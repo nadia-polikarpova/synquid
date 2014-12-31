@@ -1,0 +1,1 @@
+Figure out monads: IO Stream State a? Or even have Z3 in there to maintain solver state?
