@@ -2,6 +2,7 @@ import Synquid.Logic
 -- import Synquid.Z3
 import Synquid.Solver
 
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -20,5 +21,5 @@ main = do
                   ("l", [Var "x" |>| IntLit 0, Var "x" |<| IntLit 0, Var "x" |=| IntLit 0])]
   -- let fml = (Var "x" |=| IntLit 1) |=>| (Unknown "k" |&| Unknown "l")
   let fml = Unknown "l" |=>| Unknown "k"
-  print $ optimalSolutions fml quals
+  putStr $ intercalate "\n" (map (show . flip substitute fml) $ optimalSolutions fml quals)
   

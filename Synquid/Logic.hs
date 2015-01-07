@@ -12,6 +12,7 @@ type Id = String
 
 -- | Unary operators
 data UnOp = Neg | Not
+  deriving (Eq, Ord)
 
 instance Show UnOp where
   show Neg = "-"
@@ -19,6 +20,7 @@ instance Show UnOp where
 
 -- | Binary operators  
 data BinOp = Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies
+  deriving (Eq, Ord)
 
 instance Show BinOp where
   show Plus = "+"
@@ -41,6 +43,7 @@ data Formula =
   Unknown Id |                        -- ^ Predicate unknown
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula        -- ^ Binary expression
+  deriving (Eq, Ord)
   
 ftrue = BoolLit True
 ffalse = BoolLit False
@@ -94,21 +97,34 @@ posNegUnknowns (Binary Implies e1 e2) = let
 posNegUnknowns _ = (Set.empty, Set.empty)
 
 -- | (Candidate) solutions for predicate unknowns
-type Solution = Map Id Formula
+type Solution = Map Id (Set Formula)
+
+valuation :: Solution -> Id -> Set Formula
+valuation sol var = case Map.lookup var sol of
+  Just quals -> quals
+  Nothing -> error $ "No value for unknown " ++ var ++ " in solution " ++ show sol
+  
+isStrongerThan :: Set Formula -> Set Formula -> Bool
+isStrongerThan = flip Set.isSubsetOf
+
+-- | isSolutionStrongerThan poss negs s1 s2: is s1 stronger (more optimal) than s2 on positive unknowns poss and negative unknowns negs?
+isSolutionStrongerThan :: [Id] -> [Id] -> Solution -> Solution -> Bool
+isSolutionStrongerThan poss negs s1 s2 = 
+  all (\var -> valuation s2 var `isStrongerThan` valuation s1 var) negs && 
+  all (\var -> valuation s1 var `isStrongerThan` valuation s2 var) poss
 
 -- | substitute sol e: Substitute solutions from sol for all predicate variables in e
 substitute :: Solution -> Formula -> Formula   
 substitute sol e = case e of
   Unknown ident -> case Map.lookup ident sol of
-    Just fml -> fml
+    Just quals -> conjunction $ Set.toList quals
     Nothing -> e
   Unary op e' -> Unary op (substitute sol e')
   Binary op e1 e2 -> Binary op (substitute sol e1) (substitute sol e2)
   otherwise -> e
   
--- | Qualifiers for predicate unknowns  
-type QMap = Map Id [Formula]  
-
+type QMap = Map Id [Formula]
+  
 -- | Results of calls to an SMT solver  
 data SMTResult = Sat | Unsat
   deriving Show
