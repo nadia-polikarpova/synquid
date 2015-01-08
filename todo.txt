@@ -1,1 +1,5 @@
+- Debug monad for collecting statistics
+
 Figure out monads: IO Stream State a? Or even have Z3 in there to maintain solver state?
+Optimize for special form of constraints
+	- Id RHS is always a single unknown, can save on calls to Z3 between checking with constraint is unsatisfied and solving?

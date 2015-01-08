@@ -1,6 +1,8 @@
 -- | Formulas of the refinement logic
 module Synquid.Logic where
 
+import Synquid.Util
+
 import Data.Tuple
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -96,6 +98,11 @@ posNegUnknowns (Binary Implies e1 e2) = let
   in (Set.union e1neg e2pos, Set.union e1pos e2neg)
 posNegUnknowns _ = (Set.empty, Set.empty)
 
+allUnknowns fml = let (poss, negs) = posNegUnknowns fml in poss `Set.union` negs
+
+isStrongerThan :: Set Formula -> Set Formula -> Bool
+isStrongerThan = flip Set.isSubsetOf
+
 -- | (Candidate) solutions for predicate unknowns
 type Solution = Map Id (Set Formula)
 
@@ -104,8 +111,13 @@ valuation sol var = case Map.lookup var sol of
   Just quals -> quals
   Nothing -> error $ "No value for unknown " ++ var ++ " in solution " ++ show sol
   
-isStrongerThan :: Set Formula -> Set Formula -> Bool
-isStrongerThan = flip Set.isSubsetOf
+-- | Top of the solution lattice (maps every unknown in unknowns to the empty set of qualifiers)
+topSolution :: QMap -> Solution
+topSolution quals = constMap (Map.keysSet quals) Set.empty
+
+-- | Bottom of the solution lattice (maps every unknown to all its qualifiers) 
+botSolution :: QMap -> Solution
+botSolution quals = Map.map Set.fromList quals
 
 -- | isSolutionStrongerThan poss negs s1 s2: is s1 stronger (more optimal) than s2 on positive unknowns poss and negative unknowns negs?
 isSolutionStrongerThan :: [Id] -> [Id] -> Solution -> Solution -> Bool
