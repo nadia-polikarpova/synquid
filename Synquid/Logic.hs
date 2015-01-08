@@ -44,7 +44,8 @@ data Formula =
   Var Id |                            -- ^ Integer unknown
   Unknown Id |                        -- ^ Predicate unknown
   Unary UnOp Formula |                -- ^ Unary expression  
-  Binary BinOp Formula Formula        -- ^ Binary expression
+  Binary BinOp Formula Formula |      -- ^ Binary expression
+  AnyVar                              -- ^ Can be replaces with any variable (only used in qualifiers)
   deriving (Eq, Ord)
   
 ftrue = BoolLit True
@@ -72,6 +73,7 @@ instance Show Formula where
   show (Unknown ident) = "?" ++ ident
   show (Unary op e) = show op ++ "(" ++ show e ++ ") "
   show (Binary op e1 e2) = "(" ++ show e1 ++ ") " ++ show op ++ " (" ++ show e2 ++ ")"
+  show (AnyVar) = "*"
   
 -- | vars fml : set of all fist-order variables of fml 
 vars :: Formula -> Set Id
@@ -99,6 +101,16 @@ posNegUnknowns (Binary Implies e1 e2) = let
 posNegUnknowns _ = (Set.empty, Set.empty)
 
 allUnknowns fml = let (poss, negs) = posNegUnknowns fml in poss `Set.union` negs
+
+-- | 'instantiateVars' @idents fml@: instantiate every occurrence of * in @fml@ with all variables from @idents@
+instantiateVars :: [Id] -> Formula -> [Formula]
+instantiateVars idents AnyVar = map Var idents
+instantiateVars idents (Unary op e) = Unary op `fmap` instantiateVars idents e
+instantiateVars idents (Binary op e1 e2) = do
+  e1' <- instantiateVars idents e1
+  e2' <- instantiateVars idents e2
+  return $ Binary op e1' e2'
+instantiateVars idents fml = [fml]
 
 isStrongerThan :: Set Formula -> Set Formula -> Bool
 isStrongerThan = flip Set.isSubsetOf
