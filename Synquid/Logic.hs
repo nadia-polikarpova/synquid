@@ -64,7 +64,7 @@ fnot = Unary Not
 (|||) = Binary Or
 (|=>|) = Binary Implies
 
-conjunction fmls = if null fmls then ftrue else foldr1 (|&|) fmls
+conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
 
 instance Show Formula where
   show (BoolLit b) = show b
@@ -112,13 +112,16 @@ instantiateVars idents (Binary op e1 e2) = do
   return $ Binary op e1' e2'
 instantiateVars idents fml = [fml]
 
-isStrongerThan :: Set Formula -> Set Formula -> Bool
+-- | Valuation of a predicate unknown as a set of qualifiers
+type Valuation = Set Formula
+
+isStrongerThan :: Valuation -> Valuation -> Bool
 isStrongerThan = flip Set.isSubsetOf
 
 -- | (Candidate) solutions for predicate unknowns
-type Solution = Map Id (Set Formula)
+type Solution = Map Id Valuation
 
-valuation :: Solution -> Id -> Set Formula
+valuation :: Solution -> Id -> Valuation
 valuation sol var = case Map.lookup var sol of
   Just quals -> quals
   Nothing -> error $ "No value for unknown " ++ var ++ " in solution " ++ show sol
@@ -141,7 +144,7 @@ isSolutionStrongerThan poss negs s1 s2 =
 substitute :: Solution -> Formula -> Formula   
 substitute sol e = case e of
   Unknown ident -> case Map.lookup ident sol of
-    Just quals -> conjunction $ Set.toList quals
+    Just quals -> conjunction quals
     Nothing -> e
   Unary op e' -> Unary op (substitute sol e')
   Binary op e1 e2 -> Binary op (substitute sol e1) (substitute sol e2)
