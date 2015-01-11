@@ -15,6 +15,22 @@ import Control.Monad
 
 import Debug.Trace
 
+-- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
+-- | @fml@ must have the form "/\ u_i ==> fml'".
+greatestFixPoint :: QMap -> [Formula] -> Maybe Solution
+greatestFixPoint quals fmls = go [topSolution quals]
+  where
+    unknowns = Map.keysSet quals
+    go (sol:sols) = traceShow (length sols + 1) $ let
+        invalidConstraint = fromJust $ find (not . isValid . (substitute sol)) fmls
+        modifiedConstraint = case invalidConstraint of
+          Binary Implies lhs rhs -> Binary Implies lhs (substitute sol rhs)
+          _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint
+        sols' = strengthen quals modifiedConstraint sol
+      in case find (\s -> all (isValid . substitute s) fmls) sols' of
+        Just s -> Just s -- Solution found
+        Nothing -> go $ sols' ++ sols
+
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
 strengthen :: QMap -> Formula -> Solution -> [Solution]

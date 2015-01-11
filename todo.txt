@@ -1,3 +1,6 @@
+- Memorize invalid constraints for each solution
+- Better subset enumeration: provide generator per variable, limit depth
+- Parametrize with: choice of next solution to be strengthened, choice of invalid constraint for strengthening
 - Debug monad for collecting statistics
 
 Figure out monads: IO Stream State a? Or even have Z3 in there to maintain solver state?
