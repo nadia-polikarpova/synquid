@@ -1,6 +1,8 @@
 import Synquid.Util
 import Synquid.Logic
 import Synquid.Solver
+import Synquid.SMTSolver
+import Synquid.Z3
 import Synquid.Pretty
 
 import Data.List
@@ -22,7 +24,8 @@ testStrengthen = do
                 ("v", Set.fromList []),
                 ("w", Set.fromList [])
               ]
-    print $ strengthen quals fml sol
+    res <- evalZ3State $ initSolver >> strengthen quals fml sol
+    print res
     
 condQuals :: [Id] -> [Formula]  
 condQuals vars = do
@@ -53,6 +56,7 @@ testMaxSynthesize = do
                 ]                
   -- let fmls = [  (Var "x" |>| Var "y" |&| Unknown "then") |=>| maxType,
                 -- (fnot (Var "x" |>| Var "y") |&| Unknown "else") |=>| maxType  ]                                
-  print $ pretty $ greatestFixPoint quals fmls
+  res <- evalZ3State $ initSolver >> greatestFixPoint quals fmls
+  print $ pretty res 
       
 main = testMaxSynthesize  

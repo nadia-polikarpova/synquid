@@ -1,10 +1,12 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, TemplateHaskell #-}
 
 -- | Interface to Z3
-module Synquid.Z3 (solveSMTConstraints) where
+module Synquid.Z3 (Z3State, evalZ3State) where
 
-import Synquid.Logic hiding (Sat, Unsat)
-import qualified Synquid.Logic as Logic
+import Synquid.Logic
+import Synquid.SMTSolver
+import Synquid.Util
+import Synquid.Pretty
 import Z3.Monad
 
 import Data.Maybe
@@ -32,9 +34,9 @@ makeLenses ''Z3Env
 type Z3State = StateT Z3Env Z3   
 
 instance MonadZ3 Z3State where
-    getSolver = lift getSolver
-    getContext = lift getContext
-
+  getSolver = lift getSolver
+  getContext = lift getContext
+        
 emptyEnv :: Z3Env
 emptyEnv = Z3Env Nothing Map.empty
 
@@ -42,22 +44,15 @@ evalZ3State :: Z3State a -> IO a
 evalZ3State f = evalZ3 $ evalStateT f emptyEnv
       
 -- | Convert a list of first-order constraints to a Z3 AST and check their satisfiability.
-buildAndSolve :: [Formula] -> Z3State SMTResult
-buildAndSolve constraints = do
-  makeSorts
-  mapM_ saveStringSymbol (Set.toList (Set.unions (map vars constraints)))
-  mapM_ (toZ3 >=> assertCnstr) constraints
-  toSMTResult <$> check
+buildAndSolve :: Formula -> Z3State Result
+buildAndSolve constraint = do  
+  mapM_ saveStringSymbol (Set.toList $ vars constraint)
+  (toZ3 >=> assertCnstr) constraint
+  check
   where
-    makeSorts = do
-      is <- mkIntSort
-      intSort .= Just is
     saveStringSymbol ident = do
       s <- mkStringSymbol ident
       symbols %= Map.insert ident s
-    toSMTResult Sat = Logic.Sat
-    toSMTResult Unsat = Logic.Unsat
-    toSMTResult _ = error $ "buildAndSolve: Z3 returned Unknown"
           
 -- | Convert a first-order constraint to a Z3 AST.
 toZ3 :: Formula -> Z3State AST
@@ -95,7 +90,17 @@ toZ3 expr = case expr of
         Implies -> mkImplies
     list2 o x y = o [x, y]
         
--- | Is a list of first-order constraints satisfiable?
-solveSMTConstraints :: [Formula] -> SMTResult
-solveSMTConstraints constraints = unsafePerformIO $ evalZ3State $ buildAndSolve constraints
-    
+instance SMTSolver Z3State where
+  initSolver = do
+    is <- mkIntSort
+    intSort .= Just is
+
+  isValid fml = do  
+      push
+      res <- buildAndSolve $ fnot fml
+      pop 1
+      case res of
+        Unsat -> debug (text "SMT" <+> pretty fml <+> text "VALID") $ return True
+        Sat -> debug (text "SMT" <+> pretty fml <+> text "INVALID") $ return False    
+        _ -> error $ "isValid: Z3 returned Unknown"
+      

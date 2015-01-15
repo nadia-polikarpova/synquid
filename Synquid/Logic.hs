@@ -134,7 +134,3 @@ substitute sol e = case e of
   Unary op e' -> Unary op (substitute sol e')
   Binary op e1 e2 -> Binary op (substitute sol e1) (substitute sol e2)
   otherwise -> e
-    
--- | Results of calls to an SMT solver  
-data SMTResult = Sat | Unsat
-  deriving Show

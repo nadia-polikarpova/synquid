@@ -45,6 +45,21 @@ boundedSubsets min max s = Set.filter (\s -> let n = Set.size s in min <= n && n
 isPartition :: Ord k => [Set k] -> Set k -> Bool
 isPartition ss s = Set.unions ss == s && sum (map Set.size ss) == Set.size s
 
+-- | Monadic equivalent of 'partition'
+partitionM :: Monad m => (a -> m Bool) -> [a] -> m ([a], [a])
+partitionM f [] = return ([], [])
+partitionM f (x:xs) = do
+  res <- f x
+  (ys, zs) <- partitionM f xs
+  return (if res then (x:ys, zs) else (ys, x:zs))
+  
+-- | Monadic equivalent of 'find'
+findM :: Monad m => (a -> m Bool) -> [a] -> m (Maybe a)
+findM f [] = return Nothing
+findM f (x:xs) = do
+  res <- f x
+  if res then return (Just x) else findM f xs
+
 -- | Debug output
 debug s = traceShow s
 -- debug s = id
