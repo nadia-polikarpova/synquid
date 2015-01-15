@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 -- | Formulas of the refinement logic
 module Synquid.Logic where
 
@@ -9,6 +11,8 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 
+import Control.Lens
+
 -- | Identifiers
 type Id = String
 
@@ -16,26 +20,9 @@ type Id = String
 data UnOp = Neg | Not
   deriving (Eq, Ord)
 
-instance Show UnOp where
-  show Neg = "-"
-  show Not = "!" 
-
 -- | Binary operators  
 data BinOp = Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies
   deriving (Eq, Ord)
-
-instance Show BinOp where
-  show Plus = "+"
-  show Minus = "-"
-  show Eq = "=="
-  show Neq = "/="
-  show Lt = "<"
-  show Le = "<="
-  show Gt = ">"
-  show Ge = ">="
-  show And = "&&"
-  show Or = "||"
-  show Implies = "==>"
 
 -- | Formulas of the refinement logic
 data Formula =
@@ -65,15 +52,6 @@ fnot = Unary Not
 (|=>|) = Binary Implies
 
 conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
-
-instance Show Formula where
-  show (BoolLit b) = show b
-  show (IntLit i) = show i
-  show (Var ident) = ident
-  show (Unknown ident) = "?" ++ ident
-  show (Unary op e) = show op ++ "(" ++ show e ++ ") "
-  show (Binary op e1 e2) = "(" ++ show e1 ++ ") " ++ show op ++ " (" ++ show e2 ++ ")"
-  show (AnyVar) = "*"
   
 -- | vars fml : set of all fist-order variables of fml 
 vars :: Formula -> Set Id
@@ -112,6 +90,17 @@ instantiateVars idents (Binary op e1 e2) = do
   return $ Binary op e1' e2'
 instantiateVars idents fml = [fml]
 
+-- | Solution space for a single unknown  
+data QSpace = QSpace {
+    _qualifiers :: [Formula],
+    _minCount :: Int,
+    _maxCount :: Int
+  }
+
+makeLenses ''QSpace  
+  
+type QMap = Map Id QSpace
+
 -- | Valuation of a predicate unknown as a set of qualifiers
 type Valuation = Set Formula
 
@@ -124,15 +113,11 @@ type Solution = Map Id Valuation
 valuation :: Solution -> Id -> Valuation
 valuation sol var = case Map.lookup var sol of
   Just quals -> quals
-  Nothing -> error $ "No value for unknown " ++ var ++ " in solution " ++ show sol
+  Nothing -> error $ "valuation: no value for unknown " ++ var
   
 -- | Top of the solution lattice (maps every unknown in unknowns to the empty set of qualifiers)
 topSolution :: QMap -> Solution
 topSolution quals = constMap (Map.keysSet quals) Set.empty
-
--- | Bottom of the solution lattice (maps every unknown to all its qualifiers) 
-botSolution :: QMap -> Solution
-botSolution quals = Map.map Set.fromList quals
 
 -- | isSolutionStrongerThan poss negs s1 s2: is s1 stronger (more optimal) than s2 on positive unknowns poss and negative unknowns negs?
 isSolutionStrongerThan :: [Id] -> [Id] -> Solution -> Solution -> Bool
@@ -149,9 +134,7 @@ substitute sol e = case e of
   Unary op e' -> Unary op (substitute sol e')
   Binary op e1 e2 -> Binary op (substitute sol e1) (substitute sol e2)
   otherwise -> e
-  
-type QMap = Map Id [Formula]
-  
+    
 -- | Results of calls to an SMT solver  
 data SMTResult = Sat | Unsat
   deriving Show
