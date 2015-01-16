@@ -64,7 +64,9 @@ strengthen quals (Binary Implies lhs rhs) sol = let
       else Nothing    
   in do
     lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) subst -- all minimal valid valuations of the whole antecedent
-    return $ map merge $ concatMap splitLhsValuation lhsValuations
+    let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
+    pruned <- pruneValuations $ Map.keys splitting
+    return $ map merge $ concatMap (splitting Map.!) pruned
   where    
     unknowns = allUnknowns lhs
     unknownsList = Set.toList unknowns
@@ -94,6 +96,15 @@ optimalValuations quals subst = map qualsAt <$> filterSubsets check (length qual
     check idxs = case subst $ qualsAt idxs of
       Nothing -> return False
       Just fml -> isValid fml    
+      
+-- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another valuation @vals@ 
+pruneValuations :: SMTSolver m => [Valuation] -> m [Valuation]
+pruneValuations [] = return []
+pruneValuations (val:vals) = pruneValuations' [] val vals
+  where
+    pruneValuations' lefts val [] = ifM (isSubsumed val lefts) (return lefts) (return $ val:lefts)
+    pruneValuations' lefts val rights@(v:vs) = ifM (isSubsumed val (lefts ++ rights)) (pruneValuations' lefts v vs) (pruneValuations' (lefts ++ [val]) v vs)
+    isSubsumed val vals = isJust <$> findM (\v -> isValid $ conjunction val |=>| conjunction v) vals      
         
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (is a set satisfies check, then every superset also satisfies @check@);

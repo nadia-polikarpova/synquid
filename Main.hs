@@ -14,6 +14,14 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Monad
 import Control.Applicative
+
+condQualsRich :: [Id] -> [Formula]  
+condQualsRich vars = do
+  lhs <- map Var vars ++ [IntLit 0]
+  op <- [Ge, Gt, Eq, Neq]
+  rhs <- map Var vars
+  guard $ lhs /= rhs
+  return $ Binary op lhs rhs
   
 condQuals :: [Id] -> [Formula]  
 condQuals vars = do
@@ -42,8 +50,8 @@ extractVar t =  error $ "extractVar got a non-variable type: " ++ show t
 testMax2Synthesize = do
   let vars = ["x", "y"]
   let quals = Map.fromList [
-                ("condT", QSpace (condQuals vars) 0 2),
-                ("condF", QSpace (condQuals vars) 0 2),  
+                ("condT", QSpace (condQualsRich vars) 0 2),
+                ("condF", QSpace (condQualsRich vars) 0 2),  
                 ("then", QSpace (varQual vars) 1 1),
                 ("else", QSpace (varQual vars) 1 1)
               ]
@@ -59,7 +67,7 @@ testMax2Synthesize = do
                   val ident = conjunction $ valuation sol ident
                   res = PIf (val "condT") (extractVar $ val "then") (extractVar $ val "else") 
                 in print $ pretty res  
-                
+                                
 max3 sol = let val ident = conjunction $ valuation sol ident
   in PIf (val "condT1") 
         (PIf (val "condT2") (extractVar $ val "then2") (extractVar $ val "else2")) 
@@ -103,8 +111,10 @@ testMax3Synthesize2 = do
                 ("condF2", QSpace (condQuals vars) 0 1),  
                 ("condT3", QSpace (condQuals vars) 0 1),
                 ("condF3", QSpace (condQuals vars) 0 1),  
-                ("then1", QSpace [(Var "x" |<=| Var "v"), (Var "y" |<=| Var "v"), (Var "z" |<=| Var "v")] 0 2),
-                ("else1", QSpace [(Var "x" |<=| Var "v"), (Var "y" |<=| Var "v"), (Var "z" |<=| Var "v")] 0 2),
+                -- ("then1", QSpace [(Var "x" |<=| Var "v"), (Var "y" |<=| Var "v"), (Var "z" |<=| Var "v")] 0 2),
+                -- ("else1", QSpace [(Var "x" |<=| Var "v"), (Var "y" |<=| Var "v"), (Var "z" |<=| Var "v")] 0 2),
+                ("then1", QSpace (typeQuals vars) 0 2),
+                ("else1", QSpace (typeQuals vars) 0 2),                
                 ("then2", QSpace (varQual vars) 1 1),
                 ("else2", QSpace (varQual vars) 1 1),
                 ("then3", QSpace (varQual vars) 1 1),
@@ -125,6 +135,6 @@ testMax3Synthesize2 = do
   mSol <- (evalZ3State $ initSolver >> greatestFixPoint quals fmls)
   case mSol of
     Nothing -> putStr "No solution"
-    Just sol -> print $ pretty $ max3 sol
+    Just sol -> print $ pretty $ max3 sol  
                       
-main = testMax3Synthesize2 
+main = testMax3Synthesize2

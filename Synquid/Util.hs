@@ -59,6 +59,10 @@ findM f [] = return Nothing
 findM f (x:xs) = do
   res <- f x
   if res then return (Just x) else findM f xs
+  
+-- | Monadic equivalent of if-then-else  
+ifM :: Monad m => m Bool -> m a -> m a -> m a
+ifM cond t e = cond >>= (\res -> if res then t else e)  
 
 -- | Debug output
 debug s = traceShow s
