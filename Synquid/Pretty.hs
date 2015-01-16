@@ -40,6 +40,7 @@ module Synquid.Pretty (
 ) where
 
 import Synquid.Logic
+import Synquid.Program
 
 import Text.PrettyPrint.ANSI.Leijen hiding ((<+>), (<$>), hsep, vsep)
 import qualified Text.PrettyPrint.ANSI.Leijen as L
@@ -147,7 +148,6 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unknown ident -> text "?" <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    AnyVar -> text "*"
   )
   where
     n' = power fml
@@ -163,4 +163,13 @@ instance Pretty Valuation where
 instance Pretty Solution where
   pretty = hMapDoc text pretty
 
+programDoc :: Program -> Doc
+programDoc (PVar ident) = text ident
+programDoc (PIf c t e) = parens (fmlDoc c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
+programDoc (PHole t) = parens (text "??" <+> text "::" <+> pretty t)
 
+instance Pretty Program where
+  pretty = programDoc
+  
+instance Show Program where
+  show = show . pretty

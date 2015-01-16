@@ -36,6 +36,22 @@ greatestFixPoint quals fmls = go [topSolution quals]
           Just s -> return $ Just s -- Solution found
           Nothing -> go $ sols' ++ sols
     debugOutput n sol inv mod = debug $ vsep [text "Candidate count:" <+> pretty n, text "Chosen candidate:" <+> pretty sol, text "Invalid Constraint:" <+> pretty inv, text "Strengthening:" <+> pretty mod]
+    
+allSolutions :: SMTSolver m => QMap -> [Formula] -> m [Solution]
+allSolutions quals fmls = go [topSolution quals]
+  where
+    unknowns = Map.keysSet quals
+    go [] = return []
+    go (sol:sols) = do
+        invalidConstraint <- fromJust <$> findM (liftM not . isValid . substitute sol) fmls
+        let modifiedConstraint = case invalidConstraint of
+                                    Binary Implies lhs rhs -> Binary Implies lhs (substitute sol rhs)
+                                    _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
+        sols' <- debugOutput (length sols + 1) sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
+        (valids, invalids) <- partitionM (\s -> and <$> mapM (isValid . substitute s) (delete invalidConstraint fmls)) sols'        
+        newSols <- go $ invalids ++ sols
+        return $ valids ++ newSols
+    debugOutput n sol inv mod = debug $ vsep [text "Candidate count:" <+> pretty n, text "Chosen candidate:" <+> pretty sol, text "Invalid Constraint:" <+> pretty inv, text "Strengthening:" <+> pretty mod]   
 
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
