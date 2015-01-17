@@ -35,6 +35,7 @@ greatestFixPoint quals fmls = go [topSolution quals]
         case validSolution of
           Just s -> return $ Just s -- Solution found
           Nothing -> go $ sols' ++ sols
+    go [] = return Nothing
     debugOutput n sol inv mod = debug $ vsep [text "Candidate count:" <+> pretty n, text "Chosen candidate:" <+> pretty sol, text "Invalid Constraint:" <+> pretty inv, text "Strengthening:" <+> pretty mod]
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;

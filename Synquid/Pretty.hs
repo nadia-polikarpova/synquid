@@ -165,6 +165,7 @@ instance Pretty Solution where
 
 programDoc :: Program -> Doc
 programDoc (PVar ident) = text ident
+programDoc (PApp f x) = pretty f <+> pretty x
 programDoc (PIf c t e) = parens (fmlDoc c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
 programDoc (PHole t) = parens (text "??" <+> text "::" <+> pretty t)
 
