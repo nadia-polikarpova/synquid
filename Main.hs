@@ -136,5 +136,5 @@ testMax3Synthesize2 = do
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ max3 sol  
-                      
+                          
 main = testMax3Synthesize2

@@ -1,4 +1,3 @@
-- Memoize calls to Z3?
 - Parametrize with: choice of next solution to be strengthened, choice of invalid constraint for strengthening (e.g. should we sort solutions according to the # of constraints they satisfy?)
-
-Figure out monads: IO Stream State a? Or even have Z3 in there to maintain solver state?
+- Find an example with nontrivial solution
+- Try smten

@@ -37,48 +37,35 @@ greatestFixPoint quals fmls = go [topSolution quals]
           Nothing -> go $ sols' ++ sols
     debugOutput n sol inv mod = debug $ vsep [text "Candidate count:" <+> pretty n, text "Chosen candidate:" <+> pretty sol, text "Invalid Constraint:" <+> pretty inv, text "Strengthening:" <+> pretty mod]
     
-allSolutions :: SMTSolver m => QMap -> [Formula] -> m [Solution]
-allSolutions quals fmls = go [topSolution quals]
-  where
-    unknowns = Map.keysSet quals
-    go [] = return []
-    go (sol:sols) = do
-        invalidConstraint <- fromJust <$> findM (liftM not . isValid . substitute sol) fmls
-        let modifiedConstraint = case invalidConstraint of
-                                    Binary Implies lhs rhs -> Binary Implies lhs (substitute sol rhs)
-                                    _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
-        sols' <- debugOutput (length sols + 1) sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
-        (valids, invalids) <- partitionM (\s -> and <$> mapM (isValid . substitute s) (delete invalidConstraint fmls)) sols'        
-        newSols <- go $ invalids ++ sols
-        return $ valids ++ newSols
-    debugOutput n sol inv mod = debug $ vsep [text "Candidate count:" <+> pretty n, text "Chosen candidate:" <+> pretty sol, text "Invalid Constraint:" <+> pretty inv, text "Strengthening:" <+> pretty mod]   
-
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
 strengthen :: SMTSolver m => QMap -> Formula -> Solution -> m [Solution]
-strengthen quals (Binary Implies lhs rhs) sol = let
-    lhsQuals = setConcatMap (Set.fromList . view qualifiers . lookupQuals) unknowns -- available qualifiers for the whole antecedent
-    usedLhsQuals = setConcatMap (valuation sol) unknowns -- already used qualifiers for the whole antecedent
-    subst val = let n = Set.size val in if 1 <= n && n <= maxValSize
-      then Just $ (conjunction usedLhsQuals |&| conjunction val) |=>| rhs
-      else Nothing    
-  in do
+strengthen quals (Binary Implies lhs rhs) sol = do
     lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) subst -- all minimal valid valuations of the whole antecedent
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
-    pruned <- pruneValuations $ Map.keys splitting
+    pruned <- pruneValuations $ Map.keys splitting -- semantically optimal lhs valuations
     return $ map merge $ concatMap (splitting Map.!) pruned
   where    
     unknowns = allUnknowns lhs
     unknownsList = Set.toList unknowns
-    lookupQuals ident = case Map.lookup ident quals of
+    lookupQuals u = case Map.lookup u quals of                                        -- search space for unknown @u@
       Just qs -> qs
-      Nothing -> error $ "strengthen: missing qualifiers for unknown " ++ ident
-    maxValSize = Set.foldl (\n u -> n + view maxCount (lookupQuals u)) 0 unknowns
-    merge sol' = Map.unionWith Set.union sol sol'
+      Nothing -> error $ "strengthen: missing qualifiers for unknown " ++ u
+    lhsQuals = setConcatMap (Set.fromList . view qualifiers . lookupQuals) unknowns   -- available qualifiers for the whole antecedent
+    usedLhsQuals = setConcatMap (valuation sol) unknowns                              -- already used qualifiers for the whole antecedent
+    subst val = let n = Set.size val in if 1 <= n && n <= maxValSize                  -- substitution of @val@ into the constraint, if @val@ is within search space
+      then Just $ (conjunction usedLhsQuals |&| conjunction val) |=>| rhs
+      else Nothing        
+    maxValSize = Set.foldl (\n u -> n + view maxCount (lookupQuals u)) 0 unknowns -   -- upper bound on the size of the lhs valuations
+      Set.size usedLhsQuals
+    merge sol' = Map.unionWith Set.union sol sol'                                     -- new part of the solution merged with @sol@
     
-      -- | All possible valuations of @u@ that are subsets of $lhsVal@.
-    singleUnknownCandidates lhsVal u = let QSpace qs min max = lookupQuals u
-      in Set.toList $ boundedSubsets min max $ (Set.fromList qs) `Set.intersection` lhsVal
+      -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
+    singleUnknownCandidates lhsVal u = let 
+          QSpace qs min max = lookupQuals u
+          used = valuation sol u
+          n = Set.size used
+      in Set.toList $ boundedSubsets (min - n) (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
     
       -- | All valid partitions of @lhsVal@ into solutions for multiple unknowns.
     splitLhsValuation :: Valuation -> [Solution]
