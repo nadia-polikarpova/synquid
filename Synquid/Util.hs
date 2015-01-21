@@ -1,10 +1,13 @@
 -- | Helper functions
 module Synquid.Util where
 
+import Data.Maybe
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+
+import Control.Applicative
 
 import Debug.Trace
 
@@ -41,10 +44,6 @@ subsets s = let ss = if Set.null s
 boundedSubsets :: Ord k => Int -> Int -> Set k -> Set (Set k)
 boundedSubsets min max s = Set.filter (\s -> let n = Set.size s in min <= n && n <= max) (subsets s)
   
--- | 'isPartition' @ss s@: are sets in @ss@ partitioning @s@?
-isPartition :: Ord k => [Set k] -> Set k -> Bool
-isPartition ss s = Set.unions ss == s && sum (map Set.size ss) == Set.size s
-
 -- | Monadic equivalent of 'partition'
 partitionM :: Monad m => (a -> m Bool) -> [a] -> m ([a], [a])
 partitionM f [] = return ([], [])
@@ -53,17 +52,27 @@ partitionM f (x:xs) = do
   (ys, zs) <- partitionM f xs
   return (if res then (x:ys, zs) else (ys, x:zs))
   
--- | Monadic equivalent of 'find'
-findM :: Monad m => (a -> m Bool) -> [a] -> m (Maybe a)
-findM f [] = return Nothing
-findM f (x:xs) = do
-  res <- f x
-  if res then return (Just x) else findM f xs
+-- | Monadic version of 'any'
+anyM :: (Functor m, Monad m) => (a -> m Bool) -> [a] -> m Bool
+anyM pred xs = isJust <$> findM pred xs
   
--- | Monadic equivalent of if-then-else  
-ifM :: Monad m => m Bool -> m a -> m a -> m a
+-- | Monadic version of 'all'
+allM :: (Functor m, Monad m) => (a -> m Bool) -> [a] -> m Bool
+allM pred xs = isNothing <$> findM (\x -> not <$> pred x) xs
+  
+-- | Monadic version of 'find' (finds the first element in a list for which a computation evaluates to True) 
+findM :: (Functor m, Monad m) => (a -> m Bool) -> [a] -> m (Maybe a)
+findM _ [] = return Nothing
+findM pred (x : xs) = do
+  res <- pred x
+  if res then return (Just x) else findM pred xs  
+    
+-- | Monadic version of if-then-else  
+ifM ::(Functor m, Monad m) => m Bool -> m a -> m a -> m a
 ifM cond t e = cond >>= (\res -> if res then t else e)  
 
 -- | Debug output
-debug s = traceShow s
--- debug s = id
+debug1 s = traceShow s
+-- debug1 s = id
+-- debug2 s = traceShow s
+debug2 s = id

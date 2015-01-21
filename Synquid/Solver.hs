@@ -14,38 +14,61 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 
 import Control.Monad
+import Control.Monad.Reader
 import Control.Applicative
 import Control.Lens
 
-import Debug.Trace
+-- | 'solveWithParams' @params quals fmls@: 'greatestFixPoint' @quals fmls@ with solver parameters @params@
+solveWithParams :: SMTSolver m => SolverParams -> QMap -> [Formula] -> m (Maybe Solution)
+solveWithParams params quals fmls = runReaderT (greatestFixPoint quals fmls) params
 
+-- | Parameters of the fix point algorithm
+data SolverParams = SolverParams {
+    semanticPrune :: Bool,      -- ^ After solving each constraints, remove semantically non-optimal solutions
+    agressivePrune :: Bool,     -- ^ Perform pruning on the LHS-valuation of as opposed to per-variable valuations
+    overlappingSplits :: Bool   -- ^ When splitting an LHS valuation into variable valuations, allow them to share qualifiers 
+  }
+  
+type FixPointSolver m a = ReaderT SolverParams m a
+  
 -- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
 -- | @fml@ must have the form "/\ u_i ==> fml'".
-greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> m (Maybe Solution)
+greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe Solution)
 greatestFixPoint quals fmls = go [topSolution quals]
   where
     unknowns = Map.keysSet quals
+    go :: SMTSolver m => [Solution] -> FixPointSolver m (Maybe Solution)
     go (sol:sols) = do
-        invalidConstraint <- fromJust <$> findM (liftM not . isValid . substitute sol) fmls
+        invalidConstraint <- fromJust <$> findM (liftM not . isValidFml . substitute sol) fmls
         let modifiedConstraint = case invalidConstraint of
                                     Binary Implies lhs rhs -> Binary Implies lhs (substitute sol rhs)
                                     _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
-        sols' <- debugOutput (length sols + 1) sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
-        validSolution <- findM (\s -> and <$> mapM (isValid . substitute s) (delete invalidConstraint fmls)) sols'
+        sols' <- debugOutput (sol:sols) sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
+        validSolution <- findM (\s -> and <$> mapM (isValidFml . substitute s) (delete invalidConstraint fmls)) sols'
         case validSolution of
           Just s -> return $ Just s -- Solution found
           Nothing -> go $ sols' ++ sols
     go [] = return Nothing
-    debugOutput n sol inv mod = debug $ vsep [text "Candidate count:" <+> pretty n, text "Chosen candidate:" <+> pretty sol, text "Invalid Constraint:" <+> pretty inv, text "Strengthening:" <+> pretty mod]
+    debugOutput sols sol inv mod = debug1 $ vsep [
+      nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map pretty sols), 
+      text "Chosen candidate:" <+> pretty sol, 
+      text "Invalid Constraint:" <+> pretty inv, 
+      text "Strengthening:" <+> pretty mod]
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
-strengthen :: SMTSolver m => QMap -> Formula -> Solution -> m [Solution]
+strengthen :: SMTSolver m => QMap -> Formula -> Solution -> FixPointSolver m [Solution]
 strengthen quals (Binary Implies lhs rhs) sol = do
     lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) subst -- all minimal valid valuations of the whole antecedent
-    let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
-    pruned <- pruneValuations $ Map.keys splitting -- semantically optimal lhs valuations
-    return $ map merge $ concatMap (splitting Map.!) pruned
+    overlap <- asks overlappingSplits
+    let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map (splitLhsValuation overlap) lhsValuations) -- map of lhsValuations with a non-empty split to their split
+    let allSolutions = concat $ Map.elems splitting
+    pruned <- ifM (asks semanticPrune) 
+      (ifM (asks agressivePrune)
+        (concatMap (splitting Map.!) <$> pruneValuations (Map.keys splitting))  -- Prune LHS valuations and then return the splits of only optimal valuations
+        (pruneSolutions unknownsList allSolutions))                             -- Prune per-variable
+      (return allSolutions) 
+    return $ map merge pruned
   where    
     unknowns = allUnknowns lhs
     unknownsList = Set.toList unknowns
@@ -69,35 +92,48 @@ strengthen quals (Binary Implies lhs rhs) sol = do
       in Set.toList $ boundedSubsets (min - n) (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
     
       -- | All valid partitions of @lhsVal@ into solutions for multiple unknowns.
-    splitLhsValuation :: Valuation -> [Solution]
-    splitLhsValuation lhsVal = do
+    splitLhsValuation :: Bool -> Valuation -> [Solution]
+    splitLhsValuation overlap lhsVal = do
       unknownsVal <- mapM (singleUnknownCandidates lhsVal) unknownsList
-      guard $ isPartition unknownsVal lhsVal
+      let isValidsplit ss s = if overlap
+                                then Set.unions ss == s -- If overlapping splits are allowed, only check that the split covers the whole lhsVal
+                                else Set.unions ss == s && sum (map Set.size ss) == Set.size s  -- Otherwise, also check that they are disjoint
+      guard $ isValidsplit unknownsVal lhsVal
       return $ Map.fromList $ zip unknownsList unknownsVal
+      
+    
 strengthen _ fml _ = error $ "strengthen: encountered ill-formed constraint " ++ show fml
  
 -- | 'optimalValuations' @quals subst@: all smallest subsets of @quals@ that make @subst@ valid.
-optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> Maybe Formula) -> m [Valuation]
+optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> Maybe Formula) -> FixPointSolver m [Valuation]
 optimalValuations quals subst = map qualsAt <$> filterSubsets check (length quals)
   where
     qualsAt idxs = Set.map (quals !!) idxs
     check idxs = case subst $ qualsAt idxs of
       Nothing -> return False
-      Just fml -> isValid fml    
-      
--- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another valuation @vals@ 
-pruneValuations :: SMTSolver m => [Valuation] -> m [Valuation]
-pruneValuations [] = return []
-pruneValuations (val:vals) = pruneValuations' [] val vals
+      Just fml -> isValidFml fml    
+            
+-- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
+pruneSolutions :: SMTSolver m => [Id] -> [Solution] -> FixPointSolver m [Solution]
+pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM (\u -> isValidFml $ conjunction (valuation sol u) |=>| conjunction (valuation s u)) unknowns) sols
+  in prune isSubsumed
+  
+-- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another valuation in @vals@   
+pruneValuations :: SMTSolver m => [Valuation] -> FixPointSolver m [Valuation] 
+pruneValuations = let isSubsumed val vals = anyM (\v -> isValidFml $ conjunction val |=>| conjunction v) vals
+  in prune isSubsumed
+  
+prune :: SMTSolver m => (a -> [a] -> FixPointSolver m Bool) -> [a] -> FixPointSolver m [a]
+prune isSubsumed [] = return []
+prune isSubsumed (x:xs) = prune' [] x xs
   where
-    pruneValuations' lefts val [] = ifM (isSubsumed val lefts) (return lefts) (return $ val:lefts)
-    pruneValuations' lefts val rights@(v:vs) = ifM (isSubsumed val (lefts ++ rights)) (pruneValuations' lefts v vs) (pruneValuations' (lefts ++ [val]) v vs)
-    isSubsumed val vals = isJust <$> findM (\v -> isValid $ conjunction val |=>| conjunction v) vals      
+    prune' lefts x [] = ifM (isSubsumed x lefts) (return lefts) (return $ x:lefts)
+    prune' lefts x rights@(y:ys) = ifM (isSubsumed x (lefts ++ rights)) (prune' lefts y ys) (prune' (lefts ++ [x]) y ys)  
         
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (is a set satisfies check, then every superset also satisfies @check@);
 -- performs breadth-first search.
-filterSubsets :: SMTSolver m => (Set Int -> m Bool) -> Int -> m [Set Int]
+filterSubsets :: SMTSolver m => (Set Int -> FixPointSolver m Bool) -> Int -> FixPointSolver m [Set Int]
 filterSubsets check n = go [] [Set.empty]
   where
     go solutions candidates = if null candidates 
@@ -107,4 +143,8 @@ filterSubsets check n = go [] [Set.empty]
           (valids, invalids) <- partitionM check new 
           go (solutions ++ valids) (concatMap children invalids)      
     children idxs = let lower = if Set.null idxs then 0 else Set.findMax idxs + 1
-      in map (flip Set.insert idxs) [lower..(n - 1)]  
+      in map (flip Set.insert idxs) [lower..(n - 1)]
+      
+-- | 'isValid' lifted to FixPointSolver      
+isValidFml :: SMTSolver m => Formula -> FixPointSolver m Bool
+isValidFml = lift . isValid      

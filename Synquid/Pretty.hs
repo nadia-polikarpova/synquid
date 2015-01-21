@@ -33,7 +33,9 @@ module Synquid.Pretty (
   brackets,
   braces,
   angles,
-  spaces,  
+  spaces,
+    -- * Indentation
+  nest,
   -- * Structures
   hMapDoc,
   vMapDoc  

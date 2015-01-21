@@ -26,19 +26,11 @@ condQualsRich vars = do
 condQuals :: [Id] -> [Formula]  
 condQuals vars = do
   lhs <- map Var vars
-  op <- [Ge, Gt]
+  op <- [Ge, Gt, Eq, Neq]
   rhs <- map Var vars
   guard $ lhs /= rhs
   return $ Binary op lhs rhs
   
-typeQuals :: [Id] -> [Formula]  
-typeQuals vars = do
-  lhs <- map Var vars ++ [Var "v"]
-  op <- [Ge, Gt]
-  rhs <- map Var vars ++ [Var "v"]
-  guard $ lhs /= rhs
-  return $ Binary op lhs rhs  
-
 varQual res vars = do
   var <- map Var vars
   return $ Var res |=| var
@@ -46,6 +38,9 @@ varQual res vars = do
 extractVar res t@(Binary Eq (Var v) (Var x))
   | v == res  =  PVar x
 extractVar res t =  error $ "extractVar got a non-variable type: " ++ show t 
+
+params1 = SolverParams True True False
+-- params2 = SolverParams False False
     
 testMax2Synthesize = do
   let vars = ["x", "y"]
@@ -60,7 +55,7 @@ testMax2Synthesize = do
                 (Unknown "condT" |&| Unknown "then") |=>| maxType,
                 (Unknown "condF" |&| Unknown "else") |=>| maxType          
                 ]                
-  mSol <- evalZ3State $ initSolver >> greatestFixPoint quals fmls
+  mSol <- evalZ3State $ initSolver >> solveWithParams params1 quals fmls
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> let
@@ -97,7 +92,7 @@ testMax3Synthesize1 = do
                 (Unknown "condF1" |&| Unknown "condT3" |&| Unknown "then3") |=>| maxType,
                 (Unknown "condF1" |&| Unknown "condF3" |&| Unknown "else3") |=>| maxType
                 ]                
-  mSol <- (evalZ3State $ initSolver >> greatestFixPoint quals fmls)
+  mSol <- (evalZ3State $ initSolver >> solveWithParams params1 quals fmls)
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ max3 sol
@@ -113,8 +108,8 @@ testMax3Synthesize2 = do
                 ("condF3", QSpace (condQuals vars) 0 1),  
                 -- ("then1", QSpace [(Var "x" |<=| Var "v"), (Var "y" |<=| Var "v"), (Var "z" |<=| Var "v")] 0 2),
                 -- ("else1", QSpace [(Var "x" |<=| Var "v"), (Var "y" |<=| Var "v"), (Var "z" |<=| Var "v")] 0 2),
-                ("then1", QSpace (typeQuals vars) 0 2),
-                ("else1", QSpace (typeQuals vars) 0 2),                
+                ("then1", QSpace (condQuals $ vars ++ ["v"]) 0 2),
+                ("else1", QSpace (condQuals $ vars ++ ["v"]) 0 2),                
                 ("then2", QSpace (varQual "v" vars) 1 1),
                 ("else2", QSpace (varQual "v" vars) 1 1),
                 ("then3", QSpace (varQual "v" vars) 1 1),
@@ -132,7 +127,7 @@ testMax3Synthesize2 = do
                 (Unknown "condT3" |&| Unknown "then3") |=>| Unknown "else1",
                 (Unknown "condF3" |&| Unknown "else3") |=>| Unknown "else1"
                 ]                
-  mSol <- (evalZ3State $ initSolver >> greatestFixPoint quals fmls)
+  mSol <- (evalZ3State $ initSolver >> solveWithParams params1 quals fmls)
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ max3 sol  
@@ -172,9 +167,36 @@ testAbsSynthesize1 = do
                 (Unknown "condT" |&| Unknown "arg1" |&| Unknown "fun1") |=>| absType,
                 (Unknown "condF" |&| Unknown "arg2" |&| Unknown "fun2") |=>| absType
                 ]                
-  mSol <- (evalZ3State $ initSolver >> greatestFixPoint quals fmls)
+  mSol <- (evalZ3State $ initSolver >> solveWithParams params1 quals fmls)
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pAbs sol    
-                          
-main = testAbsSynthesize1
+    
+testAbsSynthesize2 = do
+  let vars = ["x"]
+  let quals = Map.fromList [
+                ("condT", QSpace (condQualsRich vars) 0 1),
+                ("condF", QSpace (condQualsRich vars) 0 1),
+                ("then", QSpace (condQualsRich $ vars ++ ["v"]) 0 2),
+                ("else", QSpace (condQualsRich $ vars ++ ["v"]) 0 2),
+                -- ("then", QSpace [Var "v" |>=| IntLit 0, Var "v" |>=| Var "x"] 0 2),
+                -- ("else", QSpace [Var "v" |>=| IntLit 0, Var "v" |>=| Var "x"] 0 2),                                
+                ("arg1", QSpace (varQual "y" vars) 1 1),
+                ("fun1", QSpace (constQualIntInt "y") 1 1),
+                ("arg2", QSpace (varQual "z" vars) 1 1),
+                ("fun2", QSpace (constQualIntInt "z") 1 1)
+              ]
+  let absType = (Var "v" |>=| IntLit 0) |&| (Var "v" |>=| Var "x")
+  let fmls = [  
+                BoolLit True |=>| (Unknown "condT" ||| Unknown "condF"),
+                (Unknown "condT" |&| Unknown "then") |=>| absType,
+                (Unknown "condF" |&| Unknown "else") |=>| absType,
+                (Unknown "arg1" |&| Unknown "fun1") |=>| Unknown "then",
+                (Unknown "arg2" |&| Unknown "fun2") |=>| Unknown "else"
+                ]                
+  mSol <- (evalZ3State $ initSolver >> solveWithParams params1 quals fmls)
+  case mSol of
+    Nothing -> putStr "No solution"
+    Just sol -> print $ pretty $ pAbs sol    
+                             
+main = testMax3Synthesize1
