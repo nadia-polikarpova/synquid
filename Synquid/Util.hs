@@ -76,3 +76,5 @@ debug1 s = traceShow s
 -- debug1 s = id
 -- debug2 s = traceShow s
 debug2 s = id
+-- debug3 s = traceShow s
+debug3 s = id

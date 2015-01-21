@@ -84,6 +84,7 @@ toZ3 expr = case expr of
         And   -> list2 mkAnd
         Or    -> list2 mkOr
         Implies -> mkImplies
+        Iff -> mkIff
     list2 o x y = o [x, y]
         
 instance SMTSolver Z3State where

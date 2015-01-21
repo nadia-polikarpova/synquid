@@ -51,6 +51,8 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
 
+import Control.Lens
+
 infixr 5 $+$
 infixr 6 <+>
   
@@ -122,18 +124,20 @@ instance Pretty BinOp where
   pretty And = text "&&"
   pretty Or = text "||"
   pretty Implies = text "==>"  
+  pretty Iff = text "<==>"  
   
 instance Show BinOp where
   show = show . pretty  
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Unary _ _) = 4
+power (Unary _ _) = 5
 power (Binary op _ _) 
-  | op `elem` [Plus, Minus] = 3
-  | op `elem` [Eq, Neq, Lt, Le, Gt, Ge] = 2
-  | op `elem` [And, Or] = 1
-  | op `elem` [Implies] = 0
+  | op `elem` [Plus, Minus] = 4
+  | op `elem` [Eq, Neq, Lt, Le, Gt, Ge] = 3
+  | op `elem` [And, Or] = 2
+  | op `elem` [Implies] = 1
+  | op `elem` [Iff] = 0
 power _ = 5
 
 -- | Pretty-printed formula  
@@ -164,6 +168,12 @@ instance Pretty Valuation where
   
 instance Pretty Solution where
   pretty = hMapDoc text pretty
+  
+instance Pretty QSpace where
+  pretty space = braces $ commaSep $ map pretty $ view qualifiers space
+  
+instance Pretty QMap where
+  pretty = hMapDoc text pretty  
 
 programDoc :: Program -> Doc
 programDoc (PVar ident) = text ident

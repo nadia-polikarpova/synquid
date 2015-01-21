@@ -25,7 +25,7 @@ condQualsRich vars = do
   
 condQuals :: [Id] -> [Formula]  
 condQuals vars = do
-  lhs <- map Var vars
+  lhs <- map Var vars ++ [IntLit 0]
   op <- [Ge, Gt, Eq, Neq]
   rhs <- map Var vars
   guard $ lhs /= rhs
@@ -39,7 +39,11 @@ extractVar res t@(Binary Eq (Var v) (Var x))
   | v == res  =  PVar x
 extractVar res t =  error $ "extractVar got a non-variable type: " ++ show t 
 
-params1 = SolverParams True True False
+params1 = SolverParams {
+    semanticPrune = True,
+    agressivePrune = True,
+    overlappingSplits = False 
+  }
 -- params2 = SolverParams False False
     
 testMax2Synthesize = do
@@ -199,4 +203,4 @@ testAbsSynthesize2 = do
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pAbs sol    
                              
-main = testMax3Synthesize1
+main = testMax3Synthesize2

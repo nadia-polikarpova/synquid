@@ -20,7 +20,11 @@ import Control.Lens
 
 -- | 'solveWithParams' @params quals fmls@: 'greatestFixPoint' @quals fmls@ with solver parameters @params@
 solveWithParams :: SMTSolver m => SolverParams -> QMap -> [Formula] -> m (Maybe Solution)
-solveWithParams params quals fmls = runReaderT (greatestFixPoint quals fmls) params
+solveWithParams params quals fmls = runReaderT go params
+  where
+    go = do
+      quals' <- traverse (traverseOf qualifiers pruneQualifiers) quals -- remove redundant qualifiers
+      debug3 (text "Original" $+$ pretty quals $+$ text "Pruned" $+$ pretty quals') $ greatestFixPoint quals' fmls  
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
@@ -70,7 +74,7 @@ strengthen quals (Binary Implies lhs rhs) sol = do
       (return allSolutions) 
     return $ map merge pruned
   where    
-    unknowns = allUnknowns lhs
+    unknowns = unknownsOf lhs
     unknownsList = Set.toList unknowns
     lookupQuals u = case Map.lookup u quals of                                        -- search space for unknown @u@
       Just qs -> qs
@@ -121,6 +125,11 @@ pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM (\u -> isVa
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another valuation in @vals@   
 pruneValuations :: SMTSolver m => [Valuation] -> FixPointSolver m [Valuation] 
 pruneValuations = let isSubsumed val vals = anyM (\v -> isValidFml $ conjunction val |=>| conjunction v) vals
+  in prune isSubsumed
+  
+-- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
+pruneQualifiers :: SMTSolver m => [Formula] -> FixPointSolver m [Formula]   
+pruneQualifiers = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
   in prune isSubsumed
   
 prune :: SMTSolver m => (a -> [a] -> FixPointSolver m Bool) -> [a] -> FixPointSolver m [a]

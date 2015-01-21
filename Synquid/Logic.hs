@@ -21,7 +21,7 @@ data UnOp = Neg | Not
   deriving (Eq, Ord)
 
 -- | Binary operators  
-data BinOp = Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies
+data BinOp = Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies | Iff
   deriving (Eq, Ord)
 
 -- | Formulas of the refinement logic
@@ -49,35 +49,23 @@ fnot = Unary Not
 (|&|) = Binary And
 (|||) = Binary Or
 (|=>|) = Binary Implies
+(|<=>|) = Binary Iff
 
 conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
   
--- | vars fml : set of all fist-order variables of fml 
-vars :: Formula -> Set Id
-vars (Var ident) = Set.singleton ident
-vars (Unary _ e) = vars e
-vars (Binary _ e1 e2) = vars e1 `Set.union` vars e2
-vars _ = Set.empty
+-- | varsOf fml : set of all fist-order variables of fml 
+varsOf :: Formula -> Set Id
+varsOf (Var ident) = Set.singleton ident
+varsOf (Unary _ e) = varsOf e
+varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
+varsOf _ = Set.empty
 
--- | posNegUnknowns fml : sets of positive and negative predicate unknowns of e
-posNegUnknowns :: Formula -> (Set Id, Set Id)
-posNegUnknowns (Unknown ident) = (Set.singleton ident, Set.empty)
-posNegUnknowns (Unary Not e) = swap $ posNegUnknowns e
-posNegUnknowns (Binary And e1 e2) = let 
-    (e1pos, e1neg) = posNegUnknowns e1
-    (e2pos, e2neg) = posNegUnknowns e2 
-  in (Set.union e1pos e2pos, Set.union e1neg e2neg)
-posNegUnknowns (Binary Or e1 e2) = let 
-    (e1pos, e1neg) = posNegUnknowns e1
-    (e2pos, e2neg) = posNegUnknowns e2 
-  in (Set.union e1pos e2pos, Set.union e1neg e2neg)
-posNegUnknowns (Binary Implies e1 e2) = let 
-    (e1pos, e1neg) = posNegUnknowns e1
-    (e2pos, e2neg) = posNegUnknowns e2 
-  in (Set.union e1neg e2pos, Set.union e1pos e2neg)
-posNegUnknowns _ = (Set.empty, Set.empty)
-
-allUnknowns fml = let (poss, negs) = posNegUnknowns fml in poss `Set.union` negs
+-- | unknownsOf fml : sets of predicate unknowns of fml
+unknownsOf :: Formula -> Set Id
+unknownsOf (Unknown ident) = Set.singleton ident
+unknownsOf (Unary Not e) = unknownsOf e
+unknownsOf (Binary _ e1 e2) = Set.union (unknownsOf e1) (unknownsOf e2 )
+unknownsOf _ = Set.empty
 
 -- | Solution space for a single unknown  
 data QSpace = QSpace {
