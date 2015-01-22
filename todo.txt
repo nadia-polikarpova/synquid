@@ -1,3 +1,2 @@
-- Parametrize with: choice of next solution to be strengthened, choice of invalid constraint for strengthening (e.g. should we sort solutions according to the # of constraints they satisfy?)
-- Find an example with nontrivial solution
 - Try smten
+- Parametrize with: choice of next solution to be strengthened (e.g. should we sort solutions according to the # of constraints they satisfy?)

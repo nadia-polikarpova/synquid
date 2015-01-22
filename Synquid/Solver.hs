@@ -24,15 +24,19 @@ solveWithParams params quals fmls = runReaderT go params
   where
     go = do
       quals' <- traverse (traverseOf qualifiers pruneQualifiers) quals -- remove redundant qualifiers
-      debug3 (text "Original" $+$ pretty quals $+$ text "Pruned" $+$ pretty quals') $ greatestFixPoint quals' fmls  
+      debug3 (text "Original" $+$ pretty quals $+$ text "Pruned" $+$ pretty quals') $ greatestFixPoint quals' fmls
+      
+-- | Strategies for picking the next constraint to solve      
+data ConstraintPickStrategy = PickFirst | PickSmallestSpace      
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
-    semanticPrune :: Bool,      -- ^ After solving each constraints, remove semantically non-optimal solutions
-    agressivePrune :: Bool,     -- ^ Perform pruning on the LHS-valuation of as opposed to per-variable valuations
-    overlappingSplits :: Bool   -- ^ When splitting an LHS valuation into variable valuations, allow them to share qualifiers 
-  }
-  
+  semanticPrune :: Bool,                            -- ^ After solving each constraints, remove semantically non-optimal solutions
+  agressivePrune :: Bool,                           -- ^ Perform pruning on the LHS-valuation of as opposed to per-variable valuations
+  overlappingSplits :: Bool,                        -- ^ When splitting an LHS valuation into variable valuations, allow them to share qualifiers
+  constraintPickStrategy :: ConstraintPickStrategy  -- ^ How should the next constraint to solve be picked
+}
+    
 type FixPointSolver m a = ReaderT SolverParams m a
   
 -- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
@@ -43,7 +47,7 @@ greatestFixPoint quals fmls = go [topSolution quals]
     unknowns = Map.keysSet quals
     go :: SMTSolver m => [Solution] -> FixPointSolver m (Maybe Solution)
     go (sol:sols) = do
-        invalidConstraint <- fromJust <$> findM (liftM not . isValidFml . substitute sol) fmls
+        invalidConstraint <- asks constraintPickStrategy >>= pickConstraint sol        
         let modifiedConstraint = case invalidConstraint of
                                     Binary Implies lhs rhs -> Binary Implies lhs (substitute sol rhs)
                                     _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
@@ -53,6 +57,11 @@ greatestFixPoint quals fmls = go [topSolution quals]
           Just s -> return $ Just s -- Solution found
           Nothing -> go $ sols' ++ sols
     go [] = return Nothing
+    pickConstraint sol PickFirst = fromJust <$> findM (liftM not . isValidFml . substitute sol) fmls
+    pickConstraint sol PickSmallestSpace  = do
+      invalids <- filterM (liftM not . isValidFml . substitute sol) fmls
+      let spaceSize fml = maxValSize quals sol (unknownsOf fml)
+      return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) invalids
     debugOutput sols sol inv mod = debug1 $ vsep [
       nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map pretty sols), 
       text "Chosen candidate:" <+> pretty sol, 
@@ -76,21 +85,16 @@ strengthen quals (Binary Implies lhs rhs) sol = do
   where    
     unknowns = unknownsOf lhs
     unknownsList = Set.toList unknowns
-    lookupQuals u = case Map.lookup u quals of                                        -- search space for unknown @u@
-      Just qs -> qs
-      Nothing -> error $ "strengthen: missing qualifiers for unknown " ++ u
-    lhsQuals = setConcatMap (Set.fromList . view qualifiers . lookupQuals) unknowns   -- available qualifiers for the whole antecedent
-    usedLhsQuals = setConcatMap (valuation sol) unknowns                              -- already used qualifiers for the whole antecedent
-    subst val = let n = Set.size val in if 1 <= n && n <= maxValSize                  -- substitution of @val@ into the constraint, if @val@ is within search space
+    lhsQuals = setConcatMap (Set.fromList . view qualifiers . lookupQuals quals) unknowns   -- available qualifiers for the whole antecedent
+    usedLhsQuals = setConcatMap (valuation sol) unknowns                                    -- already used qualifiers for the whole antecedent
+    subst val = let n = Set.size val in if 1 <= n && n <= maxValSize quals sol unknowns     -- substitution of @val@ into the constraint, if @val@ is within search space
       then Just $ (conjunction usedLhsQuals |&| conjunction val) |=>| rhs
       else Nothing        
-    maxValSize = Set.foldl (\n u -> n + view maxCount (lookupQuals u)) 0 unknowns -   -- upper bound on the size of the lhs valuations
-      Set.size usedLhsQuals
     merge sol' = Map.unionWith Set.union sol sol'                                     -- new part of the solution merged with @sol@
     
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let 
-          QSpace qs min max = lookupQuals u
+          QSpace qs min max = lookupQuals quals u
           used = valuation sol u
           n = Set.size used
       in Set.toList $ boundedSubsets (min - n) (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
@@ -104,9 +108,13 @@ strengthen quals (Binary Implies lhs rhs) sol = do
                                 else Set.unions ss == s && sum (map Set.size ss) == Set.size s  -- Otherwise, also check that they are disjoint
       guard $ isValidsplit unknownsVal lhsVal
       return $ Map.fromList $ zip unknownsList unknownsVal
-      
-    
+          
 strengthen _ fml _ = error $ "strengthen: encountered ill-formed constraint " ++ show fml
+
+-- | 'maxValSize' @quals sol unknowns@: Upper bound on the size of valuations of a conjunction of @unknowns@ when strengthening @sol@ 
+maxValSize quals sol unknowns = let 
+    usedQuals = setConcatMap (valuation sol) unknowns
+  in Set.foldl (\n u -> n + view maxCount (lookupQuals quals u)) 0 unknowns - Set.size usedQuals
  
 -- | 'optimalValuations' @quals subst@: all smallest subsets of @quals@ that make @subst@ valid.
 optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> Maybe Formula) -> FixPointSolver m [Valuation]

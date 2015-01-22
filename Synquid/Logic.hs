@@ -67,6 +67,9 @@ unknownsOf (Unary Not e) = unknownsOf e
 unknownsOf (Binary _ e1 e2) = Set.union (unknownsOf e1) (unknownsOf e2 )
 unknownsOf _ = Set.empty
 
+leftHandSide (Binary _ l _) = l
+rightHandSide (Binary _ _ r) = r
+
 -- | Solution space for a single unknown  
 data QSpace = QSpace {
     _qualifiers :: [Formula],
@@ -77,6 +80,12 @@ data QSpace = QSpace {
 makeLenses ''QSpace  
   
 type QMap = Map Id QSpace
+
+-- | 'lookupQuals' @quals u@: lookup the search space for unknown @u@ in @quals@
+lookupQuals :: QMap -> Id -> QSpace
+lookupQuals quals u = case Map.lookup u quals of
+  Just qs -> qs
+  Nothing -> error $ "lookupQuals: missing qualifiers for unknown " ++ u
 
 -- | Valuation of a predicate unknown as a set of qualifiers
 type Valuation = Set Formula
