@@ -27,7 +27,7 @@ data BinOp = Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies | 
 -- | Formulas of the refinement logic
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
-  IntLit Integer |                    -- ^ Integer literal
+  IntLit Int |                        -- ^ Integer literal
   Var Id |                            -- ^ Integer unknown
   Unknown Id |                        -- ^ Predicate unknown
   Unary UnOp Formula |                -- ^ Unary expression  

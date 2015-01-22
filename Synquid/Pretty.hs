@@ -176,6 +176,7 @@ instance Pretty QMap where
   pretty = hMapDoc text pretty  
 
 programDoc :: Program -> Doc
+programDoc (PIntLit i) = pretty i
 programDoc (PVar ident) = text ident
 programDoc (PApp f x) = pretty f <+> pretty x
 programDoc (PIf c t e) = parens (fmlDoc c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)

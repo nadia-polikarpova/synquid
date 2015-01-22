@@ -15,6 +15,8 @@ import Data.Map (Map)
 import Control.Monad
 import Control.Applicative
 
+-- Conditionals
+
 condQualsRich :: [Id] -> [Formula]  
 condQualsRich vars = do
   lhs <- map Var vars ++ [IntLit 0]
@@ -31,13 +33,46 @@ condQuals vars = do
   guard $ lhs /= rhs
   return $ Binary op lhs rhs
   
+condQualsLinearEq :: Int -> Id -> Id -> [Formula]  
+condQualsLinearEq n x v = map (\i -> Var v |=| (Var x |+| IntLit i)) [1..n]
+  
+-- Variables  
+  
 varQual res vars = do
   var <- map Var vars
   return $ Var res |=| var
   
 extractVar res t@(Binary Eq (Var v) (Var x))
   | v == res  =  PVar x
-extractVar res t =  error $ "extractVar got a non-variable type: " ++ show t 
+extractVar res t =  error $ "extractVar got a non-variable type: " ++ show t  
+  
+-- Constants  
+
+constZero res = Var res |=| IntLit 0
+constOne res = Var res |=| IntLit 1
+
+constQualInt res = map ($ res) [constZero, constOne]
+
+extractConstInt res q = case elemIndex q (constQualInt res) of
+  Just 0 -> PIntLit 0
+  Just 1 -> PIntLit 1
+  Nothing -> error $ "extractConstInt got a non-existing type: " ++ show q  
+  
+constId arg res = Var res |=| Var arg
+constNeg arg res = Var res |=| fneg (Var arg)
+constInc arg res = Var res |=| (Var arg |+| IntLit 1)
+constDec arg res = Var res |=| (Var arg |-| IntLit 1)
+
+constQualIntInt arg res = map (\f -> f arg res) [constId, constNeg, constInc, constDec]
+
+extractConstIntInt arg res q = case elemIndex q (constQualIntInt arg res) of
+  Just 0 -> PVar "id"
+  Just 1 -> PVar "(-)"
+  Just 2 -> PVar "inc"
+  Just 3 -> PVar "dec"  
+  Nothing -> error $ "extractConstIntInt " ++ arg ++ " " ++ res ++ " got a non-existing type: " ++ show q  
+  
+-- Search parameters  
 
 params1 = SolverParams {
     semanticPrune = True,
@@ -45,6 +80,8 @@ params1 = SolverParams {
     overlappingSplits = False,
     constraintPickStrategy = PickSmallestSpace
   }
+  
+-- Test cases  
     
 testMax2Synthesize = do
   let vars = ["x", "y"]
@@ -135,25 +172,11 @@ testMax3Synthesize2 = do
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ max3 sol  
-    
-constId arg = Var "v" |=| Var arg
-constNeg arg = Var "v" |=| fneg (Var arg)
-constInc arg = Var "v" |=| (Var arg |+| IntLit 1)
-constDec arg = Var "v" |=| (Var arg |-| IntLit 1)
-
-constQualIntInt arg = map ($ arg) [constId, constNeg, constInc, constDec]
-
-extractConstIntInt arg q = case elemIndex q (constQualIntInt arg) of
-  Just 0 -> PVar "id"
-  Just 1 -> PVar "(-)"
-  Just 2 -> PVar "inc"
-  Just 3 -> PVar "dec"  
-  Nothing -> error $ "extractConstIntInt got a non-existing type: " ++ show q 
-  
+      
 pAbs sol = let val ident = conjunction $ valuation sol ident
   in PIf (val "condT") 
-        (PApp (extractConstIntInt "y" $ val "fun1") (extractVar "y" $ val "arg1"))                
-        (PApp (extractConstIntInt "z" $ val "fun2") (extractVar "z" $ val "arg2"))                
+        (PApp (extractConstIntInt "y" "v" $ val "fun1") (extractVar "y" $ val "arg1"))                
+        (PApp (extractConstIntInt "z" "v" $ val "fun2") (extractVar "z" $ val "arg2"))                
         
 testAbsSynthesize1 = do
   let vars = ["x"]
@@ -161,9 +184,9 @@ testAbsSynthesize1 = do
                 ("condT", QSpace (condQualsRich vars) 0 1),
                 ("condF", QSpace (condQualsRich vars) 0 1),
                 ("arg1", QSpace (varQual "y" vars) 1 1),
-                ("fun1", QSpace (constQualIntInt "y") 1 1),
+                ("fun1", QSpace (constQualIntInt "y" "v") 1 1),
                 ("arg2", QSpace (varQual "z" vars) 1 1),
-                ("fun2", QSpace (constQualIntInt "z") 1 1)
+                ("fun2", QSpace (constQualIntInt "z" "v") 1 1)
               ]
   let absType = (Var "v" |>=| IntLit 0) |&| (Var "v" |>=| Var "x")
   let fmls = [  
@@ -184,9 +207,9 @@ testAbsSynthesize2 = do
                 ("then", QSpace (condQualsRich $ vars ++ ["v"]) 0 2),
                 ("else", QSpace (condQualsRich $ vars ++ ["v"]) 0 2),
                 ("arg1", QSpace (varQual "y" vars) 1 1),
-                ("fun1", QSpace (constQualIntInt "y") 1 1),
+                ("fun1", QSpace (constQualIntInt "y" "v") 1 1),
                 ("arg2", QSpace (varQual "z" vars) 1 1),
-                ("fun2", QSpace (constQualIntInt "z") 1 1)
+                ("fun2", QSpace (constQualIntInt "z" "v") 1 1)
               ]
   let absType = (Var "v" |>=| IntLit 0) |&| (Var "v" |>=| Var "x")
   let fmls = [  
@@ -200,5 +223,37 @@ testAbsSynthesize2 = do
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pAbs sol    
+    
+pInc n sol = let val ident = conjunction $ valuation sol ident
+  in if n == 0
+      then extractVar "y0" $ val "arg1"
+      else PApp (extractConstIntInt ("y" ++ show (n - 1)) ("y" ++ show n) $ val ("fun" ++ show n)) (pInc (n - 1) sol)
+        
+testIncSynthesize1 n = do
+  let vars = ["x"]
+  let quals = Map.fromList $ 
+                ("arg1", QSpace (varQual "y0" vars) 1 1) : 
+                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1 1)) [1..n]
+  let incType = Var ("y" ++ show n) |=| (Var "x" |+| IntLit n)
+  let fmls = [foldr (|&|) (Unknown "arg1") (map (\i -> Unknown ("fun" ++ show i)) [1..n])  |=>| incType]                
+  mSol <- (evalZ3State $ initSolver >> solveWithParams params1 quals fmls)
+  case mSol of
+    Nothing -> putStr "No solution"
+    Just sol -> print $ pretty $ pInc n sol
+    
+testIncSynthesize2 n = do
+  let vars = ["x"]
+  let quals = Map.fromList $ 
+                [("arg1", QSpace (varQual "y0" vars) 1 1)] ++
+                    map (\i -> ("arg" ++ show i, QSpace (condQualsLinearEq (n - 1) "x" ("y" ++ show (i - 1))) 1 1)) [2..n] ++
+                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1 1)) [1..n]
+  let incType = Var ("y" ++ show n) |=| (Var "x" |+| IntLit n)
+  let fmls = map (\i -> (Unknown ("fun" ++ show i) |&| Unknown ("arg" ++ show i)) |=>| Unknown ("arg" ++ show (i + 1))) [1..(n - 1)] ++
+                [(Unknown ("fun" ++ show n) |&| Unknown ("arg" ++ show n)) |=>| incType]  
+  mSol <- (evalZ3State $ initSolver >> solveWithParams params1 quals fmls)
+  case mSol of
+    Nothing -> putStr "No solution"
+    Just sol -> print $ pretty $ pInc n sol        
+    
                              
-main = testMax3Synthesize1
+main = testIncSynthesize2 6

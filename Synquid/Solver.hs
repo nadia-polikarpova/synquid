@@ -42,7 +42,7 @@ type FixPointSolver m a = ReaderT SolverParams m a
 -- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
 -- | @fml@ must have the form "/\ u_i ==> fml'".
 greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe Solution)
-greatestFixPoint quals fmls = go [topSolution quals]
+greatestFixPoint quals fmls = debug1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ go [topSolution quals]
   where
     unknowns = Map.keysSet quals
     go :: SMTSolver m => [Solution] -> FixPointSolver m (Maybe Solution)

@@ -74,7 +74,7 @@ ifM cond t e = cond >>= (\res -> if res then t else e)
 -- | Debug output
 debug1 s = traceShow s
 -- debug1 s = id
--- debug2 s = traceShow s
-debug2 s = id
+debug2 s = traceShow s
+-- debug2 s = id
 -- debug3 s = traceShow s
 debug3 s = id
