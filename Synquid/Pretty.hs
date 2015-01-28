@@ -43,6 +43,7 @@ module Synquid.Pretty (
 
 import Synquid.Logic
 import Synquid.Program
+import Synquid.SMTSolver
 
 import Text.PrettyPrint.ANSI.Leijen hiding ((<+>), (<$>), hsep, vsep)
 import qualified Text.PrettyPrint.ANSI.Leijen as L
@@ -113,6 +114,7 @@ instance Show UnOp where
   show = show . pretty
   
 instance Pretty BinOp where
+  pretty Times = text "*"
   pretty Plus = text "+"
   pretty Minus = text "-"
   pretty Eq = text "=="
@@ -131,14 +133,15 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Unary _ _) = 5
+power (Unary _ _) = 6
 power (Binary op _ _) 
+  | op `elem` [Times] = 5
   | op `elem` [Plus, Minus] = 4
   | op `elem` [Eq, Neq, Lt, Le, Gt, Ge] = 3
   | op `elem` [And, Or] = 2
   | op `elem` [Implies] = 1
   | op `elem` [Iff] = 0
-power _ = 5
+power _ = 6
 
 -- | Pretty-printed formula  
 fmlDoc :: Formula -> Doc
@@ -151,9 +154,10 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     Var ident -> text ident
-    Unknown ident -> text "?" <> text ident
+    Unknown ident -> text ":" <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
+    Angelic ident -> text "?" <> text ident
   )
   where
     n' = power fml
@@ -187,3 +191,9 @@ instance Pretty Program where
   
 instance Show Program where
   show = show . pretty
+  
+instance Pretty SMTModel where
+  pretty = hMapDoc text pretty
+  
+instance Show SMTModel where
+  show = show . pretty  

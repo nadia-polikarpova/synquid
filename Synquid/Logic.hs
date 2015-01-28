@@ -21,23 +21,25 @@ data UnOp = Neg | Not
   deriving (Eq, Ord)
 
 -- | Binary operators  
-data BinOp = Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies | Iff
+data BinOp = Times | Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies | Iff
   deriving (Eq, Ord)
 
 -- | Formulas of the refinement logic
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
-  IntLit Int |                        -- ^ Integer literal
+  IntLit Integer |                    -- ^ Integer literal
   Var Id |                            -- ^ Integer unknown
   Unknown Id |                        -- ^ Predicate unknown
   Unary UnOp Formula |                -- ^ Unary expression  
-  Binary BinOp Formula Formula        -- ^ Binary expression
+  Binary BinOp Formula Formula |      -- ^ Binary expression
+  Angelic Id                          -- ^ Existentially quantified first-order variable
   deriving (Eq, Ord)
   
 ftrue = BoolLit True
 ffalse = BoolLit False
 fneg = Unary Neg
 fnot = Unary Not
+(|*|) = Binary Times
 (|+|) = Binary Plus
 (|-|) = Binary Minus
 (|=|) = Binary Eq
@@ -50,6 +52,13 @@ fnot = Unary Not
 (|||) = Binary Or
 (|=>|) = Binary Implies
 (|<=>|) = Binary Iff
+
+infixl 9 |*|
+infixl 8 |+|, |-|
+infixl 7 |=|, |/=|, |<|, |<=|, |>|, |>=|
+infixl 6 |&|, |||
+infixr 5 |=>|
+infix 4 |<=>|
 
 conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
   
@@ -67,13 +76,19 @@ unknownsOf (Unary Not e) = unknownsOf e
 unknownsOf (Binary _ e1 e2) = Set.union (unknownsOf e1) (unknownsOf e2 )
 unknownsOf _ = Set.empty
 
+-- | angelicsOf fml : set of all angelic variables of fml 
+angelicsOf :: Formula -> Set Id
+angelicsOf (Angelic ident) = Set.singleton ident
+angelicsOf (Unary _ e) = angelicsOf e
+angelicsOf (Binary _ e1 e2) = angelicsOf e1 `Set.union` angelicsOf e2
+angelicsOf _ = Set.empty
+
 leftHandSide (Binary _ l _) = l
 rightHandSide (Binary _ _ r) = r
 
 -- | Solution space for a single unknown  
 data QSpace = QSpace {
     _qualifiers :: [Formula],
-    _minCount :: Int,
     _maxCount :: Int
   }
 
@@ -93,7 +108,7 @@ type Valuation = Set Formula
 isStrongerThan :: Valuation -> Valuation -> Bool
 isStrongerThan = flip Set.isSubsetOf
 
--- | (Candidate) solutions for predicate unknowns
+-- | Valuations for predicate unknowns
 type Solution = Map Id Valuation
 
 valuation :: Solution -> Id -> Valuation
@@ -119,4 +134,20 @@ substitute sol e = case e of
     Nothing -> e
   Unary op e' -> Unary op (substitute sol e')
   Binary op e1 e2 -> Binary op (substitute sol e1) (substitute sol e2)
+  otherwise -> e
+  
+-- | Valuations for first-order variables
+type SMTModel = Map Id Integer  
+  
+-- | substituteVars sol e: Substitute solutions from sol for all first-order variables in e  
+substituteVars :: SMTModel -> Formula -> Formula
+substituteVars sol e = case e of
+  Var ident -> case Map.lookup ident sol of
+    Just i -> IntLit i
+    Nothing -> e
+  Angelic ident -> case Map.lookup ident sol of
+    Just i -> IntLit i
+    Nothing -> e
+  Unary op e' -> Unary op (substituteVars sol e')
+  Binary op e1 e2 -> Binary op (substituteVars sol e1) (substituteVars sol e2)
   otherwise -> e

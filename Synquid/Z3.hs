@@ -42,29 +42,18 @@ emptyData = Z3Data Nothing Map.empty
 
 evalZ3State :: Z3State a -> IO a
 evalZ3State f = evalZ3 $ evalStateT f emptyData
-      
--- | Convert a list of first-order constraints to a Z3 AST and check their satisfiability.
-buildAndSolve :: Formula -> Z3State Result
-buildAndSolve constraint = (toZ3 >=> assertCnstr) constraint >> check
-          
+                
 -- | Convert a first-order constraint to a Z3 AST.
 toZ3 :: Formula -> Z3State AST
 toZ3 expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
   IntLit i -> mkInt i  
-  Var ident -> do
-    is <- fromJust <$> use intSort
-    symbMb <- uses symbols (Map.lookup ident)
-    case symbMb of
-      Just s -> mkConst s is
-      Nothing -> do
-        s <- mkStringSymbol ident
-        symbols %= Map.insert ident s
-        mkConst s is
+  Var ident -> var ident
+  Angelic ident -> var ident
   Unknown ident -> error $ "toZ3: encountered a second-order unknown " ++ ident
   Unary op e -> toZ3 e >>= unOp op
-  Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)
+  Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)  
   where
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
@@ -78,7 +67,8 @@ toZ3 expr = case expr of
         Gt -> mkGt
         Lt -> mkLt
         Le -> mkLe
-        Ge -> mkGe      
+        Ge -> mkGe  
+        Times -> list2 mkMul
         Plus -> list2 mkAdd
         Minus -> list2 mkSub
         And   -> list2 mkAnd
@@ -86,16 +76,58 @@ toZ3 expr = case expr of
         Implies -> mkImplies
         Iff -> mkIff
     list2 o x y = o [x, y]
+    
+    var ident = do
+      is <- fromJust <$> use intSort
+      symbMb <- uses symbols (Map.lookup ident)
+      case symbMb of
+        Just s -> mkConst s is
+        Nothing -> do
+          s <- mkStringSymbol ident
+          symbols %= Map.insert ident s
+          mkConst s is
+    
+extractModel :: Formula -> Model -> Z3State SMTModel
+extractModel fml model = foldM addVar Map.empty (Set.toList $ varsOf fml `Set.union` angelicsOf fml)
+  where
+    addVar smtMod ident = do
+      symbMb <- uses symbols (Map.lookup ident)
+      case symbMb of
+        Nothing -> error $ "extractModel: symbol not found for " ++ ident
+        Just s -> do
+          is <- fromJust <$> use intSort
+          node <- mkConst s is
+          resMb <- eval model node
+          case resMb of
+            Nothing -> error $ "extractModel: model not found for " ++ ident
+            Just val -> do
+              kind <- getAstKind val
+              case kind of
+                Z3_NUMERAL_AST -> getInt val >>= (\i -> return $ Map.insert ident i smtMod) -- Exact value: extract it
+                Z3_APP_AST -> return $ Map.insert ident 0 smtMod -- Value did not matter: return 0
         
 instance SMTSolver Z3State where
   initSolver = do
     is <- mkIntSort
     intSort .= Just is
 
-  isValid fml = do  
-      res <- local $ buildAndSolve $ fnot fml
+  isValid fml = do
+      res <- local $ (toZ3 >=> assertCnstr) (fnot fml) >> check
       case res of
         Unsat -> debug2 (text "SMT" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug2 (text "SMT" <+> pretty fml <+> text "INVALID") $ return False    
         _ -> error $ "isValid: Z3 returned Unknown"
+        
+  modelOf fml = do
+      push
+      (res, modelMb) <- (toZ3 >=> assertCnstr) fml >> getModel      
+      case res of
+        Unsat -> debug2 (text "SMT" <+> pretty fml <+> text "UNSAT") $ pop 1 >> return Nothing
+        Sat -> do
+          let model = fromJust modelMb
+          m <- extractModel fml model          
+          debug2 (text "SMT" <+> pretty fml <+> text "SAT" <+> pretty m) $ delModel model
+          pop 1          
+          return (Just m)
+        _ -> error $ "isValid: Z3 returned Unknown"      
       

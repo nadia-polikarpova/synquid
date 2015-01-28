@@ -22,8 +22,10 @@ import Control.Lens
 solveWithParams :: SMTSolver m => SolverParams -> QMap -> [Formula] -> m (Maybe Solution)
 solveWithParams params quals fmls = runReaderT go params
   where
-    go = do
-      quals' <- traverse (traverseOf qualifiers pruneQualifiers) quals -- remove redundant qualifiers
+    go = do      
+      quals' <- ifM (asks pruneQuals)
+        (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
+        (return quals)
       debug3 (text "Original" $+$ pretty quals $+$ text "Pruned" $+$ pretty quals') $ greatestFixPoint quals' fmls
       
 -- | Strategies for picking the next constraint to solve      
@@ -31,9 +33,9 @@ data ConstraintPickStrategy = PickFirst | PickSmallestSpace
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
+  pruneQuals :: Bool,                               -- ^ Should redundant qualifiers be removed before solving constraints?
   semanticPrune :: Bool,                            -- ^ After solving each constraints, remove semantically non-optimal solutions
   agressivePrune :: Bool,                           -- ^ Perform pruning on the LHS-valuation of as opposed to per-variable valuations
-  overlappingSplits :: Bool,                        -- ^ When splitting an LHS valuation into variable valuations, allow them to share qualifiers
   constraintPickStrategy :: ConstraintPickStrategy  -- ^ How should the next constraint to solve be picked
 }
     
@@ -73,8 +75,7 @@ greatestFixPoint quals fmls = debug1 (nest 2 $ text "Constraints" $+$ vsep (map 
 strengthen :: SMTSolver m => QMap -> Formula -> Solution -> FixPointSolver m [Solution]
 strengthen quals (Binary Implies lhs rhs) sol = do
     lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) subst -- all minimal valid valuations of the whole antecedent
-    overlap <- asks overlappingSplits
-    let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map (splitLhsValuation overlap) lhsValuations) -- map of lhsValuations with a non-empty split to their split
+    let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
@@ -94,18 +95,16 @@ strengthen quals (Binary Implies lhs rhs) sol = do
     
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let 
-          QSpace qs min max = lookupQuals quals u
+          QSpace qs max = lookupQuals quals u
           used = valuation sol u
           n = Set.size used
-      in Set.toList $ boundedSubsets (min - n) (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
+      in Set.toList $ boundedSubsets (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
     
       -- | All valid partitions of @lhsVal@ into solutions for multiple unknowns.
-    splitLhsValuation :: Bool -> Valuation -> [Solution]
-    splitLhsValuation overlap lhsVal = do
+    splitLhsValuation :: Valuation -> [Solution]
+    splitLhsValuation lhsVal = do
       unknownsVal <- mapM (singleUnknownCandidates lhsVal) unknownsList
-      let isValidsplit ss s = if overlap
-                                then Set.unions ss == s -- If overlapping splits are allowed, only check that the split covers the whole lhsVal
-                                else Set.unions ss == s && sum (map Set.size ss) == Set.size s  -- Otherwise, also check that they are disjoint
+      let isValidsplit ss s = Set.unions ss == s && sum (map Set.size ss) == Set.size s
       guard $ isValidsplit unknownsVal lhsVal
       return $ Map.fromList $ zip unknownsList unknownsVal
           
@@ -164,4 +163,42 @@ filterSubsets check n = go [] [Set.empty]
       
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: SMTSolver m => Formula -> FixPointSolver m Bool
-isValidFml = lift . isValid      
+isValidFml = lift . isValid
+
+-- | 'findAngelics' @fml@: solve exists angelics :: forall vars :: lhs (angelics, vars) ==> rhs (vars)
+findAngelics :: SMTSolver m => Formula -> FixPointSolver m (Maybe SMTModel)
+findAngelics fml@(Binary Implies lhs rhs) = go $ Set.empty
+  where
+    angelics = angelicsOf fml -- existentially quantified variables
+    vars = varsOf fml -- universally quantified variables
+    go examples = do
+      let toSolve = lhs |&| rhs |&| (conjunction $ Set.map (fnot . flip substituteVars lhs) examples)
+      solMb <- lift $ modelOf toSolve -- ToDo: have two solvers, so that we can just add constraints to the first one
+      case solMb of
+        Nothing -> return Nothing
+        Just sol -> do
+          let candidate = restrictDomain angelics sol
+          counterExampleMb <- lift $ modelOf $ fnot $ substituteVars candidate fml
+          case counterExampleMb of
+            Nothing -> return $ Just candidate
+            Just counterExample -> go $ Set.insert counterExample examples
+            
+findAngelics fml = error $ "findAngelics: encountered ill-formed constraint " ++ show fml  
+
+-- findAngelics :: SMTSolver m => Formula -> FixPointSolver m (Maybe SMTModel)
+-- findAngelics fml = go $ Set.singleton initExample
+  -- where
+    -- angelics = angelicsOf fml -- existentially quantified variables
+    -- vars = varsOf fml -- universally quantified variables
+    -- initExample = constMap vars 0 -- variable values for the initial step
+    -- go examples = do
+      -- let toSolve = conjunction $ Set.map (flip substituteVars fml) examples
+      -- candidateMb <- lift $ modelOf toSolve -- ToDo: have two solvers, so that we can just add constraints to the first one
+      -- case candidateMb of
+        -- Nothing -> return Nothing
+        -- Just candidate -> do
+          -- counterExampleMb <- lift $ modelOf $ fnot $ substituteVars candidate fml
+          -- case counterExampleMb of
+            -- Nothing -> return $ Just candidate
+            -- Just counterExample -> go $ Set.insert counterExample examples
+    
