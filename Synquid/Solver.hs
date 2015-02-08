@@ -26,7 +26,7 @@ solveWithParams params quals fmls = runReaderT go params
       quals' <- ifM (asks pruneQuals)
         (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
         (return quals)
-      debug3 (text "Original" $+$ pretty quals $+$ text "Pruned" $+$ pretty quals') $ greatestFixPoint quals' fmls
+      greatestFixPoint quals' fmls
       
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = PickFirst | PickSmallestSpace      
@@ -36,7 +36,8 @@ data SolverParams = SolverParams {
   pruneQuals :: Bool,                               -- ^ Should redundant qualifiers be removed before solving constraints?
   semanticPrune :: Bool,                            -- ^ After solving each constraints, remove semantically non-optimal solutions
   agressivePrune :: Bool,                           -- ^ Perform pruning on the LHS-valuation of as opposed to per-variable valuations
-  constraintPickStrategy :: ConstraintPickStrategy  -- ^ How should the next constraint to solve be picked
+  constraintPickStrategy :: ConstraintPickStrategy, -- ^ How should the next constraint to solve be picked
+  maxCegisIterations :: Int                         -- ^ Maximum number of CEGIS iterations for parametrized qualifiers (unbounded if negative)
 }
     
 type FixPointSolver m a = ReaderT SolverParams m a
@@ -46,35 +47,34 @@ type FixPointSolver m a = ReaderT SolverParams m a
 greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe Solution)
 greatestFixPoint quals fmls = debug1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ go [topSolution quals]
   where
-    unknowns = Map.keysSet quals
-    go :: SMTSolver m => [Solution] -> FixPointSolver m (Maybe Solution)
+    go :: SMTSolver m => [(Solution, SMTModel)] -> FixPointSolver m (Maybe Solution)
     go (sol:sols) = do
         invalidConstraint <- asks constraintPickStrategy >>= pickConstraint sol        
         let modifiedConstraint = case invalidConstraint of
-                                    Binary Implies lhs rhs -> Binary Implies lhs (substitute sol rhs)
+                                    Binary Implies lhs rhs -> Binary Implies lhs (substituteSolution sol rhs)
                                     _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
         sols' <- debugOutput (sol:sols) sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
-        validSolution <- findM (\s -> and <$> mapM (isValidFml . substitute s) (delete invalidConstraint fmls)) sols'
+        validSolution <- findM (\s -> and <$> mapM (isValidFml . substituteSolution s) (delete invalidConstraint fmls)) sols'
         case validSolution of
-          Just s -> return $ Just s -- Solution found
+          Just (s, m) -> return $ Just $ simpleSolution s m -- Solution found
           Nothing -> go $ sols' ++ sols
     go [] = return Nothing
-    pickConstraint sol PickFirst = fromJust <$> findM (liftM not . isValidFml . substitute sol) fmls
-    pickConstraint sol PickSmallestSpace  = do
-      invalids <- filterM (liftM not . isValidFml . substitute sol) fmls
+    pickConstraint (sol, model) PickFirst = fromJust <$> findM (liftM not . isValidFml . substituteSolution (sol, model)) fmls
+    pickConstraint (sol, model) PickSmallestSpace  = do
+      invalids <- filterM (liftM not . isValidFml . substituteSolution (sol, model)) fmls
       let spaceSize fml = maxValSize quals sol (unknownsOf fml)
       return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) invalids
-    debugOutput sols sol inv mod = debug1 $ vsep [
+    debugOutput sols sol inv model = debug1 $ vsep [
       nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map pretty sols), 
       text "Chosen candidate:" <+> pretty sol, 
       text "Invalid Constraint:" <+> pretty inv, 
-      text "Strengthening:" <+> pretty mod]
+      text "Strengthening:" <+> pretty model]
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
-strengthen :: SMTSolver m => QMap -> Formula -> Solution -> FixPointSolver m [Solution]
-strengthen quals (Binary Implies lhs rhs) sol = do
-    lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) subst -- all minimal valid valuations of the whole antecedent
+strengthen :: SMTSolver m => QMap -> Formula -> (Solution, SMTModel) -> FixPointSolver m [(Solution, SMTModel)]
+strengthen quals fml@(Binary Implies lhs rhs) (sol, model) = do
+    lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) check -- all minimal valid valuations of the whole antecedent
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -88,50 +88,77 @@ strengthen quals (Binary Implies lhs rhs) sol = do
     unknownsList = Set.toList unknowns
     lhsQuals = setConcatMap (Set.fromList . view qualifiers . lookupQuals quals) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (valuation sol) unknowns                                    -- already used qualifiers for the whole antecedent
-    subst val = let n = Set.size val in if 1 <= n && n <= maxValSize quals sol unknowns     -- substitution of @val@ into the constraint, if @val@ is within search space
-      then Just $ (conjunction usedLhsQuals |&| conjunction val) |=>| rhs
-      else Nothing        
-    merge sol' = Map.unionWith Set.union sol sol'                                     -- new part of the solution merged with @sol@
+    rhsVars = varsOf rhs
+    ins = Map.unions [view pQualInputs (lookupQuals quals u) | u <- unknownsList]
+    check val = let 
+                  n = Set.size val 
+                  lhs' = conjunction usedLhsQuals |&| conjunction val                  
+      in if 1 <= n && n <= maxValSize quals sol unknowns
+            then if rhsVars `Set.isSubsetOf` varsOf lhs'
+              then findAngelics (lhs' |=>| rhs) ins                                                                   -- all variables of rhs are contained in lhs': nontrivial solution possible
+              else ifM (isValidFml $ fnot lhs') (return $ Just $ trivialModel (angelicsOf lhs')) (return Nothing)     -- rhs has more variables: if lhs' is unsat, return any solution, and otherwise no solution
+              -- else return Nothing
+            else return Nothing        
+    merge (sol', mod') = (Map.unionWith Set.union sol sol', Map.union model mod')           -- new part of the solution merged with @sol@
     
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let 
-          QSpace qs max = lookupQuals quals u
+          QSpace qs max _ = lookupQuals quals u
           used = valuation sol u
           n = Set.size used
       in Set.toList $ boundedSubsets (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
     
       -- | All valid partitions of @lhsVal@ into solutions for multiple unknowns.
-    splitLhsValuation :: Valuation -> [Solution]
-    splitLhsValuation lhsVal = do
+    splitLhsValuation :: (Valuation, SMTModel) -> [(Solution, SMTModel)]
+    splitLhsValuation (lhsVal, m) = do
       unknownsVal <- mapM (singleUnknownCandidates lhsVal) unknownsList
       let isValidsplit ss s = Set.unions ss == s && sum (map Set.size ss) == Set.size s
       guard $ isValidsplit unknownsVal lhsVal
-      return $ Map.fromList $ zip unknownsList unknownsVal
+      return (Map.fromList $ zip unknownsList unknownsVal, m)
           
 strengthen _ fml _ = error $ "strengthen: encountered ill-formed constraint " ++ show fml
 
 -- | 'maxValSize' @quals sol unknowns@: Upper bound on the size of valuations of a conjunction of @unknowns@ when strengthening @sol@ 
+maxValSize :: QMap -> Solution -> Set Id -> Int 
 maxValSize quals sol unknowns = let 
     usedQuals = setConcatMap (valuation sol) unknowns
   in Set.foldl (\n u -> n + view maxCount (lookupQuals quals u)) 0 unknowns - Set.size usedQuals
  
--- | 'optimalValuations' @quals subst@: all smallest subsets of @quals@ that make @subst@ valid.
-optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> Maybe Formula) -> FixPointSolver m [Valuation]
-optimalValuations quals subst = map qualsAt <$> filterSubsets check (length quals)
+-- | 'optimalValuations' @quals check@: all smallest subsets of @quals@ that make @subst@ valid.
+optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> FixPointSolver m (Maybe SMTModel)) -> FixPointSolver m [(Valuation, SMTModel)]
+optimalValuations quals check = map (over _1 qualsAt) <$> filterSubsets (check . qualsAt) (length quals)
   where
     qualsAt idxs = Set.map (quals !!) idxs
-    check idxs = case subst $ qualsAt idxs of
-      Nothing -> return False
-      Just fml -> isValidFml fml    
+    -- getModel idxs = case subst $ qualsAt idxs of
+      -- Nothing -> return Nothing
+      -- Just fml -> findAngelics fml ins
+      
+-- | 'filterSubsets' @getModel n@: all minimal subsets of indexes from [0..@n@) fro which @getModel@ returns a model,
+-- where @getModel@ is monotone (if a set has a model, then every superset also has a model);
+-- performs breadth-first search.
+filterSubsets :: SMTSolver m => (Set Int -> FixPointSolver m (Maybe SMTModel)) -> Int -> FixPointSolver m [(Set Int, SMTModel)]
+filterSubsets getModel n = go [] [Set.empty]
+  where
+    go solutions candidates = if null candidates 
+      then return solutions
+      else let new = filter (\s -> not $ any (flip Set.isSubsetOf s) (map fst solutions)) candidates
+        in do
+          results <- zip new <$> mapM getModel new
+          let (valids, invalids) = partition (isJust . snd) results
+          go (solutions ++ map (over _2 fromJust) valids) (concatMap children (map fst invalids))      
+    children idxs = let lower = if Set.null idxs then 0 else Set.findMax idxs + 1
+      in map (flip Set.insert idxs) [lower..(n - 1)]      
             
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
-pruneSolutions :: SMTSolver m => [Id] -> [Solution] -> FixPointSolver m [Solution]
-pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM (\u -> isValidFml $ conjunction (valuation sol u) |=>| conjunction (valuation s u)) unknowns) sols
+pruneSolutions :: SMTSolver m => [Id] -> [(Solution, SMTModel)] -> FixPointSolver m [(Solution, SMTModel)]
+pruneSolutions unknowns = let isSubsumed (sol, model) sols = anyM (\(s, m) -> allM 
+                                (\u -> isValidFml $ substituteModel model (conjunction $ valuation sol u) |=>| substituteModel m (conjunction $ valuation s u)) unknowns) sols
   in prune isSubsumed
   
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another valuation in @vals@   
-pruneValuations :: SMTSolver m => [Valuation] -> FixPointSolver m [Valuation] 
-pruneValuations = let isSubsumed val vals = anyM (\v -> isValidFml $ conjunction val |=>| conjunction v) vals
+pruneValuations :: SMTSolver m => [(Valuation, SMTModel)] -> FixPointSolver m [(Valuation, SMTModel)] 
+pruneValuations = let isSubsumed (val, model) vals = 
+                       let fml = substituteModel model (conjunction val) in anyM (\(v, m) -> isValidFml $ fml |=>| substituteModel m (conjunction v)) vals
   in prune isSubsumed
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
@@ -140,65 +167,47 @@ pruneQualifiers = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>
   in prune isSubsumed
   
 prune :: SMTSolver m => (a -> [a] -> FixPointSolver m Bool) -> [a] -> FixPointSolver m [a]
-prune isSubsumed [] = return []
+prune _ [] = return []
 prune isSubsumed (x:xs) = prune' [] x xs
   where
     prune' lefts x [] = ifM (isSubsumed x lefts) (return lefts) (return $ x:lefts)
     prune' lefts x rights@(y:ys) = ifM (isSubsumed x (lefts ++ rights)) (prune' lefts y ys) (prune' (lefts ++ [x]) y ys)  
-        
--- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
--- where @check@ is monotone (is a set satisfies check, then every superset also satisfies @check@);
--- performs breadth-first search.
-filterSubsets :: SMTSolver m => (Set Int -> FixPointSolver m Bool) -> Int -> FixPointSolver m [Set Int]
-filterSubsets check n = go [] [Set.empty]
-  where
-    go solutions candidates = if null candidates 
-      then return solutions
-      else let new = filter (\s -> not $ any (flip Set.isSubsetOf s) solutions) candidates
-        in do
-          (valids, invalids) <- partitionM check new 
-          go (solutions ++ valids) (concatMap children invalids)      
-    children idxs = let lower = if Set.null idxs then 0 else Set.findMax idxs + 1
-      in map (flip Set.insert idxs) [lower..(n - 1)]
-      
+              
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: SMTSolver m => Formula -> FixPointSolver m Bool
 isValidFml = lift . isValid
 
 -- | 'findAngelics' @fml@: solve exists angelics :: forall vars :: lhs (angelics, vars) ==> rhs (vars)
-findAngelics :: SMTSolver m => Formula -> FixPointSolver m (Maybe SMTModel)
-findAngelics fml@(Binary Implies lhs rhs) = go $ Set.empty
+findAngelics :: SMTSolver m => Formula -> Map Id (Set Id) -> FixPointSolver m (Maybe SMTModel)
+findAngelics fml@(Binary Implies lhs rhs) ins = if Set.null angelics 
+    then ifM (isValidFml fml) (return $ Just Map.empty) (return Nothing)
+    else do 
+      max <- asks maxCegisIterations
+      debug1 (text "Solving" <+> pretty fml $+$ text "Outs" <+> pretty (Set.toList outs)) $ go max [trivialModel vars]
   where
     angelics = angelicsOf fml -- existentially quantified variables
     vars = varsOf fml -- universally quantified variables
-    go examples = do
-      let toSolve = lhs |&| rhs |&| (conjunction $ Set.map (fnot . flip substituteVars lhs) examples)
-      solMb <- lift $ modelOf toSolve -- ToDo: have two solvers, so that we can just add constraints to the first one
+    outs = vars Set.\\ (Set.unions $ Map.elems $ restrictDomain angelics ins)
+    
+    fromExample ex i = let -- part of the synthesis constraint derived from counter-example @ex@ at position @i@        
+        negative = fnot (substituteModel ex lhs) -- negative example (use all inputs)
+        positive' = substituteModel (removeDomain outs ex) (lhs |&| rhs) -- positive example (use only independent inputs and treat dependent ones angelically)
+        positive = Set.foldr (\dep -> substituteExpr dep (Var $ dep ++ show i)) positive' outs -- rename outs to be different in different examples
+      in if i == 0 
+            then Set.singleton positive  -- no negative example from the first input, since it is not necessarily a counter-example
+            else Set.fromList [negative, positive]
+    toSolve examples = let l = length examples in conjunction $ Set.unions $ zipWith fromExample examples [l - 1, l - 2 .. 0]
+            
+    go 0 _ = return Nothing
+    go n examples = do
+      solMb <- lift $ modelOf $ toSolve examples -- ToDo: have two solvers, so that we can just add constraints to the first one
       case solMb of
         Nothing -> return Nothing
-        Just sol -> do
+        Just sol -> do                                                                        -- Solution found: verify
           let candidate = restrictDomain angelics sol
-          counterExampleMb <- lift $ modelOf $ fnot $ substituteVars candidate fml
+          counterExampleMb <- lift $ modelOf $ fnot $ substituteModel candidate fml
           case counterExampleMb of
             Nothing -> return $ Just candidate
-            Just counterExample -> go $ Set.insert counterExample examples
-            
-findAngelics fml = error $ "findAngelics: encountered ill-formed constraint " ++ show fml  
-
--- findAngelics :: SMTSolver m => Formula -> FixPointSolver m (Maybe SMTModel)
--- findAngelics fml = go $ Set.singleton initExample
-  -- where
-    -- angelics = angelicsOf fml -- existentially quantified variables
-    -- vars = varsOf fml -- universally quantified variables
-    -- initExample = constMap vars 0 -- variable values for the initial step
-    -- go examples = do
-      -- let toSolve = conjunction $ Set.map (flip substituteVars fml) examples
-      -- candidateMb <- lift $ modelOf toSolve -- ToDo: have two solvers, so that we can just add constraints to the first one
-      -- case candidateMb of
-        -- Nothing -> return Nothing
-        -- Just candidate -> do
-          -- counterExampleMb <- lift $ modelOf $ fnot $ substituteVars candidate fml
-          -- case counterExampleMb of
-            -- Nothing -> return $ Just candidate
-            -- Just counterExample -> go $ Set.insert counterExample examples
-    
+            Just counterExample -> go (n - 1) $ counterExample : examples
+                        
+findAngelics fml _ = error $ "findAngelics: encountered ill-formed constraint " ++ show fml              

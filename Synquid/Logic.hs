@@ -88,8 +88,9 @@ rightHandSide (Binary _ _ r) = r
 
 -- | Solution space for a single unknown  
 data QSpace = QSpace {
-    _qualifiers :: [Formula],
-    _maxCount :: Int
+    _qualifiers :: [Formula],         -- Qualifiers 
+    _maxCount :: Int,                 -- Maximum number of qualifiers in a valuation
+    _pQualInputs :: Map Id (Set Id)   -- For parametrized qualifiers, the set of variables treated as inputs
   }
 
 makeLenses ''QSpace  
@@ -117,8 +118,8 @@ valuation sol var = case Map.lookup var sol of
   Nothing -> error $ "valuation: no value for unknown " ++ var
   
 -- | Top of the solution lattice (maps every unknown in unknowns to the empty set of qualifiers)
-topSolution :: QMap -> Solution
-topSolution quals = constMap (Map.keysSet quals) Set.empty
+topSolution :: QMap -> (Solution, SMTModel)
+topSolution quals = (constMap (Map.keysSet quals) Set.empty, Map.empty)
 
 -- | isSolutionStrongerThan poss negs s1 s2: is s1 stronger (more optimal) than s2 on positive unknowns poss and negative unknowns negs?
 isSolutionStrongerThan :: [Id] -> [Id] -> Solution -> Solution -> Bool
@@ -126,28 +127,50 @@ isSolutionStrongerThan poss negs s1 s2 =
   all (\var -> valuation s2 var `isStrongerThan` valuation s1 var) negs && 
   all (\var -> valuation s1 var `isStrongerThan` valuation s2 var) poss
 
--- | substitute sol e: Substitute solutions from sol for all predicate variables in e
-substitute :: Solution -> Formula -> Formula   
-substitute sol e = case e of
-  Unknown ident -> case Map.lookup ident sol of
-    Just quals -> conjunction quals
-    Nothing -> e
-  Unary op e' -> Unary op (substitute sol e')
-  Binary op e1 e2 -> Binary op (substitute sol e1) (substitute sol e2)
-  otherwise -> e
+-- | substituteSolution sol e: Substitute solutions from sol for all predicate variables in e
+substituteSolution :: (Solution, SMTModel) -> Formula -> Formula   
+substituteSolution (sol, mod) e = go e
+  where
+    sol' = simpleSolution sol mod
+    go e = case e of
+      Unknown ident -> case Map.lookup ident sol' of
+        Just quals -> conjunction quals
+        Nothing -> e
+      Unary op e' -> Unary op (go e')
+      Binary op e1 e2 -> Binary op (go e1) (go e2)
+      otherwise -> e
   
 -- | Valuations for first-order variables
 type SMTModel = Map Id Integer  
+
+trivialModel vars = constMap vars 0
   
--- | substituteVars sol e: Substitute solutions from sol for all first-order variables in e  
-substituteVars :: SMTModel -> Formula -> Formula
-substituteVars sol e = case e of
-  Var ident -> case Map.lookup ident sol of
+-- | substituteModel model e: Substitute solutions from model for all first-order variables in e  
+substituteModel :: SMTModel -> Formula -> Formula
+substituteModel model e = case e of
+  Var ident -> case Map.lookup ident model of
     Just i -> IntLit i
     Nothing -> e
-  Angelic ident -> case Map.lookup ident sol of
+  Angelic ident -> case Map.lookup ident model of
     Just i -> IntLit i
     Nothing -> e
-  Unary op e' -> Unary op (substituteVars sol e')
-  Binary op e1 e2 -> Binary op (substituteVars sol e1) (substituteVars sol e2)
+  Unary op e' -> Unary op (substituteModel model e')
+  Binary op e1 e2 -> Binary op (substituteModel model e1) (substituteModel model e2)
   otherwise -> e
+  
+-- | 'substituteExpr' @var expr e@: Substitute @expr@ for every occurrence of @var@ in @e@    
+substituteExpr :: Id -> Formula -> Formula -> Formula
+substituteExpr var expr fml = case fml of
+  Var name -> if name == var
+    then expr
+    else Var name
+  Angelic name -> if name == var
+    then expr
+    else Angelic name
+  Unary op fml' -> Unary op (substituteExpr var expr fml')
+  Binary op fml1 fml2 -> Binary op (substituteExpr var expr fml1) (substituteExpr var expr fml2)
+  otherwise -> fml  
+  
+-- | 'simpleSolution' @sol model@: Substitute solutions from @model@ for every parameter in @sol@
+simpleSolution :: Solution -> SMTModel -> Solution
+simpleSolution sol model = Map.map (Set.map (substituteModel model)) sol

@@ -41,7 +41,9 @@ emptyData :: Z3Data
 emptyData = Z3Data Nothing Map.empty
 
 evalZ3State :: Z3State a -> IO a
-evalZ3State f = evalZ3 $ evalStateT f emptyData
+evalZ3State f = do
+  env <- newEnv Nothing stdOpts
+  evalZ3WithEnv (evalStateT f emptyData) env
                 
 -- | Convert a first-order constraint to a Z3 AST.
 toZ3 :: Formula -> Z3State AST
@@ -114,19 +116,19 @@ instance SMTSolver Z3State where
   isValid fml = do
       res <- local $ (toZ3 >=> assertCnstr) (fnot fml) >> check
       case res of
-        Unsat -> debug2 (text "SMT" <+> pretty fml <+> text "VALID") $ return True
-        Sat -> debug2 (text "SMT" <+> pretty fml <+> text "INVALID") $ return False    
+        Unsat -> debug2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
+        Sat -> debug2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
         _ -> error $ "isValid: Z3 returned Unknown"
         
   modelOf fml = do
       push
       (res, modelMb) <- (toZ3 >=> assertCnstr) fml >> getModel      
       case res of
-        Unsat -> debug2 (text "SMT" <+> pretty fml <+> text "UNSAT") $ pop 1 >> return Nothing
+        Unsat -> debug2 (text "SMT MODEL" <+> pretty fml <+> text "UNSAT") $ pop 1 >> return Nothing
         Sat -> do
           let model = fromJust modelMb
           m <- extractModel fml model          
-          debug2 (text "SMT" <+> pretty fml <+> text "SAT" <+> pretty m) $ delModel model
+          debug2 (text "SMT MODEL" <+> pretty fml <+> text "SAT" <+> pretty m) $ delModel model
           pop 1          
           return (Just m)
         _ -> error $ "isValid: Z3 returned Unknown"      

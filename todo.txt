@@ -1,4 +1,7 @@
-- CEGIS solver (what to do with multiple solutions? do we need a lattice over them?)
+- Do we need strongest counterexamples / weakest solutions (or the other way around) for weak RHSs? Read PLDI paper.
+- Do we need multiple solutions for parameters? Do we need a lattice over them?
+- How to generalize to arbitrary constraints with arbitrary # inputs? Start with all independent and classical CEGIS and then pick dependent variables 
+- Refactor
 - Unit tests
 - Try more examples
 - Constraint generator
