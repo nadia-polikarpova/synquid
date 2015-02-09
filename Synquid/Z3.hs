@@ -52,7 +52,7 @@ toZ3 expr = case expr of
   BoolLit False -> mkFalse
   IntLit i -> mkInt i  
   Var ident -> var ident
-  Angelic ident -> var ident
+  Parameter ident -> var ident
   Unknown ident -> error $ "toZ3: encountered a second-order unknown " ++ ident
   Unary op e -> toZ3 e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)  
@@ -90,7 +90,7 @@ toZ3 expr = case expr of
           mkConst s is
     
 extractModel :: Formula -> Model -> Z3State SMTModel
-extractModel fml model = foldM addVar Map.empty (Set.toList $ varsOf fml `Set.union` angelicsOf fml)
+extractModel fml model = foldM addVar Map.empty (Set.toList $ varsOf fml `Set.union` paramsOf fml)
   where
     addVar smtMod ident = do
       symbMb <- uses symbols (Map.lookup ident)

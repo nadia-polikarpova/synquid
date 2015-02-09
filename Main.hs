@@ -264,7 +264,7 @@ testIncSynthesize3 n = do
   let vars = ["x"]
   let quals = Map.fromList $ 
                 [("arg1", QSpace (varQual "y0" vars) 1 Map.empty)] ++
-                    map (\i -> ("arg" ++ show i, QSpace [Var ("y" ++ show (i - 1)) |=| Var "x" |+| Angelic ("i" ++ show i)] 1 (ins ("i" ++ show i) ["x"]))) [2..n] ++ -- , "y" ++ show (i - 1)
+                    map (\i -> ("arg" ++ show i, QSpace [Var ("y" ++ show (i - 1)) |=| Var "x" |+| Parameter ("i" ++ show i)] 1 (ins ("i" ++ show i) ["x"]))) [2..n] ++ -- , "y" ++ show (i - 1)
                     map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1 Map.empty)) [1..n]
   let incType = Var ("y" ++ show n) |=| (Var "x" |+| IntLit n)
   let fmls = map (\i -> (Unknown ("fun" ++ show i) |&| Unknown ("arg" ++ show i)) |=>| Unknown ("arg" ++ show (i + 1))) [1..(n - 1)] ++
@@ -275,13 +275,13 @@ testIncSynthesize3 n = do
     Just sol -> print $ pretty $ pInc n sol    
     
 testCegis = do 
-  mSol <- evalZ3State $ initSolver >> runReaderT (findAngelics 
-    -- (Var "y" |=| Angelic "a" |*| Var "x" |+| Angelic "b"   |=>|   Var "y" |=| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
-    -- (Var "y" |=| Angelic "a" |*| Var "x" |+| Angelic "b"   |=>|   Var "y" |<| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
-    -- (Var "y" |=| Var "x" |+| Angelic "b"   |=>|   Var "y" |=| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "b" ["x"])) params1
-    -- (Var "y" |>| Angelic "a" |*| Var "x" |+| Angelic "b"   |=>|   Var "y" |<| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
-    -- (Var "x" |>| Angelic "a"  |=>|  Var "y" |>| IntLit 5) (ins "a" ["x"])) params1
-    (Var "y" |=| Var "x" |+| Angelic "i" |=>| Var "v" |=| Var "x" |+| IntLit 5) (ins "i" ["x"])) params1
+  mSol <- evalZ3State $ initSolver >> runReaderT (findParams 
+    -- (Var "y" |=| Parameter "a" |*| Var "x" |+| Parameter "b"   |=>|   Var "y" |=| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
+    -- (Var "y" |=| Parameter "a" |*| Var "x" |+| Parameter "b"   |=>|   Var "y" |<| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
+    -- (Var "y" |=| Var "x" |+| Parameter "b"   |=>|   Var "y" |=| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "b" ["x"])) params1
+    -- (Var "y" |>| Parameter "a" |*| Var "x" |+| Parameter "b"   |=>|   Var "y" |<| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
+    -- (Var "x" |>| Parameter "a"  |=>|  Var "y" |>| IntLit 5) (ins "a" ["x"])) params1
+    (Var "y" |=| Var "x" |+| Parameter "i" |=>| Var "v" |=| Var "x" |+| IntLit 5) (ins "i" ["x"])) params1
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty sol

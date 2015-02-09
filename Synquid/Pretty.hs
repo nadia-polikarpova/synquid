@@ -157,7 +157,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unknown ident -> text ":" <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    Angelic ident -> text "?" <> text ident
+    Parameter ident -> text "?" <> text ident
   )
   where
     n' = power fml
@@ -196,4 +196,10 @@ instance Pretty SMTModel where
   pretty = hMapDoc text pretty
   
 instance Show SMTModel where
-  show = show . pretty  
+  show = show . pretty
+
+instance Pretty PSolution where
+  pretty sol = pretty (sol ^. solution) <+> pretty (sol ^. model)
+  
+instance Show PSolution where
+  show = show . pretty

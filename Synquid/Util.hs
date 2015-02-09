@@ -8,6 +8,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 
 import Control.Applicative
+import Control.Lens
 
 import Debug.Trace
 
@@ -67,6 +68,9 @@ findM pred (x : xs) = do
 -- | Monadic version of if-then-else  
 ifM ::(Functor m, Monad m) => m Bool -> m a -> m a -> m a
 ifM cond t e = cond >>= (\res -> if res then t else e)  
+
+-- | 'pairGetter' @g1 g2@ : combine two getters into one that gets a pair
+pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 
 -- | Debug output
 debug1 s = traceShow s
