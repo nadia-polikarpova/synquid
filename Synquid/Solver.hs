@@ -20,9 +20,11 @@ import Control.Lens
 
 {- Interface -}
 
+evalFixPointSolver = runReaderT
+
 -- | 'solveWithParams' @params quals fmls@: 'greatestFixPoint' @quals fmls@ with solver parameters @params@
 solveWithParams :: SMTSolver m => SolverParams -> QMap -> [Formula] -> m (Maybe Solution)
-solveWithParams params quals fmls = runReaderT go params
+solveWithParams params quals fmls = evalFixPointSolver go params
   where
     go = do      
       quals' <- ifM (asks pruneQuals)
@@ -50,7 +52,7 @@ type FixPointSolver m a = ReaderT SolverParams m a
 -- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
 -- | @fml@ must have the form "/\ u_i ==> fml'"
 greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe Solution)
-greatestFixPoint quals fmls = debug1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ go [topSolution quals]
+greatestFixPoint quals fmls = debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ go [topSolution quals]
   where
     go :: SMTSolver m => [PSolution] -> FixPointSolver m (Maybe Solution)
     go (sol:sols) = do
@@ -69,7 +71,7 @@ greatestFixPoint quals fmls = debug1 (nest 2 $ text "Constraints" $+$ vsep (map 
       invalids <- filterM (liftM not . isValidFml . applySolution sol) fmls
       let spaceSize fml = maxValSize quals sol (unknownsOf fml)
       return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) invalids
-    debugOutput sols sol inv model = debug1 $ vsep [
+    debugOutput sols sol inv model = debug 1 $ vsep [
       nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map pretty sols), 
       text "Chosen candidate:" <+> pretty sol, 
       text "Invalid Constraint:" <+> pretty inv, 
@@ -79,7 +81,7 @@ greatestFixPoint quals fmls = debug1 (nest 2 $ text "Constraints" $+$ vsep (map 
 -- | @fml@ must have the form "/\ u_i ==> const".
 strengthen :: SMTSolver m => QMap -> Formula -> PSolution -> FixPointSolver m [PSolution]
 strengthen quals fml@(Binary Implies lhs rhs) sol = do
-    lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) getModel -- all minimal valid valuations of the whole antecedent
+    lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) check -- all minimal valid valuations of the whole antecedent
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -96,7 +98,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     rhsVars = varsOf rhs
     ins = Map.unions [lookupQuals quals inputVars u | u <- unknownsList]
     
-    getModel val = let 
+    check val = let 
                   n = Set.size val 
                   lhs' = conjunction usedLhsQuals |&| conjunction val                  
       in if 1 <= n && n <= maxValSize quals sol unknowns
@@ -129,23 +131,23 @@ maxValSize quals sol unknowns = let
     usedQuals = setConcatMap (pValuation sol) unknowns
   in Set.foldl (\n u -> n + lookupQuals quals maxCount u) 0 unknowns - Set.size usedQuals
  
--- | 'optimalValuations' @quals getModel@: all smallest subsets of @quals@ for which @getModel@ returns a result.
+-- | 'optimalValuations' @quals check@: all smallest subsets of @quals@ for which @check@ returns a solution.
 optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> FixPointSolver m (Maybe SMTModel)) -> FixPointSolver m [(Valuation, SMTModel)]
-optimalValuations quals getModel = map (over _1 qualsAt) <$> filterSubsets (getModel . qualsAt) (length quals)
+optimalValuations quals check = map (over _1 qualsAt) <$> filterSubsets (check . qualsAt) (length quals)
   where
     qualsAt = Set.map (quals !!)
       
--- | 'filterSubsets' @getModel n@: all minimal subsets of indexes from [0..@n@) for which @getModel@ returns a model,
--- where @getModel@ is monotone (if a set has a model, then every superset also has a model);
+-- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) for which @check@ returns a model,
+-- where @check@ is monotone (if a set has a model, then every superset also has a model);
 -- performs breadth-first search.
 filterSubsets :: SMTSolver m => (Set Int -> FixPointSolver m (Maybe SMTModel)) -> Int -> FixPointSolver m [(Set Int, SMTModel)]
-filterSubsets getModel n = go [] [Set.empty]
+filterSubsets check n = go [] [Set.empty]
   where
     go solutions candidates = if null candidates 
       then return solutions
       else let new = filter (\s -> not $ any (flip Set.isSubsetOf s) (map fst solutions)) candidates
         in do
-          results <- zip new <$> mapM getModel new
+          results <- zip new <$> mapM check new
           let (valids, invalids) = partition (isJust . snd) results
           go (solutions ++ map (over _2 fromJust) valids) (concatMap children (map fst invalids))      
     children idxs = let lower = if Set.null idxs then 0 else Set.findMax idxs + 1
@@ -186,7 +188,7 @@ findParams fml@(Binary Implies lhs rhs) ins = if Set.null params
     then ifM (isValidFml fml) (return $ Just Map.empty) (return Nothing)
     else do 
       max <- asks maxCegisIterations
-      debug1 (text "Solving" <+> pretty fml $+$ text "Outs" <+> pretty (Set.toList outs)) $ go max [trivialModel vars]
+      debug 1 (text "Solving" <+> pretty fml $+$ text "Outs" <+> pretty (Set.toList outs)) $ go max [trivialModel vars]
   where
     params = paramsOf fml
     vars = varsOf fml

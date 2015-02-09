@@ -1,3 +1,5 @@
+module Main where
+
 import Synquid.Util
 import Synquid.Logic
 import Synquid.Solver
@@ -273,18 +275,6 @@ testIncSynthesize3 n = do
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pInc n sol    
-    
-testCegis = do 
-  mSol <- evalZ3State $ initSolver >> runReaderT (findParams 
-    -- (Var "y" |=| Parameter "a" |*| Var "x" |+| Parameter "b"   |=>|   Var "y" |=| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
-    -- (Var "y" |=| Parameter "a" |*| Var "x" |+| Parameter "b"   |=>|   Var "y" |<| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
-    -- (Var "y" |=| Var "x" |+| Parameter "b"   |=>|   Var "y" |=| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "b" ["x"])) params1
-    -- (Var "y" |>| Parameter "a" |*| Var "x" |+| Parameter "b"   |=>|   Var "y" |<| IntLit 2 |*| Var "x" |+| IntLit 3) (ins "a" ["x"])) params1
-    -- (Var "x" |>| Parameter "a"  |=>|  Var "y" |>| IntLit 5) (ins "a" ["x"])) params1
-    (Var "y" |=| Var "x" |+| Parameter "i" |=>| Var "v" |=| Var "x" |+| IntLit 5) (ins "i" ["x"])) params1
-  case mSol of
-    Nothing -> putStr "No solution"
-    Just sol -> print $ pretty sol
-    
+        
 main = testIncSynthesize3 8
 

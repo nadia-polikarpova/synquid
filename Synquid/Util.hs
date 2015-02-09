@@ -12,8 +12,6 @@ import Control.Lens
 
 import Debug.Trace
 
-mapBoth f (a, b) = (f a, f b)
-
 -- | 'restrictDomain' @keys m@ : map @m@ restricted on the set of keys @keys@
 restrictDomain :: Ord k => Set k -> Map k a -> Map k a
 restrictDomain keys m = fst $ partitionDomain keys m
@@ -72,10 +70,10 @@ ifM cond t e = cond >>= (\res -> if res then t else e)
 -- | 'pairGetter' @g1 g2@ : combine two getters into one that gets a pair
 pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 
--- | Debug output
-debug1 s = traceShow s
--- debug1 s = id
-debug2 s = traceShow s
--- debug2 s = id
--- debug3 s = traceShow s
-debug3 s = id
+{- Debug output -}
+
+-- | 'debugOutLevel' : Level above which debug output is ignored
+debugOutLevel = 0
+
+-- | 'debug' @level msg@ : output @msg@ at level @level@ 
+debug level msg = if level <= debugOutLevel then traceShow msg else id
