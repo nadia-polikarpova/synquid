@@ -148,7 +148,7 @@ substituteModel model = substitute (Map.map IntLit model)
 data PSolution = PSolution {
   _solution :: Solution,
   _model :: SMTModel
-}
+} deriving Eq
 
 makeLenses ''PSolution
 

@@ -118,7 +118,7 @@ instance SMTSolver Z3State where
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
-        _ -> error $ "isValid: Z3 returned Unknown"
+        _ -> error $ "isValid: Z3 returned Unknown for " ++ show fml
         
   modelOf fml = do
       push
@@ -131,5 +131,5 @@ instance SMTSolver Z3State where
           debug 2 (text "SMT MODEL" <+> pretty fml <+> text "SAT" <+> pretty m) $ delModel model
           pop 1          
           return (Just m)
-        _ -> error $ "isValid: Z3 returned Unknown"      
+        _ -> error $ "modelOf: Z3 returned Unknown for " ++ show fml
       

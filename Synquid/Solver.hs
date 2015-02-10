@@ -32,15 +32,19 @@ solveWithParams params quals fmls = evalFixPointSolver go params
         (return quals)
       greatestFixPoint quals' fmls
       
+-- | Strategies for picking the next candidate solution to strengthen
+data CandidatePickStrategy = FirstCandidate | UniformCandidate | UniformStrongCandidate
+      
 -- | Strategies for picking the next constraint to solve      
-data ConstraintPickStrategy = PickFirst | PickSmallestSpace      
+data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint      
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
   pruneQuals :: Bool,                               -- ^ Should redundant qualifiers be removed before solving constraints?
   semanticPrune :: Bool,                            -- ^ After solving each constraints, remove semantically non-optimal solutions
   agressivePrune :: Bool,                           -- ^ Perform pruning on the LHS-pValuation of as opposed to per-variable valuations
-  constraintPickStrategy :: ConstraintPickStrategy, -- ^ How should the next constraint to solve be picked
+  candidatePickStrategy :: CandidatePickStrategy,   -- ^ How should the next candidate solution to strengthen be picked?
+  constraintPickStrategy :: ConstraintPickStrategy, -- ^ How should the next constraint to solve be picked?
   maxCegisIterations :: Int                         -- ^ Maximum number of CEGIS iterations for parametrized qualifiers (unbounded if negative)
 }
  
@@ -55,22 +59,38 @@ greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe 
 greatestFixPoint quals fmls = debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ go [topSolution quals]
   where
     go :: SMTSolver m => [PSolution] -> FixPointSolver m (Maybe Solution)
-    go (sol:sols) = do
+    go [] = return Nothing
+    go sols = do
+        (sol, rest) <- pickCandidate sols <$> asks candidatePickStrategy
         invalidConstraint <- asks constraintPickStrategy >>= pickConstraint sol        
         let modifiedConstraint = case invalidConstraint of
                                     Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
                                     _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
-        sols' <- debugOutput (sol:sols) sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
+        sols' <- debugOutput sols sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
         validSolution <- findM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
         case validSolution of
           Just sol' -> return $ Just $ instantiate sol' -- Solution found
-          Nothing -> go $ sols' ++ sols
-    go [] = return Nothing
-    pickConstraint sol PickFirst = fromJust <$> findM (liftM not . isValidFml . applySolution sol) fmls
-    pickConstraint sol PickSmallestSpace  = do
+          Nothing -> go $ sols' ++ rest  
+          
+    strength = Set.size . Set.unions . Map.elems . view solution    -- total number of qualifiers in a solution
+    maxQCount = maximum . map Set.size . Map.elems . view solution  -- maximum number of qualifiers mapped to an unknown
+    minQCount = minimum . map Set.size . Map.elems . view solution  -- minimum number of qualifiers mapped to an unknown          
+          
+    pickCandidate :: [PSolution] -> CandidatePickStrategy -> (PSolution, [PSolution])
+    pickCandidate (sol:rest) FirstCandidate = (sol, rest)
+    pickCandidate sols UniformCandidate = let
+        res = minimumBy (mappedCompare $ \s -> maxQCount s - minQCount s) sols  -- minimize the difference
+      in (res, delete res sols)
+    pickCandidate sols UniformStrongCandidate = let 
+        res = maximumBy (mappedCompare $ \s -> (strength s, minQCount s - maxQCount s)) sols  -- maximize the total number and minimize the difference
+      in (res, delete res sols)
+      
+    pickConstraint sol FirstConstraint = fromJust <$> findM (liftM not . isValidFml . applySolution sol) fmls
+    pickConstraint sol SmallSpaceConstraint = do
       invalids <- filterM (liftM not . isValidFml . applySolution sol) fmls
       let spaceSize fml = maxValSize quals sol (unknownsOf fml)
       return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) invalids
+      
     debugOutput sols sol inv model = debug 1 $ vsep [
       nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map pretty sols), 
       text "Chosen candidate:" <+> pretty sol, 
@@ -94,7 +114,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     unknowns = unknownsOf lhs
     unknownsList = Set.toList unknowns
     lhsQuals = setConcatMap (Set.fromList . lookupQuals quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
-    usedLhsQuals = setConcatMap (pValuation sol) unknowns                                    -- already used qualifiers for the whole antecedent
+    usedLhsQuals = setConcatMap (pValuation sol) unknowns                            -- already used qualifiers for the whole antecedent
     rhsVars = varsOf rhs
     ins = Map.unions [lookupQuals quals inputVars u | u <- unknownsList]
     
@@ -102,9 +122,9 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
                   n = Set.size val 
                   lhs' = conjunction usedLhsQuals |&| conjunction val                  
       in if 1 <= n && n <= maxValSize quals sol unknowns
-            then if rhsVars `Set.isSubsetOf` varsOf lhs'
+            -- then if rhsVars `Set.isSubsetOf` varsOf lhs'
               then findParams (lhs' |=>| rhs) ins                                                                   -- all variables of rhs are contained in lhs': nontrivial solution possible
-              else ifM (isValidFml $ fnot lhs') (return $ Just $ trivialModel (paramsOf lhs')) (return Nothing)     -- rhs has more variables: if lhs' is unsat, return any solution, and otherwise no solution
+              -- else ifM (isValidFml $ fnot lhs') (return $ Just $ trivialModel (paramsOf lhs')) (return Nothing)     -- rhs has more variables: if lhs' is unsat, return any solution, and otherwise no solution
               -- else return Nothing
             else return Nothing        
     

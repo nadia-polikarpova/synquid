@@ -26,7 +26,8 @@ defaultParams = SolverParams {
     pruneQuals = False,
     semanticPrune = True,
     agressivePrune = True,
-    constraintPickStrategy = PickSmallestSpace,
+    candidatePickStrategy = UniformStrongCandidate,
+    constraintPickStrategy = SmallSpaceConstraint,    
     maxCegisIterations = 10
   }
   

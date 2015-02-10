@@ -2,6 +2,7 @@
 module Synquid.Util where
 
 import Data.Maybe
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -11,6 +12,10 @@ import Control.Applicative
 import Control.Lens
 
 import Debug.Trace
+
+-- | `mappedCompare` @f x y@ : compare @f x@ and @f y@
+mappedCompare :: Ord b => (a -> b) -> a -> a -> Ordering
+mappedCompare f x y = f x `compare` f y
 
 -- | 'restrictDomain' @keys m@ : map @m@ restricted on the set of keys @keys@
 restrictDomain :: Ord k => Set k -> Map k a -> Map k a
@@ -32,14 +37,14 @@ constMap keys val = Set.fold (\k m -> Map.insert k val m) Map.empty keys
 setConcatMap :: (Ord a, Ord b) => (a -> Set b) -> Set a -> Set b
 setConcatMap f s = Set.foldr Set.union Set.empty (Set.map f s)
 
--- | 'boundedSubsets' @n s@: all subsets of @s@ of sizes no greater than @n@.
+-- | 'boundedSubsets' @n s@: all subsets of @s@ of sizes no greater than @n@
 boundedSubsets :: Ord k => Int -> Set k -> Set (Set k)
 boundedSubsets 0 _ = Set.singleton Set.empty
 boundedSubsets n s
   | Set.null s = Set.singleton Set.empty
   | otherwise = let (x, xs) = Set.deleteFindMin s in
       Set.map (Set.insert x) (boundedSubsets (n - 1) xs) `Set.union` boundedSubsets n xs -- x is in or x is out
-  
+        
 -- | Monadic equivalent of 'partition'
 partitionM :: Monad m => (a -> m Bool) -> [a] -> m ([a], [a])
 partitionM f [] = return ([], [])
@@ -73,7 +78,7 @@ pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 {- Debug output -}
 
 -- | 'debugOutLevel' : Level above which debug output is ignored
-debugOutLevel = 0
+debugOutLevel = 2
 
 -- | 'debug' @level msg@ : output @msg@ at level @level@ 
 debug level msg = if level <= debugOutLevel then traceShow msg else id
