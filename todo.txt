@@ -1,7 +1,7 @@
 - Constraint generator
+- Apriori splittability analysis should take var and const into account better
 
 - Look at bad example for CEGIS: y >= x && x = i ==> y >= 5. Better when known lhs is stronger (y == x) or unknown lhs is weaker (x >= i) -> think about this
-- Think more about the trick with mismatched variables and checking is lhs is UNSAT; does treating inputs and params the same way there make sense?
 - One point propagation
 - Second solver for CEGIS
 - Do we need strongest counterexamples / weakest solutions (or the other way around) for weak RHSs? Read PLDI paper.

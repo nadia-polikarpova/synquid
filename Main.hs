@@ -95,9 +95,9 @@ pruneQualsParams = defaultParams { pruneQuals = True } -- , candidatePickStrateg
 testMax2Synthesize = do
   let vars = ["x", "y"]
   let quals = Map.fromList [
-                ("cond", QSpace (condQualsRich vars) 2 Map.empty),
-                ("then", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else", QSpace (varQual "v" vars) 1 Map.empty)
+                ("cond", QSpace (condQualsRich vars) 2),
+                ("then", QSpace (varQual "v" vars) 1),
+                ("else", QSpace (varQual "v" vars) 1)
               ]
   let maxType = (Var "x" |<=| Var "v") |&| (Var "y" |<=| Var "v")
   let fmls = [  Unknown "cond" |&| Unknown "then" |=>| maxType,
@@ -119,16 +119,16 @@ max3 sol = let val ident = conjunction $ valuation sol ident
 testMax3Synthesize1Old = do
   let vars = ["x", "y", "z"]
   let quals = Map.fromList [
-                ("cond1", QSpace (condQuals vars) 2 Map.empty),
-                ("condF1", QSpace (condQuals vars) 2 Map.empty),
-                ("cond2", QSpace (condQuals vars) 2 Map.empty),
-                ("condF2", QSpace (condQuals vars) 2 Map.empty),
-                ("cond3", QSpace (condQuals vars) 2 Map.empty),
-                ("condF3", QSpace (condQuals vars) 2 Map.empty),
-                ("then2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("then3", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else3", QSpace (varQual "v" vars) 1 Map.empty)
+                ("cond1", QSpace (condQuals vars) 2),
+                ("condF1", QSpace (condQuals vars) 2),
+                ("cond2", QSpace (condQuals vars) 2),
+                ("condF2", QSpace (condQuals vars) 2),
+                ("cond3", QSpace (condQuals vars) 2),
+                ("condF3", QSpace (condQuals vars) 2),
+                ("then2", QSpace (varQual "v" vars) 1),
+                ("else2", QSpace (varQual "v" vars) 1),
+                ("then3", QSpace (varQual "v" vars) 1),
+                ("else3", QSpace (varQual "v" vars) 1)
               ]
   let maxType = (Var "x" |<=| Var "v") |&| (Var "y" |<=| Var "v") |&| (Var "z" |<=| Var "v")
   let fmls = [  
@@ -148,13 +148,13 @@ testMax3Synthesize1Old = do
 testMax3Synthesize1New = do
   let vars = ["x", "y", "z"]
   let quals = Map.fromList [
-                ("cond1", QSpace (condQuals vars) 2 Map.empty),
-                ("cond2", QSpace (condQuals vars) 2 Map.empty),
-                ("cond3", QSpace (condQuals vars) 2 Map.empty),
-                ("then2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("then3", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else3", QSpace (varQual "v" vars) 1 Map.empty)
+                ("cond1", QSpace (condQuals vars) 2),
+                ("cond2", QSpace (condQuals vars) 2),
+                ("cond3", QSpace (condQuals vars) 2),
+                ("then2", QSpace (varQual "v" vars) 1),
+                ("else2", QSpace (varQual "v" vars) 1),
+                ("then3", QSpace (varQual "v" vars) 1),
+                ("else3", QSpace (varQual "v" vars) 1)
               ]
   let maxType = (Var "x" |<=| Var "v") |&| (Var "y" |<=| Var "v") |&| (Var "z" |<=| Var "v")
   let fmls = [  
@@ -171,18 +171,18 @@ testMax3Synthesize1New = do
 testMax3Synthesize2Old = do
   let vars = ["x", "y", "z"]
   let quals = Map.fromList [
-                ("cond1", QSpace (condQuals vars) 2 Map.empty),
-                ("condF1", QSpace (condQuals vars) 2 Map.empty),
-                ("cond2", QSpace (condQuals vars) 2 Map.empty),
-                ("condF2", QSpace (condQuals vars) 2 Map.empty),
-                ("cond3", QSpace (condQuals vars) 2 Map.empty),
-                ("condF3", QSpace (condQuals vars) 2 Map.empty),                
-                ("then1", QSpace (condQuals $ vars ++ ["v"]) 2 Map.empty),
-                ("else1", QSpace (condQuals $ vars ++ ["v"]) 2 Map.empty),                
-                ("then2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("then3", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else3", QSpace (varQual "v" vars) 1 Map.empty)
+                ("cond1", QSpace (condQuals vars) 2),
+                ("condF1", QSpace (condQuals vars) 2),
+                ("cond2", QSpace (condQuals vars) 2),
+                ("condF2", QSpace (condQuals vars) 2),
+                ("cond3", QSpace (condQuals vars) 2),
+                ("condF3", QSpace (condQuals vars) 2),                
+                ("then1", QSpace (condQuals $ vars ++ ["v"]) 2),
+                ("else1", QSpace (condQuals $ vars ++ ["v"]) 2),                
+                ("then2", QSpace (varQual "v" vars) 1),
+                ("else2", QSpace (varQual "v" vars) 1),
+                ("then3", QSpace (varQual "v" vars) 1),
+                ("else3", QSpace (varQual "v" vars) 1)
               ]
   let maxType = (Var "x" |<=| Var "v") |&| (Var "y" |<=| Var "v") |&| (Var "z" |<=| Var "v")
   let fmls = [  Unknown "cond1" |&| Unknown "then1" |=>| maxType,
@@ -203,15 +203,15 @@ testMax3Synthesize2Old = do
 testMax3Synthesize2New = do
   let vars = ["x", "y", "z"]
   let quals = Map.fromList [
-                ("cond1", QSpace (condQuals vars) 2 Map.empty),
-                ("cond2", QSpace (condQuals vars) 2 Map.empty),
-                ("cond3", QSpace (condQuals vars) 2 Map.empty),
-                ("then1", QSpace (condQuals $ vars ++ ["v"]) 2 Map.empty),
-                ("else1", QSpace (condQuals $ vars ++ ["v"]) 2 Map.empty),                
-                ("then2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else2", QSpace (varQual "v" vars) 1 Map.empty),
-                ("then3", QSpace (varQual "v" vars) 1 Map.empty),
-                ("else3", QSpace (varQual "v" vars) 1 Map.empty)
+                ("cond1", QSpace (condQuals vars) 2),
+                ("cond2", QSpace (condQuals vars) 2),
+                ("cond3", QSpace (condQuals vars) 2),
+                ("then1", QSpace (condQuals $ vars ++ ["v"]) 2),
+                ("else1", QSpace (condQuals $ vars ++ ["v"]) 2),                
+                ("then2", QSpace (varQual "v" vars) 1),
+                ("else2", QSpace (varQual "v" vars) 1),
+                ("then3", QSpace (varQual "v" vars) 1),
+                ("else3", QSpace (varQual "v" vars) 1)
               ]
   let maxType = (Var "x" |<=| Var "v") |&| (Var "y" |<=| Var "v") |&| (Var "z" |<=| Var "v")
   let fmls = [  Unknown "cond1" |&| Unknown "then1" |=>| maxType,
@@ -236,11 +236,11 @@ noAgressiveParams = defaultParams { pruneQuals = True, agressivePrune = False, c
 testAbsSynthesize1 = do
   let vars = ["x"]
   let quals = Map.fromList [
-                ("cond", QSpace (condQualsRich vars) 2 Map.empty),
-                ("arg1", QSpace (varQual "y" vars) 1 Map.empty),
-                ("fun1", QSpace (constQualIntInt "y" "v") 1 Map.empty),
-                ("arg2", QSpace (varQual "z" vars) 1 Map.empty),
-                ("fun2", QSpace (constQualIntInt "z" "v") 1 Map.empty)
+                ("cond", QSpace (condQualsRich vars) 2),
+                ("arg1", QSpace (varQual "y" vars) 1),
+                ("fun1", QSpace (constQualIntInt "y" "v") 1),
+                ("arg2", QSpace (varQual "z" vars) 1),
+                ("fun2", QSpace (constQualIntInt "z" "v") 1)
               ]
   let absType = (Var "v" |>=| IntLit 0) |&| (Var "v" |>=| Var "x")
   let fmls = [  Unknown "cond" |&| Unknown "arg1" |&| Unknown "fun1" |=>| absType,
@@ -254,13 +254,13 @@ testAbsSynthesize1 = do
 testAbsSynthesize2 = do
   let vars = ["x"]
   let quals = Map.fromList [
-                ("cond", QSpace (condQualsRich vars) 2 Map.empty),
-                ("then", QSpace (condQualsRich $ vars ++ ["v"]) 2 Map.empty),
-                ("else", QSpace (condQualsRich $ vars ++ ["v"]) 2 Map.empty),
-                ("arg1", QSpace (varQual "y" vars) 1 Map.empty),
-                ("fun1", QSpace (constQualIntInt "y" "v") 1 Map.empty),
-                ("arg2", QSpace (varQual "z" vars) 1 Map.empty),
-                ("fun2", QSpace (constQualIntInt "z" "v") 1 Map.empty)
+                ("cond", QSpace (condQualsRich vars) 2),
+                ("then", QSpace (condQualsRich $ vars ++ ["v"]) 2),
+                ("else", QSpace (condQualsRich $ vars ++ ["v"]) 2),
+                ("arg1", QSpace (varQual "y" vars) 1),
+                ("fun1", QSpace (constQualIntInt "y" "v") 1),
+                ("arg2", QSpace (varQual "z" vars) 1),
+                ("fun2", QSpace (constQualIntInt "z" "v") 1)
               ]
   let absType = (Var "v" |>=| IntLit 0) |&| (Var "v" |>=| Var "x")
   let fmls = [  Unknown "cond" |&| Unknown "then" |=>| absType,
@@ -281,8 +281,8 @@ pInc n sol = let val ident = conjunction $ valuation sol ident
 testIncSynthesize1 n = do
   let vars = ["x"]
   let quals = Map.fromList $ 
-                ("arg1", QSpace (varQual "y0" vars) 1 Map.empty) : 
-                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1 Map.empty)) [1..n]
+                ("arg1", QSpace (varQual "y0" vars) 1) : 
+                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1)) [1..n]
   let incType = Var ("y" ++ show n) |=| (Var "x" |+| IntLit n)
   let fmls = [foldr (|&|) (Unknown "arg1") (map (\i -> Unknown ("fun" ++ show i)) [1..n])  |=>| incType]                
   mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams quals fmls)
@@ -293,9 +293,9 @@ testIncSynthesize1 n = do
 testIncSynthesize2 n = do
   let vars = ["x"]
   let quals = Map.fromList $ 
-                [("arg1", QSpace (varQual "y0" vars) 1 Map.empty)] ++
-                    map (\i -> ("arg" ++ show i, QSpace (condQualsLinearEq n "x" ("y" ++ show (i - 1))) 1 Map.empty)) [2..n] ++
-                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1 Map.empty)) [1..n]
+                [("arg1", QSpace (varQual "y0" vars) 1)] ++
+                    map (\i -> ("arg" ++ show i, QSpace (condQualsLinearEq n "x" ("y" ++ show (i - 1))) 1)) [2..n] ++
+                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1)) [1..n]
   let incType = Var ("y" ++ show n) |=| (Var "x" |+| IntLit n)
   let fmls = map (\i -> (Unknown ("fun" ++ show i) |&| Unknown ("arg" ++ show i)) |=>| Unknown ("arg" ++ show (i + 1))) [1..(n - 1)] ++
                 [(Unknown ("fun" ++ show n) |&| Unknown ("arg" ++ show n)) |=>| incType]  
@@ -304,21 +304,18 @@ testIncSynthesize2 n = do
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pInc n sol
     
-ins c xs = Map.fromList [(c, Set.fromList xs)]
-    
 testIncSynthesize3 n = do
   let vars = ["x"]
   let quals = Map.fromList $ 
-                [("arg1", QSpace (varQual "y0" vars) 1 Map.empty)] ++
-                    map (\i -> ("arg" ++ show i, QSpace [Var ("y" ++ show (i - 1)) |=| Var "x" |+| Parameter ("i" ++ show i)] 1 (ins ("i" ++ show i) ["x"]))) [2..n] ++ -- , "y" ++ show (i - 1)
-                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1 Map.empty)) [1..n]
+                [("arg1", QSpace (varQual "y0" vars) 1)] ++
+                    map (\i -> ("arg" ++ show i, QSpace [Var ("y" ++ show (i - 1)) |=| Var "x" |+| Parameter ("i" ++ show i)] 1)) [2..n] ++ -- , "y" ++ show (i - 1)
+                    map (\i -> ("fun" ++ show i, QSpace (constQualIntInt ("y" ++ show (i - 1)) ("y" ++ show i)) 1)) [1..n]
   let incType = Var ("y" ++ show n) |=| (Var "x" |+| IntLit n)
   let fmls = map (\i -> (Unknown ("fun" ++ show i) |&| Unknown ("arg" ++ show i)) |=>| Unknown ("arg" ++ show (i + 1))) [1..(n - 1)] ++
                 [(Unknown ("fun" ++ show n) |&| Unknown ("arg" ++ show n)) |=>| incType]  
-  mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams quals fmls)
+  mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams { maxCegisIterations = -1, candidatePickStrategy = FirstCandidate } quals fmls)
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pInc n sol    
-        
+            
 main = testIncSynthesize3 5
-

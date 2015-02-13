@@ -116,17 +116,13 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     lhsQuals = setConcatMap (Set.fromList . lookupQuals quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (pValuation sol) unknowns                            -- already used qualifiers for the whole antecedent
     rhsVars = varsOf rhs
-    ins = Map.unions [lookupQuals quals inputVars u | u <- unknownsList]
     
     check val = let 
                   n = Set.size val 
                   lhs' = conjunction usedLhsQuals |&| conjunction val                  
       in if 1 <= n && n <= maxValSize quals sol unknowns
-            -- then if rhsVars `Set.isSubsetOf` varsOf lhs'
-              then findParams (lhs' |=>| rhs) ins                                                                   -- all variables of rhs are contained in lhs': nontrivial solution possible
-              -- else ifM (isValidFml $ fnot lhs') (return $ Just $ trivialModel (paramsOf lhs')) (return Nothing)     -- rhs has more variables: if lhs' is unsat, return any solution, and otherwise no solution
-              -- else return Nothing
-            else return Nothing        
+          then findParams $ lhs' |=>| rhs
+          else return Nothing        
     
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
@@ -203,36 +199,32 @@ isValidFml :: SMTSolver m => Formula -> FixPointSolver m Bool
 isValidFml = lift . isValid
 
 -- | 'findParams' @fml@: solve exists params :: forall vars :: lhs (params, vars) ==> rhs (vars)
-findParams :: SMTSolver m => Formula -> Map Id (Set Id) -> FixPointSolver m (Maybe SMTModel)
-findParams fml@(Binary Implies lhs rhs) ins = if Set.null params 
+findParams :: SMTSolver m => Formula -> FixPointSolver m (Maybe SMTModel)
+findParams fml@(Binary Implies lhs rhs) = if Set.null params 
     then ifM (isValidFml fml) (return $ Just Map.empty) (return Nothing)
     else do 
       max <- asks maxCegisIterations
-      debug 1 (text "Solving" <+> pretty fml $+$ text "Outs" <+> pretty (Set.toList outs)) $ go max [trivialModel vars]
+      debug 1 (text "Solving" <+> pretty fml) $ go max [] (trivialModel params)
   where
     params = paramsOf fml
     vars = varsOf fml
-    outs = vars Set.\\ (Set.unions $ Map.elems $ restrictDomain params ins) -- angelically chosen variables
-    
-    fromExample ex i = let -- part of the synthesis constraint derived from counter-example @ex@ at position @i@        
-        negative = fnot (substituteModel ex lhs) -- negative example (use all inputs)
-        positive' = substituteModel (removeDomain outs ex) (lhs |&| rhs) -- positive example (use only independent inputs and treat dependent ones angelically)
-        positive = Set.foldr (\dep -> substitute $ Map.singleton dep (Var $ dep ++ show i)) positive' outs -- rename outs to be different in different examples
-      in if i == 0 
-            then Set.singleton positive  -- no negative example from the first input, since it is not necessarily a counter-example
-            else Set.fromList [negative, positive]
-    toSolve examples = let l = length examples in conjunction $ Set.unions $ zipWith fromExample examples [l - 1, l - 2 .. 0]
-            
-    go 0 _ = return Nothing -- Maximum number of iterations reached: exit
-    go n examples = do
-      solMb <- lift $ modelOf $ toSolve examples -- ToDo: have two solvers, so that we can just add constraints to the first one
-      case solMb of
-        Nothing -> return Nothing   -- No solution: exit
-        Just sol -> do              -- Solution found: verify
-          let candidate = restrictDomain params sol
-          counterExampleMb <- lift $ modelOf $ fnot $ substituteModel candidate fml
-          case counterExampleMb of
-            Nothing -> return $ Just candidate                              -- No counter-example: solution found
-            Just counterExample -> go (n - 1) $ counterExample : examples   -- Counter-example: add to list of examples and continue
+    varsList = Set.toList vars
+                
+    go 0 _ _ = return Nothing -- Maximum number of iterations reached: exit
+    go n oldToSolve candidate = do
+      counterExampleMb <- lift $ modelOf [fnot $ substituteModel candidate fml] []
+      case counterExampleMb of
+        Nothing -> return $ Just candidate                                    -- No counter-example: solution found
+        Just (counterExample, _) -> do                                        -- Counter-example: take into account
+          let negative = fnot (substituteModel counterExample lhs) -- negative example
+          let subst = Map.fromList $ zip varsList (map (\name -> Var $ name ++ show n) varsList)
+          let positive = substitute subst (lhs |&| rhs) -- rename variables to be different in different examples
+          let assignments = map (\name -> subst Map.! name |=| IntLit (counterExample Map.! name)) varsList
+          let toSolve = negative : positive : oldToSolve
+              
+          solMb <- lift $ modelOf toSolve assignments -- ToDo: have two solvers, so that we can just add constraints to the first one
+          case solMb of
+            Nothing -> return Nothing -- No solution: exit
+            Just (sol, satAssignments) -> go (n - 1) (satAssignments ++ toSolve) (restrictDomain params sol) -- New candidate: add satisfied assignments and continue
                         
-findParams fml _ = error $ "findParams: encountered ill-formed constraint " ++ show fml              
+findParams fml = error $ "findParams: encountered ill-formed constraint " ++ show fml              

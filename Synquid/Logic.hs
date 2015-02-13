@@ -107,8 +107,7 @@ substitute subst fml = case fml of
 -- | Search space for valuations of a single unknown
 data QSpace = QSpace {
     _qualifiers :: [Formula],         -- Qualifiers 
-    _maxCount :: Int,                 -- Maximum number of qualifiers in a valuation
-    _inputVars :: Map Id (Set Id)     -- For parametrized qualifiers, the set of variables treated as inputs indexed by parameter
+    _maxCount :: Int                  -- Maximum number of qualifiers in a valuation
   }
 
 makeLenses ''QSpace  
