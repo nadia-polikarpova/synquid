@@ -127,7 +127,8 @@ instance SMTSolver Z3State where
         _ -> error $ "isValid: Z3 returned Unknown for " ++ show fml
         
   modelOf = getModelOf
-        
+  
+  unsatCore = getMinUnsatCore
         
 -- | 'getModelOf' @fmls assumptions@: a model of conjunction of @fmls@ under as many optional @assumptions@ as possible (together with the assumptions that were satisfied)
 getModelOf :: [Formula] -> [Formula] -> Z3State (Maybe (SMTModel, [Formula]))
@@ -159,7 +160,7 @@ getModelOf fmls assumptions = do
       case res of
         Sat -> return $ Just lits
         Unsat -> do          
-          unsatLits <- unVector <$> getUnsatCore
+          unsatLits <- getUnsatCore
           coreDebugMsg lits unsatLits
           go $ rest ++ map (flip delete lits) unsatLits
         _ -> error $ "modelOf: Z3 returned Unknown for " ++ show fmls ++ " (under " ++ show (length lits) ++ " assumptions)"
@@ -169,4 +170,32 @@ getModelOf fmls assumptions = do
       strs <- mapM astToString lits
       strs' <- mapM astToString unsatLits
       debug 2 (text "UNSAT CORE OF" <+> braces (hsep (map text strs)) <+> text "IS" <+> braces (hsep (map text strs'))) $ return ()      
+      
+      
+getMinUnsatCore fmls assumptions = do
+  push
+  mapM_ (toZ3 >=> assertCnstr) fmls
+  
+  bool <- fromJust <$> use boolSort
+  controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length assumptions] -- ToDo: unique ids
+  assumptionsZ3 <- mapM toZ3 assumptions
+  condAssumptions <- zipWithM mkImplies controlLiterals assumptionsZ3                      
+  mapM_ assertCnstr condAssumptions
+  res <- checkAssumptions controlLiterals
+  case res of
+    Sat -> pop 1 >> return Nothing
+    Unsat -> do
+      unsatLits <- getUnsatCore
+      unsatLits' <- minimize [] unsatLits
+      let unsatAssumptions = [a | (l, a) <- zip controlLiterals assumptions, l `elem` unsatLits']
+      pop 1
+      return $ Just unsatAssumptions
+  where
+    minimize checked [] = return checked
+    minimize checked (lit:lits) = do
+      res <- local $ mapM_ assertCnstr (checked ++ lits) >> check
+      case res of
+        Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
+        Unsat -> minimize checked lits -- lit can be omitted
+      
         

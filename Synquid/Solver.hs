@@ -6,12 +6,13 @@ import Synquid.SMTSolver
 import Synquid.Util
 import Synquid.Pretty
 
-import Data.Maybe
 import Data.List
+import Data.Maybe
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Foldable as F
 
 import Control.Monad
 import Control.Monad.Reader
@@ -36,11 +37,14 @@ solveWithParams params quals fmls = evalFixPointSolver go params
 data CandidatePickStrategy = FirstCandidate | UniformCandidate | UniformStrongCandidate
       
 -- | Strategies for picking the next constraint to solve      
-data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint      
+data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
+
+data OptimalValuationsStrategy = BFSValuations | UnsatCoreValuations 
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
   pruneQuals :: Bool,                               -- ^ Should redundant qualifiers be removed before solving constraints?
+  optimalValuationsStrategy :: OptimalValuationsStrategy,
   semanticPrune :: Bool,                            -- ^ After solving each constraints, remove semantically non-optimal solutions
   agressivePrune :: Bool,                           -- ^ Perform pruning on the LHS-pValuation of as opposed to per-variable valuations
   candidatePickStrategy :: CandidatePickStrategy,   -- ^ How should the next candidate solution to strengthen be picked?
@@ -101,7 +105,8 @@ greatestFixPoint quals fmls = debug 1 (nest 2 $ text "Constraints" $+$ vsep (map
 -- | @fml@ must have the form "/\ u_i ==> const".
 strengthen :: SMTSolver m => QMap -> Formula -> PSolution -> FixPointSolver m [PSolution]
 strengthen quals fml@(Binary Implies lhs rhs) sol = do
-    lhsValuations <- optimalValuations (Set.toList $ lhsQuals Set.\\ usedLhsQuals) check -- all minimal valid valuations of the whole antecedent
+    let n = maxValSize quals sol unknowns
+    lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) usedLhsQuals rhs -- all minimal valid valuations of the whole antecedent
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -116,14 +121,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     lhsQuals = setConcatMap (Set.fromList . lookupQuals quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (pValuation sol) unknowns                            -- already used qualifiers for the whole antecedent
     rhsVars = varsOf rhs
-    
-    check val = let 
-                  n = Set.size val 
-                  lhs' = conjunction usedLhsQuals |&| conjunction val                  
-      in if 1 <= n && n <= maxValSize quals sol unknowns
-          then findParams $ lhs' |=>| rhs
-          else return Nothing        
-    
+        
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
           (qs, max) = lookupQuals quals (pairGetter qualifiers maxCount) u
@@ -146,13 +144,51 @@ maxValSize :: QMap -> PSolution -> Set Id -> Int
 maxValSize quals sol unknowns = let 
     usedQuals = setConcatMap (pValuation sol) unknowns
   in Set.foldl (\n u -> n + lookupQuals quals maxCount u) 0 unknowns - Set.size usedQuals
- 
+  
+optimalValuations :: SMTSolver m => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver m [(Valuation, SMTModel)]
+optimalValuations maxSize quals lhs rhs = do
+  strategy <- asks optimalValuationsStrategy
+  case strategy of
+    BFSValuations -> optimalValuationsBFS maxSize quals lhs rhs
+    UnsatCoreValuations -> optimalValuationsUnsatCore quals lhs rhs    
+    
 -- | 'optimalValuations' @quals check@: all smallest subsets of @quals@ for which @check@ returns a solution.
-optimalValuations :: SMTSolver m => [Formula] -> (Valuation -> FixPointSolver m (Maybe SMTModel)) -> FixPointSolver m [(Valuation, SMTModel)]
-optimalValuations quals check = map (over _1 qualsAt) <$> filterSubsets (check . qualsAt) (length quals)
+optimalValuationsBFS :: SMTSolver m => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver m [(Valuation, SMTModel)]
+optimalValuationsBFS maxSize quals lhs rhs = map (over _1 qualsAt) <$> filterSubsets (check . qualsAt) (length qualsList)
   where
-    qualsAt = Set.map (quals !!)
-      
+    qualsList = Set.toList quals
+    qualsAt = Set.map (qualsList !!)
+    check val = let 
+                  n = Set.size val 
+                  lhs' = conjunction lhs |&| conjunction val                  
+      in if 1 <= n && n <= maxSize
+          then findParams $ lhs' |=>| rhs
+          else return Nothing            
+  
+optimalValuationsUnsatCore :: SMTSolver m => Set Formula -> Set Formula -> Formula -> FixPointSolver m [(Valuation, SMTModel)]
+optimalValuationsUnsatCore quals lhs rhs = flip zip (repeat Map.empty) . Set.toList <$> go Set.empty Set.empty [quals]
+  where
+    lhsList = Set.toList lhs
+    notRhs = fnot rhs
+    
+    go sols _ [] = return $ Set.map snd sols
+    go sols unsats (c : cs) = let
+        isSubsumed = any (c `Set.isSubsetOf`) cs -- is @c@ is represented by a candidate later in the queue?
+        isCovered = F.any (\(r, s) -> c `Set.isSubsetOf` s || (s `Set.isSubsetOf` c && c `Set.isSubsetOf` r)) (sols `Set.union` unsats) -- is @c@ on the path from a prior request to the corresponding solution?
+      in if isSubsumed || isCovered
+        then go sols unsats cs -- all solutions we could get from @c@ we either already got or are covered by remaining candidates: skip
+        else do
+          coreMb <- lift $ unsatCore lhsList (notRhs : Set.toList c)
+          case coreMb of
+            Nothing -> debug 1 (pretty (conjunction c) <+> text "INVALID") $ go sols unsats cs -- @c@ is SAT
+            Just preds -> do
+              let (rhsPreds, lhsPreds) = partition (== notRhs) preds
+              let core = Set.fromList lhsPreds
+              let parents = map (flip Set.delete c) lhsPreds -- subsets of @c@ that together cover all potential remaining solutions
+              if null rhsPreds
+                then debug 1 (pretty (conjunction c) <+> text "UNSAT" <+> pretty (conjunction core)) $ go sols (Set.insert (c, core) unsats) (parents ++ cs)              
+                else debug 1 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents ++ cs)              
+            
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) for which @check@ returns a model,
 -- where @check@ is monotone (if a set has a model, then every superset also has a model);
 -- performs breadth-first search.
@@ -161,13 +197,13 @@ filterSubsets check n = go [] [Set.empty]
   where
     go solutions candidates = if null candidates 
       then return solutions
-      else let new = filter (\s -> not $ any (flip Set.isSubsetOf s) (map fst solutions)) candidates
+      else let new = filter (\c -> not $ any (`Set.isSubsetOf` c) (map fst solutions)) candidates
         in do
           results <- zip new <$> mapM check new
           let (valids, invalids) = partition (isJust . snd) results
           go (solutions ++ map (over _2 fromJust) valids) (concatMap children (map fst invalids))      
     children idxs = let lower = if Set.null idxs then 0 else Set.findMax idxs + 1
-      in map (flip Set.insert idxs) [lower..(n - 1)]      
+      in map (`Set.insert` idxs) [lower..(n - 1)]      
             
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
 pruneSolutions :: SMTSolver m => [Id] -> [PSolution] -> FixPointSolver m [PSolution]

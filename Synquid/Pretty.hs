@@ -51,6 +51,8 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
+import qualified Data.Bimap as BMap
+import Data.Bimap (Bimap)
 
 import Control.Lens
 
@@ -154,10 +156,10 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     Var ident -> text ident
-    Unknown ident -> text ":" <> text ident
+    Unknown ident -> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    Parameter ident -> text "?" <> text ident
+    Parameter ident -> text "??" <> text ident
   )
   where
     n' = power fml
@@ -179,17 +181,15 @@ instance Pretty QSpace where
 instance Pretty QMap where
   pretty = hMapDoc text pretty  
 
-programDoc :: Program -> Doc
-programDoc (PIntLit i) = pretty i
-programDoc (PVar ident) = text ident
-programDoc (PApp f x) = pretty f <+> pretty x
-programDoc (PIf c t e) = parens (fmlDoc c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
-programDoc (PHole t) = parens (text "??" <+> text "::" <+> pretty t)
+programDoc :: (Pretty s, Pretty c) => Program s c -> Doc
+programDoc (PSymbol s) = pretty s
+programDoc (PApp f x) = parens (pretty f) <+> parens (pretty x)
+programDoc (PIf c t e) = parens (pretty c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
 
-instance Pretty Program where
+instance (Pretty s, Pretty c) => Pretty (Program s c) where
   pretty = programDoc
   
-instance Show Program where
+instance (Pretty s, Pretty c) => Show (Program s c) where
   show = show . pretty
   
 instance Pretty SMTModel where
@@ -203,3 +203,32 @@ instance Pretty PSolution where
   
 instance Show PSolution where
   show = show . pretty
+
+instance Pretty BaseType where
+  pretty IntT = text "int"
+  pretty BoolT = text "bool"  
+  
+prettyType :: Type -> Doc
+prettyType (ScalarT base id fml) = braces $ text id <> text ":" <> pretty base <+> text "|" <+> pretty fml
+prettyType (FunctionT t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2
+
+instance Pretty Type where
+  pretty = prettyType
+  
+prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
+
+prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
+prettyBindings env = commaSep (map text (BMap.keys (env ^. symbols))) 
+  
+instance Pretty Environment where
+  -- pretty env = vsep (map prettyBinding (BMap.toList (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions)) 
+  pretty env = commaSep (map text (BMap.keys (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
+  
+prettyConstraint :: Constraint -> Doc  
+prettyConstraint (Subtype env t1 t2) = prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
+prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
+prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
+  
+instance Pretty Constraint where
+  pretty = prettyConstraint
+   

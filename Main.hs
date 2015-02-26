@@ -7,6 +7,7 @@ import Synquid.SMTSolver
 import Synquid.Z3
 import Synquid.Program
 import Synquid.Pretty
+import Synquid.ConstraintGenerator
 
 import Data.Maybe
 import Data.List
@@ -14,7 +15,10 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Bimap as BMap
+import Data.Bimap (Bimap)
 import Control.Monad
+import Control.Lens
 import Control.Applicative
 import Control.Monad.Reader
 
@@ -36,6 +40,17 @@ condQuals vars = do
   guard $ lhs /= rhs
   return $ Binary op lhs rhs
   
+typeQualsRich :: Id -> [Id] -> [Formula]  
+typeQualsRich v vars = do
+  lhs <- map Var (v:vars) ++ [IntLit 0]
+  op <- [Ge, Neq]
+  rhs <- map Var (v:vars) ++ [IntLit 0]
+  guard $ (lhs == Var v || rhs == Var v) && lhs /= rhs
+  return $ Binary op lhs rhs
+  
+trivialSpace quals = QSpace quals (-1)
+  
+  
 condQualsLinearEq :: Integer -> Id -> Id -> [Formula]  
 condQualsLinearEq n x v = map (\i -> Var v |=| (Var x |+| IntLit i)) [0.. (2*n)] 
   -- ++ map (\i -> Var v |=| (fneg (Var x) |+| IntLit i)) [0..n]
@@ -47,8 +62,8 @@ varQual res vars = do
   return $ Var res |=| var
   
 extractVar res (Binary Eq (Var v) (Var x))
-  | v == res  =  PVar x
-extractVar _ (BoolLit True) = PVar "??"
+  | v == res  =  PSymbol x
+extractVar _ (BoolLit True) = PSymbol "??"
 extractVar res t =  error $ "extractVar got a non-variable type: " ++ show t  
   
 -- Constants  
@@ -59,8 +74,8 @@ constOne res = Var res |=| IntLit 1
 constQualInt res = map ($ res) [constZero, constOne]
 
 extractConstInt res q = case elemIndex q (constQualInt res) of
-  Just 0 -> PIntLit 0
-  Just 1 -> PIntLit 1
+  Just 0 -> PSymbol "0"
+  Just 1 -> PSymbol "1"
   Nothing -> error $ "extractConstInt got a non-existing type: " ++ show q  
   
 constId arg res = Var res |=| Var arg
@@ -71,16 +86,18 @@ constDec arg res = Var res |=| (Var arg |-| IntLit 1)
 constQualIntInt arg res = map (\f -> f arg res) [constId, constNeg, constInc, constDec]
 
 extractConstIntInt arg res q = case elemIndex q (constQualIntInt arg res) of
-  Just 0 -> PVar "id"
-  Just 1 -> PVar "(-)"
-  Just 2 -> PVar "inc"
-  Just 3 -> PVar "dec"  
+  Just 0 -> PSymbol "id"
+  Just 1 -> PSymbol "(-)"
+  Just 2 -> PSymbol "inc"
+  Just 3 -> PSymbol "dec"  
   Nothing -> error $ "extractConstIntInt " ++ arg ++ " " ++ res ++ " got a non-existing type: " ++ show q  
   
 -- Search parameters  
 
 defaultParams = SolverParams {
     pruneQuals = False,
+    -- optimalValuationsStrategy = UnsatCoreValuations,
+    optimalValuationsStrategy = BFSValuations,
     semanticPrune = True,
     agressivePrune = True,
     candidatePickStrategy = UniformStrongCandidate,
@@ -95,7 +112,8 @@ pruneQualsParams = defaultParams { pruneQuals = True } -- , candidatePickStrateg
 testMax2Synthesize = do
   let vars = ["x", "y"]
   let quals = Map.fromList [
-                ("cond", QSpace (condQualsRich vars) 2),
+                -- ("cond", QSpace (condQualsRich vars) 2),
+                ("cond", QSpace (condQualsRich vars) (length $ condQualsRich vars)),
                 ("then", QSpace (varQual "v" vars) 1),
                 ("else", QSpace (varQual "v" vars) 1)
               ]
@@ -148,6 +166,9 @@ testMax3Synthesize1Old = do
 testMax3Synthesize1New = do
   let vars = ["x", "y", "z"]
   let quals = Map.fromList [
+                -- ("cond1", QSpace (condQuals vars) (length $ condQuals vars)),
+                -- ("cond2", QSpace (condQuals vars) (length $ condQuals vars)),
+                -- ("cond3", QSpace (condQuals vars) (length $ condQuals vars)),
                 ("cond1", QSpace (condQuals vars) 2),
                 ("cond2", QSpace (condQuals vars) 2),
                 ("cond3", QSpace (condQuals vars) 2),
@@ -272,7 +293,8 @@ testAbsSynthesize2 = do
   case mSol of
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pAbs sol    
-    
+
+pInc :: Integer -> Solution -> Program Id Formula
 pInc n sol = let val ident = conjunction $ valuation sol ident
   in if n == 0
       then extractVar "y0" $ val "arg1"
@@ -318,4 +340,28 @@ testIncSynthesize3 n = do
     Nothing -> putStr "No solution"
     Just sol -> print $ pretty $ pInc n sol    
             
-main = testIncSynthesize3 5
+-- main = testMax3Synthesize1New
+
+main = do
+  let env = 
+            -- addSymbol "0" (ScalarT IntT "_v0" (Var "_v0" |=| IntLit 0)) .
+            addSymbol "inc" (FunctionT (ScalarT IntT "_v1" ftrue) (ScalarT IntT "_v0" (Var "_v0" |=| Var "_v1" |+| IntLit 1)))
+            -- addSymbol "x" (ScalarT IntT "_v0" (Var "_v0" |=| Var "x"))
+            -- addSymbol "y" (ScalarT IntT "_v0" (Var "_v0" |=| Var "y"))
+            $ emptyEnv
+  -- let typ = ScalarT IntT "_v0" (Var "_v0" |>=| Var "x") 
+  let typ = FunctionT (ScalarT IntT "x" ftrue) (ScalarT IntT "v" (Var "v" |>=| Var "x"))
+  -- let templ = choice (sym int_) (sym int_)  
+  -- let templ = sym (int_ |->| int_) |$| sym int_
+  -- let templ = sym (int_ |->| int_ |->| int_) |$| sym int_ |$| sym int_
+  let templ = choice (sym (int_ |->| int_)) (sym (int_ |->| int_))
+  -- let templ = sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
+  let ress = genConstraints (trivialSpace . condQualsRich) (\v vs -> trivialSpace $ typeQualsRich v vs) env typ templ
+  mapM_ printRes ress
+  where
+    printRes (p, qmap, fmls) = do 
+      print $ pretty p
+      putStr "\n"
+      print $ pretty qmap
+      putStr "\n"
+      print $ vsep $ map pretty fmls

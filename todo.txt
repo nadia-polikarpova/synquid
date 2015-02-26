@@ -1,11 +1,8 @@
-- Constraint generator
-- Apriori splittability analysis should take var and const into account better
+- New solver based on weakening
+- Try smten
 
 - Look at bad example for CEGIS: y >= x && x = i ==> y >= 5. Better when known lhs is stronger (y == x) or unknown lhs is weaker (x >= i) -> think about this
 - One point propagation
 - Second solver for CEGIS
-- Do we need strongest counterexamples / weakest solutions (or the other way around) for weak RHSs? Read PLDI paper.
 - Do we need multiple solutions for parameters? Do we need a lattice over them?
-- How to generalize to arbitrary constraints with arbitrary # inputs? Start with all independent and classical CEGIS and then pick dependent variables 
-
-- Try smten
+- Use optimization instead of UNSAT cores in CEGIS?

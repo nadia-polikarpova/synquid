@@ -55,6 +55,7 @@ fnot = Unary Not
 (|=>|) = Binary Implies
 (|<=>|) = Binary Iff
 conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
+disjunction fmls = if Set.null fmls then ffalse else foldr1 (|||) (Set.toList fmls)
 
 infixl 9 |*|
 infixl 8 |+|, |-|
