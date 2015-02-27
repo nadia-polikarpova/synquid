@@ -48,8 +48,7 @@ typeQualsRich v vars = do
   guard $ (lhs == Var v || rhs == Var v) && lhs /= rhs
   return $ Binary op lhs rhs
   
-trivialSpace quals = QSpace quals (-1)
-  
+trivialSpace quals = QSpace quals (length quals)
   
 condQualsLinearEq :: Integer -> Id -> Id -> [Formula]  
 condQualsLinearEq n x v = map (\i -> Var v |=| (Var x |+| IntLit i)) [0.. (2*n)] 
@@ -345,20 +344,34 @@ testIncSynthesize3 n = do
 main = do
   let env = 
             -- addSymbol "0" (ScalarT IntT "_v0" (Var "_v0" |=| IntLit 0)) .
-            addSymbol "inc" (FunctionT (ScalarT IntT "_v1" ftrue) (ScalarT IntT "_v0" (Var "_v0" |=| Var "_v1" |+| IntLit 1)))
-            -- addSymbol "x" (ScalarT IntT "_v0" (Var "_v0" |=| Var "x"))
-            -- addSymbol "y" (ScalarT IntT "_v0" (Var "_v0" |=| Var "y"))
+            -- addSymbol "inc" (FunctionT (ScalarT IntT "_v1" ftrue) (ScalarT IntT "_v0" (Var "_v0" |=| Var "_v1" |+| IntLit 1)))
+            addSymbol "x" (ScalarT IntT "_v0" (Var "_v0" |=| Var "x")) .
+            addSymbol "y" (ScalarT IntT "_v0" (Var "_v0" |=| Var "y"))
+            -- addSymbol "z" (ScalarT IntT "_v0" (Var "_v0" |=| Var "z"))
             $ emptyEnv
-  -- let typ = ScalarT IntT "_v0" (Var "_v0" |>=| Var "x") 
-  let typ = FunctionT (ScalarT IntT "x" ftrue) (ScalarT IntT "v" (Var "v" |>=| Var "x"))
-  -- let templ = choice (sym int_) (sym int_)  
+  let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y") 
+  -- let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y" |&| Var "v" |>=| Var "z") 
+  -- let typ = FunctionT (ScalarT IntT "x" ftrue) (ScalarT IntT "v" (Var "v" |>=| Var "x"))
+  let templ = choice (sym int_) (sym int_)  
   -- let templ = sym (int_ |->| int_) |$| sym int_
   -- let templ = sym (int_ |->| int_ |->| int_) |$| sym int_ |$| sym int_
-  let templ = choice (sym (int_ |->| int_)) (sym (int_ |->| int_))
+  -- let templ = choice (choice (sym int_) (sym int_)) (choice (sym int_) (sym int_))
   -- let templ = sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
+  
   let ress = genConstraints (trivialSpace . condQualsRich) (\v vs -> trivialSpace $ typeQualsRich v vs) env typ templ
-  mapM_ printRes ress
+  progMb <- findJustM go ress  
+  case progMb of
+    Nothing -> putStr "No Solution"
+    Just prog -> print $ pretty prog
   where
+    go :: (SimpleProgram, QMap, [Formula]) -> IO (Maybe SimpleProgram)
+    go (p, qmap, fmls) = do
+      debug 1 (pretty qmap) $ return ()
+      mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls)
+      case mSol of
+        Nothing -> return Nothing
+        Just sol -> return $ Just$ substituteCond sol p
+      
     printRes (p, qmap, fmls) = do 
       print $ pretty p
       putStr "\n"

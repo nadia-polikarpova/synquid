@@ -90,6 +90,9 @@ leftHandSide (Binary _ l _) = l
 -- | 'rightHandSide' @fml@ : right-hand side of a binary expression
 rightHandSide (Binary _ _ r) = r
 
+conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
+conjunctsOf f = Set.singleton f
+
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Map Id Formula -> Formula -> Formula
 substitute subst fml = case fml of

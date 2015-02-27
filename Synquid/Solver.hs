@@ -115,11 +115,12 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
         (pruneSolutions unknownsList allSolutions))                             -- Prune per-variable
       (return allSolutions) 
     return $ map (merge sol) pruned
-  where    
+  where
     unknowns = unknownsOf lhs
+    knownConjuncts = conjunctsOf lhs Set.\\ (Set.map Unknown unknowns)
     unknownsList = Set.toList unknowns
     lhsQuals = setConcatMap (Set.fromList . lookupQuals quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
-    usedLhsQuals = setConcatMap (pValuation sol) unknowns                            -- already used qualifiers for the whole antecedent
+    usedLhsQuals = setConcatMap (pValuation sol) unknowns `Set.union` knownConjuncts -- already used qualifiers for the whole antecedent
     rhsVars = varsOf rhs
         
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.

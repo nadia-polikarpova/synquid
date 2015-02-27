@@ -67,6 +67,15 @@ findM _ [] = return Nothing
 findM pred (x : xs) = do
   res <- pred x
   if res then return (Just x) else findM pred xs  
+  
+-- | Monadic version of 'find' (finds the first element in a list for which a computation evaluates to True) 
+findJustM :: (Functor m, Monad m) => (a -> m (Maybe b)) -> [a] -> m (Maybe b)
+findJustM _ [] = return Nothing
+findJustM f (x : xs) = do
+  resMb <- f x
+  case resMb of
+    Nothing -> findJustM f xs
+    Just res -> return $ Just res
     
 -- | Monadic version of if-then-else  
 ifM ::(Functor m, Monad m) => m Bool -> m a -> m a -> m a
@@ -78,7 +87,7 @@ pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 {- Debug output -}
 
 -- | 'debugOutLevel' : Level above which debug output is ignored
-debugOutLevel = 2
+debugOutLevel = 1
 
 -- | 'debug' @level msg@ : output @msg@ at level @level@ 
 debug level msg = if level <= debugOutLevel then traceShow msg else id

@@ -54,6 +54,11 @@ type Template = Program TypeSkeleton ()
 type LiquidProgram = Program Type Formula
 type SimpleProgram = Program Id Formula
 
+substituteCond :: Solution -> SimpleProgram -> SimpleProgram
+substituteCond _ p@(PSymbol _) = p
+substituteCond sol (PApp f x) = PApp (substituteCond sol f) (substituteCond sol x)
+substituteCond sol (PIf c t e) = PIf (applySolution (parametrize sol) c) (substituteCond sol t) (substituteCond sol e)
+
 typeSkeletonOf :: Template -> TypeSkeleton
 typeSkeletonOf (PSymbol t) = t
 typeSkeletonOf (PApp fun _) = let (FunctionS _ t) = typeSkeletonOf fun in t

@@ -1,4 +1,4 @@
-- New solver based on weakening
+- Least-fixed pint solver (with disjunctions)
 - Try smten
 
 - Look at bad example for CEGIS: y >= x && x = i ==> y >= 5. Better when known lhs is stronger (y == x) or unknown lhs is weaker (x >= i) -> think about this
