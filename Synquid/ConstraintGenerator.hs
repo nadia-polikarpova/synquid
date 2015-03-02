@@ -97,28 +97,24 @@ constraintsTopDown env t (PIf _ thenTempl elseTempl) = do
 split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT tArg1 tFun1) (FunctionT tArg2 tFun2)) =
   let x = head $ boundVars tArg2 in 
-  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol x tArg2 env) tFun1 tFun2)
+  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol (Var x) tArg2 env) tFun1 tFun2)
 split (WellFormed env (FunctionT tArg tFun)) = 
   let x = head $ boundVars tArg in 
-  split (WellFormed env tArg) ++ split (WellFormed (addSymbol x tArg env) tFun)
+  split (WellFormed env tArg) ++ split (WellFormed (addSymbol (Var x) tArg env) tFun)
 -- ToDo: splitting WellFormedSymbol
 split c = [c]
 
-type CondQuals = [Id] -> QSpace
-type TypeQuals = Id -> [Id] -> QSpace
+type CondQuals = [Formula] -> QSpace
+type TypeQuals = Id -> [Formula] -> QSpace
 
 toFormula :: CondQuals -> TypeQuals -> Constraint -> Either Formula (Id, QSpace)
 toFormula _ _ (Subtype env (ScalarT IntT v1 fml1) (ScalarT IntT v2 fml2))
   | v1 == v2 = Left $ conjunction (fml1 `Set.insert` view assumptions env) |=>| disjunction (fml2 `Set.insert` view negAssumptions env)
 toFormula _ tq (WellFormed env (ScalarT IntT v (Unknown u))) = 
-  Right (u, tq v $ symbolsByShape (ScalarS IntT) env)
+  Right (u, tq v (Map.elems $ symbolsByShape (ScalarS IntT) env))
 toFormula cq _ (WellFormedCond env (Unknown u)) = 
-  Right (u, cq $ symbolsByShape (ScalarS IntT) env)  
-toFormula _ _ (WellFormedSymbol env (ScalarT IntT v (Unknown u))) = 
-  let symq names = QSpace (varQual v names) 1 -- ToDo: distinguish variables and constants
-  in Right (u, symq $ symbolsByShape (ScalarS IntT) env)
+  Right (u, cq (Map.elems $ symbolsByShape (ScalarS IntT) env))  
+toFormula _ _ (WellFormedSymbol env t@(ScalarT IntT v (Unknown u))) = 
+  let fmlOf (ScalarT _ _ fml) = fml
+  in Right (u, flip QSpace 1 $ map (fmlOf . unifyVarsWith t) $ Map.keys $ symbolsByShape (ScalarS IntT) env)
 toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
-
-varQual res vars = do
-  var <- map Var vars
-  return $ Var res |=| var  

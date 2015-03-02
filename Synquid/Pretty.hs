@@ -218,11 +218,11 @@ instance Pretty Type where
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
-prettyBindings env = commaSep (map text (BMap.keys (env ^. symbols))) 
+prettyBindings env = commaSep (map pretty (Map.elems (env ^. symbols))) 
   
 instance Pretty Environment where
   -- pretty env = vsep (map prettyBinding (BMap.toList (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions)) 
-  pretty env = commaSep (map text (BMap.keys (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
+  pretty env = commaSep (map pretty (Map.elems (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
   
 prettyConstraint :: Constraint -> Doc  
 prettyConstraint (Subtype env t1 t2) = prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2

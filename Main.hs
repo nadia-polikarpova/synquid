@@ -40,21 +40,15 @@ condQuals vars = do
   guard $ lhs /= rhs
   return $ Binary op lhs rhs
   
-typeQualsRich :: Id -> [Id] -> [Formula]  
-typeQualsRich v vars = do
-  lhs <- map Var (v:vars) ++ [IntLit 0]
-  op <- [Ge, Neq]
-  rhs <- map Var (v:vars) ++ [IntLit 0]
-  guard $ (lhs == Var v || rhs == Var v) && lhs /= rhs
-  return $ Binary op lhs rhs
-  
-trivialSpace quals = QSpace quals (length quals)
-  
 condQualsLinearEq :: Integer -> Id -> Id -> [Formula]  
 condQualsLinearEq n x v = map (\i -> Var v |=| (Var x |+| IntLit i)) [0.. (2*n)] 
   -- ++ map (\i -> Var v |=| (fneg (Var x) |+| IntLit i)) [0..n]
   
 -- Variables  
+
+varQual res vars = do
+  var <- map Var vars
+  return $ Var res |=| var
     
 extractVar res (Binary Eq (Var v) (Var x))
   | v == res  =  PSymbol x
@@ -91,8 +85,8 @@ extractConstIntInt arg res q = case elemIndex q (constQualIntInt arg res) of
 
 defaultParams = SolverParams {
     pruneQuals = False,
-    -- optimalValuationsStrategy = UnsatCoreValuations,
-    optimalValuationsStrategy = BFSValuations,
+    optimalValuationsStrategy = UnsatCoreValuations,
+    -- optimalValuationsStrategy = BFSValuations,
     semanticPrune = True,
     agressivePrune = True,
     candidatePickStrategy = UniformStrongCandidate,
@@ -339,31 +333,39 @@ testIncSynthesize3 n = do
 
 main = do
   let env = 
-            -- addSymbol "0" (ScalarT IntT "_v0" (Var "_v0" |=| IntLit 0)) .
-            -- addSymbol "inc" (FunctionT (ScalarT IntT "_v1" ftrue) (ScalarT IntT "_v0" (Var "_v0" |=| Var "_v1" |+| IntLit 1)))
-            addSymbol "x" (ScalarT IntT "_v0" (Var "_v0" |=| Var "x")) .
-            addSymbol "y" (ScalarT IntT "_v0" (Var "_v0" |=| Var "y")) .
-            addSymbol "z" (ScalarT IntT "_v0" (Var "_v0" |=| Var "z"))
+            addSymbol (IntLit 0) (ScalarT IntT "_v0" (Var "_v0" |=| IntLit 0)) .
+            -- addSymbol (Var "inc") (FunctionT (ScalarT IntT "_v1" ftrue) (ScalarT IntT "_v0" (Var "_v0" |=| Var "_v1" |+| IntLit 1)))
+            addSymbol (Var "x") (ScalarT IntT "_v0" (Var "_v0" |=| Var "x")) .
+            addSymbol (Var "y") (ScalarT IntT "_v0" (Var "_v0" |=| Var "y"))
+            -- addSymbol (Var "z") (ScalarT IntT "_v0" (Var "_v0" |=| Var "z"))
             $ emptyEnv
   -- let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y") 
-  let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y" |&| Var "v" |>=| Var "z") 
+  let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y" |&| Var "v" |>=| IntLit 0) 
   -- let typ = FunctionT (ScalarT IntT "x" ftrue) (ScalarT IntT "v" (Var "v" |>=| Var "x"))
   -- let templ = choice (sym int_) (sym int_)  
   -- let templ = sym (int_ |->| int_) |$| sym int_
   -- let templ = sym (int_ |->| int_ |->| int_) |$| sym int_ |$| sym int_
   let templ = choice (choice (sym int_) (sym int_)) (choice (sym int_) (sym int_))
+  -- let templ = choice (choice (sym int_) (sym int_)) (choice (sym int_) (sym int_))
   -- let templ = sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
   
-  let (p, qmap, fmls) = genConstraints (trivialSpace . condQuals) (\v vs -> trivialSpace $ typeQualsRich v vs) env typ templ
+  let (p, qmap, fmls) = genConstraints (toSpace . cq) (\v syms -> toSpace $ tq v syms) env typ templ
   debug 1 (pretty qmap) $ return ()
   mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls)
   case mSol of
     Nothing -> putStr "No Solution"
     Just sol -> print $ pretty $ extract p (parametrize sol)
-        
-    -- printRes (p, qmap, fmls) = do 
-      -- print $ pretty p
-      -- putStr "\n"
-      -- print $ pretty qmap
-      -- putStr "\n"
-      -- print $ vsep $ map pretty fmls
+  where
+    cq syms = do
+      lhs <- syms
+      op <- [Ge, Neq]
+      rhs <- syms
+      guard $ lhs /= rhs
+      return $ Binary op lhs rhs  
+    tq v syms = do
+      lhs <- (Var v):syms
+      op <- [Ge, Neq]
+      rhs <- (Var v):syms
+      guard $ (lhs == Var v || rhs == Var v) && lhs /= rhs
+      return $ Binary op lhs rhs  
+    toSpace quals = QSpace quals (length quals)

@@ -9,8 +9,6 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import qualified Data.Bimap as BMap
-import Data.Bimap (Bimap)
 import Control.Monad
 import Control.Lens
 
@@ -30,12 +28,12 @@ data Type =
 boundVars (ScalarT _ v _) = [v]
 boundVars (FunctionT arg fun) = boundVars arg ++ boundVars fun
 
-unifyVars t1 t2 = snd $ unifyVars' Map.empty t1 t2
+unifyVarsWith t1 t2 = snd $ unifyVarsWith' Map.empty t1 t2
   where
-    unifyVars' m (ScalarT base v fml) (ScalarT _ v' _) = let m' = Map.insert v (Var v') m in (m', ScalarT base v' $ substitute m' fml)
-    unifyVars' m (FunctionT tArg tFun) (FunctionT tArg' tFun') = let 
-        (m', resArg) = unifyVars' m tArg tArg'
-        (m'', resFun) = unifyVars' m' tFun tFun'
+    unifyVarsWith' m (ScalarT _ v' _) (ScalarT base v fml) = let m' = Map.insert v (Var v') m in (m', ScalarT base v' $ substitute m' fml)
+    unifyVarsWith' m (FunctionT tArg' tFun') (FunctionT tArg tFun) = let 
+        (m', resArg) = unifyVarsWith' m tArg' tArg
+        (m'', resFun) = unifyVarsWith' m' tFun' tFun
       in (m'', FunctionT resArg resFun)
       
 typeConjunction (ScalarT base v fml) (ScalarT _ _ fml') = ScalarT base v (fml |&| fml')       
@@ -52,7 +50,7 @@ shape (FunctionT tArg tFun) = FunctionS (shape tArg) (shape tFun)
 
 type Template = Program TypeSkeleton ()
 type LiquidProgram = Program (Environment, Type) Formula
-type SimpleProgram = Program Id Formula
+type SimpleProgram = Program Formula Formula
 
 typeApplySolution :: PSolution -> Type -> Type
 typeApplySolution sol (ScalarT base name fml) = ScalarT base name (applySolution sol fml)
@@ -73,30 +71,25 @@ infixr 5 |->|
 infixl 5 |$|
   
 data Environment = Environment {
-  _symbols :: Bimap Id Type,
+  _symbols :: Map Type Formula,
   _assumptions :: Set Formula,
   _negAssumptions :: Set Formula
 }
 
 makeLenses ''Environment  
 
-emptyEnv = Environment BMap.empty Set.empty Set.empty
+emptyEnv = Environment Map.empty Set.empty Set.empty
 
-addSymbol :: Id -> Type -> Environment -> Environment
-addSymbol name t = symbols %~ BMap.insert name t
+addSymbol :: Formula -> Type -> Environment -> Environment
+addSymbol sym t = symbols %~ Map.insert t sym
 
-symbolByName :: Id -> Environment -> Type
-symbolByName name env = case view (symbols . to (BMap.lookup name)) env of
-  Just t -> t
-  Nothing -> error $ "symbolByName: can't find " ++ name
-
-symbolByType :: Type -> Environment -> Id
-symbolByType t env = case view (symbols . to (BMap.lookupR t)) env of
-  Just name -> name
+symbolByType :: Type -> Environment -> Formula
+symbolByType t env = case view (symbols . to (Map.lookup t)) env of
+  Just sym -> sym
   Nothing -> error $ "symbolByType: can't find type"
 
-symbolsByShape :: TypeSkeleton -> Environment -> [Id]
-symbolsByShape s = view (symbols . to (BMap.keys . BMap.filter (\_ t -> shape t == s)))
+symbolsByShape :: TypeSkeleton -> Environment -> Map Type Formula
+symbolsByShape s env = Map.filterWithKey (\t _ -> shape t == s) $ view symbols env  
 
 addAssumption :: Formula -> Environment -> Environment
 addAssumption f = assumptions %~ Set.insert f
@@ -107,7 +100,7 @@ addNegAssumption f = negAssumptions %~ Set.insert f
 restrict :: Type -> Environment -> Environment
 restrict t env = over symbols restrict' env
   where
-    restrict' symbs = BMap.fromList $ over (mapped._2) (flip unifyVars t) $ BMap.toList $ BMap.filter (\_ t' -> shape t' == shape t) symbs
+    restrict' symbs = Map.mapKeys (unifyVarsWith t) $ Map.filterWithKey (\t' _ -> shape t' == shape t) symbs
     
 extract :: LiquidProgram -> PSolution -> SimpleProgram
 extract prog sol = case prog of

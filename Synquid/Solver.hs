@@ -181,14 +181,14 @@ optimalValuationsUnsatCore quals lhs rhs = flip zip (repeat Map.empty) . Set.toL
         else do
           coreMb <- lift $ unsatCore lhsList (notRhs : Set.toList c)
           case coreMb of
-            Nothing -> debug 1 (pretty (conjunction c) <+> text "INVALID") $ go sols unsats cs -- @c@ is SAT
+            Nothing -> debug 2 (pretty (conjunction c) <+> text "INVALID") $ go sols unsats cs -- @c@ is SAT
             Just preds -> do
               let (rhsPreds, lhsPreds) = partition (== notRhs) preds
               let core = Set.fromList lhsPreds
               let parents = map (flip Set.delete c) lhsPreds -- subsets of @c@ that together cover all potential remaining solutions
               if null rhsPreds
-                then debug 1 (pretty (conjunction c) <+> text "UNSAT" <+> pretty (conjunction core)) $ go sols (Set.insert (c, core) unsats) (parents ++ cs)              
-                else debug 1 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents ++ cs)              
+                then debug 2 (pretty (conjunction c) <+> text "UNSAT" <+> pretty (conjunction core)) $ go sols (Set.insert (c, core) unsats) (parents ++ cs)              
+                else debug 2 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents ++ cs)              
             
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) for which @check@ returns a model,
 -- where @check@ is monotone (if a set has a model, then every superset also has a model);
