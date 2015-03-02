@@ -51,13 +51,12 @@ shape (ScalarT base _ _) = ScalarS base
 shape (FunctionT tArg tFun) = FunctionS (shape tArg) (shape tFun)
 
 type Template = Program TypeSkeleton ()
-type LiquidProgram = Program Type Formula
+type LiquidProgram = Program (Environment, Type) Formula
 type SimpleProgram = Program Id Formula
 
-substituteCond :: Solution -> SimpleProgram -> SimpleProgram
-substituteCond _ p@(PSymbol _) = p
-substituteCond sol (PApp f x) = PApp (substituteCond sol f) (substituteCond sol x)
-substituteCond sol (PIf c t e) = PIf (applySolution (parametrize sol) c) (substituteCond sol t) (substituteCond sol e)
+typeApplySolution :: PSolution -> Type -> Type
+typeApplySolution sol (ScalarT base name fml) = ScalarT base name (applySolution sol fml)
+typeApplySolution sol (FunctionT arg fun) = FunctionT (typeApplySolution sol arg) (typeApplySolution sol fun)
 
 typeSkeletonOf :: Template -> TypeSkeleton
 typeSkeletonOf (PSymbol t) = t
@@ -104,16 +103,20 @@ addAssumption f = assumptions %~ Set.insert f
 
 addNegAssumption :: Formula -> Environment -> Environment
 addNegAssumption f = negAssumptions %~ Set.insert f
-  
-extract :: Environment -> LiquidProgram -> Maybe SimpleProgram
-extract env prog = case prog of
-  PSymbol t -> liftM PSymbol $ BMap.lookupR t (env ^. symbols)
-  PApp t1 t2 -> liftM2 PApp (extract env t1) (extract env t2)
-  PIf cond t1 t2 -> if Set.null $ unknownsOf cond
-    then liftM2 (PIf cond) (extract env t1) (extract env t2)
-    else Nothing
+
+restrict :: Type -> Environment -> Environment
+restrict t env = over symbols restrict' env
+  where
+    restrict' symbs = BMap.fromList $ over (mapped._2) (flip unifyVars t) $ BMap.toList $ BMap.filter (\_ t' -> shape t' == shape t) symbs
     
+extract :: LiquidProgram -> PSolution -> SimpleProgram
+extract prog sol = case prog of
+  PSymbol (env, t) -> PSymbol $ symbolByType (typeApplySolution sol t) env
+  PApp t1 t2 -> PApp (extract t1 sol) (extract t2 sol)
+  PIf cond t1 t2 -> PIf (applySolution sol cond) (extract t1 sol) (extract t2 sol)      
+      
 data Constraint = Subtype Environment Type Type
   | WellFormed Environment Type
   | WellFormedCond Environment Formula
+  | WellFormedSymbol Environment Type
   
