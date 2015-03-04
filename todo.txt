@@ -1,5 +1,9 @@
-- Get rid of types in templates
-- Recursion
+- For higher-order functions and recursion:
+	we want WellFormedSymbol constraints with the symbol being an unknown function;
+	with current toFormula this causes unknowns to show up in the qualifiers;
+	promising solution is to refactor the way function symbols are handled: 
+	instead of taking their type verbatim, try splitting both the WFS constraints for functions and the function symbols in the environment
+- Polymorphism
 - Parser for types and templates
 - make TypeSkeleton a functor?
 - For function constants: make qspace dependent on solution for other unknowns when it's been chosen

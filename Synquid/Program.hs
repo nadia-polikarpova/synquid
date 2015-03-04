@@ -50,6 +50,10 @@ unifyVarsWith t' t = snd $ unifyVarsWith' Map.empty t' t
         (m', resArg) = unifyVarsWith' m tArg' tArg
         (m'', resFun) = unifyVarsWith' m' tFun' tFun
       in (m'', FunctionT resArg resFun)
+      
+unknownsOfType :: RType -> Set Id
+unknownsOfType (ScalarT _ (_, fml)) = unknownsOf fml
+unknownsOfType (FunctionT arg fun) = unknownsOfType arg `Set.union` unknownsOfType fun
 
 -- | 'typeApplySolution' @sol t@: replace all unknowns in @t@ with their valuations in @sol@
 typeApplySolution :: PSolution -> RType -> RType
@@ -123,7 +127,8 @@ data Program s c =
   PSymbol s |
   PApp (Program s c) (Program s c) |
   PFun s (Program s c) |
-  PIf c (Program s c) (Program s c)    
+  PIf c (Program s c) (Program s c) |
+  PFix s (Program s c)
     
 -- | Program templates (skeleton + unrefined types of symbols)
 type Template = Program SType ()
@@ -140,13 +145,16 @@ sTypeOf (PSymbol t) = t
 sTypeOf (PApp fun _) = let (FunctionT _ t) = sTypeOf fun in t
 sTypeOf (PFun t p) = FunctionT t (sTypeOf p)
 sTypeOf (PIf _ p _) = sTypeOf p
+sTypeOf (PFix t _) = t
 
-int_ = ScalarT IntT ()
+int = ScalarT IntT
+int_ = int ()
 (|->|) = FunctionT
 sym = PSymbol
 choice = PIf ()
 (|$|) = PApp
 (|.|) = PFun
+fix_ = PFix 
 
 infixr 5 |->|
 infixr 5 |$|
@@ -155,10 +163,13 @@ infixr 4 |.|
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
 extract :: LiquidProgram -> PSolution -> SimpleProgram
 extract prog sol = case prog of
-  PSymbol (env, t) -> PSymbol $ symbolByType (typeApplySolution sol t) env
+  PSymbol (env, t) -> PSymbol $ symbolFromType env t
   PApp pFun pArg -> PApp (extract pFun sol) (extract pArg sol)
-  PFun (env, t) p -> PFun (symbolByType (typeApplySolution sol t) env) (extract p sol)
+  PFun (env, t) p -> PFun (symbolFromType env t) (extract p sol)
   PIf cond pThen pElse -> PIf (applySolution sol cond) (extract pThen sol) (extract pElse sol)      
+  PFix (env, t) p -> PFix (symbolFromType env t) (extract p sol)
+  where
+    symbolFromType env t = symbolByType (typeApplySolution sol t) env
       
 -- | Typing constraints
 data Constraint = Subtype Environment RType RType

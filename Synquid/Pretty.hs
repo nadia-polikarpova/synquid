@@ -10,8 +10,6 @@ module Synquid.Pretty (
   empty,
   isEmpty,
   text,
-  int,
-  integer,
   linebreak,
   semi,
   lbrace, rbrace,
@@ -186,6 +184,7 @@ programDoc (PSymbol s) = pretty s
 programDoc (PApp f x) = parens (pretty f <+> pretty x)
 programDoc (PFun x e) = parens (text "\\" <> pretty x <+> text "." <+> pretty e)
 programDoc (PIf c t e) = parens (pretty c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
+programDoc (PFix f e) = parens (text "let rec" <> pretty f <+> text "=" <+> pretty e)
 
 instance (Pretty s, Pretty c) => Pretty (Program s c) where
   pretty = programDoc
@@ -209,12 +208,25 @@ instance Pretty BaseType where
   pretty IntT = text "int"
   pretty BoolT = text "bool"  
   
+prettySType :: SType -> Doc
+prettySType (ScalarT base _) = pretty base
+prettySType (FunctionT t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2  
+
+instance Pretty SType where
+  pretty = prettySType
+  
+instance Show SType where
+ show = show . pretty
+  
 prettyType :: RType -> Doc
 prettyType (ScalarT base (v, fml)) = braces $ text v <> text ":" <> pretty base <+> text "|" <+> pretty fml
 prettyType (FunctionT t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2
 
 instance Pretty RType where
   pretty = prettyType
+  
+instance Show RType where
+ show = show . pretty  
   
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
