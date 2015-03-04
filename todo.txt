@@ -1,7 +1,14 @@
+- make TypeSkeleton a functor?
+- For function constants: make qspace dependent on solution for other unknowns when it's been chosen
+- Optimiztions
+	If u's qspace has a single qualifier: put it directly into the solution
+	If u appears as a head of exactly one clause, it can be replaced by its body and the clause can be thrown away (provided they have the same variables?) 
+	If u's qspace is empty there's no solution to the whole thing
+- Explicit search
+- Recursion
 - Try smten
 
 - Look at bad example for CEGIS: y >= x && x = i ==> y >= 5. Better when known lhs is stronger (y == x) or unknown lhs is weaker (x >= i) -> think about this
-- One point propagation
 - Second solver for CEGIS
 - Do we need multiple solutions for parameters? Do we need a lattice over them?
 - Use optimization instead of UNSAT cores in CEGIS?

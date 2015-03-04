@@ -179,7 +179,7 @@ instance Pretty QSpace where
   pretty space = braces $ commaSep $ map pretty $ view qualifiers space
   
 instance Pretty QMap where
-  pretty = hMapDoc text pretty  
+  pretty = vMapDoc text pretty  
 
 programDoc :: (Pretty s, Pretty c) => Program s c -> Doc
 programDoc (PSymbol s) = pretty s
@@ -208,11 +208,11 @@ instance Pretty BaseType where
   pretty IntT = text "int"
   pretty BoolT = text "bool"  
   
-prettyType :: Type -> Doc
-prettyType (ScalarT base id fml) = braces $ text id <> text ":" <> pretty base <+> text "|" <+> pretty fml
+prettyType :: RType -> Doc
+prettyType (ScalarT base (v, fml)) = braces $ text v <> text ":" <> pretty base <+> text "|" <+> pretty fml
 prettyType (FunctionT t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2
 
-instance Pretty Type where
+instance Pretty RType where
   pretty = prettyType
   
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
