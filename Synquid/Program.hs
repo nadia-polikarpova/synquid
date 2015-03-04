@@ -122,6 +122,7 @@ embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -
 data Program s c =
   PSymbol s |
   PApp (Program s c) (Program s c) |
+  PFun s (Program s c) |
   PIf c (Program s c) (Program s c)    
     
 -- | Program templates (skeleton + unrefined types of symbols)
@@ -137,6 +138,7 @@ type LiquidProgram = Program (Environment, RType) Formula
 sTypeOf :: Template -> SType
 sTypeOf (PSymbol t) = t
 sTypeOf (PApp fun _) = let (FunctionT _ t) = sTypeOf fun in t
+sTypeOf (PFun t p) = FunctionT t (sTypeOf p)
 sTypeOf (PIf _ p _) = sTypeOf p
 
 int_ = ScalarT IntT ()
@@ -144,16 +146,19 @@ int_ = ScalarT IntT ()
 sym = PSymbol
 choice = PIf ()
 (|$|) = PApp
+(|.|) = PFun
 
 infixr 5 |->|
 infixr 5 |$|
+infixr 4 |.|
     
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
 extract :: LiquidProgram -> PSolution -> SimpleProgram
 extract prog sol = case prog of
   PSymbol (env, t) -> PSymbol $ symbolByType (typeApplySolution sol t) env
-  PApp t1 t2 -> PApp (extract t1 sol) (extract t2 sol)
-  PIf cond t1 t2 -> PIf (applySolution sol cond) (extract t1 sol) (extract t2 sol)      
+  PApp pFun pArg -> PApp (extract pFun sol) (extract pArg sol)
+  PFun (env, t) p -> PFun (symbolByType (typeApplySolution sol t) env) (extract p sol)
+  PIf cond pThen pElse -> PIf (applySolution sol cond) (extract pThen sol) (extract pElse sol)      
       
 -- | Typing constraints
 data Constraint = Subtype Environment RType RType

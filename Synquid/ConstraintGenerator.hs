@@ -60,6 +60,11 @@ constraints env t (PApp funTempl argTempl) = do
   (fun, csFun) <- constraints env tFun funTempl
   (arg, csArg) <- constraints env tArg argTempl     
   return (PApp fun arg, csArg ++ csFun ++ [WellFormed env tArg])
+constraints env t (PFun varTempl bodyTempl) = do
+  let (FunctionT tArg tRes) = t
+  let env' = addSymbol (valueVar tArg) tArg env
+  (pBody, cs) <- constraints env' tRes bodyTempl
+  return (PFun (env', tArg) pBody, cs)
 constraints env t (PIf _ thenTempl elseTempl) = do
   cond <- Unknown <$> freshId unknownPrefix
   (pThen, csThen) <- constraints (addAssumption cond env) t thenTempl

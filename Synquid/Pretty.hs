@@ -183,7 +183,8 @@ instance Pretty QMap where
 
 programDoc :: (Pretty s, Pretty c) => Program s c -> Doc
 programDoc (PSymbol s) = pretty s
-programDoc (PApp f x) = parens (pretty f) <+> parens (pretty x)
+programDoc (PApp f x) = parens (pretty f <+> pretty x)
+programDoc (PFun x e) = parens (text "\\" <> pretty x <+> text "." <+> pretty e)
 programDoc (PIf c t e) = parens (pretty c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
 
 instance (Pretty s, Pretty c) => Pretty (Program s c) where

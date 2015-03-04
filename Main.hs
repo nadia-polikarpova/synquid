@@ -337,21 +337,23 @@ main = do
             addSymbol (Var "dec") (FunctionT (ScalarT IntT ("_v1", ftrue)) (ScalarT IntT ("_v0", Var "_v0" |=| Var "_v1" |-| IntLit 1))) .
             addSymbol (Var "id") (FunctionT (ScalarT IntT ("_v1", ftrue)) (ScalarT IntT ("_v0", Var "_v0" |=| Var "_v1"))) .
             addSymbol (Var "inc") (FunctionT (ScalarT IntT ("_v1", ftrue)) (ScalarT IntT ("_v0", Var "_v0" |=| Var "_v1" |+| IntLit 1))) .
-            addSymbol (Var "neg") (FunctionT (ScalarT IntT ("_v1", ftrue)) (ScalarT IntT ("_v0", Var "_v0" |=| fneg (Var "_v1")))) .
-            addSymbol (Var "x") (ScalarT IntT ("_v0", ftrue))
+            addSymbol (Var "neg") (FunctionT (ScalarT IntT ("_v1", ftrue)) (ScalarT IntT ("_v0", Var "_v0" |=| fneg (Var "_v1"))))
+            -- addSymbol (Var "x") (ScalarT IntT ("_v0", ftrue))
             -- addSymbol (Var "x") (ScalarT IntT "_v0" (Var "_v0" |=| Var "x")) .
             -- addSymbol (Var "y") (ScalarT IntT "_v0" (Var "_v0" |=| Var "y")) .
             -- addSymbol (Var "z") (ScalarT IntT "_v0" (Var "_v0" |=| Var "z"))
             $ emptyEnv
-  let typ = ScalarT IntT ("_v0", Var "_v0" |>| Var "x") 
+  -- let typ = ScalarT IntT ("_v0", Var "_v0" |>| Var "x") 
   -- let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y") 
   -- let typ = ScalarT IntT "v" (Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y" |&| Var "v" |>=| IntLit 0) 
-  -- let typ = FunctionT (ScalarT IntT "x" ftrue) (ScalarT IntT "v" (Var "v" |>=| Var "x"))
+  -- let typ = FunctionT (ScalarT IntT ("x", ftrue)) $ FunctionT (ScalarT IntT ("y", ftrue)) (ScalarT IntT ("v", Var "v" |>=| Var "x" |&| Var "v" |>=| Var "y"))
+  let typ = FunctionT (ScalarT IntT ("x", ftrue)) (ScalarT IntT ("v", Var "v" |>=| Var "x" |&| Var "v" |>=| IntLit 0))
   -- let templ = choice (sym int_) (sym int_)
   -- let templ = sym (int_ |->| int_ |->| int_) |$| sym int_ |$| sym int_
   -- let templ = choice (choice (sym int_) (sym int_)) (choice (sym int_) (sym int_))
-  let templ = choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
+  -- let templ = choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   -- let templ = sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
+  let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   let (p, qmap, fmls) = genConstraints (toSpace . cq) (\v syms -> toSpace $ tq v syms) env typ templ
   debug 1 (pretty qmap) $ return ()
