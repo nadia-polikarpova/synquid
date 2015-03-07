@@ -21,44 +21,44 @@ data BaseType = BoolT | IntT
 -- | Type skeletons parametrized by refinements  
 data TypeSkeleton r =
   ScalarT BaseType r |
-  FunctionT (TypeSkeleton r) (TypeSkeleton r)
+  FunctionT Id (TypeSkeleton r) (TypeSkeleton r)
   deriving (Eq, Ord)
   
 -- | Unrefined typed  
 type SType = TypeSkeleton ()  
 
 -- | Refinement types  
-type RType = TypeSkeleton (Id, Formula)
+type RType = TypeSkeleton Formula
 
 -- | Forget refinements
 shape :: RType -> SType  
 shape (ScalarT base _) = ScalarT base ()
-shape (FunctionT tArg tFun) = FunctionT (shape tArg) (shape tFun)
-  
--- | The value variable of a refinement type
-valueVar :: RType -> Formula
-valueVar (ScalarT _ (v, _)) = Var v
-valueVar (FunctionT _ res) = valueVar res
+shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 
+refine :: SType -> RType
+refine (ScalarT base _) = ScalarT base ftrue
+refine (FunctionT _ tArg tFun) = FunctionT dontCare (refine tArg) (refine tFun) -- ToDo: do we care???
+  
 -- | 'unifyVarsWith' @t' t@: @t@ with value variables replaced by the corresponding ones from @t'@
 -- (the types must have the same shape)
 unifyVarsWith :: RType -> RType -> RType
-unifyVarsWith t' t = snd $ unifyVarsWith' Map.empty t' t
+unifyVarsWith t' t = unifyVarsWith' Map.empty t' t
   where
-    unifyVarsWith' m (ScalarT _ (v', _)) (ScalarT base (v, fml)) = let m' = Map.insert v (Var v') m in (m', ScalarT base (v', substitute m' fml))
-    unifyVarsWith' m (FunctionT tArg' tFun') (FunctionT tArg tFun) = let 
-        (m', resArg) = unifyVarsWith' m tArg' tArg
-        (m'', resFun) = unifyVarsWith' m' tFun' tFun
-      in (m'', FunctionT resArg resFun)
+    unifyVarsWith' m (ScalarT _ _) (ScalarT base fml) = ScalarT base (substitute m fml)
+    unifyVarsWith' m (FunctionT x tArg' tFun') (FunctionT y tArg tFun) = FunctionT x (unifyVarsWith' m tArg' tArg) (unifyVarsWith' (Map.insert y (Var x) m) tFun' tFun)
+    
+renameVar :: Id -> Id -> RType -> RType    
+renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var new)) fml)
+renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg) (renameVar old new tRes)
       
-unknownsOfType :: RType -> Set Id
-unknownsOfType (ScalarT _ (_, fml)) = unknownsOf fml
-unknownsOfType (FunctionT arg fun) = unknownsOfType arg `Set.union` unknownsOfType fun
+unknownsOfType :: RType -> Set Formula
+unknownsOfType (ScalarT _ fml) = unknownsOf fml
+unknownsOfType (FunctionT _ arg res) = unknownsOfType arg `Set.union` unknownsOfType res
 
 -- | 'typeApplySolution' @sol t@: replace all unknowns in @t@ with their valuations in @sol@
 typeApplySolution :: PSolution -> RType -> RType
-typeApplySolution sol (ScalarT base (v, fml)) = ScalarT base (v, applySolution sol fml)
-typeApplySolution sol (FunctionT arg fun) = FunctionT (typeApplySolution sol arg) (typeApplySolution sol fun)
+typeApplySolution sol (ScalarT base fml) = ScalarT base $ applySolution sol fml
+typeApplySolution sol (FunctionT x arg fun) = FunctionT x (typeApplySolution sol arg) (typeApplySolution sol fun)
 
 -- | Typing environment
 data Environment = Environment {
@@ -78,25 +78,12 @@ addSymbol :: Formula -> RType -> Environment -> Environment
 addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertWith (Set.union) (shape t) (Set.singleton sym))
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
-varRefinement v x = Var v |=| Var x
+varRefinement x = valueVar |=| Var x
 
 -- | 'varFromRefinement' @v fml@ : if @fml@ is a variable refinement, return the variable
-varFromRefinement v (Binary Eq (Var v') (Var x))
-  | v == v' = Just $ Var x
-varFromRefinement _ _ = Nothing
-
--- | 'symbolByType' @t env@ : symbol of type @t@ in @env@
-symbolByType :: RType -> Environment -> Formula
-symbolByType t env = case t of
-  (ScalarT _ (v, fml)) -> case varFromRefinement v fml of
-    Just sym -> sym
-    Nothing -> envLookup
-  _ -> envLookup
-  where
-    envLookup = case Map.toList $ Map.filter (== t) $ symbolsByShape (shape t) env of
-                  (sym, _):_ -> sym
-                  _ -> error $ "symbolByType: can't find type"
-
+varFromRefinement (Binary Eq v (Var x))
+  | v == valueVar = Just $ Var x
+varFromRefinement _ = Nothing
                   
 -- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
 symbolsByShape :: SType -> Environment -> Map Formula RType
@@ -118,38 +105,39 @@ restrict t env = env {_symbols = Map.map (unifyVarsWith t) $ symbolsByShape (sha
 embedding :: Environment -> (Set Formula, Set Formula)    
 embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ env ^. symbols), env ^.negAssumptions)
   where
-    embedBinding _ (ScalarT _ (_, BoolLit True)) = Set.empty -- Ignore trivial types
-    embedBinding (Var x) (ScalarT _ (v, fml)) = Set.singleton $ substitute (Map.singleton v (Var x)) fml -- Scalar variables are embedded as variable refinements
+    embedBinding _ (ScalarT _ (BoolLit True)) = Set.empty -- Ignore trivial types
+    embedBinding (Var x) (ScalarT _ (Unknown _ u)) = Set.singleton $ Unknown x u -- Pending substitution
+    embedBinding (Var x) (ScalarT _ fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var x)) fml -- In-place substitution
     embedBinding _ _ = Set.empty
     
 -- | Program skeletons parametrized by information stored in symbols and conditionals
-data Program s c =
+data Program v s c =
   PSymbol s |
-  PApp (Program s c) (Program s c) |
-  PFun s (Program s c) |
-  PIf c (Program s c) (Program s c) |
-  PFix s (Program s c)
+  PApp (Program v s c) (Program v s c) |
+  PFun v (Program v s c) |
+  PIf c (Program v s c) (Program v s c) |
+  PFix v (Program v s c)
     
 -- | Program templates (skeleton + unrefined types of symbols)
-type Template = Program SType ()
+type Template = Program SType SType ()
 
 -- | Fully defined programs 
-type SimpleProgram = Program Formula Formula
+type SimpleProgram = Program Id Formula Formula
 
 -- | Programs where symbols are represented by their refinement type, which might contain unknowns
-type LiquidProgram = Program (Environment, RType) Formula
+type LiquidProgram = Program Id (Environment, RType) Formula
 
 -- | Simple type of a program template
 sTypeOf :: Template -> SType
 sTypeOf (PSymbol t) = t
-sTypeOf (PApp fun _) = let (FunctionT _ t) = sTypeOf fun in t
-sTypeOf (PFun t p) = FunctionT t (sTypeOf p)
+sTypeOf (PApp fun _) = let (FunctionT _ _ t) = sTypeOf fun in t
+sTypeOf (PFun t p) = FunctionT dontCare t (sTypeOf p)
 sTypeOf (PIf _ p _) = sTypeOf p
 sTypeOf (PFix t _) = t
 
 int = ScalarT IntT
 int_ = int ()
-(|->|) = FunctionT
+(|->|) = FunctionT dontCare
 sym = PSymbol
 choice = PIf ()
 (|$|) = PApp
@@ -159,18 +147,7 @@ fix_ = PFix
 infixr 5 |->|
 infixr 5 |$|
 infixr 4 |.|
-    
--- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
-extract :: LiquidProgram -> PSolution -> SimpleProgram
-extract prog sol = case prog of
-  PSymbol (env, t) -> PSymbol $ symbolFromType env t
-  PApp pFun pArg -> PApp (extract pFun sol) (extract pArg sol)
-  PFun (env, t) p -> PFun (symbolFromType env t) (extract p sol)
-  PIf cond pThen pElse -> PIf (applySolution sol cond) (extract pThen sol) (extract pElse sol)      
-  PFix (env, t) p -> PFix (symbolFromType env t) (extract p sol)
-  where
-    symbolFromType env t = symbolByType (typeApplySolution sol t) env
-      
+          
 -- | Typing constraints
 data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType

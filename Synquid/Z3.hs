@@ -55,7 +55,7 @@ toZ3 expr = case expr of
   IntLit i -> mkInt i  
   Var ident -> var ident
   Parameter ident -> var ident
-  Unknown ident -> error $ "toZ3: encountered a second-order unknown " ++ ident
+  Unknown _ ident -> error $ "toZ3: encountered a second-order unknown " ++ ident
   Unary op e -> toZ3 e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)  
   where

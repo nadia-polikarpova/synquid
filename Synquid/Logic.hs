@@ -32,13 +32,17 @@ data Formula =
   IntLit Integer |                    -- ^ Integer literal
   Var Id |                            -- ^ Input variable (universally quantified first-order variable)
   Parameter Id |                      -- ^ Parameter (existentially quantified first-order variable)
-  Unknown Id |                        -- ^ Predicate unknown
+  Unknown Id Id |                     -- ^ Predicate unknown
   Unary UnOp Formula |                -- ^ Unary expression  
-  Binary BinOp Formula Formula        -- ^ Binary expression  
+  Binary BinOp Formula Formula        -- ^ Binary expression
   deriving (Eq, Ord)
+  
+valueVarName = "_v"
+dontCare = "_"
   
 ftrue = BoolLit True
 ffalse = BoolLit False
+valueVar = Var valueVarName
 fneg = Unary Neg
 fnot = Unary Not
 (|*|) = Binary Times
@@ -79,8 +83,8 @@ paramsOf (Binary _ e1 e2) = paramsOf e1 `Set.union` paramsOf e2
 paramsOf _ = Set.empty
 
 -- | 'unknownsOf' @fml@ : set of all predicate unknowns of @fml@
-unknownsOf :: Formula -> Set Id
-unknownsOf (Unknown ident) = Set.singleton ident
+unknownsOf :: Formula -> Set Formula
+unknownsOf u@(Unknown _ _) = Set.singleton u
 unknownsOf (Unary Not e) = unknownsOf e
 unknownsOf (Binary _ e1 e2) = Set.union (unknownsOf e1) (unknownsOf e2 )
 unknownsOf _ = Set.empty
@@ -104,7 +108,11 @@ substitute subst fml = case fml of
     Nothing -> fml
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
-  otherwise -> fml  
+  otherwise -> fml
+
+substituteV x = substitute (Map.singleton valueVarName (Var x))
+
+unknownName (Unknown _ u) = u 
 
 {- Qualifiers -}
 
@@ -120,10 +128,13 @@ makeLenses ''QSpace
 type QMap = Map Id QSpace
 
 -- | 'lookupQuals' @quals g u@: get @g@ component of the search space for unknown @u@ in @quals@
-lookupQuals :: QMap -> Getter QSpace a -> Id -> a
-lookupQuals quals g u = case Map.lookup u quals of
+lookupQuals :: QMap -> Getter QSpace a -> Formula -> a
+lookupQuals quals g (Unknown _ u) = case Map.lookup u quals of
   Just qs -> view g qs
   Nothing -> error $ "lookupQuals: missing qualifiers for unknown " ++ u
+  
+lookupQualsSubst :: QMap -> Getter QSpace a -> Formula -> a
+lookupQualsSubst quals g u@(Unknown x _) = lookupQuals quals (to (over qualifiers (map (substituteV x))) . g) u
   
 {- Solutions -}  
 
@@ -168,17 +179,17 @@ topSolution :: QMap -> PSolution
 topSolution quals = parametrize $ constMap (Map.keysSet quals) Set.empty
 
 -- | 'pValuation' @sol u@ : valuation of @u@ in @sol@ (parameters uninstantiated)
-pValuation :: PSolution -> Id -> Valuation
-pValuation sol u = case Map.lookup u (sol ^. solution) of
-  Just quals -> quals
+pValuation :: PSolution -> Formula -> Valuation
+pValuation sol (Unknown x u) = case Map.lookup u (sol ^. solution) of
+  Just quals -> Set.map (substituteV x) quals
   Nothing -> error $ "valuation: no value for unknown " ++ u
   
 -- | 'instValuation' @sol u@ : valuation of @u@ in @sol@ (parameters instantiated)  
-instValuation :: PSolution -> Id -> Valuation
+instValuation :: PSolution -> Formula -> Valuation
 instValuation sol u = Set.map (substituteModel $ sol ^. model) $ pValuation sol u
 
 -- | 'pValuation' @sol u@ : valuation of @u@ in @sol@
-valuation :: Solution -> Id -> Valuation
+valuation :: Solution -> Formula -> Valuation
 valuation sol = pValuation (parametrize sol)
 
 -- | 'applySolution' @sol fml@ : Substitute solutions from sol for all predicate variables in e
@@ -187,8 +198,8 @@ applySolution psol fml = go fml
   where
     sol = instantiate psol
     go fml = case fml of
-      Unknown ident -> case Map.lookup ident sol of
-        Just quals -> conjunction quals
+      Unknown x ident -> case Map.lookup ident sol of
+        Just quals -> substituteV x $ conjunction quals
         Nothing -> fml
       Unary op fml' -> Unary op (go fml')
       Binary op fml1 fml2 -> Binary op (go fml1) (go fml2)

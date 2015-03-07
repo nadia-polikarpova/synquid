@@ -117,15 +117,15 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     return $ map (merge sol) pruned
   where
     unknowns = unknownsOf lhs
-    knownConjuncts = conjunctsOf lhs Set.\\ (Set.map Unknown unknowns)
+    knownConjuncts = conjunctsOf lhs Set.\\ unknowns
     unknownsList = Set.toList unknowns
-    lhsQuals = setConcatMap (Set.fromList . lookupQuals quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
-    usedLhsQuals = setConcatMap (pValuation sol) unknowns `Set.union` knownConjuncts -- already used qualifiers for the whole antecedent
+    lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
+    usedLhsQuals = setConcatMap (pValuation sol) unknowns `Set.union` knownConjuncts      -- already used qualifiers for the whole antecedent
     rhsVars = varsOf rhs
         
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
-          (qs, max) = lookupQuals quals (pairGetter qualifiers maxCount) u
+          (qs, max) = lookupQualsSubst quals (pairGetter qualifiers maxCount) u
           used = pValuation sol u
           n = Set.size used
       in Set.toList $ boundedSubsets (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal
@@ -136,12 +136,14 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
       unknownsVal <- mapM (singleUnknownCandidates lhsVal) unknownsList
       let isValidsplit ss s = Set.unions ss == s && sum (map Set.size ss) == Set.size s
       guard $ isValidsplit unknownsVal lhsVal
-      return $ PSolution (Map.fromList $ zip unknownsList unknownsVal) m
+      return $ PSolution (Map.fromList $ zipWith unsubst unknownsList unknownsVal) m
+      
+    unsubst u@(Unknown x name) quals = (name, Set.map (substitute (Map.singleton x valueVar)) quals)
           
 strengthen _ fml _ = error $ "strengthen: encountered ill-formed constraint " ++ show fml
 
 -- | 'maxValSize' @quals sol unknowns@: Upper bound on the size of valuations of a conjunction of @unknowns@ when strengthening @sol@ 
-maxValSize :: QMap -> PSolution -> Set Id -> Int 
+maxValSize :: QMap -> PSolution -> Set Formula -> Int 
 maxValSize quals sol unknowns = let 
     usedQuals = setConcatMap (pValuation sol) unknowns
   in Set.foldl (\n u -> n + lookupQuals quals maxCount u) 0 unknowns - Set.size usedQuals
@@ -207,7 +209,7 @@ filterSubsets check n = go [] [Set.empty]
       in map (`Set.insert` idxs) [lower..(n - 1)]      
             
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
-pruneSolutions :: SMTSolver m => [Id] -> [PSolution] -> FixPointSolver m [PSolution]
+pruneSolutions :: SMTSolver m => [Formula] -> [PSolution] -> FixPointSolver m [PSolution]
 pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM 
                                 (\u -> isValidFml $ (conjunction $ instValuation sol u) |=>| (conjunction $ instValuation s u)) unknowns) sols
   in prune isSubsumed

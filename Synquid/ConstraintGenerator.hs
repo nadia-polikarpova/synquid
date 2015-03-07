@@ -23,22 +23,15 @@ freshId prefix = ((prefix ++) . show) <$> state (\i -> (i, i + 1))
 unknownPrefix = "_u"  
 varPrefix = "_x"
 
--- | 'freshValueVars' @s@ : refinement type with shape @s@, fresh value variables, and trivial refinements
-freshValueVars :: SType -> Generator RType
-freshValueVars (ScalarT base _) = do
-  v <- freshId varPrefix
-  return $ ScalarT base (v, ftrue)
-freshValueVars (FunctionT t1 t2) = liftM2 FunctionT (freshValueVars t1) (freshValueVars t2)
-
 -- | 'freshRefinements' @t@ : a type with the same shape and value variables as @t@ but fresh unknowns as refinements
 freshRefinements :: RType -> Generator RType
-freshRefinements (ScalarT base (v, _)) = do
+freshRefinements (ScalarT base _) = do
   k <- freshId unknownPrefix
-  return $ ScalarT base (v, Unknown k)
-freshRefinements (FunctionT tArg tFun) = do
-  liftM2 FunctionT (freshRefinements tArg) (freshRefinements tFun)
+  return $ ScalarT base (Unknown valueVarName k)
+freshRefinements (FunctionT x tArg tFun) = do
+  liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
   
-genConstraints :: CondQuals -> TypeQuals -> Environment -> RType -> Template -> (LiquidProgram, QMap, [Formula])
+genConstraints :: QualsGen -> QualsGen -> Environment -> RType -> Template -> (LiquidProgram, QMap, [Formula])
 genConstraints cq tq env typ templ = evalState go 0
   where
     go :: Generator (LiquidProgram, QMap, [Formula])
@@ -57,53 +50,76 @@ constraints env t (PSymbol _) = do
   let env' = restrict t' env
   return (PSymbol (env', t'), [WellFormedSymbol env' t', Subtype env t' t])
 constraints env t (PApp funTempl argTempl) = do
-  tArg <- freshValueVars >=> freshRefinements $ sTypeOf argTempl
-  let tFun = FunctionT tArg t
+  x <- freshId varPrefix
+  tArg <- freshRefinements $ refine $ sTypeOf argTempl
+  let tFun = FunctionT x tArg t
   (fun, csFun) <- constraints env tFun funTempl
   (arg, csArg) <- constraints env tArg argTempl     
   return (PApp fun arg, csArg ++ csFun ++ [WellFormed env tArg])
 constraints env t (PFun _ bodyTempl) = do
-  let (FunctionT tArg tRes) = t
-  let env' = addSymbol (valueVar tArg) tArg env
+  let (FunctionT x tArg tRes) = t
+  let env' = addSymbol (Var x) tArg env
   (pBody, cs) <- constraints env' tRes bodyTempl
-  return (PFun (env', tArg) pBody, cs)
+  return (PFun x pBody, cs)
 constraints env t (PIf _ thenTempl elseTempl) = do
-  cond <- Unknown <$> freshId unknownPrefix
+  cond <- Unknown valueVarName <$> freshId unknownPrefix
   (pThen, csThen) <- constraints (addAssumption cond env) t thenTempl
   (pElse, csElse) <- constraints (addNegAssumption cond env) t elseTempl
   return (PIf cond pThen pElse, csThen ++ csElse ++ [WellFormedCond env cond])
 constraints env t (PFix _ bodyTemp) = do
-  t' <- freshRefinements t  
-  let env' = addSymbol (valueVar t') t' env
+  f <- freshId varPrefix
+  t' <- freshRefinements t
+  let env' = addSymbol (Var f) t' env
   (pBody, cs) <- constraints env' t' bodyTemp
-  return (PFix (env', t') pBody, cs ++ [WellFormed env t', Subtype env t' t])
+  return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])
     
 split :: Constraint -> [Constraint]
-split (Subtype env (FunctionT tArg1 tRes1) (FunctionT tArg2 tRes2)) =
-  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol (valueVar tArg2) tArg2 env) tRes1 tRes2)
-split (WellFormed env (FunctionT tArg tRes)) = 
-  split (WellFormed env tArg) ++ split (WellFormed (addSymbol (valueVar tArg) tArg env) tRes)
+split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
+  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol (Var y) tArg2 env) (renameVar x y tRes1) tRes2)
+split (WellFormed env (FunctionT x tArg tRes)) = 
+  split (WellFormed env tArg) ++ split (WellFormed (addSymbol (Var x) tArg env) tRes)
 split c = [c]
 
-type CondQuals = [Formula] -> QSpace
-type TypeQuals = Id -> [Formula] -> QSpace
+type QualsGen = [Formula] -> QSpace
 
-toFormula :: CondQuals -> TypeQuals -> Constraint -> Either Formula (Map Id QSpace)
-toFormula _ _ (Subtype env (ScalarT IntT (v1, fml1)) (ScalarT IntT (v2, fml2))) =
+toFormula :: QualsGen -> QualsGen -> Constraint -> Either Formula (Map Id QSpace)
+toFormula _ _ (Subtype env (ScalarT IntT fml) (ScalarT IntT fml')) =
   let (poss, negs) = embedding env 
-  in Left $ conjunction (Set.insert fml1 poss) |=>| disjunction (Set.insert fml2 negs)
-toFormula _ tq (WellFormed env (ScalarT IntT (v, Unknown u))) = 
-  Right $ Map.singleton u $ tq v (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
-toFormula cq _ (WellFormedCond env (Unknown u)) = 
+  in Left $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)
+toFormula _ tq (WellFormed env (ScalarT IntT (Unknown _ u))) = 
+  Right $ Map.singleton u $ tq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
+toFormula cq _ (WellFormedCond env (Unknown _ u)) = 
   Right $ Map.singleton u $ cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
 toFormula _ _ (WellFormedSymbol env t) =
   Right $ Map.map (flip QSpace 1 . nub) $ Map.foldlWithKey (\m s t' -> Map.unionWith (++) m $ matchUnknowns t t' s) emptyQuals (env ^. symbols)
   where
-    emptyQuals = constMap (unknownsOfType t) []
-    matchUnknowns (ScalarT _ (_, Unknown u)) (ScalarT base (v, _)) (Var x) = Map.singleton u [varRefinement v x]
+    emptyQuals = constMap (Set.map unknownName $ unknownsOfType t) []
+    matchUnknowns (ScalarT _ (Unknown _ u)) (ScalarT base _) (Var x) = Map.singleton u [varRefinement x]
     matchUnknowns t t' _ = matchUnknowns' t t'
-    matchUnknowns' (ScalarT _ (_, Unknown u)) (ScalarT base (_, fml)) = Map.singleton u [fml]
-    matchUnknowns' (FunctionT t1 t2) (FunctionT t1' t2') = matchUnknowns' t1 t1' `Map.union` matchUnknowns' t2 t2'
-    matchUnknowns' t t' = error $ show $ pretty t <+> pretty t'
+    matchUnknowns' (ScalarT _ (Unknown _ u)) (ScalarT base (fml)) = Map.singleton u [fml]
+    matchUnknowns' (FunctionT x t1 t2) (FunctionT _ t1' t2') = matchUnknowns' t1 t1' `Map.union` matchUnknowns' t2 t2'
+    matchUnknowns' t t' = error $ show $ text "matchUnknowns': cannot match" <+> pretty t <+> text "and" <+> pretty t'
 toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
+-- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
+extract :: LiquidProgram -> PSolution -> SimpleProgram
+extract prog sol = case prog of
+  PSymbol (env, t) -> PSymbol $ symbolFromType env t
+  PApp pFun pArg -> PApp (extract pFun sol) (extract pArg sol)
+  PFun x pBody -> PFun x (extract pBody sol)
+  PIf cond pThen pElse -> PIf (applySolution sol cond) (extract pThen sol) (extract pElse sol)      
+  PFix f pBody -> PFix f (extract pBody sol)
+  where
+    symbolFromType env t = symbolByType (typeApplySolution sol t) env
+    
+-- | 'symbolByType' @t env@ : symbol of type @t@ in @env@
+symbolByType :: RType -> Environment -> Formula
+symbolByType t env = case t of
+  (ScalarT _ fml) -> case varFromRefinement fml of
+    Just sym -> sym
+    Nothing -> envLookup
+  _ -> envLookup
+  where
+    envLookup = case Map.toList $ Map.filter (== t) $ symbolsByShape (shape t) env of
+                  (sym, _):_ -> sym
+                  _ -> error $ show (text "symbolByType: can't find type" <+> pretty t <+> text "in" $+$ pretty env)   

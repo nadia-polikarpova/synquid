@@ -154,7 +154,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     Var ident -> text ident
-    Unknown ident -> text ident
+    Unknown x ident -> if x == valueVarName then text ident else brackets (text x <> text "/" <> text valueVarName) <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
     Parameter ident -> text "??" <> text ident
@@ -179,17 +179,17 @@ instance Pretty QSpace where
 instance Pretty QMap where
   pretty = vMapDoc text pretty  
 
-programDoc :: (Pretty s, Pretty c) => Program s c -> Doc
+programDoc :: (Pretty v, Pretty s, Pretty c) => Program v s c -> Doc
 programDoc (PSymbol s) = pretty s
 programDoc (PApp f x) = parens (pretty f <+> pretty x)
 programDoc (PFun x e) = parens (text "\\" <> pretty x <+> text "." <+> pretty e)
 programDoc (PIf c t e) = parens (pretty c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
 programDoc (PFix f e) = parens (text "let rec" <> pretty f <+> text "=" <+> pretty e)
 
-instance (Pretty s, Pretty c) => Pretty (Program s c) where
+instance (Pretty v, Pretty s, Pretty c) => Pretty (Program v s c) where
   pretty = programDoc
   
-instance (Pretty s, Pretty c) => Show (Program s c) where
+instance (Pretty v, Pretty s, Pretty c) => Show (Program v s c) where
   show = show . pretty
   
 instance Pretty SMTModel where
@@ -210,7 +210,7 @@ instance Pretty BaseType where
   
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
-prettySType (FunctionT t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2  
+prettySType (FunctionT _ t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2  
 
 instance Pretty SType where
   pretty = prettySType
@@ -219,8 +219,8 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
-prettyType (ScalarT base (v, fml)) = braces $ text v <> text ":" <> pretty base <+> text "|" <+> pretty fml
-prettyType (FunctionT t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2
+prettyType (ScalarT base fml) = braces $ text valueVarName <> text ":" <> pretty base <+> text "|" <+> pretty fml
+prettyType (FunctionT x t1 t2) = parens $ text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2
 
 instance Pretty RType where
   pretty = prettyType
