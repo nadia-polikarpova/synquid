@@ -370,7 +370,7 @@ main = do
   mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls)
   case mSol of
     Nothing -> putStr "No Solution"
-    Just sol -> print $ pretty $ extract p (parametrize sol)
+    Just sol -> print $ pretty $ extract p sol
   where
     cq syms = do
       lhs <- syms

@@ -157,7 +157,6 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unknown x ident -> if x == valueVarName then text ident else brackets (text x <> text "/" <> text valueVarName) <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    Parameter ident -> text "??" <> text ident
   )
   where
     n' = power fml
@@ -190,18 +189,6 @@ instance (Pretty v, Pretty s, Pretty c) => Pretty (Program v s c) where
   pretty = programDoc
   
 instance (Pretty v, Pretty s, Pretty c) => Show (Program v s c) where
-  show = show . pretty
-  
-instance Pretty SMTModel where
-  pretty = hMapDoc text pretty
-  
-instance Show SMTModel where
-  show = show . pretty
-
-instance Pretty PSolution where
-  pretty sol = pretty (sol ^. solution) <+> pretty (sol ^. model)
-  
-instance Show PSolution where
   show = show . pretty
 
 instance Pretty BaseType where

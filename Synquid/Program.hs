@@ -56,7 +56,7 @@ unknownsOfType (ScalarT _ fml) = unknownsOf fml
 unknownsOfType (FunctionT _ arg res) = unknownsOfType arg `Set.union` unknownsOfType res
 
 -- | 'typeApplySolution' @sol t@: replace all unknowns in @t@ with their valuations in @sol@
-typeApplySolution :: PSolution -> RType -> RType
+typeApplySolution :: Solution -> RType -> RType
 typeApplySolution sol (ScalarT base fml) = ScalarT base $ applySolution sol fml
 typeApplySolution sol (FunctionT x arg fun) = FunctionT x (typeApplySolution sol arg) (typeApplySolution sol fun)
 

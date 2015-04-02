@@ -103,7 +103,7 @@ toFormula _ _ (WellFormedSymbol env t) =
 toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
-extract :: LiquidProgram -> PSolution -> SimpleProgram
+extract :: LiquidProgram -> Solution -> SimpleProgram
 extract prog sol = case prog of
   PSymbol (env, t) -> PSymbol $ symbolFromType env t
   PApp pFun pArg -> PApp (extract pFun sol) (extract pArg sol)
