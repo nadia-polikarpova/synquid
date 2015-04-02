@@ -131,7 +131,7 @@ type QMap = Map Id QSpace
 lookupQuals :: QMap -> Getter QSpace a -> Formula -> a
 lookupQuals quals g (Unknown _ u) = case Map.lookup u quals of
   Just qs -> view g qs
-  Nothing -> error $ "lookupQuals: missing qualifiers for unknown " ++ u
+  Nothing -> error $ unwords ["lookupQuals: missing qualifiers for unknown", u]
   
 lookupQualsSubst :: QMap -> Formula -> [Formula]
 lookupQualsSubst quals u@(Unknown x _) = concatMap go $ lookupQuals quals (to (over qualifiers (map (substituteV x))) . qualifiers) u
@@ -186,7 +186,7 @@ topSolution quals = parametrize $ constMap (Map.keysSet quals) Set.empty
 pValuation :: PSolution -> Formula -> Valuation
 pValuation sol (Unknown x u) = case Map.lookup u (sol ^. solution) of
   Just quals -> Set.map (substituteV x) quals
-  Nothing -> error $ "valuation: no value for unknown " ++ u
+  Nothing -> error $ unwords ["valuation: no value for unknown", u]
   
 -- | 'instValuation' @sol u@ : valuation of @u@ in @sol@ (parameters instantiated)  
 instValuation :: PSolution -> Formula -> Valuation

@@ -55,7 +55,7 @@ toZ3 expr = case expr of
   IntLit i -> mkInt i  
   Var ident -> var ident
   Parameter ident -> var ident
-  Unknown _ ident -> error $ "toZ3: encountered a second-order unknown " ++ ident
+  Unknown _ ident -> error $ unwords ["toZ3: encountered a second-order unknown", ident]
   Unary op e -> toZ3 e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)  
   where
@@ -99,13 +99,13 @@ extractModel fmls model = foldM addVar Map.empty allVars
     addVar smtMod ident = do
       symbMb <- uses symbols (Map.lookup ident)
       case symbMb of
-        Nothing -> error $ "extractModel: symbol not found for " ++ ident
+        Nothing -> error $ unwords ["extractModel: symbol not found for", ident]
         Just s -> do
           is <- fromJust <$> use intSort
           node <- mkConst s is
           resMb <- eval model node
           case resMb of
-            Nothing -> error $ "extractModel: model not found for " ++ ident
+            Nothing -> error $ unwords ["extractModel: model not found for", ident]
             Just val -> do
               kind <- getAstKind val
               case kind of
@@ -124,7 +124,7 @@ instance SMTSolver Z3State where
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
-        _ -> error $ "isValid: Z3 returned Unknown for " ++ show fml
+        _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
         
   modelOf = getModelOf
   
@@ -163,7 +163,7 @@ getModelOf fmls assumptions = do
           unsatLits <- getUnsatCore
           coreDebugMsg lits unsatLits
           go $ rest ++ map (flip delete lits) unsatLits
-        _ -> error $ "modelOf: Z3 returned Unknown for " ++ show fmls ++ " (under " ++ show (length lits) ++ " assumptions)"
+        _ -> error $ unwords ["modelOf: Z3 returned Unknown for", show fmls, "(under", show (length lits), "assumptions)"]
         
     problemDoc = commaSep (map pretty fmls) <+> braces (commaSep (map pretty assumptions))
     coreDebugMsg lits unsatLits = do

@@ -73,7 +73,7 @@ greatestFixPoint quals fmls = do
         invalidConstraint <- asks constraintPickStrategy >>= pickConstraint sol        
         let modifiedConstraint = case invalidConstraint of
                                     Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
-                                    _ -> error $ "greatestFixPoint: encountered ill-formed constraint " ++ show invalidConstraint        
+                                    _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show invalidConstraint]
         sols' <- debugOutput sols sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
         validSolution <- findM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
         case validSolution of
@@ -146,7 +146,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
       
     unsubst u@(Unknown x name) quals = (name, Set.map (substitute (Map.singleton x valueVar)) quals)
           
-strengthen _ fml _ = error $ "strengthen: encountered ill-formed constraint " ++ show fml
+strengthen _ fml _ = error $ unwords ["strengthen: encountered ill-formed constraint", show fml]
 
 -- | 'maxValSize' @quals sol unknowns@: Upper bound on the size of valuations of a conjunction of @unknowns@ when strengthening @sol@ 
 maxValSize :: QMap -> PSolution -> Set Formula -> Int 
@@ -272,4 +272,4 @@ findParams fml@(Binary Implies lhs rhs) = if Set.null params
             Nothing -> return Nothing -- No solution: exit
             Just (sol, satAssignments) -> go (n - 1) (satAssignments ++ toSolve) (restrictDomain params sol) -- New candidate: add satisfied assignments and continue
                         
-findParams fml = error $ "findParams: encountered ill-formed constraint " ++ show fml              
+findParams fml = error $ unwords ["findParams: encountered ill-formed constraint", show fml]
