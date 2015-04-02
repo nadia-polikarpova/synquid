@@ -323,7 +323,7 @@ import Control.Monad.Reader
 defaultParams = SolverParams {
     pruneQuals = True,
     optimalValuationsStrategy = UnsatCoreValuations,
-    -- optimalValuationsStrategy = BFSValuations,
+    -- optimalValuationsStrategy = BFSValuations,    
     semanticPrune = True,
     agressivePrune = True,
     candidatePickStrategy = UniformStrongCandidate,
@@ -334,17 +334,18 @@ defaultParams = SolverParams {
 main = do
   let env = 
             addSymbol (IntLit 0) (int (valueVar |=| IntLit 0)) .           
-            addSymbol (Var "dec") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "id") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x"))) .
-            addSymbol (Var "inc") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |+| IntLit 1))) .
-            addSymbol (Var "neg") (FunctionT "x" (int ftrue) (int (valueVar |=| fneg (Var "x")))) .
+            -- addSymbol (Var "dec") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |-| IntLit 1))) .
+            -- addSymbol (Var "id") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x"))) .
+            -- addSymbol (Var "inc") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |+| IntLit 1))) .
+            -- addSymbol (Var "neg") (FunctionT "x" (int ftrue) (int (valueVar |=| fneg (Var "x")))) .
             -- addSymbol (Var "plus") (FunctionT "x" (int ftrue) $ FunctionT "y" (int ftrue) $ int (valueVar |=| Var "x" |+| Var "y")) .
             -- addSymbol (Var "x") (int ftrue) .
             -- addSymbol (Var "y") (int ftrue) .
             id $ emptyEnv
 
-  -- let typ = int ("x", ftrue) |->| int ("v", Var "v" |=| Var "x" |+| IntLit 1)
-  -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
+  -- Peano
+  let typ = FunctionT "x" (int (valueVar |>=| IntLit 0)) $ int (valueVar |=| Var "x")
+  let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
             
   -- let typ = int ("x", ftrue) |->| int ("y", ftrue) |->| int ("v", Var "v" |=| Var "x" |+| Var "y")
   -- -- let templ = int_ |.| int_ |.| (sym (int_ |->| int_ |->| int_) |$| sym int_) |$| sym int_ 
@@ -355,14 +356,14 @@ main = do
   -- let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
 
   -- abs:
-  let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
-  let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
+  -- let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
+  -- let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   -- application
   -- let typ = int (valueVar |>| Var "y")
   -- let templ = sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
   
-  let (p, qmap, fmls) = genConstraints (toSpace . cq) (toSpace . tq) env typ templ
+  let (p, qmap, fmls) = genConstraints (toSpace . cq) (toSpace . other) env typ templ
   debug 1 (pretty qmap) $ return ()
   putStr "\n"
   -- debug 1 (vsep $ map pretty fmls) $ return ()
@@ -382,5 +383,8 @@ main = do
       op <- [Ge, Neq]
       rhs <- valueVar:syms
       guard $ (lhs == valueVar || rhs == valueVar) && lhs /= rhs
-      return $ Binary op lhs rhs  
+      return $ Binary op lhs rhs
+    other syms = do
+      rhs <- syms
+      [valueVar |>=| rhs, valueVar |<=| rhs]
     toSpace quals = QSpace quals (length quals)

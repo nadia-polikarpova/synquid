@@ -28,9 +28,10 @@ solveWithParams :: SMTSolver m => SolverParams -> QMap -> [Formula] -> m (Maybe 
 solveWithParams params quals fmls = evalFixPointSolver go params
   where
     go = do      
-      quals' <- ifM (asks pruneQuals)
-        (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
-        (return quals)
+      -- quals' <- ifM (asks pruneQuals)
+        -- (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
+        -- (return quals)
+      let quals' = quals
       greatestFixPoint quals' fmls
       
 -- | Strategies for picking the next candidate solution to strengthen
@@ -60,7 +61,10 @@ type FixPointSolver m a = ReaderT SolverParams m a
 -- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
 -- | @fml@ must have the form "/\ u_i ==> fml'"
 greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe Solution)
-greatestFixPoint quals fmls = debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ go [topSolution quals]
+greatestFixPoint quals fmls = do
+    debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ return ()
+    res <- go [topSolution quals]
+    debug 1 (text "Solution" <+> pretty res) $ return res
   where
     go :: SMTSolver m => [PSolution] -> FixPointSolver m (Maybe Solution)
     go [] = return Nothing
@@ -107,6 +111,7 @@ strengthen :: SMTSolver m => QMap -> Formula -> PSolution -> FixPointSolver m [P
 strengthen quals fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize quals sol unknowns
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) usedLhsQuals rhs -- all minimal valid valuations of the whole antecedent
+    debug 1 (vsep (map pretty lhsValuations)) $ return ()
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -119,13 +124,14 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     unknowns = unknownsOf lhs
     knownConjuncts = conjunctsOf lhs Set.\\ unknowns
     unknownsList = Set.toList unknowns
-    lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst quals qualifiers) unknowns   -- available qualifiers for the whole antecedent
+    lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst quals) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (pValuation sol) unknowns `Set.union` knownConjuncts      -- already used qualifiers for the whole antecedent
     rhsVars = varsOf rhs
         
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
-          (qs, max) = lookupQualsSubst quals (pairGetter qualifiers maxCount) u
+          qs = lookupQualsSubst quals u
+          max = lookupQuals quals maxCount u
           used = pValuation sol u
           n = Set.size used
       in Set.toList $ boundedSubsets (max - n) $ (Set.fromList qs Set.\\ used) `Set.intersection` lhsVal

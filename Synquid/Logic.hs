@@ -133,8 +133,12 @@ lookupQuals quals g (Unknown _ u) = case Map.lookup u quals of
   Just qs -> view g qs
   Nothing -> error $ "lookupQuals: missing qualifiers for unknown " ++ u
   
-lookupQualsSubst :: QMap -> Getter QSpace a -> Formula -> a
-lookupQualsSubst quals g u@(Unknown x _) = lookupQuals quals (to (over qualifiers (map (substituteV x))) . g) u
+lookupQualsSubst :: QMap -> Formula -> [Formula]
+lookupQualsSubst quals u@(Unknown x _) = concatMap go $ lookupQuals quals (to (over qualifiers (map (substituteV x))) . qualifiers) u
+  where
+    go u@(Unknown _ _) = lookupQualsSubst quals u
+    go fml = [fml]
+  
   
 {- Solutions -}  
 

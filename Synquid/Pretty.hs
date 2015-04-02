@@ -184,7 +184,7 @@ programDoc (PSymbol s) = pretty s
 programDoc (PApp f x) = parens (pretty f <+> pretty x)
 programDoc (PFun x e) = parens (text "\\" <> pretty x <+> text "." <+> pretty e)
 programDoc (PIf c t e) = parens (pretty c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
-programDoc (PFix f e) = parens (text "let rec" <> pretty f <+> text "=" <+> pretty e)
+programDoc (PFix f e) = parens (text "let rec" <+> pretty f <+> text "=" <+> pretty e)
 
 instance (Pretty v, Pretty s, Pretty c) => Pretty (Program v s c) where
   pretty = programDoc

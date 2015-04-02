@@ -82,7 +82,7 @@ split c = [c]
 
 type QualsGen = [Formula] -> QSpace
 
-toFormula :: QualsGen -> QualsGen -> Constraint -> Either Formula (Map Id QSpace)
+toFormula :: QualsGen -> QualsGen -> Constraint -> Either Formula QMap
 toFormula _ _ (Subtype env (ScalarT IntT fml) (ScalarT IntT fml')) =
   let (poss, negs) = embedding env 
   in Left $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)
@@ -91,7 +91,8 @@ toFormula _ tq (WellFormed env (ScalarT IntT (Unknown _ u))) =
 toFormula cq _ (WellFormedCond env (Unknown _ u)) = 
   Right $ Map.singleton u $ cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
 toFormula _ _ (WellFormedSymbol env t) =
-  Right $ Map.map (flip QSpace 1 . nub) $ Map.foldlWithKey (\m s t' -> Map.unionWith (++) m $ matchUnknowns t t' s) emptyQuals (env ^. symbols)
+  -- Right $ Map.map (flip QSpace 1 . nub) $ Map.foldlWithKey (\m s t' -> Map.unionWith (++) m $ matchUnknowns t t' s) emptyQuals (env ^. symbols)
+  Right $ Map.map (flip QSpace 100 . nub) $ Map.foldlWithKey (\m s t' -> Map.unionWith (++) m $ matchUnknowns t t' s) emptyQuals (env ^. symbols)
   where
     emptyQuals = constMap (Set.map unknownName $ unknownsOfType t) []
     matchUnknowns (ScalarT _ (Unknown _ u)) (ScalarT base _) (Var x) = Map.singleton u [varRefinement x]
@@ -110,7 +111,8 @@ extract prog sol = case prog of
   PIf cond pThen pElse -> PIf (applySolution sol cond) (extract pThen sol) (extract pElse sol)      
   PFix f pBody -> PFix f (extract pBody sol)
   where
-    symbolFromType env t = symbolByType (typeApplySolution sol t) env
+    symbolFromType env t = symbolByType (typeApplySolution sol t) (envApplySolution sol env)
+    envApplySolution sol = over symbols (Map.map (typeApplySolution sol))
     
 -- | 'symbolByType' @t env@ : symbol of type @t@ in @env@
 symbolByType :: RType -> Environment -> Formula
