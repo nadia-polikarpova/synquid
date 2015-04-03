@@ -346,18 +346,18 @@ main = do
             -- addSymbol (Var "y") (int ftrue) .
             id $ emptyEnv
 
-  -- Peano
-  let typ = FunctionT "x" (int (valueVar |>=| IntLit 0)) $ int (valueVar |=| Var "x")
-  -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
-  let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
+  -- -- Peano
+  -- let typ = FunctionT "x" (int (valueVar |>=| IntLit 0)) $ int (valueVar |=| Var "x")
+  -- -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
+  -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
               
   -- -- max2:
   -- let typ = FunctionT "x" (int ftrue) $ FunctionT "y" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| Var "y")
   -- let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
 
-  -- -- abs:
-  -- let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
-  -- let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
+  -- abs:
+  let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
+  let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   -- -- application
   -- let typ = FunctionT "y" (int ftrue) $ int (valueVar |>| Var "y")
@@ -372,7 +372,7 @@ main = do
   -- print $ pretty qmap
   -- putStr "\n"
   
-  mSol <- evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls (runMaybeT . extract p)
+  mSol <- evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls (extract p)
   case mSol of
     Nothing -> putStr "No Solution"
     Just sol -> print $ pretty sol

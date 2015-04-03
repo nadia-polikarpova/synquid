@@ -46,31 +46,31 @@ genConstraints cq tq env typ templ = evalState go 0
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
 extract :: SMTSolver s => LiquidProgram -> Solution -> MaybeT s SimpleProgram
 extract prog sol = case prog of
-  PSymbol (env, t) -> let env' = envApplySolution sol env
-    in msum $ map (extractSymbol env' (typeApplySolution sol t)) (Map.toList $ symbolsByShape (shape t) env') 
+  PSymbol leafConstraint -> msum $ map extractSymbol (Map.toList $ leafConstraint)     
   PApp pFun pArg -> liftM2 PApp (extract pFun sol) (extract pArg sol)
   PFun x pBody -> liftM (PFun x) (extract pBody sol)
   PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (extract pThen sol) (extract pElse sol)      
   PFix f pBody -> liftM (PFix f) (extract pBody sol)
   where
-    extractSymbol :: SMTSolver s => Environment -> RType -> (Formula, RType) -> MaybeT s SimpleProgram
-    extractSymbol env t (symb, symbT) = do
-      let constraint = Subtype env (symbolType symb symbT) t
-      debug 1 (pretty constraint) $ return ()
-      let fmls = lefts $ map (toFormula trivialGen trivialGen) $ split constraint
-      debug 1 (vsep $ map pretty fmls) $ return ()
-      res <- lift $ isValid (conjunction $ Set.fromList fmls)
-      if res
-        then debug 1 (text "VALID") $ return (PSymbol symb)
-        else debug 1 (text "INVALID") $ mzero    
-    symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
-    symbolType _ t = t      
+    extractSymbol :: SMTSolver s => (Formula, Formula) -> MaybeT s SimpleProgram
+    extractSymbol (symb, fml) = do   
+      let fml' = applySolution sol fml
+      res <- debug 1 (text "Check symbol" <+> pretty symb <+> pretty fml') $ lift $ isValid fml'
+      if res then debug 1 (text "VALID") $ return (PSymbol symb) else debug 1 (text "INVALID") $ mzero    
   
 constraints :: Environment -> RType -> Template -> Generator (LiquidProgram, [Constraint])
 constraints env t (PSymbol _) = do
   t' <- freshRefinements t
   -- let env' = restrict t' env
-  return (PSymbol (env, t'), [WellFormed env t', Subtype env t' t])
+  let leaftConstraint = Map.mapWithKey (constraintForSymbol t') $ symbolsByShape (shape t') env
+  return (PSymbol leaftConstraint, [WellFormed env t', Subtype env t' t])
+  where
+    constraintForSymbol t symb symbT = let 
+        constraint = Subtype env (symbolType symb symbT) t
+        fmls = lefts $ map (toFormula trivialGen trivialGen) $ split constraint
+      in conjunction $ Set.fromList fmls
+    symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
+    symbolType _ t = t      
 constraints env t (PApp funTempl argTempl) = do
   x <- freshId "_x"
   tArg <- freshRefinements $ refine $ sTypeOf argTempl

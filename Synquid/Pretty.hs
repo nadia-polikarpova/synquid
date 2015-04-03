@@ -231,4 +231,7 @@ prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> p
   
 instance Pretty Constraint where
   pretty = prettyConstraint
+  
+instance Pretty LeafConstraint where
+  pretty = hMapDoc pretty pretty
    

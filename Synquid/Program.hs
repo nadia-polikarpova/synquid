@@ -44,11 +44,6 @@ refine (FunctionT _ tArg tFun) = FunctionT dontCare (refine tArg) (refine tFun) 
 renameVar :: Id -> Id -> RType -> RType    
 renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var new)) fml)
 renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg) (renameVar old new tRes)
-      
--- | 'typeApplySolution' @sol t@: replace all unknowns in @t@ with their valuations in @sol@
-typeApplySolution :: Solution -> RType -> RType
-typeApplySolution sol (ScalarT base fml) = ScalarT base $ applySolution sol fml
-typeApplySolution sol (FunctionT x arg fun) = FunctionT x (typeApplySolution sol arg) (typeApplySolution sol fun)
 
 -- | Typing environment
 data Environment = Environment {
@@ -82,12 +77,6 @@ addAssumption f = assumptions %~ Set.insert f
 addNegAssumption :: Formula -> Environment -> Environment
 addNegAssumption f = negAssumptions %~ Set.insert f
 
--- | 'envApplySolution' @sol env@: replace all unknowns in types and assumptions of @env@ with their valuations in @sol@
-envApplySolution :: Solution -> Environment -> Environment
-envApplySolution sol = over symbols (Map.map $ typeApplySolution sol) .
-  over assumptions (Set.map $ applySolution sol) .
-  over negAssumptions (Set.map $ applySolution sol) 
-    
 -- | Positive and negative formulas encoded in an environment    
 embedding :: Environment -> (Set Formula, Set Formula)    
 embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ env ^. symbols), env ^.negAssumptions)
@@ -111,8 +100,10 @@ type Template = Program SType SType ()
 -- | Fully defined programs 
 type SimpleProgram = Program Id Formula Formula
 
+type LeafConstraint = Map Formula Formula
+
 -- | Programs where symbols are represented by their refinement type, which might contain unknowns
-type LiquidProgram = Program Id (Environment, RType) Formula
+type LiquidProgram = Program Id LeafConstraint Formula
 
 -- | Simple type of a program template
 sTypeOf :: Template -> SType

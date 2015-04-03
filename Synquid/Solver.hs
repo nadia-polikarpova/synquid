@@ -24,16 +24,15 @@ import Control.Lens
 
 evalFixPointSolver = runReaderT
 
--- | 'solveWithParams' @params quals fmls@: 'greatestFixPoint' @quals fmls@ with solver parameters @params@
-solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Formula] -> (Solution -> s (Maybe res)) -> s (Maybe res)
-solveWithParams params quals fmls postfilter = evalFixPointSolver go params
+-- | 'solveWithParams' @params quals constraints checkLowerBound@: 'greatestFixPoint' @quals constraints checkLowerBound@ with solver parameters @params@
+solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Formula] -> (Solution -> MaybeT s res) -> s (Maybe res)
+solveWithParams params quals constraints checkLowerBound = evalFixPointSolver go params
   where
     go = do      
-      -- quals' <- ifM (asks pruneQuals)
-        -- (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
-        -- (return quals)
-      let quals' = quals
-      greatestFixPoint quals' fmls postfilter
+      quals' <- ifM (asks pruneQuals)
+        (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
+        (return quals)
+      greatestFixPoint quals' constraints checkLowerBound
       
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | UniformCandidate | UniformStrongCandidate
@@ -59,11 +58,12 @@ type FixPointSolver s a = ReaderT SolverParams s a
 
 {- Implementation -}
   
--- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
--- | @fml@ must have the form "/\ u_i ==> fml'"
-greatestFixPoint :: SMTSolver s => QMap -> [Formula] -> (Solution -> s (Maybe res)) -> FixPointSolver s (Maybe res)
-greatestFixPoint quals fmls postfilter = do
-    debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ return ()
+-- | 'greatestFixPoint' @quals constraints checkLowerBound@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@ 
+-- | for which @checkLowerBound@ returns a result, if one exists;
+-- | each of @constraints@ must have the form "/\ c_i && /\ u_i ==> fml"
+greatestFixPoint :: SMTSolver s => QMap -> [Formula] -> (Solution -> MaybeT s res) -> FixPointSolver s (Maybe res)
+greatestFixPoint quals constraints checkLowerBound = do
+    debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty constraints)) $ return ()
     go [topSolution quals]
     -- debug 1 (text "Solution" <+> pretty res) $ return res
   where
@@ -75,14 +75,14 @@ greatestFixPoint quals fmls postfilter = do
                                     Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
                                     _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show invalidConstraint]
         sols' <- debugOutput sols sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
-        (valids, invalids) <- partitionM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
+        (valids, invalids) <- partitionM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint constraints)) sols'
         debug 1 (text "Valid Solutions" $+$ vsep (map pretty valids)) $ return ()
-        resMb <- findJustM (lift . postfilter) valids
+        resMb <- lift $ runMaybeT $ msum $ map checkLowerBound valids
         case resMb of
           Just res -> return $ Just res
           Nothing -> do
-            -- TODO: find way to filter out hopeless solutions (too strong to be realizable)
-            -- bla <- mapM (lift . postfilter) invalids
+            -- TODO: find a way to filter out hopeless solutions (too strong to be realizable)
+            -- bla <- mapM (lift . runMaybeT . checkLowerBound) invalids
             -- let invalids' = map snd $ filter (isJust . fst) $ zip bla invalids
             go $ invalids ++ rest
           
@@ -105,9 +105,9 @@ greatestFixPoint quals fmls postfilter = do
         res = maximumBy (mappedCompare $ \s -> (strength s, minQCount s - maxQCount s)) sols  -- maximize the total number and minimize the difference
       in (res, delete res sols)
       
-    pickConstraint sol FirstConstraint = fromJust <$> findM (liftM not . isValidFml . applySolution sol) fmls
+    pickConstraint sol FirstConstraint = fromJust <$> findM (liftM not . isValidFml . applySolution sol) constraints
     pickConstraint sol SmallSpaceConstraint = do
-      invalids <- filterM (liftM not . isValidFml . applySolution sol) fmls
+      invalids <- filterM (liftM not . isValidFml . applySolution sol) constraints
       let spaceSize fml = maxValSize quals sol (unknownsOf fml)
       return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) invalids
       
