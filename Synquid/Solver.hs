@@ -16,6 +16,7 @@ import qualified Data.Foldable as F
 
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
 import Control.Applicative
 import Control.Lens
 
@@ -24,15 +25,15 @@ import Control.Lens
 evalFixPointSolver = runReaderT
 
 -- | 'solveWithParams' @params quals fmls@: 'greatestFixPoint' @quals fmls@ with solver parameters @params@
-solveWithParams :: SMTSolver m => SolverParams -> QMap -> [Formula] -> m (Maybe Solution)
-solveWithParams params quals fmls = evalFixPointSolver go params
+solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Formula] -> (Solution -> s (Maybe res)) -> s (Maybe res)
+solveWithParams params quals fmls postfilter = evalFixPointSolver go params
   where
     go = do      
       -- quals' <- ifM (asks pruneQuals)
         -- (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
         -- (return quals)
       let quals' = quals
-      greatestFixPoint quals' fmls
+      greatestFixPoint quals' fmls postfilter
       
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | UniformCandidate | UniformStrongCandidate
@@ -54,19 +55,18 @@ data SolverParams = SolverParams {
 }
  
 -- | Fix point solver execution 
-type FixPointSolver m a = ReaderT SolverParams m a
+type FixPointSolver s a = ReaderT SolverParams s a
 
 {- Implementation -}
   
 -- | 'greatestFixPoint' @quals fmls@: weakest solution for a system of second-order constraints @fmls@ over qualifiers @quals@, if one exists;
 -- | @fml@ must have the form "/\ u_i ==> fml'"
-greatestFixPoint :: SMTSolver m => QMap -> [Formula] -> FixPointSolver m (Maybe Solution)
-greatestFixPoint quals fmls = do
+greatestFixPoint :: SMTSolver s => QMap -> [Formula] -> (Solution -> s (Maybe res)) -> FixPointSolver s (Maybe res)
+greatestFixPoint quals fmls postfilter = do
     debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty fmls)) $ return ()
-    res <- go [topSolution quals]
-    debug 1 (text "Solution" <+> pretty res) $ return res
+    go [topSolution quals]
+    -- debug 1 (text "Solution" <+> pretty res) $ return res
   where
-    go :: SMTSolver m => [Solution] -> FixPointSolver m (Maybe Solution)
     go [] = return Nothing
     go sols = do
         (sol, rest) <- pickCandidate sols <$> asks candidatePickStrategy
@@ -75,10 +75,22 @@ greatestFixPoint quals fmls = do
                                     Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
                                     _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show invalidConstraint]
         sols' <- debugOutput sols sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
-        validSolution <- findM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
-        case validSolution of
-          Just sol' -> return $ Just sol' -- Solution found
-          Nothing -> go $ sols' ++ rest  
+        (valids, invalids) <- partitionM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
+        debug 1 (text "Valid Solutions" $+$ vsep (map pretty valids)) $ return ()
+        resMb <- findJustM (lift . postfilter) valids
+        case resMb of
+          Just res -> return $ Just res
+          Nothing -> do
+            -- TODO: find way to filter out hopeless solutions (too strong to be realizable)
+            -- bla <- mapM (lift . postfilter) invalids
+            -- let invalids' = map snd $ filter (isJust . fst) $ zip bla invalids
+            go $ invalids ++ rest
+          
+        -- validSolution <- findM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
+        -- case validSolution of
+          -- Just sol' -> return $ Just sol' -- Solution found
+          -- Nothing -> go $ sols' ++ rest  
+          
           
     strength = Set.size . Set.unions . Map.elems    -- total number of qualifiers in a solution
     maxQCount = maximum . map Set.size . Map.elems  -- maximum number of qualifiers mapped to an unknown
@@ -107,11 +119,11 @@ greatestFixPoint quals fmls = do
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
-strengthen :: SMTSolver m => QMap -> Formula -> Solution -> FixPointSolver m [Solution]
+strengthen :: SMTSolver s => QMap -> Formula -> Solution -> FixPointSolver s [Solution]
 strengthen quals fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize quals sol unknowns
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) usedLhsQuals rhs -- all minimal valid valuations of the whole antecedent
-    debug 1 (vsep (map pretty lhsValuations)) $ return ()
+    debug 1 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations)) $ return ()
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -154,7 +166,7 @@ maxValSize quals sol unknowns = let
     usedQuals = setConcatMap (valuation sol) unknowns
   in Set.foldl (\n u -> n + lookupQuals quals maxCount u) 0 unknowns - Set.size usedQuals
   
-optimalValuations :: SMTSolver m => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver m [Valuation]
+optimalValuations :: SMTSolver s => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
 optimalValuations maxSize quals lhs rhs = do
   strategy <- asks optimalValuationsStrategy
   case strategy of
@@ -162,7 +174,7 @@ optimalValuations maxSize quals lhs rhs = do
     UnsatCoreValuations -> optimalValuationsUnsatCore quals lhs rhs    
     
 -- | 'optimalValuations' @quals check@: all smallest subsets of @quals@ for which @check@ returns a solution.
-optimalValuationsBFS :: SMTSolver m => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver m [Valuation]
+optimalValuationsBFS :: SMTSolver s => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
 optimalValuationsBFS maxSize quals lhs rhs = map qualsAt <$> filterSubsets (check . qualsAt) (length qualsList)
   where
     qualsList = Set.toList quals
@@ -174,7 +186,7 @@ optimalValuationsBFS maxSize quals lhs rhs = map qualsAt <$> filterSubsets (chec
           then isValidFml $ lhs' |=>| rhs
           else return False
   
-optimalValuationsUnsatCore :: SMTSolver m => Set Formula -> Set Formula -> Formula -> FixPointSolver m [Valuation]
+optimalValuationsUnsatCore :: SMTSolver s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
 optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty [quals]
   where
     lhsList = Set.toList lhs
@@ -201,7 +213,7 @@ optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (if a set satisfies @check@, then every superset also satisfies @check@);
 -- performs breadth-first search.
-filterSubsets :: SMTSolver m => (Set Int -> FixPointSolver m Bool) -> Int -> FixPointSolver m [Set Int]
+filterSubsets :: SMTSolver s => (Set Int -> FixPointSolver s Bool) -> Int -> FixPointSolver s [Set Int]
 filterSubsets check n = go [] [Set.empty]
   where
     go solutions candidates = if null candidates 
@@ -215,23 +227,23 @@ filterSubsets check n = go [] [Set.empty]
       in map (`Set.insert` idxs) [lower..(n - 1)]      
             
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
-pruneSolutions :: SMTSolver m => [Formula] -> [Solution] -> FixPointSolver m [Solution]
+pruneSolutions :: SMTSolver s => [Formula] -> [Solution] -> FixPointSolver s [Solution]
 pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM 
                                 (\u -> isValidFml $ (conjunction $ valuation sol u) |=>| (conjunction $ valuation s u)) unknowns) sols
   in prune isSubsumed
   
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another pValuation in @vals@   
-pruneValuations :: SMTSolver m => [Valuation] -> FixPointSolver m [Valuation] 
+pruneValuations :: SMTSolver s => [Valuation] -> FixPointSolver s [Valuation] 
 pruneValuations = let isSubsumed val vals = let fml = conjunction val in anyM (\v -> isValidFml $ fml |=>| conjunction v) vals
   in prune isSubsumed
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
-pruneQualifiers :: SMTSolver m => [Formula] -> FixPointSolver m [Formula]   
+pruneQualifiers :: SMTSolver s => [Formula] -> FixPointSolver s [Formula]   
 pruneQualifiers = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
   in prune isSubsumed
   
 -- | 'prune' @isSubsumed xs@ : prune all elements of @xs@ subsumed by another element according to @isSubsumed@  
-prune :: SMTSolver m => (a -> [a] -> FixPointSolver m Bool) -> [a] -> FixPointSolver m [a]
+prune :: SMTSolver s => (a -> [a] -> FixPointSolver s Bool) -> [a] -> FixPointSolver s [a]
 prune _ [] = return []
 prune isSubsumed (x:xs) = prune' [] x xs
   where
@@ -239,5 +251,5 @@ prune isSubsumed (x:xs) = prune' [] x xs
     prune' lefts x rights@(y:ys) = ifM (isSubsumed x (lefts ++ rights)) (prune' lefts y ys) (prune' (lefts ++ [x]) y ys)  
               
 -- | 'isValid' lifted to FixPointSolver      
-isValidFml :: SMTSolver m => Formula -> FixPointSolver m Bool
+isValidFml :: SMTSolver s => Formula -> FixPointSolver s Bool
 isValidFml = lift . isValid

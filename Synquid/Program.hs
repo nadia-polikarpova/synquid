@@ -35,26 +35,16 @@ shape :: RType -> SType
 shape (ScalarT base _) = ScalarT base ()
 shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 
+-- | Insert trivial refinements
 refine :: SType -> RType
 refine (ScalarT base _) = ScalarT base ftrue
 refine (FunctionT _ tArg tFun) = FunctionT dontCare (refine tArg) (refine tFun) -- ToDo: do we care???
-  
--- | 'unifyVarsWith' @t' t@: @t@ with value variables replaced by the corresponding ones from @t'@
--- (the types must have the same shape)
-unifyVarsWith :: RType -> RType -> RType
-unifyVarsWith t' t = unifyVarsWith' Map.empty t' t
-  where
-    unifyVarsWith' m (ScalarT _ _) (ScalarT base fml) = ScalarT base (substitute m fml)
-    unifyVarsWith' m (FunctionT x tArg' tFun') (FunctionT y tArg tFun) = FunctionT x (unifyVarsWith' m tArg' tArg) (unifyVarsWith' (Map.insert y (Var x) m) tFun' tFun)
-    
+      
+-- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType    
 renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var new)) fml)
 renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg) (renameVar old new tRes)
       
-unknownsOfType :: RType -> Set Formula
-unknownsOfType (ScalarT _ fml) = unknownsOf fml
-unknownsOfType (FunctionT _ arg res) = unknownsOfType arg `Set.union` unknownsOfType res
-
 -- | 'typeApplySolution' @sol t@: replace all unknowns in @t@ with their valuations in @sol@
 typeApplySolution :: Solution -> RType -> RType
 typeApplySolution sol (ScalarT base fml) = ScalarT base $ applySolution sol fml
@@ -79,11 +69,6 @@ addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertW
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x = valueVar |=| Var x
-
--- | 'varFromRefinement' @v fml@ : if @fml@ is a variable refinement, return the variable
-varFromRefinement (Binary Eq v (Var x))
-  | v == valueVar = Just $ Var x
-varFromRefinement _ = Nothing
                   
 -- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
 symbolsByShape :: SType -> Environment -> Map Formula RType
@@ -97,9 +82,11 @@ addAssumption f = assumptions %~ Set.insert f
 addNegAssumption :: Formula -> Environment -> Environment
 addNegAssumption f = negAssumptions %~ Set.insert f
 
--- | 'restrict' @t env@ : @env@ with only those symbols whose simple type matches the shape of @t@, and variables renamed accordingly
-restrict :: RType -> Environment -> Environment
-restrict t env = env {_symbols = Map.map (unifyVarsWith t) $ symbolsByShape (shape t) env}
+-- | 'envApplySolution' @sol env@: replace all unknowns in types and assumptions of @env@ with their valuations in @sol@
+envApplySolution :: Solution -> Environment -> Environment
+envApplySolution sol = over symbols (Map.map $ typeApplySolution sol) .
+  over assumptions (Set.map $ applySolution sol) .
+  over negAssumptions (Set.map $ applySolution sol) 
     
 -- | Positive and negative formulas encoded in an environment    
 embedding :: Environment -> (Set Formula, Set Formula)    
@@ -152,5 +139,4 @@ infixr 4 |.|
 data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
-  | WellFormedSymbol Environment RType
   

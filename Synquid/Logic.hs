@@ -112,6 +112,8 @@ data QSpace = QSpace {
   }
 
 makeLenses ''QSpace  
+
+emptyQSpace = QSpace [] 0
   
 -- | Mapping from unknowns to their search spaces
 type QMap = Map Id QSpace

@@ -218,17 +218,16 @@ instance Show RType where
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
-prettyBindings env = commaSep (map pretty (Map.elems (env ^. symbols))) 
+-- prettyBindings env = commaSep (map pretty (Map.elems (env ^. symbols))) 
+prettyBindings env = hMapDoc pretty pretty (env ^. symbols)
   
 instance Pretty Environment where
-  -- pretty env = vsep (map prettyBinding (BMap.toList (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions)) 
-  pretty env = commaSep (map pretty (Map.elems (env ^. symbols)) ++ map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
+  pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions))
   
 prettyConstraint :: Constraint -> Doc  
-prettyConstraint (Subtype env t1 t2) = prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
+prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
-prettyConstraint (WellFormedSymbol env t) = prettyBindings env <+> text "|-" <+> text "symbol" <+> pretty t
   
 instance Pretty Constraint where
   pretty = prettyConstraint

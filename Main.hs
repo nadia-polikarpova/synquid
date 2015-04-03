@@ -21,6 +21,7 @@ import Control.Monad
 import Control.Lens
 import Control.Applicative
 import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
 
 -- -- Conditionals
 
@@ -324,8 +325,10 @@ defaultParams = SolverParams {
     pruneQuals = True,
     optimalValuationsStrategy = UnsatCoreValuations,
     -- optimalValuationsStrategy = BFSValuations,    
-    semanticPrune = True,
-    agressivePrune = True,
+    -- semanticPrune = True,
+    -- agressivePrune = True,
+    semanticPrune = False,
+    agressivePrune = False,    
     candidatePickStrategy = UniformStrongCandidate,
     constraintPickStrategy = SmallSpaceConstraint,
     maxCegisIterations = 20
@@ -333,11 +336,11 @@ defaultParams = SolverParams {
 
 main = do
   let env = 
-            addSymbol (IntLit 0) (int (valueVar |=| IntLit 0)) .           
-            -- addSymbol (Var "dec") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            -- addSymbol (Var "id") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x"))) .
-            -- addSymbol (Var "inc") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |+| IntLit 1))) .
-            -- addSymbol (Var "neg") (FunctionT "x" (int ftrue) (int (valueVar |=| fneg (Var "x")))) .
+            -- addSymbol (IntLit 0) (int (valueVar |=| IntLit 0)) .           
+            addSymbol (Var "dec") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |-| IntLit 1))) .
+            addSymbol (Var "id") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x"))) .
+            addSymbol (Var "inc") (FunctionT "x" (int ftrue) (int (valueVar |=| Var "x" |+| IntLit 1))) .
+            addSymbol (Var "neg") (FunctionT "x" (int ftrue) (int (valueVar |=| fneg (Var "x")))) .
             -- addSymbol (Var "plus") (FunctionT "x" (int ftrue) $ FunctionT "y" (int ftrue) $ int (valueVar |=| Var "x" |+| Var "y")) .
             -- addSymbol (Var "x") (int ftrue) .
             -- addSymbol (Var "y") (int ftrue) .
@@ -345,46 +348,48 @@ main = do
 
   -- Peano
   let typ = FunctionT "x" (int (valueVar |>=| IntLit 0)) $ int (valueVar |=| Var "x")
-  let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
-            
-  -- let typ = int ("x", ftrue) |->| int ("y", ftrue) |->| int ("v", Var "v" |=| Var "x" |+| Var "y")
-  -- -- let templ = int_ |.| int_ |.| (sym (int_ |->| int_ |->| int_) |$| sym int_) |$| sym int_ 
-  -- let templ = fix_ (int_ |->| int_ |->| int_) (int_ |.| int_ |.| (sym (int_ |->| int_ |->| int_) |$| sym int_) |$| sym int_)
-  
-  -- max2:
+  -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
+  let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
+              
+  -- -- max2:
   -- let typ = FunctionT "x" (int ftrue) $ FunctionT "y" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| Var "y")
   -- let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
 
-  -- abs:
+  -- -- abs:
   -- let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
   -- let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
-  -- application
-  -- let typ = int (valueVar |>| Var "y")
-  -- let templ = sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
+  -- -- application
+  -- let typ = FunctionT "y" (int ftrue) $ int (valueVar |>| Var "y")
+  -- let templ = int_ |.| sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)
   
-  let (p, qmap, fmls) = genConstraints (toSpace . cq) (toSpace . other) env typ templ
-  debug 1 (pretty qmap) $ return ()
-  putStr "\n"
-  -- debug 1 (vsep $ map pretty fmls) $ return ()
-  mSol <- (evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls)
+  let (p, qmap, fmls) = genConstraints (toSpace . cq) (toSpace . \syms -> tq syms ++ [valueVar |>=| IntLit 0]) env typ templ
+  putStr "Liquid Program\n"
+  print $ pretty p
+  -- putStr "\nConstraints\n"
+  -- print $ vsep $ map pretty fmls
+  -- putStr "\nQmap\n"
+  -- print $ pretty qmap
+  -- putStr "\n"
+  
+  mSol <- evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls (runMaybeT . extract p)
   case mSol of
     Nothing -> putStr "No Solution"
-    Just sol -> print $ pretty $ extract p sol
+    Just sol -> print $ pretty sol
   where
     cq syms = do
       lhs <- syms
       op <- [Ge, Neq]
-      rhs <- syms
+      rhs <- syms ++ [IntLit 0]
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
+    -- tq syms = do
+      -- lhs <- valueVar:syms
+      -- op <- [Ge, Neq]
+      -- rhs <- valueVar:syms
+      -- guard $ (lhs == valueVar || rhs == valueVar) && lhs /= rhs
+      -- return $ Binary op lhs rhs
     tq syms = do
-      lhs <- valueVar:syms
-      op <- [Ge, Neq]
-      rhs <- valueVar:syms
-      guard $ (lhs == valueVar || rhs == valueVar) && lhs /= rhs
-      return $ Binary op lhs rhs
-    other syms = do
       rhs <- syms
-      [valueVar |>=| rhs, valueVar |<=| rhs]
+      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1, valueVar |=| fneg rhs] -- TODO: BUG!
     toSpace quals = QSpace quals (length quals)
