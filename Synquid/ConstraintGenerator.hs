@@ -36,34 +36,18 @@ genConstraints cq tq env typ templ = evalState go 0
     go :: Generator (LiquidProgram, QMap, [Formula])
     go = do
       (p, cs) <- constraints env typ templ
-      debug 1 (pretty cs) $ return ()
+      -- debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return ()
       let cs' = concatMap split cs
-      debug 1 (pretty cs') $ return ()
+      -- debug 1 (vsep $ map pretty cs') $ return ()
       let (fmls, qspaces) = partitionEithers $ map (toFormula cq tq) cs'
       let qmap = Map.unions qspaces      
-      return (p, qmap, fmls)
-      
--- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
-extract :: SMTSolver s => LiquidProgram -> Solution -> MaybeT s SimpleProgram
-extract prog sol = case prog of
-  PSymbol leafConstraint -> msum $ map extractSymbol (Map.toList $ leafConstraint)     
-  PApp pFun pArg -> liftM2 PApp (extract pFun sol) (extract pArg sol)
-  PFun x pBody -> liftM (PFun x) (extract pBody sol)
-  PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (extract pThen sol) (extract pElse sol)      
-  PFix f pBody -> liftM (PFix f) (extract pBody sol)
-  where
-    extractSymbol :: SMTSolver s => (Formula, Formula) -> MaybeT s SimpleProgram
-    extractSymbol (symb, fml) = do   
-      let fml' = applySolution sol fml
-      res <- debug 1 (text "Check symbol" <+> pretty symb <+> pretty fml') $ lift $ isValid fml'
-      if res then debug 1 (text "VALID") $ return (PSymbol symb) else debug 1 (text "INVALID") $ mzero    
-  
+      debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (p, qmap, fmls)
+
 constraints :: Environment -> RType -> Template -> Generator (LiquidProgram, [Constraint])
 constraints env t (PSymbol _) = do
   t' <- freshRefinements t
-  -- let env' = restrict t' env
-  let leaftConstraint = Map.mapWithKey (constraintForSymbol t') $ symbolsByShape (shape t') env
-  return (PSymbol leaftConstraint, [WellFormed env t', Subtype env t' t])
+  let leafConstraint = Map.mapWithKey (constraintForSymbol t') $ symbolsByShape (shape t') env
+  return (PSymbol leafConstraint, [WellFormed env t', Subtype env t' t])
   where
     constraintForSymbol t symb symbT = let 
         constraint = Subtype env (symbolType symb symbT) t
@@ -93,7 +77,7 @@ constraints env t (PFix _ bodyTemp) = do
   t' <- freshRefinements t
   let env' = addSymbol (Var f) t' env
   (pBody, cs) <- constraints env' t' bodyTemp
-  return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])
+  return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])  
     
 split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
@@ -115,3 +99,18 @@ toFormula _ tq (WellFormed env (ScalarT IntT (Unknown _ u))) =
 toFormula cq _ (WellFormedCond env (Unknown _ u)) = 
   Right $ Map.singleton u $ cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
 toFormula _ _ c = Right $ Map.empty -- error $ show $ text "Not a simple constraint:" $+$ pretty c
+
+-- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
+extract :: SMTSolver s => LiquidProgram -> Solution -> MaybeT s SimpleProgram
+extract prog sol = case prog of
+  PSymbol leafConstraint -> msum $ map extractSymbol (Map.toList $ leafConstraint)     
+  PApp pFun pArg -> liftM2 PApp (extract pFun sol) (extract pArg sol)
+  PFun x pBody -> liftM (PFun x) (extract pBody sol)
+  PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (extract pThen sol) (extract pElse sol)      
+  PFix f pBody -> liftM (PFix f) (extract pBody sol)
+  where
+    extractSymbol :: SMTSolver s => (Formula, Formula) -> MaybeT s SimpleProgram
+    extractSymbol (symb, fml) = do   
+      let fml' = applySolution sol fml
+      res <- debug 1 (text "Check symbol" <+> pretty symb <+> parens (pretty fml) <+> pretty fml') $ lift $ isValid fml'
+      if res then debug 1 (text "OK") $ return (PSymbol symb) else debug 1 (text "MEH") $ mzero    

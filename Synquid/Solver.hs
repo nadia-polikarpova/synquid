@@ -64,7 +64,10 @@ type FixPointSolver s a = ReaderT SolverParams s a
 greatestFixPoint :: SMTSolver s => QMap -> [Formula] -> (Solution -> MaybeT s res) -> FixPointSolver s (Maybe res)
 greatestFixPoint quals constraints checkLowerBound = do
     debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty constraints)) $ return ()
-    go [topSolution quals]
+    let sol0 = topSolution quals
+    ifM (and <$> mapM (isValidFml . applySolution sol0) constraints)
+      (lift $ runMaybeT $ checkLowerBound sol0)
+      (go [sol0])
     -- debug 1 (text "Solution" <+> pretty res) $ return res
   where
     go [] = return Nothing
@@ -76,22 +79,22 @@ greatestFixPoint quals constraints checkLowerBound = do
                                     _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show invalidConstraint]
         sols' <- debugOutput sols sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
         (valids, invalids) <- partitionM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint constraints)) sols'
-        debug 1 (text "Valid Solutions" $+$ vsep (map pretty valids)) $ return ()
+        debug 1 (text "Valid Solutions" $+$ vsep (map pretty valids) $+$ text "Invalid Solutions" $+$ vsep (map pretty invalids)) $ return ()
         resMb <- lift $ runMaybeT $ msum $ map checkLowerBound valids
         case resMb of
           Just res -> return $ Just res
           Nothing -> do
             -- TODO: find a way to filter out hopeless solutions (too strong to be realizable)
+            let invalids' = invalids
             -- bla <- mapM (lift . runMaybeT . checkLowerBound) invalids
             -- let invalids' = map snd $ filter (isJust . fst) $ zip bla invalids
-            go $ invalids ++ rest
+            go $ invalids' ++ rest
           
         -- validSolution <- findM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
         -- case validSolution of
           -- Just sol' -> return $ Just sol' -- Solution found
-          -- Nothing -> go $ sols' ++ rest  
-          
-          
+          -- Nothing -> go $ sols' ++ rest
+
     strength = Set.size . Set.unions . Map.elems    -- total number of qualifiers in a solution
     maxQCount = maximum . map Set.size . Map.elems  -- maximum number of qualifiers mapped to an unknown
     minQCount = minimum . map Set.size . Map.elems  -- minimum number of qualifiers mapped to an unknown          
