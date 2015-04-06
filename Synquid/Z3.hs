@@ -52,7 +52,7 @@ toZ3 :: Formula -> Z3State AST
 toZ3 expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
-  IntLit i -> mkInt i  
+  IntLit i -> mkIntNum i  
   Var ident -> var ident
   Unknown _ ident -> error $ unwords ["toZ3: encountered a second-order unknown", ident]
   Unary op e -> toZ3 e >>= unOp op
@@ -98,7 +98,7 @@ instance SMTSolver Z3State where
     boolSort .= Just bool
 
   isValid fml = do
-      res <- local $ (toZ3 >=> assertCnstr) (fnot fml) >> check
+      res <- local $ (toZ3 >=> assert) (fnot fml) >> check
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
@@ -108,13 +108,13 @@ instance SMTSolver Z3State where
 
 getMinUnsatCore fmls assumptions = do
   push
-  mapM_ (toZ3 >=> assertCnstr) fmls
+  mapM_ (toZ3 >=> assert) fmls
   
   bool <- fromJust <$> use boolSort
   controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length assumptions] -- ToDo: unique ids
   assumptionsZ3 <- mapM toZ3 assumptions
   condAssumptions <- zipWithM mkImplies controlLiterals assumptionsZ3                      
-  mapM_ assertCnstr condAssumptions
+  mapM_ assert condAssumptions
   res <- checkAssumptions controlLiterals
   case res of
     Sat -> pop 1 >> return Nothing
@@ -127,7 +127,7 @@ getMinUnsatCore fmls assumptions = do
   where
     minimize checked [] = return checked
     minimize checked (lit:lits) = do
-      res <- local $ mapM_ assertCnstr (checked ++ lits) >> check
+      res <- local $ mapM_ assert (checked ++ lits) >> check
       case res of
         Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
         Unsat -> minimize checked lits -- lit can be omitted
