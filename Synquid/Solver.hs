@@ -202,17 +202,18 @@ optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty
       in if isSubsumed || isCovered
         then go sols unsats cs -- all solutions we could get from @c@ we either already got or are covered by remaining candidates: skip
         else do
-          coreMb <- lift $ unsatCore lhsList (notRhs : Set.toList c)
+          coreMb <- lift $ unsatCore lhsList [notRhs] (Set.toList c)
           case coreMb of
-            Nothing -> debug 2 (pretty (conjunction c) <+> text "INVALID") $ go sols unsats cs -- @c@ is SAT
-            Just preds -> do
-              let (rhsPreds, lhsPreds) = partition (== notRhs) preds
-              let core = Set.fromList lhsPreds
-              let parents = map (flip Set.delete c) lhsPreds -- subsets of @c@ that together cover all potential remaining solutions
-              if null rhsPreds
-                then debug 2 (pretty (conjunction c) <+> text "UNSAT" <+> pretty (conjunction core)) $ go sols (Set.insert (c, core) unsats) (parents ++ cs)              
-                else debug 2 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents ++ cs)              
-            
+            UCSat -> debug 2 (pretty (conjunction c) <+> text "INVALID") $ go sols unsats cs -- @c@ is SAT
+            UCBad preds -> do
+              let core = Set.fromList preds
+              debug 2 (pretty (conjunction c) <+> text "UNSAT" <+> pretty (conjunction core)) $ go sols (Set.insert (c, core) unsats) (parents c preds ++ cs)              
+            UCGood preds -> do
+              let core = Set.fromList preds
+              debug 2 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents c preds ++ cs)
+              
+    parents candidate preds = map (flip Set.delete candidate) preds -- subsets of @candidate@ that together cover all potential remaining solutions
+                            
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (if a set satisfies @check@, then every superset also satisfies @check@);
 -- performs breadth-first search.

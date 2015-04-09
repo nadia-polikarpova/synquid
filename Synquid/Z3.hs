@@ -105,8 +105,8 @@ instance SMTSolver Z3State where
         _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
         
   unsatCore = getMinUnsatCore
-
-getMinUnsatCore fmls assumptions = do
+  
+getMinUnsatCore fmls mustHaves assumptions = do
   push
   mapM_ (toZ3 >=> assert) fmls
   
@@ -115,21 +115,56 @@ getMinUnsatCore fmls assumptions = do
   assumptionsZ3 <- mapM toZ3 assumptions
   condAssumptions <- zipWithM mkImplies controlLiterals assumptionsZ3                      
   mapM_ assert condAssumptions
+  
+  push
+  mapM_ (toZ3 >=> assert) mustHaves  
+  
   res <- checkAssumptions controlLiterals
   case res of
-    Sat -> pop 1 >> return Nothing
+    Sat -> pop 2 >> return UCSat
     Unsat -> do
       unsatLits <- getUnsatCore
-      unsatLits' <- minimize [] unsatLits
-      let unsatAssumptions = [a | (l, a) <- zip controlLiterals assumptions, l `elem` unsatLits']
+      unsatLitsMin <- minimize [] unsatLits
+      let unsatAssumptions = [a | (l, a) <- zip controlLiterals assumptions, l `elem` unsatLitsMin]
+      pop 1 -- remove mustHaves
+      res <- local $ mapM_ assert unsatLitsMin >> check
       pop 1
-      return $ Just unsatAssumptions
+      case res of
+        Sat -> return $ UCGood unsatAssumptions
+        Unsat -> return $ UCBad unsatAssumptions
   where
     minimize checked [] = return checked
     minimize checked (lit:lits) = do
       res <- local $ mapM_ assert (checked ++ lits) >> check
       case res of
         Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
-        Unsat -> minimize checked lits -- lit can be omitted
+        Unsat -> minimize checked lits -- lit can be omitted    
+  
+
+-- getMinUnsatCore fmls assumptions = do
+  -- push
+  -- mapM_ (toZ3 >=> assert) fmls
+  
+  -- bool <- fromJust <$> use boolSort
+  -- controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length assumptions] -- ToDo: unique ids
+  -- assumptionsZ3 <- mapM toZ3 assumptions
+  -- condAssumptions <- zipWithM mkImplies controlLiterals assumptionsZ3                      
+  -- mapM_ assert condAssumptions
+  -- res <- checkAssumptions controlLiterals
+  -- case res of
+    -- Sat -> pop 1 >> return Nothing
+    -- Unsat -> do
+      -- unsatLits <- getUnsatCore
+      -- unsatLits' <- minimize [] unsatLits
+      -- let unsatAssumptions = [a | (l, a) <- zip controlLiterals assumptions, l `elem` unsatLits']
+      -- pop 1
+      -- return $ Just unsatAssumptions
+  -- where
+    -- minimize checked [] = return checked
+    -- minimize checked (lit:lits) = do
+      -- res <- local $ mapM_ assert (checked ++ lits) >> check
+      -- case res of
+        -- Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
+        -- Unsat -> minimize checked lits -- lit can be omitted
       
         

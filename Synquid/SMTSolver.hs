@@ -6,8 +6,10 @@ import Data.Map
 import Data.Set
 import Control.Applicative
 
+data UnsatCoreResult = UCSat | UCBad [Formula] | UCGood [Formula]
+
 class (Monad s, Applicative s) => SMTSolver s where  
   initSolver :: s ()                                                      -- ^ Initialize solver  
   isValid :: Formula -> s Bool                                            -- ^ 'isValid' @fml@: is @fml@ logically valid?
-  unsatCore :: [Formula] -> [Formula] -> s (Maybe [Formula])
+  unsatCore :: [Formula] -> [Formula] -> [Formula] -> s UnsatCoreResult
                                                                           
