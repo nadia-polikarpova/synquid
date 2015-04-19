@@ -1,5 +1,10 @@
+- WellFormedSymbol constraints: adapt search space for scalars (only variable/constant types?), check functions in empty environment
+- Preconditions/lower bound filtering: disjunctive lower bound as a constraint type. One way to integrate:
+	- one in a while check (post => t) constraint and filter out infeasible lower bounds for a solution
+	- if all lower bounds are filtered out, the solution is infeasible
+	- when the solution is otherwise valid or only few lower bounds are left, split into unique lower bounds and strengthen preconditions
+- Marco: two solvers, bells and whistles from the paper/python implementation
 - Termination
-- Lower bound filtering
 
 
 - Polymorphism

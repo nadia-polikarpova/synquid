@@ -324,15 +324,15 @@ import Control.Monad.Trans.Maybe
 defaultParams = SolverParams {
     -- pruneQuals = True,
     pruneQuals = False,
-    optimalValuationsStrategy = UnsatCoreValuations,
+    -- optimalValuationsStrategy = UnsatCoreValuations,
+    optimalValuationsStrategy = MarcoValuations,    
     -- optimalValuationsStrategy = BFSValuations,    
-    -- semanticPrune = True,
+    semanticPrune = True,
     -- agressivePrune = True,
-    semanticPrune = False,
+    -- semanticPrune = False,
     agressivePrune = False,    
     candidatePickStrategy = UniformStrongCandidate,
-    constraintPickStrategy = SmallSpaceConstraint,
-    maxCegisIterations = 20
+    constraintPickStrategy = SmallSpaceConstraint
   }
   
 nat = int (valueVar |>=| IntLit 0)
@@ -384,9 +384,9 @@ main = do
   -- print $ pretty p
   -- putStr "\nConstraints\n"
   -- print $ vsep $ map pretty fmls
-  -- putStr "\nQmap\n"
-  -- print $ pretty qmap
-  -- putStr "\n"
+  putStr "\nQmap\n"
+  print $ pretty qmap
+  putStr "\n"
   
   mSol <- evalZ3State $ initSolver >> solveWithParams defaultParams qmap fmls (extract p)
   case mSol of

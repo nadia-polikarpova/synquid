@@ -40,17 +40,16 @@ data CandidatePickStrategy = FirstCandidate | UniformCandidate | UniformStrongCa
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
 
-data OptimalValuationsStrategy = BFSValuations | UnsatCoreValuations 
+data OptimalValuationsStrategy = BFSValuations | UnsatCoreValuations | MarcoValuations
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
-  pruneQuals :: Bool,                               -- ^ Should redundant qualifiers be removed before solving constraints?
-  optimalValuationsStrategy :: OptimalValuationsStrategy,
-  semanticPrune :: Bool,                            -- ^ After solving each constraints, remove semantically non-optimal solutions
-  agressivePrune :: Bool,                           -- ^ Perform pruning on the LHS-pValuation of as opposed to per-variable valuations
-  candidatePickStrategy :: CandidatePickStrategy,   -- ^ How should the next candidate solution to strengthen be picked?
-  constraintPickStrategy :: ConstraintPickStrategy, -- ^ How should the next constraint to solve be picked?
-  maxCegisIterations :: Int                         -- ^ Maximum number of CEGIS iterations for parametrized qualifiers (unbounded if negative)
+  pruneQuals :: Bool,                                     -- ^ Should redundant qualifiers be removed before solving constraints?
+  optimalValuationsStrategy :: OptimalValuationsStrategy, -- ^ How should we find optimal left-hand side valuations?
+  semanticPrune :: Bool,                                  -- ^ After solving each constraints, remove semantically non-optimal solutions
+  agressivePrune :: Bool,                                 -- ^ Perform pruning on the LHS-pValuation of as opposed to per-variable valuations
+  candidatePickStrategy :: CandidatePickStrategy,         -- ^ How should the next candidate solution to strengthen be picked?
+  constraintPickStrategy :: ConstraintPickStrategy        -- ^ How should the next constraint to solve be picked?
 }
  
 -- | Fix point solver execution 
@@ -175,6 +174,7 @@ optimalValuations maxSize quals lhs rhs = do
   case strategy of
     BFSValuations -> optimalValuationsBFS maxSize quals lhs rhs
     UnsatCoreValuations -> optimalValuationsUnsatCore quals lhs rhs    
+    MarcoValuations -> optimalValuationsMarco quals lhs rhs    
     
 -- | 'optimalValuations' @quals check@: all smallest subsets of @quals@ for which @check@ returns a solution.
 optimalValuationsBFS :: SMTSolver s => Int -> Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
@@ -212,7 +212,16 @@ optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty
               let core = Set.fromList preds
               debug 2 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents c preds ++ cs)
               
-    parents candidate preds = map (flip Set.delete candidate) preds -- subsets of @candidate@ that together cover all potential remaining solutions
+    parents candidate preds = map (flip Set.delete candidate) preds -- subsets of @candidate@ that together cover all potential remaining solutions    
+    
+optimalValuationsMarco :: SMTSolver s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
+optimalValuationsMarco quals lhs rhs = do
+    map (Set.delete fixedRhs) . filter (fixedRhs `Set.member`) . map Set.fromList <$> lift (allUnsatCores fixedLhs (fixedRhs : qualsList))
+  where
+    qualsList = Set.toList quals
+    fixedLhs = conjunction lhs
+    fixedRhs = fnot rhs
+
                             
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (if a set satisfies @check@, then every superset also satisfies @check@);

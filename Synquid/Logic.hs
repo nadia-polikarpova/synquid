@@ -162,3 +162,6 @@ applySolution sol fml = case fml of
 -- | 'merge' @sol sol'@ : element-wise conjunction of @sol@ and @sol'@
 merge :: Solution -> Solution -> Solution      
 merge sol sol' = Map.unionWith Set.union sol sol'
+
+-- | Mapping from first-order variables to their valuations
+type SMTModel = Map Id Integer 

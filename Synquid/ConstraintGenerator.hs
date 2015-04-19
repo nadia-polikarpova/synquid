@@ -27,8 +27,8 @@ freshRefinements (ScalarT base _) = do
   k <- freshId "_u"  
   return $ ScalarT base (Unknown valueVarName k)
 freshRefinements (FunctionT x tArg tFun) = do
-  -- liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
-  liftM2 (FunctionT x) (return tArg) (freshRefinements tFun)
+  liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
+  -- liftM2 (FunctionT x) (return tArg) (freshRefinements tFun)
   
 genConstraints :: QualsGen -> QualsGen -> Environment -> RType -> Template -> (LiquidProgram, QMap, [Formula])
 genConstraints cq tq env typ templ = evalState go 0
@@ -47,7 +47,10 @@ constraints :: Environment -> RType -> Template -> Generator (LiquidProgram, [Co
 constraints env t (PSymbol _) = do
   t' <- freshRefinements t
   let leafConstraint = Map.mapWithKey (constraintForSymbol t') $ symbolsByShape (shape t') env
-  return (PSymbol leafConstraint, [WellFormed env t', Subtype env t' t])
+  case t of
+    ScalarT _ _ -> return (PSymbol leafConstraint, [WellFormed env t', Subtype env t' t])
+    FunctionT _ _ _ -> return (PSymbol leafConstraint, [WellFormed emptyEnv t', Subtype env t' t])
+    -- FunctionT _ _ _ -> return (PSymbol leafConstraint, [WellFormed env t', Subtype env t' t])
   where
     constraintForSymbol t symb symbT = let 
         constraint = Subtype env (symbolType symb symbT) t
