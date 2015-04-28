@@ -25,13 +25,20 @@ data UnOp = Neg | Not
 -- | Binary operators  
 data BinOp = Times | Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies | Iff
   deriving (Eq, Ord)
+  
+-- | Variable substitution  
+type Substitution = Map Id Formula
+
+-- | 'inverse' @s@ : inverse of substitution @s@, provided that the range of @s@ only contains variables
+inverse :: Substitution -> Substitution
+inverse s = Map.fromList [(y, Var x) | (x, Var y) <- Map.toList s]
 
 -- | Formulas of the refinement logic
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
   IntLit Integer |                    -- ^ Integer literal
   Var Id |                            -- ^ Input variable (universally quantified first-order variable)
-  Unknown Id Id |                     -- ^ Predicate unknown
+  Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula        -- ^ Binary expression
   deriving (Eq, Ord)
@@ -90,18 +97,15 @@ conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
 conjunctsOf f = Set.singleton f
 
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
-substitute :: Map Id Formula -> Formula -> Formula
+substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
   Var name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
+  Unknown s name -> Unknown (subst `Map.union` s) name 
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
   otherwise -> fml
-
-substituteV x = substitute (Map.singleton valueVarName (Var x))
-
-unknownName (Unknown _ u) = u 
 
 {- Qualifiers -}
 
@@ -125,7 +129,7 @@ lookupQuals quals g (Unknown _ u) = case Map.lookup u quals of
   Nothing -> error $ unwords ["lookupQuals: missing qualifiers for unknown", u]
   
 lookupQualsSubst :: QMap -> Formula -> [Formula]
-lookupQualsSubst quals u@(Unknown x _) = concatMap go $ lookupQuals quals (to (over qualifiers (map (substituteV x))) . qualifiers) u
+lookupQualsSubst quals u@(Unknown s _) = concatMap go $ lookupQuals quals (to (over qualifiers (map (substitute s))) . qualifiers) u
   where
     go u@(Unknown _ _) = lookupQualsSubst quals u
     go fml = [fml]
@@ -145,15 +149,15 @@ topSolution quals = constMap (Map.keysSet quals) Set.empty
 
 -- | 'valuation' @sol u@ : valuation of @u@ in @sol@
 valuation :: Solution -> Formula -> Valuation
-valuation sol (Unknown x u) = case Map.lookup u sol of
-  Just quals -> Set.map (substituteV x) quals
+valuation sol (Unknown s u) = case Map.lookup u sol of
+  Just quals -> Set.map (substitute s) quals
   Nothing -> error $ unwords ["valuation: no value for unknown", u]
 
 -- | 'applySolution' @sol fml@ : Substitute solutions from sol for all predicate variables in e
 applySolution :: Solution -> Formula -> Formula   
 applySolution sol fml = case fml of
-  Unknown x ident -> case Map.lookup ident sol of
-    Just quals -> substituteV x $ conjunction quals
+  Unknown s ident -> case Map.lookup ident sol of
+    Just quals -> substitute s $ conjunction quals
     Nothing -> fml
   Unary op fml' -> Unary op (applySolution sol fml')
   Binary op fml1 fml2 -> Binary op (applySolution sol fml1) (applySolution sol fml2)

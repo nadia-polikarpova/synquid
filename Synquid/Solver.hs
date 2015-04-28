@@ -158,7 +158,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
       guard $ isValidsplit unknownsVal lhsVal
       return $ Map.fromList $ zipWith unsubst unknownsList unknownsVal
       
-    unsubst u@(Unknown x name) quals = (name, Set.map (substitute (Map.singleton x valueVar)) quals)
+    unsubst u@(Unknown s name) quals = (name, Set.map (substitute (inverse s)) quals)
           
 strengthen _ fml _ = error $ unwords ["strengthen: encountered ill-formed constraint", show fml]
 

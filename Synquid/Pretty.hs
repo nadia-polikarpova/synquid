@@ -154,7 +154,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     Var ident -> text ident
-    Unknown x ident -> if x == valueVarName then text ident else brackets (text x <> text "/" <> text valueVarName) <> text ident
+    Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
   )

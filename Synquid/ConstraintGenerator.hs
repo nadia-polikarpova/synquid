@@ -25,7 +25,7 @@ freshId prefix = ((prefix ++) . show) <$> state (\i -> (i, i + 1))
 freshRefinements :: RType -> Generator RType
 freshRefinements (ScalarT base _) = do
   k <- freshId "_u"  
-  return $ ScalarT base (Unknown valueVarName k)
+  return $ ScalarT base (Unknown Map.empty k)
 freshRefinements (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
   
@@ -69,7 +69,7 @@ constraints env t (PFun _ bodyTempl) = do
   (pBody, cs) <- constraints env' tRes bodyTempl
   return (PFun x pBody, cs)
 constraints env t (PIf _ thenTempl elseTempl) = do
-  cond <- Unknown valueVarName <$> freshId "_u"
+  cond <- Unknown Map.empty <$> freshId "_u"
   (pThen, csThen) <- constraints (addAssumption cond env) t thenTempl
   (pElse, csElse) <- constraints (addNegAssumption cond env) t elseTempl
   return (PIf cond pThen pElse, csThen ++ csElse ++ [WellFormedCond env cond])

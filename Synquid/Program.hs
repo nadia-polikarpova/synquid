@@ -82,8 +82,7 @@ embedding :: Environment -> (Set Formula, Set Formula)
 embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ env ^. symbols), env ^.negAssumptions)
   where
     embedBinding _ (ScalarT _ (BoolLit True)) = Set.empty -- Ignore trivial types
-    embedBinding (Var x) (ScalarT _ (Unknown _ u)) = Set.singleton $ Unknown x u -- Pending substitution
-    embedBinding (Var x) (ScalarT _ fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var x)) fml -- In-place substitution
+    embedBinding (Var x) (ScalarT _ fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var x)) fml
     embedBinding _ _ = Set.empty
     
 -- | Program skeletons parametrized by information stored in symbols and conditionals

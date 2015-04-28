@@ -344,30 +344,30 @@ main = do
             addSymbol (Var "dec") (FunctionT "x" intAll (int (valueVar |=| Var "x" |-| IntLit 1))) .
             addSymbol (Var "id") (FunctionT "x" intAll (int (valueVar |=| Var "x"))) .
             addSymbol (Var "inc") (FunctionT "x" intAll (int (valueVar |=| Var "x" |+| IntLit 1))) .
-            addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
+            -- addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
             -- addSymbol (Var "plus") (FunctionT "x" intAll $ FunctionT "y" (int ftrue) $ int (valueVar |=| Var "x" |+| Var "y")) .
             -- addSymbol (Var "const0") (FunctionT "x" intAll (int (valueVar |=| IntLit 0))) .
             -- addSymbol (Var "y") nat .
             -- addSymbol (Var "f") (FunctionT "x" (int (IntLit 0 |<=| valueVar |&| valueVar |<| Var "y")) (int (valueVar |=| Var "x"))) .
             id $ emptyEnv
 
-  -- -- Peano
-  -- let typ = FunctionT "x" intAll $ int (valueVar |=| Var "x")
-  -- -- let typ = int (valueVar |=| Var "y")
+  -- Peano
+  let typ = FunctionT "x" nat $ int (valueVar |=| Var "x")
+  -- let typ = int (valueVar |=| Var "y")
   -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
-  -- -- let templ = int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))
-  -- -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
-  -- -- let templ = choice 
-                -- -- (sym (int_ |->| int_) |$| sym int_) 
-                -- -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))
+  -- let templ = int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))
+  let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
+  -- let templ = choice 
+                -- (sym (int_ |->| int_) |$| sym int_) 
+                -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))
               
   -- -- max2:
   -- let typ = FunctionT "x" (int ftrue) $ FunctionT "y" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| Var "y")
   -- let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
 
-  -- abs:
-  let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
-  let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
+  -- -- abs:
+  -- let typ = FunctionT "x" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
+  -- let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   -- -- application
   -- let typ = FunctionT "y" nat $ int (valueVar |=| IntLit 0)
@@ -395,7 +395,8 @@ main = do
   where
     cq syms = do
       lhs <- syms
-      op <- [Ge, Le, Neq]
+      -- op <- [Ge, Le, Neq]
+      op <- [Eq]
       rhs <- syms ++ [IntLit 0]
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
@@ -407,5 +408,5 @@ main = do
       -- return $ Binary op lhs rhs
     tq syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1, valueVar |=| fneg rhs]
+      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1] --, valueVar |=| fneg rhs]
     toSpace quals = QSpace quals 2 -- (length quals)
