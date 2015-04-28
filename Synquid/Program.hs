@@ -130,4 +130,5 @@ infixr 4 |.|
 data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
+  | WellFormedScalar Environment RType
   

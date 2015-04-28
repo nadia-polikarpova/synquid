@@ -352,14 +352,14 @@ main = do
             id $ emptyEnv
 
   -- -- Peano
-  -- -- let typ = FunctionT "x" intAll $ int (valueVar |=| Var "x")
-  -- let typ = int (valueVar |=| Var "y")
-  -- -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
+  -- let typ = FunctionT "x" intAll $ int (valueVar |=| Var "x")
+  -- -- let typ = int (valueVar |=| Var "y")
+  -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
   -- -- let templ = int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))
   -- -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
-  -- let templ = choice 
-                -- (sym (int_ |->| int_) |$| sym int_) 
-                -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))
+  -- -- let templ = choice 
+                -- -- (sym (int_ |->| int_) |$| sym int_) 
+                -- -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))
               
   -- -- max2:
   -- let typ = FunctionT "x" (int ftrue) $ FunctionT "y" (int ftrue) $ int (valueVar |>=| Var "x" |&| valueVar |>=| Var "y")

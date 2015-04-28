@@ -228,6 +228,7 @@ prettyConstraint :: Constraint -> Doc
 prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
+prettyConstraint (WellFormedScalar env t) = prettyBindings env <+> text "|-" <+> pretty t <+> text "is scalar"
   
 instance Pretty Constraint where
   pretty = prettyConstraint

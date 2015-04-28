@@ -28,7 +28,6 @@ freshRefinements (ScalarT base _) = do
   return $ ScalarT base (Unknown valueVarName k)
 freshRefinements (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
-  -- liftM2 (FunctionT x) (return tArg) (freshRefinements tFun)
   
 genConstraints :: QualsGen -> QualsGen -> Environment -> RType -> Template -> (LiquidProgram, QMap, [Formula])
 genConstraints cq tq env typ templ = evalState go 0
@@ -48,9 +47,8 @@ constraints env t (PSymbol _) = do
   t' <- freshRefinements t
   let leafConstraint = Map.mapWithKey (constraintForSymbol t') $ symbolsByShape (shape t') env
   case t of
-    ScalarT _ _ -> return (PSymbol leafConstraint, [WellFormed env t', Subtype env t' t])
+    ScalarT _ _ -> return (PSymbol leafConstraint, [WellFormedScalar env t', Subtype env t' t])
     FunctionT _ _ _ -> return (PSymbol leafConstraint, [WellFormed emptyEnv t', Subtype env t' t])
-    -- FunctionT _ _ _ -> return (PSymbol leafConstraint, [WellFormed env t', Subtype env t' t])
   where
     constraintForSymbol t symb symbT = let 
         constraint = Subtype env (symbolType symb symbT) t
@@ -101,7 +99,10 @@ toFormula _ tq (WellFormed env (ScalarT IntT (Unknown _ u))) =
   Right $ Map.singleton u $ tq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
 toFormula cq _ (WellFormedCond env (Unknown _ u)) = 
   Right $ Map.singleton u $ cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
-toFormula _ _ c = Right $ Map.empty -- error $ show $ text "Not a simple constraint:" $+$ pretty c
+toFormula _ _ (WellFormedScalar env (ScalarT IntT (Unknown _ u))) = 
+  let quals = map (valueVar |=|) (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
+  in Right $ Map.singleton u $ QSpace quals (length quals)
+toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
 extract :: SMTSolver s => LiquidProgram -> Solution -> MaybeT s SimpleProgram
