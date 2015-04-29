@@ -102,10 +102,19 @@ substitute subst fml = case fml of
   Var name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
-  Unknown s name -> Unknown (subst `Map.union` s) name 
+  Unknown s name -> Unknown (subst `compose` s) name 
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
   otherwise -> fml
+  where
+    compose new old = if Map.null old
+      then new
+      else if Map.null new
+        then old
+        else  let ((x, Var y), new') = Map.deleteFindMin new
+              in case Map.lookup y old of
+                Nothing -> Map.insert x (Var y) $ compose new' old
+                Just (Var v) -> Map.insert x (Var v) $ compose new' (Map.delete y old)
 
 {- Qualifiers -}
 

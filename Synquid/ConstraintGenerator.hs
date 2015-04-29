@@ -27,7 +27,7 @@ freshRefinements (ScalarT base _) = do
   k <- freshId "_u"  
   return $ ScalarT base (Unknown Map.empty k)
 freshRefinements (FunctionT x tArg tFun) = do
-  liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
+  liftM3 FunctionT (freshId "_x") (freshRefinements tArg) (freshRefinements tFun)
   
 genConstraints :: QualsGen -> QualsGen -> Environment -> RType -> Template -> (LiquidProgram, QMap, [Formula])
 genConstraints cq tq env typ templ = evalState go 0
@@ -74,11 +74,20 @@ constraints env t (PIf _ thenTempl elseTempl) = do
   (pElse, csElse) <- constraints (addNegAssumption cond env) t elseTempl
   return (PIf cond pThen pElse, csThen ++ csElse ++ [WellFormedCond env cond])
 constraints env t (PFix _ bodyTemp) = do
-  f <- freshId "_f"
+  f <- freshId "_f"  
   t' <- freshRefinements t
   let env' = addSymbol (Var f) t' env
   (pBody, cs) <- constraints env' t' bodyTemp
-  return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])  
+  return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])    
+  -- t'@(FunctionT x tArg tRes) <- freshRefinements t
+  -- y <- freshId "_x"  
+  -- let (ScalarT IntT fml) = tArg
+  -- -- let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var x))
+  -- let tArg' = ScalarT IntT (fml |&| (valueVar |<| Var x))
+  -- let env' = addSymbol (Var f) (FunctionT y tArg' (renameVar x y tRes)) env
+  -- (pBody, cs) <- constraints env' t' bodyTemp
+  -- return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])  
+  
     
 split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =

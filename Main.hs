@@ -342,7 +342,7 @@ main = do
   let env =             
             -- addSymbol (IntLit 0) (int (valueVar |=| IntLit 0)) .           
             addSymbol (Var "dec") (FunctionT "x" intAll (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "id") (FunctionT "x" intAll (int (valueVar |=| Var "x"))) .
+            -- addSymbol (Var "id") (FunctionT "x" intAll (int (valueVar |=| Var "x"))) .
             addSymbol (Var "inc") (FunctionT "x" intAll (int (valueVar |=| Var "x" |+| IntLit 1))) .
             -- addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
             -- addSymbol (Var "plus") (FunctionT "x" intAll $ FunctionT "y" (int ftrue) $ int (valueVar |=| Var "x" |+| Var "y")) .
@@ -352,7 +352,7 @@ main = do
             id $ emptyEnv
 
   -- Peano
-  let typ = FunctionT "x" nat $ int (valueVar |=| Var "x")
+  let typ = FunctionT "y" intAll $ int (valueVar |=| Var "y")
   -- let typ = int (valueVar |=| Var "y")
   -- let templ = fix_ (int_ |->| int_) (int_ |.| (sym (int_ |->| int_) |$| sym int_))
   -- let templ = int_ |.| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))
