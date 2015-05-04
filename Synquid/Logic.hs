@@ -102,26 +102,26 @@ substitute subst fml = case fml of
   Var name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
-  Unknown s name -> Unknown (subst `compose` s) name 
+  Unknown s name -> Unknown (s `compose` subst) name 
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
   otherwise -> fml
   where
-    compose new old = if Map.null old
+    compose old new = if Map.null old
       then new
       else if Map.null new
         then old
-        else  let ((x, Var y), new') = Map.deleteFindMin new
-              in case Map.lookup y old of
-                Nothing -> Map.insert x (Var y) $ compose new' old
-                Just (Var v) -> Map.insert x (Var v) $ compose new' (Map.delete y old)
+        else  let ((x, Var y), old') = Map.deleteFindMin old
+              in case Map.lookup y new of
+                Nothing -> Map.insert x (Var y) $ compose old' new
+                Just (Var v) -> Map.insert x (Var v) $ compose old' (Map.delete y new)
 
 {- Qualifiers -}
 
 -- | Search space for valuations of a single unknown
 data QSpace = QSpace {
-    _qualifiers :: [Formula],         -- Qualifiers 
-    _maxCount :: Int                  -- Maximum number of qualifiers in a valuation
+    _qualifiers :: [Formula],         -- ^ Qualifiers 
+    _maxCount :: Int                  -- ^ Maximum number of qualifiers in a valuation
   }
 
 makeLenses ''QSpace  
@@ -162,7 +162,7 @@ valuation sol (Unknown s u) = case Map.lookup u sol of
   Just quals -> Set.map (substitute s) quals
   Nothing -> error $ unwords ["valuation: no value for unknown", u]
 
--- | 'applySolution' @sol fml@ : Substitute solutions from sol for all predicate variables in e
+-- | 'applySolution' @sol fml@ : Substitute solutions from sol for all predicate variables in fml
 applySolution :: Solution -> Formula -> Formula   
 applySolution sol fml = case fml of
   Unknown s ident -> case Map.lookup ident sol of
@@ -176,5 +176,21 @@ applySolution sol fml = case fml of
 merge :: Solution -> Solution -> Solution      
 merge sol sol' = Map.unionWith Set.union sol sol'
 
--- | Mapping from first-order variables to their valuations
-type SMTModel = Map Id Integer 
+{- Clauses -}
+
+-- | Top-level conjunct of the synthesis constraint
+data Clause = Horn Formula    -- ^ Simple horn clause of the form "/\ c_i && /\ u_i ==> fml"
+  | Disjunctive [[Formula]]   -- ^ Disjunction of conjunctions of horn clauses
+  deriving (Eq, Ord)
+
+-- | Is a clause disjunctive?  
+isDisjunctive (Disjunctive _) = True
+isDisjunctive _ = False
+
+-- | Formula inside a horn clause
+fromHorn (Horn fml) = fml
+
+-- | 'clauseApplySolution' @sol clause@ : Substitute solutions from sol for all predicate variables in clause
+clauseApplySolution :: Solution -> Clause -> Clause
+clauseApplySolution sol (Horn fml) = Horn $ applySolution sol fml
+clauseApplySolution sol (Disjunctive disjuncts) = Disjunctive $ (map . map) (applySolution sol) disjuncts

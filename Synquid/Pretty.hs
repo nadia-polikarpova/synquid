@@ -177,6 +177,13 @@ instance Pretty QSpace where
   
 instance Pretty QMap where
   pretty = vMapDoc text pretty  
+  
+prettyClause :: Clause -> Doc
+prettyClause (Horn fml) = pretty fml
+prettyClause (Disjunctive disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
+
+instance Pretty Clause where
+  pretty = prettyClause
 
 programDoc :: (Pretty v, Pretty s, Pretty c) => Program v s c -> Doc
 programDoc (PSymbol s) = pretty s
@@ -219,7 +226,8 @@ prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
 -- prettyBindings env = commaSep (map pretty (Map.elems (env ^. symbols))) 
-prettyBindings env = hMapDoc pretty pretty (env ^. symbols)
+-- prettyBindings env = hMapDoc pretty pretty (env ^. symbols)
+prettyBindings env = empty
   
 instance Pretty Environment where
   pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions))
@@ -228,11 +236,11 @@ prettyConstraint :: Constraint -> Doc
 prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
-prettyConstraint (WellFormedScalar env t) = prettyBindings env <+> text "|-" <+> pretty t <+> text "is scalar"
+prettyConstraint (WellFormedScalar env t) = prettyBindings env <+> text "|-" <+> pretty t <+> text "IS SCALAR"
+prettyConstraint (WellFormedSymbol disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
   
 instance Pretty Constraint where
   pretty = prettyConstraint
   
 instance Pretty LeafConstraint where
-  pretty = hMapDoc pretty pretty
-   
+  pretty = hMapDoc pretty pretty   

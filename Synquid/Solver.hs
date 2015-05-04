@@ -24,18 +24,18 @@ import Control.Lens
 
 evalFixPointSolver = runReaderT
 
--- | 'solveWithParams' @params quals constraints checkLowerBound@: 'greatestFixPoint' @quals constraints checkLowerBound@ with solver parameters @params@
-solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Formula] -> (Solution -> MaybeT s res) -> s (Maybe res)
-solveWithParams params quals constraints checkLowerBound = evalFixPointSolver go params
+-- | 'solveWithParams' @params quals constraints@: 'greatestFixPoint' @quals constraints@ with solver parameters @params@
+solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Clause] -> s (Maybe Solution)
+solveWithParams params quals constraints = evalFixPointSolver go params
   where
     go = do      
       quals' <- ifM (asks pruneQuals)
         (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
         (return quals)
-      greatestFixPoint quals' constraints checkLowerBound
+      greatestFixPoint quals' constraints
       
 -- | Strategies for picking the next candidate solution to strengthen
-data CandidatePickStrategy = FirstCandidate | UniformCandidate | UniformStrongCandidate
+data CandidatePickStrategy = FirstCandidate | UniformCandidate | InitializedCandidate
       
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
@@ -57,67 +57,73 @@ type FixPointSolver s a = ReaderT SolverParams s a
 
 {- Implementation -}
   
--- | 'greatestFixPoint' @quals constraints checkLowerBound@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@ 
--- | for which @checkLowerBound@ returns a result, if one exists;
--- | each of @constraints@ must have the form "/\ c_i && /\ u_i ==> fml"
-greatestFixPoint :: SMTSolver s => QMap -> [Formula] -> (Solution -> MaybeT s res) -> FixPointSolver s (Maybe res)
-greatestFixPoint quals constraints checkLowerBound = do
+-- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
+greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> FixPointSolver s (Maybe Solution)
+greatestFixPoint quals constraints = do
     debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty constraints)) $ return ()
     let sol0 = topSolution quals
-    ifM (and <$> mapM (isValidFml . applySolution sol0) constraints)
-      (lift $ runMaybeT $ checkLowerBound sol0)
-      (go [sol0])
-    -- debug 1 (text "Solution" <+> pretty res) $ return res
+    res <- ifM (and <$> mapM (isValidClause . clauseApplySolution sol0) constraints)
+      (return $ Just sol0)
+      (go [(constraints, sol0)])
+    debug 1 (text "Solution" <+> pretty res) $ return res
   where
     go [] = return Nothing
     go sols = do
-        (sol, rest) <- pickCandidate sols <$> asks candidatePickStrategy
-        invalidConstraint <- asks constraintPickStrategy >>= pickConstraint sol        
-        let modifiedConstraint = case invalidConstraint of
-                                    Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
-                                    _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show invalidConstraint]
-        sols' <- debugOutput sols sol invalidConstraint modifiedConstraint $ strengthen quals modifiedConstraint sol
-        (valids, invalids) <- partitionM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint constraints)) sols'
-        debug 1 (text "Valid Solutions" $+$ vsep (map pretty valids) $+$ text "Invalid Solutions" $+$ vsep (map pretty invalids)) $ return ()
-        resMb <- lift $ runMaybeT $ msum $ map checkLowerBound valids
-        case resMb of
-          Just res -> return $ Just res
-          Nothing -> do
-            -- TODO: find a way to filter out hopeless solutions (too strong to be realizable)
-            let invalids' = invalids
-            -- bla <- mapM (lift . runMaybeT . checkLowerBound) invalids
-            -- let invalids' = map snd $ filter (isJust . fst) $ zip bla invalids
-            go $ invalids' ++ rest
-          
-        -- validSolution <- findM (\s -> and <$> mapM (isValidFml . applySolution s) (delete invalidConstraint fmls)) sols'
-        -- case validSolution of
-          -- Just sol' -> return $ Just sol' -- Solution found
-          -- Nothing -> go $ sols' ++ rest
+        ((constraints, sol), rest) <- pickCandidate sols <$> asks candidatePickStrategy
+        invalidConstraint <- asks constraintPickStrategy >>= pickConstraint constraints sol
+        let otherConstraints = delete invalidConstraint constraints
+        case invalidConstraint of
+          Disjunctive disjuncts -> do
+            debugOutputSplit sols sol invalidConstraint $ return ()
+            let splitConstraints = map ((++ otherConstraints) . map Horn) disjuncts            
+            go $ zip splitConstraints (repeat sol) ++ rest
+          Horn invalidFml -> do
+            let modifiedConstraint = instantiateRhs sol invalidFml
+            debugOutput sols sol invalidFml modifiedConstraint $ return ()
+            sols' <- strengthen quals modifiedConstraint sol
+            validSolution <- findM (\s -> and <$> mapM (isValidClause . clauseApplySolution s) otherConstraints) sols'
+            case validSolution of
+              Just sol' -> return $ Just sol' -- Solution found
+              Nothing -> go $ zip (repeat constraints) sols' ++ rest
 
-    strength = Set.size . Set.unions . Map.elems    -- total number of qualifiers in a solution
-    maxQCount = maximum . map Set.size . Map.elems  -- maximum number of qualifiers mapped to an unknown
-    minQCount = minimum . map Set.size . Map.elems  -- minimum number of qualifiers mapped to an unknown          
+    nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
+    maxQCount = maximum . map Set.size . Map.elems    -- maximum number of qualifiers mapped to an unknown
+    minQCount = minimum . map Set.size . Map.elems    -- minimum number of qualifiers mapped to an unknown          
           
-    pickCandidate :: [Solution] -> CandidatePickStrategy -> (Solution, [Solution])
-    pickCandidate (sol:rest) FirstCandidate = (sol, rest)
+    pickCandidate :: [([Clause], Solution)] -> CandidatePickStrategy -> (([Clause], Solution), [([Clause], Solution)])
+    pickCandidate (conSol:rest) FirstCandidate = (conSol, rest)
     pickCandidate sols UniformCandidate = let
-        res = minimumBy (mappedCompare $ \s -> maxQCount s - minQCount s) sols  -- minimize the difference
+        res = minimumBy (mappedCompare $ \(cons, s) -> (length cons, maxQCount s - minQCount s)) sols  -- minimize the difference
       in (res, delete res sols)
-    pickCandidate sols UniformStrongCandidate = let 
-        res = maximumBy (mappedCompare $ \s -> (strength s, minQCount s - maxQCount s)) sols  -- maximize the total number and minimize the difference
+    pickCandidate sols InitializedCandidate = let 
+        res = maximumBy (mappedCompare $ \(cons, s) -> (length cons, nontrivCount s)) sols  -- maximize the total number and minimize the difference
       in (res, delete res sols)
       
-    pickConstraint sol FirstConstraint = fromJust <$> findM (liftM not . isValidFml . applySolution sol) constraints
-    pickConstraint sol SmallSpaceConstraint = do
-      invalids <- filterM (liftM not . isValidFml . applySolution sol) constraints
-      let spaceSize fml = maxValSize quals sol (unknownsOf fml)
-      return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) invalids
-      
-    debugOutput sols sol inv model = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map pretty sols), 
+    pickConstraint constraints sol strategy = do
+      invalids <- filterM (liftM not . isValidClause . clauseApplySolution sol) constraints
+      let (ds, hs) = partition isDisjunctive invalids
+      if null hs
+        then return $ head ds
+        else case strategy of
+          FirstConstraint -> return $ head hs
+          SmallSpaceConstraint -> do
+            let spaceSize (Horn fml) = maxValSize quals sol (unknownsOf fml)
+            return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) hs
+            
+    instantiateRhs sol fml = case fml of
+      Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
+      _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]
+
+    debugOutput sols sol inv modified = debug 1 $ vsep [
+      nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map (pretty . snd) sols), 
       text "Chosen candidate:" <+> pretty sol, 
       text "Invalid Constraint:" <+> pretty inv, 
-      text "Strengthening:" <+> pretty model]
+      text "Strengthening:" <+> pretty modified]
+      
+    debugOutputSplit sols sol inv = debug 1 $ vsep [
+      nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map (pretty . snd) sols), 
+      text "Chosen candidate:" <+> pretty sol, 
+      text "Splitting Invalid Constraint:" <+> pretty inv]      
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
@@ -266,3 +272,8 @@ prune isSubsumed (x:xs) = prune' [] x xs
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: SMTSolver s => Formula -> FixPointSolver s Bool
 isValidFml = lift . isValid
+
+-- | 'isValidClause' @c@: is @c@ logically valid? 
+isValidClause :: SMTSolver s => Clause -> FixPointSolver s Bool
+isValidClause (Horn fml) = isValidFml fml
+isValidClause (Disjunctive disjuncts) = or <$> mapM (isValidFml . conjunction . Set.fromList) disjuncts

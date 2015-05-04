@@ -50,17 +50,26 @@ data Environment = Environment {
   _symbols :: Map Formula RType,                -- ^ Variables and constants (with their refinement types)
   _symbolsOfShape :: Map SType (Set Formula),   -- ^ Variables and constants indexed by their simple type
   _assumptions :: Set Formula,                  -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula                -- ^ Negative unknown assumptions
+  _negAssumptions :: Set Formula,               -- ^ Negative unknown assumptions
+  _ranks :: [Formula]                           -- ^ Ranking functions
 }
 
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
-emptyEnv = Environment Map.empty Map.empty Set.empty Set.empty
+emptyEnv = Environment Map.empty Map.empty Set.empty Set.empty []
 
 -- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
 addSymbol :: Formula -> RType -> Environment -> Environment
 addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertWith (Set.union) (shape t) (Set.singleton sym))
+
+-- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
+addRank :: Formula -> Environment -> Environment
+addRank r = ranks %~ (r :)
+
+clearSymbols = set symbols Map.empty . set symbolsOfShape Map.empty
+clearAssumptions = set assumptions Set.empty . set negAssumptions Set.empty
+clearRanks = set ranks []
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x = valueVar |=| Var x
@@ -129,5 +138,6 @@ infixr 4 |.|
 data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
+  | WellFormedSymbol [[Constraint]]
   | WellFormedScalar Environment RType
   
