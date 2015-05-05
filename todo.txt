@@ -1,4 +1,4 @@
-- Clean up (extraction)
+- Three-valued validity (for better filtering on disjunctive constraints)
 - Marco: two solvers, bells and whistles from the paper/python implementation
 - Termination
 

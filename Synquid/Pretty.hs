@@ -243,4 +243,7 @@ instance Pretty Constraint where
   pretty = prettyConstraint
   
 instance Pretty LeafConstraint where
-  pretty = hMapDoc pretty pretty   
+  pretty = hMapDoc pretty pretty
+  
+instance Pretty Candidate where
+  pretty (Candidate sol valids invalids) = pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))

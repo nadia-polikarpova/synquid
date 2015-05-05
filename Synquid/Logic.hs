@@ -11,7 +11,7 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 
-import Control.Lens
+import Control.Lens hiding (both)
 
 -- | Identifiers
 type Id = String
@@ -87,6 +87,18 @@ unknownsOf u@(Unknown _ _) = Set.singleton u
 unknownsOf (Unary Not e) = unknownsOf e
 unknownsOf (Binary _ e1 e2) = Set.union (unknownsOf e1) (unknownsOf e2 )
 unknownsOf _ = Set.empty
+
+-- | 'posNegUnknowns' @fml@: sets of positive and negative predicate unknowns in @fml@
+posNegUnknowns :: Formula -> (Set Id, Set Id)
+posNegUnknowns (Unknown _ u) = (Set.singleton u, Set.empty)
+posNegUnknowns (Unary Not e) = swap $ posNegUnknowns e
+posNegUnknowns (Binary Implies e1 e2) = both2 Set.union (swap $ posNegUnknowns e1) (posNegUnknowns e2)
+posNegUnknowns (Binary Iff e1 e2) = both2 Set.union (posNegUnknowns $ Binary Implies e1 e2) (posNegUnknowns $ Binary Implies e2 e1)
+posNegUnknowns (Binary _ e1 e2) = both2 Set.union (posNegUnknowns e1) (posNegUnknowns e2)
+posNegUnknowns _ = (Set.empty, Set.empty)
+
+posUnknowns = fst . posNegUnknowns
+negUnknowns = snd . posNegUnknowns
 
 -- | 'leftHandSide' @fml@ : left-hand side of a binary expression
 leftHandSide (Binary _ l _) = l
@@ -194,3 +206,21 @@ fromHorn (Horn fml) = fml
 clauseApplySolution :: Solution -> Clause -> Clause
 clauseApplySolution sol (Horn fml) = Horn $ applySolution sol fml
 clauseApplySolution sol (Disjunctive disjuncts) = Disjunctive $ (map . map) (applySolution sol) disjuncts
+
+-- | 'clausePosNegUnknowns' @c@: sets of positive and negative predicate unknowns in clause @c@
+clausePosNegUnknowns :: Clause -> (Set Id, Set Id)
+clausePosNegUnknowns (Horn fml) = posNegUnknowns fml
+clausePosNegUnknowns (Disjunctive disjuncts) = let flatten f = both Set.unions . unzip . map f in flatten (flatten posNegUnknowns) $ disjuncts
+
+clausePosUnknowns = fst . clausePosNegUnknowns
+clauseNegUnknowns = snd . clausePosNegUnknowns
+
+{- Solution Candidates -}
+
+-- | Solution candidate
+data Candidate = Candidate {
+    solution :: Solution,
+    validConstraints :: Set Clause,
+    invalidConstraints :: Set Clause
+  } deriving (Eq, Ord)  
+

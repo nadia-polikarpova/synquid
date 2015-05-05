@@ -9,13 +9,26 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 
 import Control.Applicative
-import Control.Lens
+import Control.Monad
+import Control.Lens hiding (both)
 
 import Debug.Trace
 
 -- | `mappedCompare` @f x y@ : compare @f x@ and @f y@
 mappedCompare :: Ord b => (a -> b) -> a -> a -> Ordering
 mappedCompare f x y = f x `compare` f y
+
+-- | Map a function on a pair
+both :: (a -> b) -> (a, a) -> (b, b)
+both f (x1, x2) = (f x1, f x2)
+
+-- | Map a two-argument function on two pairs
+both2 :: (a -> b -> c) -> (a, a) -> (b, b) -> (c, c)
+both2 f (x1, x2) (y1, y2) = (f x1 y1, f x2 y2)
+
+-- | 'disjoint' @s1 s2@ : are @s1@ and @s2@ disjoint?
+disjoint :: Ord a => Set a -> Set a -> Bool
+disjoint s1 s2 = Set.null $ s1 `Set.intersection` s2
 
 -- | 'restrictDomain' @keys m@ : map @m@ restricted on the set of keys @keys@
 restrictDomain :: Ord k => Set k -> Map k a -> Map k a
@@ -80,6 +93,10 @@ findJustM f (x : xs) = do
 -- | Monadic version of if-then-else  
 ifM ::(Functor m, Monad m) => m Bool -> m a -> m a -> m a
 ifM cond t e = cond >>= (\res -> if res then t else e)  
+
+-- | Monadic equivalent of 'Set.partition'
+setPartitionM :: (Ord a, Monad m) => (a -> m Bool) -> Set a -> m (Set a, Set a)
+setPartitionM f s = both Set.fromList `liftM` partitionM f (Set.toList s)
 
 -- | 'pairGetter' @g1 g2@ : combine two getters into one that gets a pair
 pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))

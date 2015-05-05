@@ -57,73 +57,82 @@ data SolverParams = SolverParams {
 type FixPointSolver s a = ReaderT SolverParams s a
 
 {- Implementation -}
-  
+
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
 greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> FixPointSolver s (Maybe Solution)
 greatestFixPoint quals constraints = do
     debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty constraints)) $ return ()
     let sol0 = topSolution quals
-    res <- ifM (and <$> mapM (isValidClause . clauseApplySolution sol0) constraints)
-      (return $ Just sol0)
-      (go [(constraints, sol0)])
-    debug 1 (text "Solution" <+> pretty res) $ return res
+    (valids, invalids) <- partitionM (isValidClause . clauseApplySolution sol0) constraints
+    if null invalids
+      then return $ Just sol0
+      else go [Candidate sol0 (Set.fromList valids) (Set.fromList invalids)]
   where
     go [] = return Nothing
-    go sols = do
-        ((constraints, sol), rest) <- pickCandidate sols <$> asks candidatePickStrategy
-        invalidConstraint <- asks constraintPickStrategy >>= pickConstraint constraints sol
-        let otherConstraints = delete invalidConstraint constraints
-        case invalidConstraint of
+    go candidates = do
+        (cand@(Candidate sol valids invalids), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
+        constraint <- asks constraintPickStrategy >>= pickConstraint cand
+        let otherInvalids = Set.delete constraint invalids
+        case constraint of
           Disjunctive disjuncts -> do
-            debugOutputSplit sols sol invalidConstraint $ return ()
-            let splitConstraints = map ((++ otherConstraints) . map Horn) disjuncts            
-            go $ zip splitConstraints (repeat sol) ++ rest
-          Horn invalidFml -> do
-            let modifiedConstraint = instantiateRhs sol invalidFml
-            debugOutput sols sol invalidFml modifiedConstraint $ return ()
+            debugOutputSplit candidates cand constraint $ return ()
+            let newCandidates = map ((\invs -> cand { invalidConstraints = invs }) . Set.union otherInvalids . Set.fromList . map Horn) disjuncts
+            go $ newCandidates ++ rest
+          Horn fml -> do
+            let modifiedConstraint = instantiateRhs sol fml
+            debugOutput candidates cand fml modifiedConstraint $ return ()
             sols' <- strengthen quals modifiedConstraint sol
-            validSolution <- findM (\s -> and <$> mapM (isValidClause . clauseApplySolution s) otherConstraints) sols'
-            case validSolution of
-              Just sol' -> return $ Just sol' -- Solution found
-              Nothing -> go $ zip (repeat constraints) sols' ++ rest
+                        
+            newCandidates <- mapM (updateCandidate constraint otherInvalids valids sol) sols'            
+            case find (Set.null . invalidConstraints) newCandidates of
+              Just cand' -> return $ Just (solution cand') -- Solution found
+              Nothing -> go $ newCandidates ++ rest
+              
+    instantiateRhs sol fml = case fml of
+      Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
+      _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
+              
+    -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @constraint@
+    updateCandidate constraint otherInvalids valids sol sol' = do
+      let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) $ Map.unionWith Set.difference sol' sol
+      let (unaffectedValids, affectedValids) = Set.partition (\c -> clausePosUnknowns c `disjoint` modifiedUnknowns) valids
+      let (unaffectedInvalids, affectedInvalids) = Set.partition (\c -> clauseNegUnknowns c `disjoint` modifiedUnknowns) otherInvalids
+      (newValids, newInvalids) <- setPartitionM (isValidClause . clauseApplySolution sol') $ affectedValids `Set.union` affectedInvalids
+      return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids)            
 
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
     maxQCount = maximum . map Set.size . Map.elems    -- maximum number of qualifiers mapped to an unknown
     minQCount = minimum . map Set.size . Map.elems    -- minimum number of qualifiers mapped to an unknown          
           
-    pickCandidate :: [([Clause], Solution)] -> CandidatePickStrategy -> (([Clause], Solution), [([Clause], Solution)])
-    pickCandidate (conSol:rest) FirstCandidate = (conSol, rest)
+    pickCandidate :: [Candidate] -> CandidatePickStrategy -> (Candidate, [Candidate])
+    pickCandidate (cand:rest) FirstCandidate = (cand, rest)
     pickCandidate sols UniformCandidate = let
-        res = minimumBy (mappedCompare $ \(cons, s) -> (length cons, maxQCount s - minQCount s)) sols  -- minimize the difference
+        res = minimumBy (mappedCompare $ \(Candidate s valids invalids) -> (Set.size valids + Set.size invalids, maxQCount s - minQCount s)) sols  -- minimize the difference
       in (res, delete res sols)
-    pickCandidate sols InitializedCandidate = let 
-        res = maximumBy (mappedCompare $ \(cons, s) -> (length cons, nontrivCount s)) sols  -- maximize the total number and minimize the difference
-      in (res, delete res sols)
+    pickCandidate cands InitializedCandidate = let 
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids) -> nontrivCount s) cands  -- maximize the total number and minimize the difference
+      in (res, delete res cands)
       
-    pickConstraint constraints sol strategy = do
-      invalids <- filterM (liftM not . isValidClause . clauseApplySolution sol) constraints
-      let (ds, hs) = partition isDisjunctive invalids
-      if null hs
-        then return $ head ds
+    pickConstraint (Candidate sol valids invalids) strategy = do
+      let (ds, hs) = Set.partition isDisjunctive invalids
+      if Set.null hs
+        then return $ Set.findMin ds
         else case strategy of
-          FirstConstraint -> return $ head hs
+          FirstConstraint -> return $ Set.findMin hs
           SmallSpaceConstraint -> do
+            -- let spaceSize c = maxValSize quals sol (Set.map (Unknown Map.empty) $ clauseNegUnknowns c)
             let spaceSize (Horn fml) = maxValSize quals sol (unknownsOf fml)
-            return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) hs
-            
-    instantiateRhs sol fml = case fml of
-      Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
-      _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]
+            return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList hs)
 
-    debugOutput sols sol inv modified = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map (pretty . snd) sols), 
-      text "Chosen candidate:" <+> pretty sol, 
+    debugOutput cands cand inv modified = debug 1 $ vsep [
+      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
+      text "Chosen candidate:" <+> pretty cand, 
       text "Invalid Constraint:" <+> pretty inv, 
       text "Strengthening:" <+> pretty modified]
       
-    debugOutputSplit sols sol inv = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length sols) $+$ (vsep $ map (pretty . snd) sols), 
-      text "Chosen candidate:" <+> pretty sol, 
+    debugOutputSplit cands cand inv = debug 1 $ vsep [
+      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
+      text "Chosen candidate:" <+> pretty cand, 
       text "Splitting Invalid Constraint:" <+> pretty inv]      
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
