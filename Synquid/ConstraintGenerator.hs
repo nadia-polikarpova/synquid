@@ -15,6 +15,31 @@ import Control.Monad.State
 import Control.Applicative
 import Control.Lens
 import Control.Monad.Trans.Maybe
+
+{- Interface -}
+
+-- | State space generator (returns a state space for a list of symbols in scope)
+type QualsGen = [Formula] -> QSpace
+
+-- | Empty state space generator
+trivialGen = const emptyQSpace
+
+-- | 'genConstraints' @cq tq env typ templ@ : given search space generators for conditionals and types @cq@ and @tq@,
+-- top-level type environment @env@, refinement type @typ@, and template @templ@,
+-- generate a set of constraints, a search space map for the unknowns inside those constraints, and a liquid program,
+-- such that a valid solution for the constraints would turn the liquid program into a simple program of type @typ@.
+genConstraints :: QualsGen -> QualsGen -> Environment -> RType -> Template -> ([Clause], QMap, LiquidProgram)
+genConstraints cq tq env typ templ = evalState go 0
+  where
+    go :: Generator ([Clause], QMap, LiquidProgram)
+    go = do
+      (p, cs) <- constraints env typ templ
+      let cs' = concatMap split cs
+      let (clauses, qspaces) = partitionEithers $ map (toFormula cq tq) cs'
+      let qmap = Map.unions qspaces      
+      debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (clauses, qmap, p)
+
+{- Implementation -}
   
 type Generator = State Int
 
@@ -29,19 +54,8 @@ freshRefinements (ScalarT base _) = do
 freshRefinements (FunctionT x tArg tFun) = do
   liftM3 FunctionT (freshId "_x") (freshRefinements tArg) (freshRefinements tFun)
   
-genConstraints :: QualsGen -> QualsGen -> Environment -> RType -> Template -> (LiquidProgram, QMap, [Clause])
-genConstraints cq tq env typ templ = evalState go 0
-  where
-    go :: Generator (LiquidProgram, QMap, [Clause])
-    go = do
-      (p, cs) <- constraints env typ templ
-      -- debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return ()
-      let cs' = concatMap split cs
-      -- debug 1 (vsep $ map pretty cs') $ return ()
-      let (clauses, qspaces) = partitionEithers $ map (toFormula cq tq) cs'
-      let qmap = Map.unions qspaces      
-      debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (p, qmap, clauses)
-
+-- | 'constraints' @env t templ@ : a liquid program and typing constraints 
+-- for a program of type @t@ following @templ@ in the typing enviroment @env@
 constraints :: Environment -> RType -> Template -> Generator (LiquidProgram, [Constraint])
 constraints env t (PSymbol _) = do
   t' <- freshRefinements t
@@ -92,6 +106,7 @@ constraints env t (PFix _ bodyTemp) = do
   (pBody, cs) <- constraints env' (FunctionT x tArg'' tRes) bodyTemp
   return (PFix f pBody, cs ++ [WellFormed (clearRanks env) t', Subtype env t' t])    
     
+-- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
   split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol (Var y) tArg2 env) (renameVar x y tRes1) tRes2)
@@ -101,10 +116,8 @@ split (WellFormedSymbol disjuncts) =
   [WellFormedSymbol $ map (concatMap split) disjuncts]
 split c = [c]
 
-type QualsGen = [Formula] -> QSpace
-
-trivialGen = const emptyQSpace
-
+-- | 'toFormula' @cq tq c@ : translate simple typing constraint @c@ into either a logical constraint or an element of the search space,
+-- given search space generators @cq@ and @tq@
 toFormula :: QualsGen -> QualsGen -> Constraint -> Either Clause QMap
 toFormula _ _ (Subtype env (ScalarT IntT fml) (ScalarT IntT fml')) =
   let (poss, negs) = embedding env 

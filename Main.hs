@@ -380,19 +380,19 @@ main = do
   -- let typ = FunctionT "y" nat $ int (valueVar |>| Var "y")
   -- let templ = sym (int_ |->| int_)
   
-  let (p, qmap, fmls) = genConstraints (toSpace . cq) (toSpace . \syms -> tq syms ++ [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]) env typ templ
+  let (clauses, qmap, p) = genConstraints (toSpace . cq) (toSpace . \syms -> tq syms ++ [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]) env typ templ
   
   -- putStr "Liquid Program\n"
   -- print $ pretty p
   -- putStr "\nConstraints\n"
-  -- print $ vsep $ map pretty fmls
+  -- print $ vsep $ map pretty clauses
   putStr "\nQmap\n"
   print $ pretty qmap
   putStr "\n"
   
   mProg <- evalZ3State $ do
     initSolver
-    mSol <- solveWithParams defaultParams qmap fmls
+    mSol <- solveWithParams defaultParams qmap clauses
     case mSol of
       Nothing -> return Nothing
       Just sol -> runMaybeT $ extract p sol

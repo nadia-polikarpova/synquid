@@ -94,13 +94,13 @@ embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -
     embedBinding (Var x) (ScalarT _ fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var x)) fml
     embedBinding _ _ = Set.empty
     
--- | Program skeletons parametrized by information stored in symbols and conditionals
+-- | Program skeletons parametrized by information stored in bound variable positions, symbols, and conditionals
 data Program v s c =
-  PSymbol s |
-  PApp (Program v s c) (Program v s c) |
-  PFun v (Program v s c) |
-  PIf c (Program v s c) (Program v s c) |
-  PFix v (Program v s c)
+  PSymbol s |                             -- ^ Symbol (variable or constant)
+  PApp (Program v s c) (Program v s c) |  -- ^ Function application
+  PFun v (Program v s c) |                -- ^ Lambda abstraction
+  PIf c (Program v s c) (Program v s c) | -- ^ Conditional
+  PFix v (Program v s c)                  -- ^ Fixpoint
     
 -- | Program templates (skeleton + unrefined types of symbols)
 type Template = Program SType SType ()
@@ -108,9 +108,10 @@ type Template = Program SType SType ()
 -- | Fully defined programs 
 type SimpleProgram = Program Id Formula Formula
 
+-- | For each symbol, the necessary condition for the symbol to be a solution at a given leaf
 type LeafConstraint = Map Formula Formula
 
--- | Programs where symbols are represented by their refinement type, which might contain unknowns
+-- | Programs where conditions and symbols are represented by constraints with unknowns
 type LiquidProgram = Program Id LeafConstraint Formula
 
 -- | Simple type of a program template

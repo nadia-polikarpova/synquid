@@ -40,6 +40,7 @@ data CandidatePickStrategy = FirstCandidate | UniformCandidate | InitializedCand
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
 
+-- | MUS search strategies
 data OptimalValuationsStrategy = BFSValuations | UnsatCoreValuations | MarcoValuations
 
 -- | Parameters of the fix point algorithm
