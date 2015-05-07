@@ -18,7 +18,7 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import Control.Applicative
-import Control.Lens
+import Control.Lens hiding (both)
 
 {- Interface -}
 
@@ -76,7 +76,7 @@ greatestFixPoint quals constraints = do
         case constraint of
           Disjunctive disjuncts -> do
             debugOutputSplit candidates cand constraint $ return ()
-            let newCandidates = map ((\invs -> cand { invalidConstraints = invs }) . Set.union otherInvalids . Set.fromList . map Horn) disjuncts
+            newCandidates <- mapM (updateWithDisjuct sol valids otherInvalids) disjuncts
             go $ newCandidates ++ rest
           Horn fml -> do
             let modifiedConstraint = instantiateRhs sol fml
@@ -98,7 +98,12 @@ greatestFixPoint quals constraints = do
       let (unaffectedValids, affectedValids) = Set.partition (\c -> clausePosUnknowns c `disjoint` modifiedUnknowns) valids
       let (unaffectedInvalids, affectedInvalids) = Set.partition (\c -> clauseNegUnknowns c `disjoint` modifiedUnknowns) otherInvalids
       (newValids, newInvalids) <- setPartitionM (isValidClause . clauseApplySolution sol') $ affectedValids `Set.union` affectedInvalids
-      return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids)            
+      return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids)
+      
+    -- | Re-evaluate each of @conjuncts@, extracted from a disjunctive constraint during splitting
+    updateWithDisjuct sol valids otherInvalids conjuncts = do
+      (newValids, newInvalids) <- both Set.fromList <$> partitionM (isValidClause . clauseApplySolution sol) (map Horn conjuncts)
+      return $ Candidate sol (valids `Set.union` newValids) (otherInvalids `Set.union` newInvalids)
 
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
     maxQCount = maximum . map Set.size . Map.elems    -- maximum number of qualifiers mapped to an unknown
