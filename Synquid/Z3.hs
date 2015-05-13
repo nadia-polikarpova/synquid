@@ -20,32 +20,43 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.State
 import Control.Applicative
-import Control.Lens
+import Control.Lens hiding (both)
 
 import System.IO.Unsafe
 
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
+  _mainEnv :: Z3Env,          -- ^ Z3 environment for the main solver
   _intSort :: Maybe Sort,     -- ^ Int sort
   _boolSort :: Maybe Sort,    -- ^ Boolean sort
-  _symbols :: Map Id Symbol   -- ^ Variable symbols
+  _symbols :: Map Id Symbol,  -- ^ Variable symbols
+  _auxEnv :: Z3Env,           -- ^ Z3 environment for the auxiliary solver
+  _boolSortAux :: Maybe Sort  -- ^ Boolean sort
 }
 
 makeLenses ''Z3Data
 
-type Z3State = StateT Z3Data Z3   
+type Z3State = StateT Z3Data IO
 
 instance MonadZ3 Z3State where
-  getSolver = lift getSolver
-  getContext = lift getContext
+  getSolver = gets (envSolver . _mainEnv)
+  getContext = gets (envContext . _mainEnv)
         
-emptyData :: Z3Data
-emptyData = Z3Data Nothing Nothing Map.empty
+-- | Use auxiliary solver to execute a Z3 computation
+withAuxSolver :: Z3State a -> Z3State a
+withAuxSolver c = do
+  m <- use mainEnv
+  a <- use auxEnv
+  mainEnv .= a
+  res <- c
+  mainEnv .= m
+  return res
 
 evalZ3State :: Z3State a -> IO a
 evalZ3State f = do
-  env <- newEnv (Just QF_AUFLIA) stdOpts
-  evalZ3WithEnv (evalStateT f emptyData) env
+  mainEnv <- newEnv (Just QF_AUFLIA) stdOpts
+  auxEnv <- newEnv (Just QF_AUFLIA) stdOpts
+  evalStateT f $ Z3Data mainEnv Nothing Nothing Map.empty auxEnv Nothing
                 
 -- | Convert a first-order constraint to a Z3 AST.
 toZ3 :: Formula -> Z3State AST
@@ -96,6 +107,8 @@ instance SMTSolver Z3State where
     intSort .= Just int
     bool <- mkBoolSort
     boolSort .= Just bool
+    boolAux <- withAuxSolver mkBoolSort
+    boolSortAux .= Just boolAux
 
   isValid fml = do
       res <- local $ (toZ3 >=> assert) (fnot fml) >> check
@@ -113,10 +126,10 @@ getMinUnsatCore assumptions mustHaves fmls = do
   push
   mapM_ (toZ3 >=> assert) assumptions
   
-  bool <- fromJust <$> use boolSort
+  bool <- fromJust <$> use boolSort  
+  
   controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
-  assumptionsZ3 <- mapM toZ3 fmls
-  condAssumptions <- zipWithM mkImplies controlLiterals assumptionsZ3                      
+  condAssumptions <- mapM toZ3 fmls >>= zipWithM mkImplies controlLiterals                      
   mapM_ assert condAssumptions
   
   push
@@ -147,46 +160,65 @@ getMinUnsatCore assumptions mustHaves fmls = do
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
 getAllMUSs :: Formula -> [Formula] -> Z3State [[Formula]]
 getAllMUSs assumption fmls = do
+  push
+  withAuxSolver push
+
   bool <- fromJust <$> use boolSort
-  controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
-  condAssumptions <- mapM toZ3 fmls >>= zipWithM mkImplies controlLiterals
-  assumptionZ3 <- toZ3 assumption
-  go assumptionZ3 condAssumptions controlLiterals [] []
+  boolAux <- fromJust <$> use boolSortAux
+  
+  controlLits <- mkContolLits bool
+  controlLitsAux <- withAuxSolver $ mkContolLits boolAux
+  
+  toZ3 assumption >>= assert
+  condAssumptions <- mapM toZ3 fmls >>= zipWithM mkImplies controlLits  
+  mapM_ assert condAssumptions
+    
+  res <- getAllMUSs' fmls controlLits controlLitsAux [] []    
+  withAuxSolver $ pop 1
+  pop 1  
+  return res
   
   where
-    go assumptionZ3 condAssumptions controlLiterals uncovered cores = do
-      push
-      (res, modelMb) <- mapM_ assert uncovered >> getModel -- Get the next seed (uncovered subset of fmls)
+    mkContolLits bool = mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
+
+getAllMUSs' fmls controlLits controlLitsAux uncovered cores = do      
+  seedMb <- (fmap $ both $ map litFromAux) <$> getNextSeed uncovered
+  case seedMb of
+    Nothing -> return cores -- No uncovered subsets left, return the cores accumulated so far
+    Just (seed, rest) -> do
+      debug 2 (text "Seed" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` seed]) $ return ()
+      res <- checkAssumptions seed  -- Check if seed is satisfiable
       case res of
-        Unsat -> pop 1 >> return cores -- No uncovered subsets left, return the cores accumulated so far
+        Unsat -> do
+          mus <- getUnsatCore >>= minimize []
+          let unsatFmls = [a | (l, a) <- zip controlLits fmls, l `elem` mus]
+          debug 2 (text "MUS" <+> pretty unsatFmls) $ return ()          
+          newConjunct <- withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr -- Remove all supersets of mus from unexplored sets
+          getAllMUSs' fmls controlLits controlLitsAux (newConjunct : uncovered) (unsatFmls : cores)
         Sat -> do
-          (seed, rest) <- partitionM (getCtrlLitModel (fromJust modelMb)) controlLiterals
-          debug 2 (text "Seed" <+> pretty [a | (l, a) <- zip controlLiterals fmls, l `elem` seed]) $ return ()
-          pop 1
-          push
-          mapM_ assert (assumptionZ3 : condAssumptions)
-          res <- checkAssumptions seed  -- Check if seed is satisfiable
-          case res of
-            Unsat -> do
-              mus <- minimize [] seed -- Unsatisfiable: minimize
-              debug 2 (text "MUS" <+> pretty [a | (l, a) <- zip controlLiterals fmls, l `elem` mus]) $ return ()
-              pop 1
-              let unsatFmls = [a | (l, a) <- zip controlLiterals fmls, l `elem` mus]
-              newConjunct <- mapM mkNot mus >>= mkOr -- Remove all supersets of mus from unexplored sets
-              go assumptionZ3 condAssumptions controlLiterals (newConjunct : uncovered) (unsatFmls : cores)
-            Sat -> do
-              mss <- maximize seed rest  -- Satisfiable: maximize
-              debug 2 (text "MSS" <+> pretty [a | (l, a) <- zip controlLiterals fmls, l `elem` mss]) $ return ()
-              pop 1
-              if length mss == length controlLiterals
-                then return []  -- The conjunction of fmls is SAT: no UNSAT cores
-                else do
-                  newConjunct <- mkOr (controlLiterals \\ mss)  -- Remove all subsets of mss from the unexplored set
-                  go assumptionZ3 condAssumptions controlLiterals (newConjunct : uncovered) cores
+          mss <- maximize seed rest  -- Satisfiable: maximize
+          debug 2 (text "MSS" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` mss]) $ return ()
+          if length mss == length controlLits
+            then return []  -- The conjunction of fmls is SAT: no UNSAT cores
+            else do
+              newConjunct <- withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss)  -- Remove all subsets of mss from the unexplored set
+              getAllMUSs' fmls controlLits controlLitsAux (newConjunct : uncovered) cores
+              
+  where
+    litToAux :: AST -> AST
+    litToAux lit = controlLitsAux !! fromJust (elemIndex lit controlLits)
+    
+    litFromAux :: AST -> AST
+    litFromAux lit = controlLits !! fromJust (elemIndex lit controlLitsAux)    
+                  
+    getNextSeed uncovered = withAuxSolver $ do
+      (res, modelMb) <- mapM_ assert (take 1 uncovered) >> getModel -- Get the next seed (uncovered subset of fmls)
+      case res of
+        Unsat -> return Nothing -- No uncovered subsets left, return the cores accumulated so far
+        Sat -> Just <$> partitionM (getCtrlLitModel (fromJust modelMb)) controlLitsAux
         
     getCtrlLitModel m lit = do
-      astMb <- eval m lit
-      resMb <- getBoolValue (fromJust astMb)
+      resMb <- fromJust <$> eval m lit >>= getBoolValue
       case resMb of
         Nothing -> return True
         Just b -> return b
@@ -203,32 +235,5 @@ getAllMUSs assumption fmls = do
       res <- local $ mapM_ assert (lit:checked) >> check
       case res of
         Sat -> maximize (lit:checked) lits -- still SAT with lit: add to the max satisfiable set
-        Unsat -> maximize checked lits -- let makes checked unsat
-
--- getMinUnsatCore fmls assumptions = do
-  -- push
-  -- mapM_ (toZ3 >=> assert) fmls
-  
-  -- bool <- fromJust <$> use boolSort
-  -- controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length assumptions] -- ToDo: unique ids
-  -- assumptionsZ3 <- mapM toZ3 assumptions
-  -- condAssumptions <- zipWithM mkImplies controlLiterals assumptionsZ3                      
-  -- mapM_ assert condAssumptions
-  -- res <- checkAssumptions controlLiterals
-  -- case res of
-    -- Sat -> pop 1 >> return Nothing
-    -- Unsat -> do
-      -- unsatLits <- getUnsatCore
-      -- unsatLits' <- minimize [] unsatLits
-      -- let unsatAssumptions = [a | (l, a) <- zip controlLiterals assumptions, l `elem` unsatLits']
-      -- pop 1
-      -- return $ Just unsatAssumptions
-  -- where
-    -- minimize checked [] = return checked
-    -- minimize checked (lit:lits) = do
-      -- res <- local $ mapM_ assert (checked ++ lits) >> check
-      -- case res of
-        -- Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
-        -- Unsat -> minimize checked lits -- lit can be omitted
-      
+        Unsat -> maximize checked lits -- let makes checked unsat      
         

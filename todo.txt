@@ -1,11 +1,9 @@
-- Three-valued validity (for better filtering on disjunctive constraints)
-- Marco: two solvers, bells and whistles from the paper/python implementation
-- Termination
-
+- Marco: bells and whistles from the paper/python implementation
+- Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct
+- Data types
 
 - Polymorphism
 - Parser for types and templates
-- make TypeSkeleton a functor?
 - Explicit search
 
 - Look at bad example for CEGIS: y >= x && x = i ==> y >= 5. Better when known lhs is stronger (y == x) or unknown lhs is weaker (x >= i) -> think about this
