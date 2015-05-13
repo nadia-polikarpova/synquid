@@ -173,7 +173,7 @@ getAllMUSs assumption fmls = do
   condAssumptions <- mapM toZ3 fmls >>= zipWithM mkImplies controlLits  
   mapM_ assert condAssumptions
     
-  res <- getAllMUSs' fmls controlLits controlLitsAux [] []    
+  res <- getAllMUSs' fmls controlLits controlLitsAux []    
   withAuxSolver $ pop 1
   pop 1  
   return res
@@ -181,8 +181,8 @@ getAllMUSs assumption fmls = do
   where
     mkContolLits bool = mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
 
-getAllMUSs' fmls controlLits controlLitsAux uncovered cores = do      
-  seedMb <- (fmap $ both $ map litFromAux) <$> getNextSeed uncovered
+getAllMUSs' fmls controlLits controlLitsAux cores = do      
+  seedMb <- (fmap $ both $ map litFromAux) <$> getNextSeed
   case seedMb of
     Nothing -> return cores -- No uncovered subsets left, return the cores accumulated so far
     Just (seed, rest) -> do
@@ -193,16 +193,16 @@ getAllMUSs' fmls controlLits controlLitsAux uncovered cores = do
           mus <- getUnsatCore >>= minimize []
           let unsatFmls = [a | (l, a) <- zip controlLits fmls, l `elem` mus]
           debug 2 (text "MUS" <+> pretty unsatFmls) $ return ()          
-          newConjunct <- withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr -- Remove all supersets of mus from unexplored sets
-          getAllMUSs' fmls controlLits controlLitsAux (newConjunct : uncovered) (unsatFmls : cores)
+          withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr >>= assert -- Remove all supersets of mus from unexplored sets
+          getAllMUSs' fmls controlLits controlLitsAux (unsatFmls : cores)
         Sat -> do
           mss <- maximize seed rest  -- Satisfiable: maximize
           debug 2 (text "MSS" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` mss]) $ return ()
           if length mss == length controlLits
             then return []  -- The conjunction of fmls is SAT: no UNSAT cores
             else do
-              newConjunct <- withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss)  -- Remove all subsets of mss from the unexplored set
-              getAllMUSs' fmls controlLits controlLitsAux (newConjunct : uncovered) cores
+              withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss) >>= assert  -- Remove all subsets of mss from the unexplored set
+              getAllMUSs' fmls controlLits controlLitsAux cores
               
   where
     litToAux :: AST -> AST
@@ -211,8 +211,8 @@ getAllMUSs' fmls controlLits controlLitsAux uncovered cores = do
     litFromAux :: AST -> AST
     litFromAux lit = controlLits !! fromJust (elemIndex lit controlLitsAux)    
                   
-    getNextSeed uncovered = withAuxSolver $ do
-      (res, modelMb) <- mapM_ assert (take 1 uncovered) >> getModel -- Get the next seed (uncovered subset of fmls)
+    getNextSeed = withAuxSolver $ do
+      (res, modelMb) <- getModel -- Get the next seed (uncovered subset of fmls)
       case res of
         Unsat -> return Nothing -- No uncovered subsets left, return the cores accumulated so far
         Sat -> Just <$> partitionM (getCtrlLitModel (fromJust modelMb)) controlLitsAux
