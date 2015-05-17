@@ -156,32 +156,35 @@ getMinUnsatCore assumptions mustHaves fmls = do
         Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
         Unsat -> minimize checked lits -- lit can be omitted
         
--- | 'getAllMUSs' @assumption fmls@ : find all minimal unsatisfiable subsets of @fmls@ assuming @assumption@
+-- | 'getAllMUSs' @assumption mustHaves fmls@ : find all minimal unsatisfiable subsets of @mustHaves@ union @fmls@, which contain all elements of @mustHaves@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
-getAllMUSs :: Formula -> [Formula] -> Z3State [[Formula]]
-getAllMUSs assumption fmls = do
+getAllMUSs :: Formula -> [Formula] -> [Formula] -> Z3State [[Formula]]
+getAllMUSs assumption mustHaves fmls = do
   push
   withAuxSolver push
 
   bool <- fromJust <$> use boolSort
   boolAux <- fromJust <$> use boolSortAux
-  
-  controlLits <- mkContolLits bool
-  controlLitsAux <- withAuxSolver $ mkContolLits boolAux
+
+  let allFmls = mustHaves ++ fmls  
+  controlLits <- mkContolLits bool allFmls
+  controlLitsAux <- withAuxSolver $ mkContolLits boolAux allFmls
   
   toZ3 assumption >>= assert
-  condAssumptions <- mapM toZ3 fmls >>= zipWithM mkImplies controlLits  
+  condAssumptions <- mapM toZ3 allFmls >>= zipWithM mkImplies controlLits  
   mapM_ assert condAssumptions
+  
+  withAuxSolver $ mapM_ assert $ take (length mustHaves) controlLitsAux
     
-  res <- getAllMUSs' fmls controlLits controlLitsAux []    
+  res <- getAllMUSs' allFmls controlLits controlLitsAux (length mustHaves) []    
   withAuxSolver $ pop 1
   pop 1  
   return res
   
   where
-    mkContolLits bool = mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
+    mkContolLits bool fmls = mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
 
-getAllMUSs' fmls controlLits controlLitsAux cores = do      
+getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do      
   seedMb <- (fmap $ both $ map litFromAux) <$> getNextSeed
   case seedMb of
     Nothing -> return cores -- No uncovered subsets left, return the cores accumulated so far
@@ -191,18 +194,22 @@ getAllMUSs' fmls controlLits controlLitsAux cores = do
       case res of
         Unsat -> do
           mus <- getUnsatCore >>= minimize []
-          let unsatFmls = [a | (l, a) <- zip controlLits fmls, l `elem` mus]
-          debug 2 (text "MUS" <+> pretty unsatFmls) $ return ()          
           withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr >>= assert -- Remove all supersets of mus from unexplored sets
-          getAllMUSs' fmls controlLits controlLitsAux (unsatFmls : cores)
+          if all (`elem` mus) (take mustHavesCount controlLits)
+            then do
+              let unsatFmls = [a | (l, a) <- zip (drop mustHavesCount controlLits) (drop mustHavesCount fmls), l `elem` mus]
+              debug 2 (text "MUS" <+> pretty unsatFmls) $ return ()                        
+              getAllMUSs' fmls controlLits controlLitsAux mustHavesCount (unsatFmls : cores)
+            else getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
         Sat -> do
-          mss <- maximize seed rest  -- Satisfiable: maximize
+          -- mss <- maximize seed rest  -- Satisfiable: maximize
+          let mss = seed
           debug 2 (text "MSS" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` mss]) $ return ()
           if length mss == length controlLits
             then return []  -- The conjunction of fmls is SAT: no UNSAT cores
             else do
               withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss) >>= assert  -- Remove all subsets of mss from the unexplored set
-              getAllMUSs' fmls controlLits controlLitsAux cores
+              getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
               
   where
     litToAux :: AST -> AST

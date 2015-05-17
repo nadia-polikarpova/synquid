@@ -236,13 +236,11 @@ optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty
     parents candidate preds = map (flip Set.delete candidate) preds -- subsets of @candidate@ that together cover all potential remaining solutions    
     
 optimalValuationsMarco :: SMTSolver s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
-optimalValuationsMarco quals lhs rhs = do
-    map (Set.delete fixedRhs) . filter (fixedRhs `Set.member`) . map Set.fromList <$> lift (allUnsatCores fixedLhs (fixedRhs : qualsList))
+optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores fixedLhs [fixedRhs] qualsList)
   where
     qualsList = Set.toList quals
     fixedLhs = conjunction lhs
     fixedRhs = fnot rhs
-
                             
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (if a set satisfies @check@, then every superset also satisfies @check@);

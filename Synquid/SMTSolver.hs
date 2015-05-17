@@ -12,5 +12,5 @@ class (Monad s, Applicative s) => SMTSolver s where
   initSolver :: s ()                                                      -- ^ Initialize solver  
   isValid :: Formula -> s Bool                                            -- ^ 'isValid' @fml@: is @fml@ logically valid?
   unsatCore :: [Formula] -> [Formula] -> [Formula] -> s UnsatCoreResult
-  allUnsatCores :: Formula -> [Formula] -> s [[Formula]]
+  allUnsatCores :: Formula -> [Formula] -> [Formula] -> s [[Formula]]
                                                                           
