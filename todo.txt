@@ -1,5 +1,4 @@
 - Preprocess search spaces to extract unsat cores
-- Bound the number of atoms?
 - Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct
 - Data types
 

@@ -195,7 +195,7 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
       case res of
         Unsat -> do
           mus <- getUnsatCore >>= minimize
-          withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr >>= assert -- Remove all supersets of mus from unexplored sets
+          blockUp mus
           let unsatFmls = [a | (l, a) <- zip (drop mustHavesCount controlLits) (drop mustHavesCount fmls), l `elem` mus]          
           if all (`elem` mus) (take mustHavesCount controlLits)
             then debug 2 (text "MUS" <+> pretty unsatFmls) $ 
@@ -208,7 +208,7 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
           if length mss == length controlLits
             then return []  -- The conjunction of fmls is SAT: no UNSAT cores
             else do
-              withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss) >>= assert  -- Remove all subsets of mss from the unexplored set
+              blockDown mss
               getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
               
   where
@@ -216,7 +216,7 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
     litToAux lit = controlLitsAux !! fromJust (elemIndex lit controlLits)
     
     litFromAux :: AST -> AST
-    litFromAux lit = controlLits !! fromJust (elemIndex lit controlLitsAux)    
+    litFromAux lit = controlLits !! fromJust (elemIndex lit controlLitsAux)
                   
     getNextSeed = withAuxSolver $ do
       (res, modelMb) <- getModel -- Get the next seed (uncovered subset of fmls)
@@ -229,6 +229,12 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
       case resMb of
         Nothing -> return bias
         Just b -> return b
+        
+    -- | Remove all supersets of mus from unexplored sets
+    blockUp mus = withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr >>= assert
+    
+    -- | Remove all subsets of mss from the unexplored set
+    blockDown mss = withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss) >>= assert
   
     minimize lits = local $ minimize' [] lits
     minimize' checked [] = return checked
