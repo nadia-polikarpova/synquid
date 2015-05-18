@@ -1,8 +1,10 @@
-- Marco: bells and whistles from the paper/python implementation
+- Preprocess search spaces to extract unsat cores
+- Bound the number of atoms?
 - Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct
 - Data types
 
 - Polymorphism
+- Higher-order functions
 - Parser for types and templates
 - Explicit search
 

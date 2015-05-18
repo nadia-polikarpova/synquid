@@ -107,6 +107,7 @@ instance SMTSolver Z3State where
     intSort .= Just int
     bool <- mkBoolSort
     boolSort .= Just bool
+    
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
 
@@ -193,17 +194,16 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
       res <- checkAssumptions seed  -- Check if seed is satisfiable
       case res of
         Unsat -> do
-          mus <- getUnsatCore >>= minimize []
+          mus <- getUnsatCore >>= minimize
           withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr >>= assert -- Remove all supersets of mus from unexplored sets
+          let unsatFmls = [a | (l, a) <- zip (drop mustHavesCount controlLits) (drop mustHavesCount fmls), l `elem` mus]          
           if all (`elem` mus) (take mustHavesCount controlLits)
-            then do
-              let unsatFmls = [a | (l, a) <- zip (drop mustHavesCount controlLits) (drop mustHavesCount fmls), l `elem` mus]
-              debug 2 (text "MUS" <+> pretty unsatFmls) $ return ()                        
-              getAllMUSs' fmls controlLits controlLitsAux mustHavesCount (unsatFmls : cores)
-            else getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
+            then debug 2 (text "MUS" <+> pretty unsatFmls) $ 
+                    getAllMUSs' fmls controlLits controlLitsAux mustHavesCount (unsatFmls : cores)
+            else debug 2 (text "MUSeless" <+> pretty unsatFmls) $ 
+                    getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
         Sat -> do
-          -- mss <- maximize seed rest  -- Satisfiable: maximize
-          let mss = seed
+          mss <- maximize seed rest  -- Satisfiable: maximize
           debug 2 (text "MSS" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` mss]) $ return ()
           if length mss == length controlLits
             then return []  -- The conjunction of fmls is SAT: no UNSAT cores
@@ -222,25 +222,33 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
       (res, modelMb) <- getModel -- Get the next seed (uncovered subset of fmls)
       case res of
         Unsat -> return Nothing -- No uncovered subsets left, return the cores accumulated so far
-        Sat -> Just <$> partitionM (getCtrlLitModel (fromJust modelMb)) controlLitsAux
+        Sat -> Just <$> partitionM (getCtrlLitModel True (fromJust modelMb)) controlLitsAux
         
-    getCtrlLitModel m lit = do
+    getCtrlLitModel bias m lit = do
       resMb <- fromJust <$> eval m lit >>= getBoolValue
       case resMb of
-        Nothing -> return True
+        Nothing -> return bias
         Just b -> return b
   
-    minimize checked [] = return checked
-    minimize checked (lit:lits) = do
-      res <- local $ mapM_ assert (checked ++ lits) >> check
+    minimize lits = local $ minimize' [] lits
+    minimize' checked [] = return checked
+    minimize' checked (lit:lits) = do
+      res <- checkAssumptions lits
       case res of
-        Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
-        Unsat -> minimize checked lits -- lit can be omitted    
+        Sat -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
+        Unsat -> minimize' checked lits -- lit can be omitted    
         
-    maximize checked [] = return checked
-    maximize checked (lit:lits) = do
-      res <- local $ mapM_ assert (lit:checked) >> check
+    maximize checked rest = local $ mapM_ assert checked >> maximize' checked rest    
+    maximize' checked [] = return checked -- checked includes all literals and thus must be maximal
+    maximize' checked rest = do
+      mkOr rest >>= assert
+      (res, modelMb) <- getModel
       case res of
-        Sat -> maximize (lit:checked) lits -- still SAT with lit: add to the max satisfiable set
-        Unsat -> maximize checked lits -- let makes checked unsat      
+        Unsat -> return checked -- cannot add any literals, checked is maximal
+        Sat -> do -- found some literals to add; fix them and continue
+          (setRest, unsetRest) <- partitionM (getCtrlLitModel True (fromJust modelMb)) rest
+          mapM_ assert setRest
+          maximize' (checked ++ setRest) unsetRest
+          
+      
         
