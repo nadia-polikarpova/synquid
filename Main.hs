@@ -35,8 +35,7 @@ defaultParams = SolverParams {
     -- agressivePrune = True,
     -- semanticPrune = False,
     agressivePrune = False,    
-    candidatePickStrategy = InitializedCandidate,
-    -- candidatePickStrategy = UniformCandidate,
+    candidatePickStrategy = InitializedWeakCandidate,
     constraintPickStrategy = SmallSpaceConstraint
   }
   
@@ -49,7 +48,7 @@ main = do
             addSymbol (Var "dec") (FunctionT "x" nat (int (valueVar |=| Var "x" |-| IntLit 1))) .
             -- addSymbol (Var "id") (FunctionT "x" intAll (int (valueVar |=| Var "x"))) .
             addSymbol (Var "inc") (FunctionT "x" nat (int (valueVar |=| Var "x" |+| IntLit 1))) .
-            -- addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
+            addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
             -- addSymbol (Var "plus") (FunctionT "x" intAll $ FunctionT "y" (int ftrue) $ int (valueVar |=| Var "x" |+| Var "y")) .
             addSymbol (Var "const0") (FunctionT "x" intAll (int (valueVar |=| IntLit 0))) .
             -- addSymbol (Var "a") nat .
@@ -118,5 +117,5 @@ main = do
       -- return $ Binary op lhs rhs
     tq syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1] --, valueVar |=| fneg rhs]
+      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1, valueVar |=| fneg rhs]
     toSpace quals = QSpace quals (length quals)

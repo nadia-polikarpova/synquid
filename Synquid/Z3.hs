@@ -15,6 +15,8 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Bimap as Bimap
+import Data.Bimap (Bimap)
 
 import Control.Monad
 import Control.Monad.Trans
@@ -26,18 +28,43 @@ import System.IO.Unsafe
 
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
-  _mainEnv :: Z3Env,          -- ^ Z3 environment for the main solver
-  _intSort :: Maybe Sort,     -- ^ Int sort
-  _boolSort :: Maybe Sort,    -- ^ Boolean sort
-  _symbols :: Map Id Symbol,  -- ^ Variable symbols
-  _auxEnv :: Z3Env,           -- ^ Z3 environment for the auxiliary solver
-  _boolSortAux :: Maybe Sort  -- ^ Boolean sort
+  _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
+  _intSort :: Maybe Sort,                     -- ^ Int sort
+  _boolSort :: Maybe Sort,                    -- ^ Boolean sort
+  _symbols :: Map Id Symbol,                  -- ^ Variable symbols
+  _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
+  _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
+  _boolSortAux :: Maybe Sort,                 -- ^ Boolean sort in the auxiliary solver  
+  _controlLiteralsAux :: Bimap Formula AST    -- ^ Control literals for computing UNSAT cores in the auxiliary solver
 }
 
 makeLenses ''Z3Data
 
+initZ3Data env env' = Z3Data {
+  _mainEnv = env,
+  _intSort = Nothing,
+  _boolSort = Nothing,
+  _symbols = Map.empty,
+  _controlLiterals = Bimap.empty,
+  _auxEnv = env',
+  _boolSortAux = Nothing,
+  _controlLiteralsAux = Bimap.empty  
+} 
+
 type Z3State = StateT Z3Data IO
 
+-- | Get the literal in the auxiliary solver that corresponds to a given literal in the main solver
+litToAux :: AST -> Z3State AST
+litToAux lit = do
+  fml <- uses controlLiterals (Bimap.!> lit)
+  uses controlLiteralsAux (Bimap.! fml)
+
+-- | Get the literal in the main solver that corresponds to a given literal in the auxiliary solver  
+litFromAux :: AST -> Z3State AST
+litFromAux lit = do
+  fml <- uses controlLiteralsAux (Bimap.!> lit)
+  uses controlLiterals (Bimap.! fml)
+  
 instance MonadZ3 Z3State where
   getSolver = gets (envSolver . _mainEnv)
   getContext = gets (envContext . _mainEnv)
@@ -54,9 +81,9 @@ withAuxSolver c = do
 
 evalZ3State :: Z3State a -> IO a
 evalZ3State f = do
-  mainEnv <- newEnv (Just QF_AUFLIA) stdOpts
-  auxEnv <- newEnv (Just QF_AUFLIA) stdOpts
-  evalStateT f $ Z3Data mainEnv Nothing Nothing Map.empty auxEnv Nothing
+  env <- newEnv (Just QF_AUFLIA) stdOpts
+  env' <- newEnv (Just QF_AUFLIA) stdOpts
+  evalStateT f $ initZ3Data env env'
                 
 -- | Convert a first-order constraint to a Z3 AST.
 toZ3 :: Formula -> Z3State AST
@@ -157,85 +184,97 @@ getMinUnsatCore assumptions mustHaves fmls = do
         Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
         Unsat -> minimize checked lits -- lit can be omitted
         
--- | 'getAllMUSs' @assumption mustHaves fmls@ : find all minimal unsatisfiable subsets of @mustHaves@ union @fmls@, which contain all elements of @mustHaves@, assuming @assumption@
+-- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
-getAllMUSs :: Formula -> [Formula] -> [Formula] -> Z3State [[Formula]]
-getAllMUSs assumption mustHaves fmls = do
+getAllMUSs :: Formula -> Formula -> [Formula] -> Z3State [[Formula]]
+getAllMUSs assumption mustHave fmls = do
   push
   withAuxSolver push
-
-  bool <- fromJust <$> use boolSort
-  boolAux <- fromJust <$> use boolSortAux
-
-  let allFmls = mustHaves ++ fmls  
-  controlLits <- mkContolLits bool allFmls
-  controlLitsAux <- withAuxSolver $ mkContolLits boolAux allFmls
   
-  toZ3 assumption >>= assert
+  let allFmls = mustHave : fmls  
+  (controlLits, controlLitsAux) <- unzip <$> mapM getControlLits allFmls
+  
+  toZ3 assumption >>= assert 
   condAssumptions <- mapM toZ3 allFmls >>= zipWithM mkImplies controlLits  
-  mapM_ assert condAssumptions
-  
-  withAuxSolver $ mapM_ assert $ take (length mustHaves) controlLitsAux
+  mapM_ assert $ condAssumptions
+  withAuxSolver $ assert $ head controlLitsAux
     
-  res <- getAllMUSs' allFmls controlLits controlLitsAux (length mustHaves) []    
+  res <- getAllMUSs' controlLitsAux (head controlLits) []
   withAuxSolver $ pop 1
   pop 1  
   return res
   
   where
-    mkContolLits bool fmls = mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
-
-getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do      
-  seedMb <- (fmap $ both $ map litFromAux) <$> getNextSeed
+    getControlLits fml = do
+      litMb <- uses controlLiterals (Bimap.lookup fml)      
+      case litMb of
+        Just lit -> do
+          litAux <- uses controlLiteralsAux (Bimap.! fml)
+          return (lit, litAux)
+        Nothing -> do
+          bool <- fromJust <$> use boolSort
+          boolAux <- fromJust <$> use boolSortAux
+          name <- ((++ "lit") . show . Bimap.size) <$> use controlLiterals
+          lit <- mkStringSymbol name >>= flip mkConst bool
+          litAux <- withAuxSolver $ mkStringSymbol name >>= flip mkConst boolAux          
+          controlLiterals %= Bimap.insert fml lit
+          controlLiteralsAux %= Bimap.insert fml litAux
+          return (lit, litAux)          
+                    
+getAllMUSs' controlLitsAux mustHave cores = do      
+  seedMb <- getNextSeed
   case seedMb of
     Nothing -> return cores -- No uncovered subsets left, return the cores accumulated so far
-    Just (seed, rest) -> do
-      debug 2 (text "Seed" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` seed]) $ return ()
+    Just s -> do
+      (seed, rest) <- bothM (mapM litFromAux) s
+      mapM litToFml seed >>= debugOutput "Seed"
       res <- checkAssumptions seed  -- Check if seed is satisfiable
       case res of
-        Unsat -> do
+        Unsat -> do                 -- Unsatisfiable: extract MUS
           mus <- getUnsatCore >>= minimize
           blockUp mus
-          let unsatFmls = [a | (l, a) <- zip (drop mustHavesCount controlLits) (drop mustHavesCount fmls), l `elem` mus]          
-          if all (`elem` mus) (take mustHavesCount controlLits)
-            then debug 2 (text "MUS" <+> pretty unsatFmls) $ 
-                    getAllMUSs' fmls controlLits controlLitsAux mustHavesCount (unsatFmls : cores)
-            else debug 2 (text "MUSeless" <+> pretty unsatFmls) $ 
-                    getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
-        Sat -> do
-          mss <- maximize seed rest  -- Satisfiable: maximize
-          debug 2 (text "MSS" <+> pretty [a | (l, a) <- zip controlLits fmls, l `elem` mss]) $ return ()
-          if length mss == length controlLits
-            then return []  -- The conjunction of fmls is SAT: no UNSAT cores
+          unsatFmls <- mapM litToFml (delete mustHave mus)
+          if mustHave `elem` mus
+            then do
+                  debugOutput "MUS" unsatFmls
+                  getAllMUSs' controlLitsAux mustHave (unsatFmls : cores)
             else do
-              blockDown mss
-              getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores
+                  debugOutput "MUSeless" unsatFmls
+                  getAllMUSs' controlLitsAux mustHave cores
+        Sat -> do
+          mss <- maximize seed rest  -- Satisfiable: expand to MSS                    
+          blockDown mss
+          mapM litToFml mss >>= debugOutput "MSS"
+          getAllMUSs' controlLitsAux mustHave cores
               
   where
-    litToAux :: AST -> AST
-    litToAux lit = controlLitsAux !! fromJust (elemIndex lit controlLits)
+    -- | Get the formula mapped to a given control literal in the main solver
+    litToFml = uses controlLiterals . flip (Bimap.!>)
     
-    litFromAux :: AST -> AST
-    litFromAux lit = controlLits !! fromJust (elemIndex lit controlLitsAux)
-                  
+    -- | Get an unexplored subset of control literals inside the auxiliary solver
     getNextSeed = withAuxSolver $ do
-      (res, modelMb) <- getModel -- Get the next seed (uncovered subset of fmls)
+      (res, modelMb) <- getModel
       case res of
-        Unsat -> return Nothing -- No uncovered subsets left, return the cores accumulated so far
-        Sat -> Just <$> partitionM (getCtrlLitModel True (fromJust modelMb)) controlLitsAux
-        
+        Unsat -> return Nothing -- No unexplored subsets left
+        Sat -> Just <$> partitionM (getCtrlLitModel True (fromJust modelMb)) controlLitsAux -- Found unexplored subset: partition @controlLitsAux@ according to the model
+    
+    -- | Extract the Boolean value for literal @lit@ from the model @m@ with default @bias@
     getCtrlLitModel bias m lit = do
       resMb <- fromJust <$> eval m lit >>= getBoolValue
       case resMb of
         Nothing -> return bias
-        Just b -> return b
+        Just b -> return b        
         
-    -- | Remove all supersets of mus from unexplored sets
-    blockUp mus = withAuxSolver $ mapM (mkNot . litToAux) mus >>= mkOr >>= assert
-    
-    -- | Remove all subsets of mss from the unexplored set
-    blockDown mss = withAuxSolver $ mkOr (controlLitsAux \\ map litToAux mss) >>= assert
-  
+    -- | Mark all supersets of @mus@ explored
+    blockUp mus = withAuxSolver $ mapM (litToAux >=> mkNot) mus >>= mkOr >>= assert
+
+    -- | Mark all subsets of @mss@ explored
+    blockDown mss = withAuxSolver $ do
+      mss' <- mapM litToAux mss
+      let rest = controlLitsAux \\ mss'
+      (if null rest then mkFalse else mkOr rest) >>= assert        
+                  
+    -- | Shrink unsatisfiable set @lits@ to some MUS
     minimize lits = local $ minimize' [] lits
     minimize' checked [] = return checked
     minimize' checked (lit:lits) = do
@@ -244,6 +283,7 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
         Sat -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
         Unsat -> minimize' checked lits -- lit can be omitted    
         
+    -- | Grow satisfiable set @checked@ with literals from @rest@ to some MSS
     maximize checked rest = local $ mapM_ assert checked >> maximize' checked rest    
     maximize' checked [] = return checked -- checked includes all literals and thus must be maximal
     maximize' checked rest = do
@@ -255,6 +295,8 @@ getAllMUSs' fmls controlLits controlLitsAux mustHavesCount cores = do
           (setRest, unsetRest) <- partitionM (getCtrlLitModel True (fromJust modelMb)) rest
           mapM_ assert setRest
           maximize' (checked ++ setRest) unsetRest
+          
+    debugOutput label fmls = debug 2 (text label <+> pretty fmls) $ return ()
           
       
         

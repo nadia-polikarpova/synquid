@@ -35,7 +35,7 @@ solveWithParams params quals constraints = evalFixPointSolver go params
       greatestFixPoint quals' constraints
       
 -- | Strategies for picking the next candidate solution to strengthen
-data CandidatePickStrategy = FirstCandidate | UniformCandidate | InitializedCandidate
+data CandidatePickStrategy = FirstCandidate | InitializedWeakCandidate
       
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
@@ -106,16 +106,12 @@ greatestFixPoint quals constraints = do
       return $ Candidate sol (valids `Set.union` newValids) (otherInvalids `Set.union` newInvalids)
 
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
-    maxQCount = maximum . map Set.size . Map.elems    -- maximum number of qualifiers mapped to an unknown
-    minQCount = minimum . map Set.size . Map.elems    -- minimum number of qualifiers mapped to an unknown          
+    totalQCount = sum . map Set.size . Map.elems          -- total number of qualifiers in a solution
           
     pickCandidate :: [Candidate] -> CandidatePickStrategy -> (Candidate, [Candidate])
     pickCandidate (cand:rest) FirstCandidate = (cand, rest)
-    pickCandidate sols UniformCandidate = let
-        res = minimumBy (mappedCompare $ \(Candidate s valids invalids) -> (Set.size valids + Set.size invalids, maxQCount s - minQCount s)) sols  -- minimize the difference
-      in (res, delete res sols)
-    pickCandidate cands InitializedCandidate = let 
-        res = maximumBy (mappedCompare $ \(Candidate s valids invalids) -> nontrivCount s) cands  -- maximize the total number and minimize the difference
+    pickCandidate cands InitializedWeakCandidate = let 
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids) -> (nontrivCount s, - totalQCount s)) cands  -- maximize the umber of initialized unknowns and minimize strength
       in (res, delete res cands)
       
     pickConstraint (Candidate sol valids invalids) strategy = do
@@ -236,7 +232,7 @@ optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty
     parents candidate preds = map (flip Set.delete candidate) preds -- subsets of @candidate@ that together cover all potential remaining solutions    
     
 optimalValuationsMarco :: SMTSolver s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
-optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores fixedLhs [fixedRhs] qualsList)
+optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores fixedLhs fixedRhs qualsList)
   where
     qualsList = Set.toList quals
     fixedLhs = conjunction lhs

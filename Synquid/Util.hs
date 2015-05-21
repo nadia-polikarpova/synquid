@@ -26,6 +26,13 @@ both f (x1, x2) = (f x1, f x2)
 both2 :: (a -> b -> c) -> (a, a) -> (b, b) -> (c, c)
 both2 f (x1, x2) (y1, y2) = (f x1 y1, f x2 y2)
 
+-- | Map a monadic action on a pair
+bothM :: Monad m => (a -> m b) -> (a, a) -> m (b, b)
+bothM f (x1, x2) = do
+  y1 <- f x1
+  y2 <- f x2
+  return (y1, y2)
+
 -- | 'disjoint' @s1 s2@ : are @s1@ and @s2@ disjoint?
 disjoint :: Ord a => Set a -> Set a -> Bool
 disjoint s1 s2 = Set.null $ s1 `Set.intersection` s2
@@ -104,7 +111,7 @@ pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 {- Debug output -}
 
 -- | 'debugOutLevel' : Level above which debug output is ignored
-debugOutLevel = 1
+debugOutLevel = 0
 
 -- | 'debug' @level msg@ : output @msg@ at level @level@ 
 debug level msg = if level <= debugOutLevel then traceShow msg else id
