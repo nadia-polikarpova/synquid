@@ -1,4 +1,6 @@
-- Preprocess search spaces to extract unsat cores
+- Infer function search spaces from constants for bottom-up; block infeasible combinations right away
+- Solve the whole disjunctive constraint and keep it (even better, trim it)
+
 - Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct
 - Data types
 

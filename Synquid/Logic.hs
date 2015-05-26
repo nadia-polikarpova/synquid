@@ -45,6 +45,7 @@ data Formula =
   
 valueVarName = "_v"
 dontCare = "_"
+unknownName (Unknown _ name) = name
   
 ftrue = BoolLit True
 ffalse = BoolLit False

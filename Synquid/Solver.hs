@@ -70,40 +70,41 @@ greatestFixPoint quals constraints = do
   where
     go [] = return Nothing
     go candidates = do
-        (cand@(Candidate sol valids invalids), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
+        (cand@(Candidate sol _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
         constraint <- asks constraintPickStrategy >>= pickConstraint cand
-        let otherInvalids = Set.delete constraint invalids
         case constraint of
           Disjunctive disjuncts -> do
             debugOutputSplit candidates cand constraint $ return ()
-            newCandidates <- mapM (updateWithDisjuct sol valids otherInvalids) disjuncts
-            go $ newCandidates ++ rest
+            newCandidates <- mapM (updateWithDisjuct constraint cand) disjuncts
+            go (newCandidates ++ rest)
           Horn fml -> do
             let modifiedConstraint = instantiateRhs sol fml
             debugOutput candidates cand fml modifiedConstraint $ return ()
-            sols' <- strengthen quals modifiedConstraint sol
+            
+            diffs <- strengthen quals modifiedConstraint sol
                         
-            newCandidates <- mapM (updateCandidate constraint otherInvalids valids sol) sols'            
+            newCandidates <- mapM (updateCandidate constraint cand) diffs
             case find (Set.null . invalidConstraints) newCandidates of
               Just cand' -> return $ Just (solution cand') -- Solution found
-              Nothing -> go $ newCandidates ++ rest
+              Nothing -> go (newCandidates ++ rest)
               
     instantiateRhs sol fml = case fml of
       Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @constraint@
-    updateCandidate constraint otherInvalids valids sol sol' = do
-      let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) $ Map.unionWith Set.difference sol' sol
+    updateCandidate constraint (Candidate sol valids invalids) diff = do
+      let sol' = merge sol diff
+      let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) diff
       let (unaffectedValids, affectedValids) = Set.partition (\c -> clausePosUnknowns c `disjoint` modifiedUnknowns) valids
-      let (unaffectedInvalids, affectedInvalids) = Set.partition (\c -> clauseNegUnknowns c `disjoint` modifiedUnknowns) otherInvalids
+      let (unaffectedInvalids, affectedInvalids) = Set.partition (\c -> clauseNegUnknowns c `disjoint` modifiedUnknowns) (Set.delete constraint invalids)
       (newValids, newInvalids) <- setPartitionM (isValidClause . clauseApplySolution sol') $ affectedValids `Set.union` affectedInvalids
       return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids)
       
     -- | Re-evaluate each of @conjuncts@, extracted from a disjunctive constraint during splitting
-    updateWithDisjuct sol valids otherInvalids conjuncts = do
+    updateWithDisjuct constraint (Candidate sol valids invalids) conjuncts = do
       (newValids, newInvalids) <- both Set.fromList <$> partitionM (isValidClause . clauseApplySolution sol) (map Horn conjuncts)
-      return $ Candidate sol (valids `Set.union` newValids) (otherInvalids `Set.union` newInvalids)
+      return $ Candidate sol (valids `Set.union` newValids) (Set.delete constraint invalids `Set.union` newInvalids)
 
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
     totalQCount = sum . map Set.size . Map.elems          -- total number of qualifiers in a solution
@@ -111,7 +112,7 @@ greatestFixPoint quals constraints = do
     pickCandidate :: [Candidate] -> CandidatePickStrategy -> (Candidate, [Candidate])
     pickCandidate (cand:rest) FirstCandidate = (cand, rest)
     pickCandidate cands InitializedWeakCandidate = let 
-        res = maximumBy (mappedCompare $ \(Candidate s valids invalids) -> (nontrivCount s, - totalQCount s)) cands  -- maximize the umber of initialized unknowns and minimize strength
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the umber of initialized unknowns and minimize strength
       in (res, delete res cands)
       
     pickConstraint (Candidate sol valids invalids) strategy = do
@@ -121,14 +122,13 @@ greatestFixPoint quals constraints = do
         else case strategy of
           FirstConstraint -> return $ Set.findMin hs
           SmallSpaceConstraint -> do
-            -- let spaceSize c = maxValSize quals sol (Set.map (Unknown Map.empty) $ clauseNegUnknowns c)
-            let spaceSize (Horn fml) = maxValSize quals sol (unknownsOf fml)
+            let spaceSize (Horn fml) = maxValSize quals sol (unknownsOf (leftHandSide fml))
             return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList hs)
 
     debugOutput cands cand inv modified = debug 1 $ vsep [
       nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
-      text "Chosen candidate:" <+> pretty cand, 
-      text "Invalid Constraint:" <+> pretty inv, 
+      text "Chosen candidate:" <+> pretty cand,
+      text "Invalid Constraint:" <+> pretty inv,
       text "Strengthening:" <+> pretty modified]
       
     debugOutputSplit cands cand inv = debug 1 $ vsep [
@@ -149,8 +149,9 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
       (ifM (asks agressivePrune)
         (concatMap (splitting Map.!) <$> pruneValuations (Map.keys splitting))  -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))                             -- Prune per-variable
-      (return allSolutions) 
-    return $ map (merge sol) pruned
+      (return allSolutions)
+    debug 1 (text "Diffs:" $+$ vsep (map pretty pruned)) $ return ()
+    return pruned
   where
     unknowns = unknownsOf lhs
     knownConjuncts = conjunctsOf lhs Set.\\ unknowns

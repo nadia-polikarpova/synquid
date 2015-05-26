@@ -38,12 +38,15 @@ shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 -- | Insert trivial refinements
 refine :: SType -> RType
 refine (ScalarT base _) = ScalarT base ftrue
-refine (FunctionT _ tArg tFun) = FunctionT dontCare (refine tArg) (refine tFun) -- ToDo: do we care???
+refine (FunctionT _ tArg tFun) = FunctionT dontCare (refine tArg) (refine tFun)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType    
 renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var new)) fml)
 renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg) (renameVar old new tRes)
+
+typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
+typeConjunction var (FunctionT x tArg tRes) = FunctionT x tArg (typeConjunction var tRes)
 
 -- | Typing environment
 data Environment = Environment {
