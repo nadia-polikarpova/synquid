@@ -27,7 +27,9 @@ trivialGen = const emptyQSpace
 
 -- | Parameters of constraint generation
 data ConsGenParams = ConsGenParams {
-  bottomUp :: Bool                                       -- ^ Should types be propagated bottom-up as opposed to top-down?
+  bottomUp :: Bool,                                       -- ^ Should types be propagated bottom-up as opposed to top-down?
+  abstractLeaves :: Bool,
+  abstractFix :: Bool  
 }
 
 -- | 'genConstraints' @params cq tq env typ templ@ : given parameters @params@, search space generators for conditionals and types @cq@ and @tq@,
@@ -79,21 +81,25 @@ addConstraint c = modify (\(i, cs) -> (i, c:cs))
 -- for a program of type @t@ following @templ@ in the typing environment @env@
 constraintsTopDown :: Environment -> RType -> Template -> Generator LiquidProgram
 constraintsTopDown env t (PSymbol _) = do
-  -- t' <- freshRefinements t
-  let t' = t
+  abstract <- asks abstractLeaves
+  t' <- if abstract then freshRefinements t else return t
   let symbols = symbolsByShape (shape t') env
-  let leafFml = Map.mapWithKey (fmlForSymbol t') symbols
-  let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t') symbols
-  addConstraint $ WellFormedSymbol disjuncts
+  let leafFml = Map.mapWithKey (fmlForSymbol abstract t') symbols
+  let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol abstract t') symbols  
+  if abstract
+    then do
+      case t of
+        ScalarT _ _ -> addConstraint $ WellFormedScalar env t'
+        FunctionT _ _ _ -> (addConstraint $ WellFormedSymbol disjuncts) >> (addConstraint $ WellFormed (clearSymbols $ clearAssumptions env) t')      
+      addConstraint $ Subtype env t' t
+    else addConstraint $ WellFormedSymbol disjuncts  
   return $ PSymbol leafFml
-  -- case t of
-    -- ScalarT _ _ -> return (PSymbol leafFml, [WellFormedScalar env t', Subtype env t' t])
-    -- FunctionT _ _ _ -> return (PSymbol leafFml, [WellFormedSymbol disjuncts, WellFormed (clearSymbols $ clearAssumptions env) t', Subtype env t' t])
   where    
-    -- constraintForSymbol t symb symbT = Subtype (clearSymbols $ clearAssumptions env) (symbolType symb symbT) t
-    constraintForSymbol t symb symbT = Subtype env (symbolType symb symbT) t
-    fmlForSymbol t symb symbT = let         
-        fmls = map fromHorn $ lefts $ map (toFormula trivialGen trivialGen) $ split (constraintForSymbol t symb symbT)
+    constraintForSymbol abstract t symb symbT = if abstract
+                                                  then Subtype emptyEnv (symbolType symb symbT) t
+                                                  else Subtype env (symbolType symb symbT) t
+    fmlForSymbol abstract t symb symbT = let         
+        fmls = map fromHorn $ lefts $ map (toFormula trivialGen trivialGen) $ split (constraintForSymbol abstract t symb symbT)
       in conjunction $ Set.fromList fmls
     symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
     symbolType _ t = t      
@@ -117,14 +123,10 @@ constraintsTopDown env t (PIf _ thenTempl elseTempl) = do
   addConstraint $ WellFormedCond env cond
   return $ PIf cond pThen pElse
 constraintsTopDown env t (PFix _ bodyTemp) = do
-  f <- freshId "_f"  
-  -- t' <- freshRefinements t
-  -- let env' = addSymbol (Var f) t' env
-  -- (pBody, cs) <- constraintsTopDown env' t' bodyTemp
-  -- return (PFix f pBody, cs ++ [WellFormed env t', Subtype env t' t])    
-  
-  -- t'@(FunctionT x tArg tRes) <- freshRefinements t
-  let (FunctionT x tArg tRes) = t
+  abstract <- asks abstractFix
+  t' <- if abstract then freshRefinements t else return t
+  f <- freshId "_f"
+  let (FunctionT x tArg tRes) = t'
   m <- freshId "_m"
   y <- freshId "_x"  
   let (ScalarT IntT fml) = tArg
@@ -132,7 +134,8 @@ constraintsTopDown env t (PFix _ bodyTemp) = do
   let tArg'' = ScalarT IntT (fml |&| (valueVar |=| Var m))
   let env' = addSymbol (Var f) (FunctionT y tArg' (renameVar x y tRes)) . addRank (Var m) $ env
   pBody <- constraintsTopDown env' (FunctionT x tArg'' tRes) bodyTemp
-  return $ PFix f pBody -- ++ [WellFormed (clearRanks env) t', Subtype env t' t])    
+  when abstract $ (addConstraint $ WellFormed (clearRanks env) t') >> (addConstraint $ Subtype env t' t)
+  return $ PFix f pBody
   
 -- | 'constraintsBottomUp' @env templ@ : a liquid program, its type, and typing constraints 
 -- for a program following @templ@ in the typing environment @env@  

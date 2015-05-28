@@ -28,7 +28,9 @@ intAll = int ftrue
 toSpace quals = QSpace quals (length quals)
 
 consGenParams = ConsGenParams {
-  bottomUp = True
+  bottomUp = True,
+  abstractLeaves = True,
+  abstractFix = True
 }
 
 -- | Search parameters
@@ -193,10 +195,10 @@ testAddition = do
                 -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
   
   let cq syms = do
-      lhs <- syms
-      op <- [Le]
-      rhs <- [IntLit 0]
-      guard $ lhs /= rhs
+      lhs <- syms ++ [IntLit 0]
+      op <- [Le, Ge, Neq]
+      rhs <- syms ++ [IntLit 0]
+      guard $ lhs < rhs
       return $ Binary op lhs rhs  
   let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]
   let tq1 syms = do
