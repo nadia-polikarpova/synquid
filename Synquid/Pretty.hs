@@ -32,11 +32,14 @@ module Synquid.Pretty (
   braces,
   angles,
   spaces,
-    -- * Indentation
+  -- * Indentation
   nest,
   -- * Structures
   hMapDoc,
-  vMapDoc  
+  vMapDoc,
+  -- * Other
+  programDoc,
+  candidateDoc
 ) where
 
 import Synquid.Logic
@@ -185,15 +188,19 @@ prettyClause (Disjunctive disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\
 instance Pretty Clause where
   pretty = prettyClause
 
-programDoc :: (Pretty v, Pretty s, Pretty c) => Program v s c -> Doc
-programDoc (PSymbol s) = pretty s
-programDoc (PApp f x) = parens (pretty f <+> pretty x)
-programDoc (PFun x e) = parens (text "\\" <> pretty x <+> text "." <+> pretty e)
-programDoc (PIf c t e) = parens (pretty c <+> text "?" <+> programDoc t <+> text ":" <+> programDoc e)
-programDoc (PFix f e) = parens (text "let rec" <+> pretty f <+> text "=" <+> pretty e)
+programDoc :: (s -> Doc) -> (c -> Doc) -> (t -> Doc) -> Program s c t -> Doc
+programDoc sdoc cdoc tdoc (Program p typ) = let 
+    pDoc = programDoc sdoc cdoc tdoc
+    withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
+  in case p of
+    PSymbol s -> withType $ sdoc s
+    PApp f x -> parens (pDoc f <+> pDoc x)
+    PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
+    PIf c t e -> nest 2 $ withType (cdoc c <+> text "?") $+$ pDoc t <+> text ":" $+$ pDoc e
+    PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
 
-instance (Pretty v, Pretty s, Pretty c) => Pretty (Program v s c) where
-  pretty = programDoc
+instance (Pretty s, Pretty c, Pretty t) => Pretty (Program s c t) where
+  pretty = programDoc pretty pretty pretty
   
 instance (Pretty v, Pretty s, Pretty c) => Show (Program v s c) where
   show = show . pretty
@@ -204,7 +211,7 @@ instance Pretty BaseType where
   
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
-prettySType (FunctionT _ t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2  
+prettySType (FunctionT _ t1 t2) = parens $ pretty t1 <+> text "->" <+> pretty t2 
 
 instance Pretty SType where
   pretty = prettySType
@@ -213,8 +220,9 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
-prettyType (ScalarT base fml) = braces $ text valueVarName <> text ":" <> pretty base <+> text "|" <+> pretty fml
-prettyType (FunctionT x t1 t2) = parens $ text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2
+-- prettyType (ScalarT base fml) = braces $ text valueVarName <> text ":" <> pretty base <+> text "|" <+> pretty fml
+prettyType (ScalarT base fml) = pretty fml
+prettyType (FunctionT x t1 t2) = text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2
 
 instance Pretty RType where
   pretty = prettyType
@@ -243,7 +251,13 @@ instance Pretty Constraint where
   pretty = prettyConstraint
   
 instance Pretty LeafConstraint where
-  pretty = hMapDoc pretty pretty
+  pretty = const empty
   
 instance Pretty Candidate where
-  pretty (Candidate sol valids invalids) = pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))
+  pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))  
+    
+candidateDoc :: LiquidProgram -> Candidate -> Doc
+candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc (const empty) condDoc typDoc prog
+  where
+    condDoc fml = pretty $ applySolution sol fml
+    typDoc t = pretty $ typeApplySolution sol t

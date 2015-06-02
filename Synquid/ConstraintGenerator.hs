@@ -37,13 +37,13 @@ data ConsGenParams = ConsGenParams {
 -- generate a set of constraints, a search space map for the unknowns inside those constraints, and a liquid program,
 -- such that a valid solution for the constraints would turn the liquid program into a simple program of type @typ@.
 genConstraints :: ConsGenParams -> QualsGen -> QualsGen -> Environment -> RType -> Template -> ([Clause], QMap, LiquidProgram)
-genConstraints params cq tq env typ templ = if bottomUp params
+genConstraints params cq tq env t templ = if bottomUp params
                                               then runReader (evalStateT goBottomUp (0, [])) params
                                               else runReader (evalStateT goTopDown (0, [])) params
   where
     goTopDown :: Generator ([Clause], QMap, LiquidProgram)
     goTopDown = do
-      p <- constraintsTopDown env typ templ
+      p <- constraintsTopDown env t templ
       cs <- gets snd
       let cs' = concatMap split cs
       let (clauses, qmap) = toFormulas cq tq cs'
@@ -51,8 +51,8 @@ genConstraints params cq tq env typ templ = if bottomUp params
       
     goBottomUp :: Generator ([Clause], QMap, LiquidProgram)
     goBottomUp = do
-      (p, t) <- constraintsBottomUp env templ
-      addConstraint $ Subtype env t typ
+      p <- constraintsBottomUp env templ
+      addConstraint $ Subtype env (typ p) t
       cs <- gets snd
       let cs' = concatMap split cs
       let (clauses, qmap) = toFormulas cq tq cs'
@@ -78,118 +78,115 @@ addConstraint c = modify (\(i, cs) -> (i, c:cs))
 -- | 'constraintsTopDown' @env t templ@ : a liquid program and typing constraints 
 -- for a program of type @t@ following @templ@ in the typing environment @env@
 constraintsTopDown :: Environment -> RType -> Template -> Generator LiquidProgram
-constraintsTopDown env t (PSymbol s) = do
-  abstract <- asks abstractLeaves
-  t' <- if abstract then freshRefinements t else return t
-  let symbols = symbolsByShape s env
-  let leafFml = Map.mapWithKey (fmlForSymbol abstract t') symbols
-  let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol abstract t') symbols  
-  if abstract  
-    then do
-      addConstraint $ WellFormedLeaf t' (Map.elems $ Map.mapWithKey symbolType symbols)
-      when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-      addConstraint $ Subtype env t' t
-    else addConstraint $ WellFormedSymbol disjuncts  
-  return $ PSymbol leafFml
-  where    
-    constraintForSymbol abstract t symb symbT = if abstract
-                                                  then Subtype emptyEnv (symbolType symb symbT) t
-                                                  else Subtype env (symbolType symb symbT) t
-    fmlForSymbol abstract t symb symbT = let         
-        fmls = map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split (constraintForSymbol abstract t symb symbT)
-      in conjunction $ Set.fromList fmls
-    symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
-    symbolType _ t = t      
-constraintsTopDown env t (PApp funTempl argTempl) = do
-  x <- freshId "_x"
-  tArg <- freshRefinements $ refine $ sTypeOf argTempl
-  let tFun = FunctionT x tArg t
-  fun <- constraintsTopDown env tFun funTempl
-  arg <- constraintsTopDown env tArg argTempl     
-  addConstraint $ WellFormed (clearRanks env) tArg
-  return $ PApp fun arg
-constraintsTopDown env t (PFun _ bodyTempl) = do
-  let (FunctionT x tArg tRes) = t
-  let env' = addSymbol (Var x) tArg env
-  pBody <- constraintsTopDown env' tRes bodyTempl
-  return $ PFun x pBody
-constraintsTopDown env t (PIf _ thenTempl elseTempl) = do
-  cond <- Unknown Map.empty <$> freshId "_u"
-  pThen <- constraintsTopDown (addAssumption cond env) t thenTempl
-  pElse <- constraintsTopDown (addNegAssumption cond env) t elseTempl
-  addConstraint $ WellFormedCond env cond
-  return $ PIf cond pThen pElse
-constraintsTopDown env t (PFix _ bodyTemp) = do
-  abstract <- asks abstractFix
-  t' <- if abstract then freshRefinements t else return t
-  f <- freshId "_f"
-  let (FunctionT x tArg tRes) = t'
-  m <- freshId "_m"
-  y <- freshId "_x"  
-  let (ScalarT IntT fml) = tArg
-  let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var m))
-  let tArg'' = ScalarT IntT (fml |&| (valueVar |=| Var m))
-  let env' = addSymbol (Var f) (FunctionT y tArg' (renameVar x y tRes)) . addRank (Var m) $ env
-  pBody <- constraintsTopDown env' (FunctionT x tArg'' tRes) bodyTemp
-  when abstract $ (addConstraint $ WellFormed (clearRanks env) t') >> (addConstraint $ Subtype env t' t)
-  return $ PFix f pBody
+constraintsTopDown env t (Program templ s) = case templ of
+  PSymbol _ -> do
+    abstract <- asks abstractLeaves
+    t' <- if abstract then freshRefinements t else return t
+    let symbols = symbolsByShape s env
+    let leafConstraint = Map.mapWithKey (constraintForSymbol abstract t') symbols
+    let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol abstract t') symbols  
+    if abstract  
+      then do
+        addConstraint $ WellFormedLeaf t' (Map.elems $ Map.mapWithKey symbolType symbols)
+        when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+        addConstraint $ Subtype env t' t
+      else addConstraint $ WellFormedSymbol disjuncts  
+    return $ Program (PSymbol leafConstraint) t'
+    where    
+      constraintForSymbol abstract t symb symbT = if abstract
+                                                    then Subtype emptyEnv (symbolType symb symbT) t
+                                                    else Subtype env (symbolType symb symbT) t
+      symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
+      symbolType _ t = t      
+  PApp funTempl argTempl -> do
+    x <- freshId "_x"
+    tArg <- freshRefinements $ refine $ argType s
+    let tFun = FunctionT x tArg t
+    fun <- constraintsTopDown env tFun funTempl
+    arg <- constraintsTopDown env tArg argTempl     
+    addConstraint $ WellFormed (clearRanks env) tArg
+    return $ Program (PApp fun arg) t
+  PFun _ bodyTempl -> do
+    let (FunctionT x tArg tRes) = t
+    let env' = addSymbol (Var x) tArg env
+    pBody <- constraintsTopDown env' tRes bodyTempl
+    return $ Program (PFun x pBody) t
+  PIf _ thenTempl elseTempl -> do
+    cond <- Unknown Map.empty <$> freshId "_u"
+    pThen <- constraintsTopDown (addAssumption cond env) t thenTempl
+    pElse <- constraintsTopDown (addNegAssumption cond env) t elseTempl
+    addConstraint $ WellFormedCond env cond
+    return $ Program (PIf cond pThen pElse) t
+  PFix _ bodyTempl -> do
+    abstract <- asks abstractFix
+    t' <- if abstract then freshRefinements t else return t
+    f <- freshId "_f"
+    let (FunctionT x tArg tRes) = t'
+    m <- freshId "_m"
+    y <- freshId "_x"  
+    let (ScalarT IntT fml) = tArg
+    let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var m))
+    let tArg'' = ScalarT IntT (fml |&| (valueVar |=| Var m))
+    let env' = addSymbol (Var f) (FunctionT y tArg' (renameVar x y tRes)) . addRank (Var m) $ env
+    pBody <- constraintsTopDown env' (FunctionT x tArg'' tRes) bodyTempl
+    when abstract $ (addConstraint $ WellFormed (clearRanks env) t') >> (addConstraint $ Subtype env t' t)
+    return $ Program (PFix f pBody) t'
   
 -- | 'constraintsBottomUp' @env templ@ : a liquid program, its type, and typing constraints 
 -- for a program following @templ@ in the typing environment @env@  
-constraintsBottomUp :: Environment -> Template -> Generator (LiquidProgram, RType)
-constraintsBottomUp env (PSymbol s) = do
-  t <- freshRefinements $ refine s
-  let symbols = symbolsByShape s env
-  let leafFml = Map.mapWithKey (fmlForSymbol t) symbols
-  let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols
-  
-  addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-  when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-  return (PSymbol leafFml, t)
-  where    
-    constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
-    fmlForSymbol t symb symbT = let         
-        fmls = map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split (constraintForSymbol t symb symbT)
-      in conjunction $ Set.fromList fmls
-    symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
-    symbolType _ t = t
-constraintsBottomUp env (PApp funTempl argTempl) = do
-  (fun, FunctionT x tArg tRes) <- constraintsBottomUp env funTempl
-  (arg, tArg') <- constraintsBottomUp env argTempl
-  addConstraint $ Subtype env tArg' tArg
-  return (PApp fun arg, typeConjunction (renameVar valueVarName x tArg') tRes)
-constraintsBottomUp env templ@(PFun _ bodyTempl) = do
-  t@(FunctionT x tArg tRes) <- freshRefinements $ refine $ sTypeOf templ
-  let env' = addSymbol (Var x) tArg env
-  (pBody, tRes') <- constraintsBottomUp env' bodyTempl
-  addConstraint $ WellFormed env t
-  addConstraint $ Subtype env' tRes' tRes
-  return (PFun x pBody, t)
-constraintsBottomUp env (PIf _ thenTempl elseTempl) = do
-  t <- freshRefinements $ refine $ sTypeOf thenTempl
-  cond <- Unknown Map.empty <$> freshId "_u"
-  let envThen = addAssumption cond env
-  let envElse = addNegAssumption cond env
-  (pThen, tThen) <- constraintsBottomUp envThen thenTempl
-  (pElse, tElse) <- constraintsBottomUp envElse elseTempl
-  addConstraint $ WellFormed (clearRanks env) t
-  addConstraint $ WellFormedCond env cond
-  addConstraint $ Subtype envThen tThen t
-  addConstraint $ Subtype envElse tElse t  
-  return (PIf cond pThen pElse, t)
-constraintsBottomUp env (PFix s bodyTemp) = do
-  t@(FunctionT x tArg tRes) <- freshRefinements $ refine s
-  f <- freshId "_f"
-  m <- freshId "_m"
-  y <- freshId "_x"  
-  let (ScalarT IntT fml) = tArg
-  let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var m))
-  let tArg'' = ScalarT IntT (fml |&| (valueVar |=| Var m))
-  let env' = addSymbol (Var f) (FunctionT y tArg' (renameVar x y tRes)) . addRank (Var m) $ env
-  (pBody, t') <- constraintsBottomUp env' bodyTemp
-  addConstraint $ WellFormed env t
-  addConstraint $ Subtype env t' (FunctionT x tArg'' tRes)
-  return (PFix f pBody, t)  
+constraintsBottomUp :: Environment -> Template -> Generator LiquidProgram
+constraintsBottomUp env (Program templ s) = case templ of
+  PSymbol _ -> do
+    t <- freshRefinements $ refine s
+    let symbols = symbolsByShape s env
+    let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
+    let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols
+    
+    addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
+    when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+    return $ Program (PSymbol leafConstraint) t
+    where    
+      constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
+      symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
+      symbolType _ t = t
+  PApp funTempl argTempl -> do
+    fun <- constraintsBottomUp env funTempl
+    arg <- constraintsBottomUp env argTempl
+    let FunctionT x tArg tRes = typ fun
+    addConstraint $ Subtype env (typ arg) tArg
+    return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName x $ typ arg) tRes)
+  PFun _ bodyTempl -> do
+    t@(FunctionT x tArg tRes) <- freshRefinements $ refine s
+    let env' = addSymbol (Var x) tArg env
+    pBody <- constraintsBottomUp env' bodyTempl
+    addConstraint $ WellFormed env t
+    addConstraint $ Subtype env' (typ pBody) tRes
+    return $ Program (PFun x pBody) t
+  PIf _ thenTempl elseTempl -> do
+    t <- freshRefinements $ refine s
+    cond <- Unknown Map.empty <$> freshId "_u"
+    let envThen = addAssumption cond env
+    let envElse = addNegAssumption cond env
+    pThen <- constraintsBottomUp envThen thenTempl
+    pElse <- constraintsBottomUp envElse elseTempl
+    addConstraint $ WellFormed (clearRanks env) t
+    addConstraint $ WellFormedCond env cond
+    addConstraint $ Subtype envThen (typ pThen) t
+    addConstraint $ Subtype envElse (typ pElse) t  
+    return $ Program (PIf cond pThen pElse) t
+  PFix _ bodyTempl -> do
+    t@(FunctionT x tArg tRes) <- freshRefinements $ refine s
+    f <- freshId "_f"
+    m <- freshId "_m"
+    y <- freshId "_x"  
+    let (ScalarT IntT fml) = tArg
+    let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var m))
+    let tArg'' = ScalarT IntT (fml |&| (valueVar |=| Var m))
+    let env' = addSymbol (Var f) (FunctionT y tArg' (renameVar x y tRes)) . addRank (Var m) $ env
+    pBody <- constraintsBottomUp env' bodyTempl
+    addConstraint $ WellFormed env t
+    addConstraint $ Subtype env (typ pBody) (FunctionT x tArg'' tRes)
+    return $ Program (PFix f pBody) t
       
 -- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
@@ -234,15 +231,16 @@ toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
 extract :: SMTSolver s => LiquidProgram -> Solution -> MaybeT s SimpleProgram
-extract prog sol = case prog of
+extract (Program prog t) sol = (flip Program (typeApplySolution sol t)) <$> case prog of
   PSymbol leafConstraint -> msum $ map extractSymbol (Map.toList $ leafConstraint)     
   PApp pFun pArg -> liftM2 PApp (extract pFun sol) (extract pArg sol)
   PFun x pBody -> liftM (PFun x) (extract pBody sol)
   PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (extract pThen sol) (extract pElse sol)      
   PFix f pBody -> liftM (PFix f) (extract pBody sol)
   where
-    extractSymbol :: SMTSolver s => (Formula, Formula) -> MaybeT s SimpleProgram
-    extractSymbol (symb, fml) = do   
+    extractSymbol :: SMTSolver s => (Formula, Constraint) -> MaybeT s (BareProgram Formula Formula RType)
+    extractSymbol (symb, c) = do   
+      let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split c
       let fml' = applySolution sol fml
       res <- debug 1 (text "Check symbol" <+> pretty symb <+> parens (pretty fml) <+> pretty fml') $ lift $ isValid fml'
       if res then debug 1 (text "OK") $ return (PSymbol symb) else debug 1 (text "MEH") $ mzero    

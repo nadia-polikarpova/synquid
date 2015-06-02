@@ -33,6 +33,7 @@ type RType = TypeSkeleton Formula
 isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
+resType (FunctionT _ _ t) = t
 
 -- | Forget refinements
 shape :: RType -> SType  
@@ -51,6 +52,9 @@ renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg)
 
 typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
 typeConjunction var (FunctionT x tArg tRes) = FunctionT x tArg (typeConjunction var tRes)
+
+typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
+typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
 -- | Typing environment
 data Environment = Environment {
@@ -102,41 +106,41 @@ embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -
     embedBinding _ _ = Set.empty
     
 -- | Program skeletons parametrized by information stored in bound variable positions, symbols, and conditionals
-data Program v s c =
-  PSymbol s |                             -- ^ Symbol (variable or constant)
-  PApp (Program v s c) (Program v s c) |  -- ^ Function application
-  PFun v (Program v s c) |                -- ^ Lambda abstraction
-  PIf c (Program v s c) (Program v s c) | -- ^ Conditional
-  PFix v (Program v s c)                  -- ^ Fixpoint
+data BareProgram s c t =
+  PSymbol s |                         -- ^ Symbol (variable or constant)
+  PApp (Program s c t) (Program s c t) |  -- ^ Function application
+  PFun Id (Program s c t) |             -- ^ Lambda abstraction
+  PIf c (Program s c t) (Program s c t) | -- ^ Conditional
+  PFix Id (Program s c t)               -- ^ Fixpoint
+  
+data Program s c t = Program {
+  content :: BareProgram s c t,
+  typ :: t
+}
     
 -- | Program templates (skeleton + unrefined types of symbols)
-type Template = Program SType SType ()
+type Template = Program () () SType
 
 -- | Fully defined programs 
-type SimpleProgram = Program Id Formula Formula
+type SimpleProgram = Program Formula Formula RType
 
--- | For each symbol, the necessary condition for the symbol to be a solution at a given leaf
-type LeafConstraint = Map Formula Formula
+-- | For each symbol, a sufficient condition for the symbol to be a solution at a given leaf
+type LeafConstraint = Map Formula Constraint
 
 -- | Programs where conditions and symbols are represented by constraints with unknowns
-type LiquidProgram = Program Id LeafConstraint Formula
+type LiquidProgram = Program LeafConstraint Formula RType
 
--- | Simple type of a program template
-sTypeOf :: Template -> SType
-sTypeOf (PSymbol t) = t
-sTypeOf (PApp fun _) = let (FunctionT _ _ t) = sTypeOf fun in t
-sTypeOf (PFun t p) = FunctionT dontCare t (sTypeOf p)
-sTypeOf (PIf _ p _) = sTypeOf p
-sTypeOf (PFix t _) = t
-
+-- | Building type shapes
 int = ScalarT IntT
 int_ = int ()
 (|->|) = FunctionT dontCare
-sym = PSymbol
-choice = PIf ()
-(|$|) = PApp
-(|.|) = PFun
-fix_ = PFix 
+
+-- | Building program templates
+sym s = Program (PSymbol ()) s
+(|$|) fun arg = let (FunctionT _ _ t) = typ fun in Program (PApp fun arg) t
+(|.|) s p = Program (PFun dontCare p) (FunctionT dontCare s (typ p))
+choice t e = Program (PIf () t e) (typ t)
+fix_ s p = Program (PFix dontCare p) s
 
 infixr 5 |->|
 infixr 5 |$|

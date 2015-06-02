@@ -222,6 +222,7 @@ clauseNegUnknowns = snd . clausePosNegUnknowns
 data Candidate = Candidate {
     solution :: Solution,
     validConstraints :: Set Clause,
-    invalidConstraints :: Set Clause
+    invalidConstraints :: Set Clause,
+    label :: String
   } deriving (Eq, Ord)  
 

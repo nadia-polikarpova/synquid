@@ -25,14 +25,14 @@ import Control.Lens hiding (both)
 evalFixPointSolver = runReaderT
 
 -- | 'solveWithParams' @params quals constraints@: 'greatestFixPoint' @quals constraints@ with solver parameters @params@
-solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Clause] -> s (Maybe Solution)
-solveWithParams params quals constraints = evalFixPointSolver go params
+solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Clause] -> (Candidate -> Doc) -> s (Maybe Solution)
+solveWithParams params quals constraints candidateDoc = evalFixPointSolver go params
   where
     go = do      
       quals' <- ifM (asks pruneQuals)
         (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
         (return quals)
-      greatestFixPoint quals' constraints
+      greatestFixPoint quals' constraints candidateDoc
       
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | InitializedWeakCandidate
@@ -59,52 +59,61 @@ type FixPointSolver s a = ReaderT SolverParams s a
 {- Implementation -}
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
-greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> FixPointSolver s (Maybe Solution)
-greatestFixPoint quals constraints = do
+greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> (Candidate -> Doc) -> FixPointSolver s (Maybe Solution)
+greatestFixPoint quals constraints candidateDoc = do
     debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty constraints)) $ return ()
     let sol0 = topSolution quals
     (valids, invalids) <- partitionM (isValidClause . clauseApplySolution sol0) constraints
     if null invalids
       then return $ Just sol0
-      else go [Candidate sol0 (Set.fromList valids) (Set.fromList invalids)]
+      else go [Candidate sol0 (Set.fromList valids) (Set.fromList invalids) "0"]
   where
     go [] = return Nothing
     go candidates = do
-        (cand@(Candidate sol _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
+        (cand@(Candidate sol _ _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
         constraint <- asks constraintPickStrategy >>= pickConstraint cand
         case constraint of
           Disjunctive disjuncts -> do
             debugOutputSplit candidates cand constraint $ return ()
-            newCandidates <- mapM (updateWithDisjuct constraint cand) disjuncts
+            newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
             go (newCandidates ++ rest)
-          Horn fml -> do
+          Horn fml -> do            
             let modifiedConstraint = instantiateRhs sol fml
             debugOutput candidates cand fml modifiedConstraint $ return ()
             
             diffs <- strengthen quals modifiedConstraint sol
                         
-            newCandidates <- mapM (updateCandidate constraint cand) diffs
+            (newCandidates, rest') <- if length diffs == 1
+              then do -- Propagate the diff to all equivalent candidates
+                let unknowns = Set.map unknownName $ unknownsOf fml
+                let (equivs, nequivs) = partition (\(Candidate s _ _ _) -> restrictDomain unknowns s == restrictDomain unknowns sol) rest
+                nc <- mapM (\c -> updateCandidate constraint c diffs (head diffs)) (cand : equivs)
+                return (nc, nequivs)
+              else do -- Only update the current candidate
+                nc <- mapM (updateCandidate constraint cand diffs) diffs
+                return (nc, rest)
             case find (Set.null . invalidConstraints) newCandidates of
               Just cand' -> return $ Just (solution cand') -- Solution found
-              Nothing -> go (newCandidates ++ rest)
+              Nothing -> go (newCandidates ++ rest')
               
     instantiateRhs sol fml = case fml of
       Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @constraint@
-    updateCandidate constraint (Candidate sol valids invalids) diff = do
+    updateCandidate constraint (Candidate sol valids invalids label) diffs diff = do
       let sol' = merge sol diff
       let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) diff
       let (unaffectedValids, affectedValids) = Set.partition (\c -> clausePosUnknowns c `disjoint` modifiedUnknowns) valids
       let (unaffectedInvalids, affectedInvalids) = Set.partition (\c -> clauseNegUnknowns c `disjoint` modifiedUnknowns) (Set.delete constraint invalids)
       (newValids, newInvalids) <- setPartitionM (isValidClause . clauseApplySolution sol') $ affectedValids `Set.union` affectedInvalids
-      return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids)
+      let newLabel = if length diffs == 1 then label else label ++ "." ++ show (fromJust $ elemIndex diff diffs)
+      return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) newLabel
       
     -- | Re-evaluate each of @conjuncts@, extracted from a disjunctive constraint during splitting
-    updateWithDisjuct constraint (Candidate sol valids invalids) conjuncts = do
+    updateWithDisjuct constraint (Candidate sol valids invalids label) (conjuncts, index) = do
       (newValids, newInvalids) <- both Set.fromList <$> partitionM (isValidClause . clauseApplySolution sol) (map Horn conjuncts)
-      return $ Candidate sol (valids `Set.union` newValids) (Set.delete constraint invalids `Set.union` newInvalids)
+      return $ Candidate sol (valids `Set.union` newValids) (Set.delete constraint invalids `Set.union` newInvalids) (label ++ ".d" ++ show index)
 
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
     totalQCount = sum . map Set.size . Map.elems          -- total number of qualifiers in a solution
@@ -112,10 +121,10 @@ greatestFixPoint quals constraints = do
     pickCandidate :: [Candidate] -> CandidatePickStrategy -> (Candidate, [Candidate])
     pickCandidate (cand:rest) FirstCandidate = (cand, rest)
     pickCandidate cands InitializedWeakCandidate = let 
-        res = maximumBy (mappedCompare $ \(Candidate s valids invalids) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the umber of initialized unknowns and minimize strength
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the umber of initialized unknowns and minimize strength
       in (res, delete res cands)
       
-    pickConstraint (Candidate sol valids invalids) strategy = do
+    pickConstraint (Candidate sol valids invalids _) strategy = do
       let (ds, hs) = Set.partition isDisjunctive invalids
       if Set.null hs
         then return $ Set.findMin ds
@@ -126,14 +135,14 @@ greatestFixPoint quals constraints = do
             return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList hs)
 
     debugOutput cands cand inv modified = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
-      text "Chosen candidate:" <+> pretty cand,
+      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
+      text "Chosen candidate:" <+> candidateDoc cand,
       text "Invalid Constraint:" <+> pretty inv,
       text "Strengthening:" <+> pretty modified]
       
     debugOutputSplit cands cand inv = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
-      text "Chosen candidate:" <+> pretty cand, 
+      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
+      text "Chosen candidate:" <+> candidateDoc cand, 
       text "Splitting Invalid Constraint:" <+> pretty inv]      
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
@@ -147,8 +156,8 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
-        (concatMap (splitting Map.!) <$> pruneValuations (Map.keys splitting))  -- Prune LHS valuations and then return the splits of only optimal valuations
-        (pruneSolutions unknownsList allSolutions))                             -- Prune per-variable
+        (concatMap (splitting Map.!) <$> pruneValuations usedLhsQuals (Map.keys splitting))   -- Prune LHS valuations and then return the splits of only optimal valuations
+        (pruneSolutions unknownsList allSolutions))                                           -- Prune per-variable
       (return allSolutions)
     debug 1 (text "Diffs:" $+$ vsep (map pretty pruned)) $ return ()
     return pruned
@@ -262,8 +271,8 @@ pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM
   in prune isSubsumed
   
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another pValuation in @vals@   
-pruneValuations :: SMTSolver s => [Valuation] -> FixPointSolver s [Valuation] 
-pruneValuations = let isSubsumed val vals = let fml = conjunction val in anyM (\v -> isValidFml $ fml |=>| conjunction v) vals
+pruneValuations :: SMTSolver s => Set Formula -> [Valuation] -> FixPointSolver s [Valuation] 
+pruneValuations assumptions = let isSubsumed val vals = let fml = conjunction (val `Set.union` assumptions) in anyM (\v -> isValidFml $ fml |=>| conjunction v) vals
   in prune isSubsumed
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@

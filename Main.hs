@@ -19,7 +19,7 @@ import qualified Data.Bimap as BMap
 import Data.Bimap (Bimap)
 import Control.Monad
 import Control.Lens
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 
@@ -54,8 +54,8 @@ solverParams = SolverParams {
 synthesize env typ templ cq tq = do
   let (clauses, qmap, p) = genConstraints consGenParams (toSpace . cq) (toSpace . tq) env typ templ
   
-  -- putStr "Liquid Program\n"
-  -- print $ pretty p
+  putStr "Liquid Program\n"
+  print $ pretty p
   -- putStr "\nConstraints\n"
   -- print $ vsep $ map pretty clauses
   putStr "\nQmap\n"
@@ -64,13 +64,13 @@ synthesize env typ templ cq tq = do
   
   mProg <- evalZ3State $ do
     initSolver
-    mSol <- solveWithParams solverParams qmap clauses
+    mSol <- solveWithParams solverParams qmap clauses (candidateDoc p)
     case mSol of
       Nothing -> return Nothing
       Just sol -> debug 0 (pretty sol) $ runMaybeT $ extract p sol  
   case mProg of
     Nothing -> putStr "No Solution"
-    Just prog -> print $ pretty prog
+    Just prog -> print $ programDoc pretty pretty (const empty) prog
   
 testApp = do
   let env = addSymbol (Var "a") intAll .
@@ -190,12 +190,12 @@ testAddition = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valueVar |=| Var "y" |+| Var "z")
-  -- let templ = fix_ (int_ |->| int_ |->| int_) (int_ |.| int_ |.| choice 
-                -- (sym int_) 
-                -- (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
-  let templ = int_ |.| (fix_ (int_ |->| int_) (int_ |.| choice 
+  let templ = fix_ (int_ |->| int_ |->| int_) (int_ |.| int_ |.| choice 
                 (sym int_) 
-                (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
+                (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
+  -- let templ = int_ |.| (fix_ (int_ |->| int_) (int_ |.| choice 
+                -- (sym int_) 
+                -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
   
   let cq syms = do
       lhs <- syms ++ [IntLit 0]
