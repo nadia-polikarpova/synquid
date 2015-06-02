@@ -30,6 +30,10 @@ type SType = TypeSkeleton ()
 -- | Refinement types  
 type RType = TypeSkeleton Formula
 
+isFunctionType (FunctionT _ _ _) = True
+isFunctionType _ = False
+argType (FunctionT _ t _) = t
+
 -- | Forget refinements
 shape :: RType -> SType  
 shape (ScalarT base _) = ScalarT base ()
@@ -142,6 +146,9 @@ infixr 4 |.|
 data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
-  | WellFormedSymbol [[Constraint]]
-  | WellFormedScalar Environment RType
+  | WellFormedLeaf RType [RType]
+  | WellFormedSymbol [[Constraint]]  
+  
+isWFLeaf (WellFormedLeaf _ _) = True
+isWFLeaf _ = False  
   

@@ -1,4 +1,6 @@
-- Infer function search spaces from constants for bottom-up; block infeasible combinations right away
+- Better debugging: print liquid program instead of solution, identify solutions to represent backtracking
+- Fix \y.fix and top down
+- Block infeasible combinations of symbol qualifiers right away
 - Solve the whole disjunctive constraint and keep it (even better, trim it)
 
 - Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct

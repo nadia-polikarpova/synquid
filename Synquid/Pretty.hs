@@ -236,8 +236,8 @@ prettyConstraint :: Constraint -> Doc
 prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
-prettyConstraint (WellFormedScalar env t) = prettyBindings env <+> text "|-" <+> pretty t <+> text "IS SCALAR"
 prettyConstraint (WellFormedSymbol disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
+prettyConstraint (WellFormedLeaf t ts) = nest 2 $ pretty t <+> text "ONE OF" $+$ (vsep $ map pretty ts)
   
 instance Pretty Constraint where
   pretty = prettyConstraint

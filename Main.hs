@@ -96,7 +96,8 @@ testApp2 = do
   let templ = sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_  
   let tq syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1]
+      [valueVar |=| rhs]
+      -- [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1]
         
   synthesize env typ templ (const []) tq
   
@@ -109,7 +110,8 @@ testLambda = do
   let tq0 = [valueVar |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1]
+      [valueVar |=| rhs]
+      -- [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1]
         
   synthesize env typ templ (const []) (\syms -> tq0 ++ tq1 syms)
   
@@ -172,10 +174,12 @@ testPeano = do
       rhs <- syms ++ [IntLit 0]
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
-  let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]
+  let tq0 = [valueVar |>=| IntLit 0]
+  -- let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1, valueVar |=| fneg rhs]
+      [valueVar |=| rhs]
+      -- [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1, valueVar |=| fneg rhs]
         
   synthesize env typ templ cq (\syms -> tq0 ++ tq1 syms)
   
@@ -186,13 +190,12 @@ testAddition = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valueVar |=| Var "y" |+| Var "z")
-  let templ = fix_ (int_ |->| int_ |->| int_) (int_ |.| int_ |.| choice 
-                (sym int_) 
-                (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
-  -- let typ = FunctionT "y" nat $ (FunctionT "z" nat $ int (valueVar |=| Var "y" |+| Var "z"))
-  -- let templ = int_ |.| (fix_ (int_ |->| int_) (int_ |.| choice 
+  -- let templ = fix_ (int_ |->| int_ |->| int_) (int_ |.| int_ |.| choice 
                 -- (sym int_) 
-                -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
+                -- (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
+  let templ = int_ |.| (fix_ (int_ |->| int_) (int_ |.| choice 
+                (sym int_) 
+                (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
   
   let cq syms = do
       lhs <- syms ++ [IntLit 0]
@@ -203,13 +206,13 @@ testAddition = do
   let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |=| rhs |-| IntLit 1, valueVar |=| rhs |+| IntLit 1]
+      [valueVar |=| rhs]
+      -- [valueVar |=| rhs, valueVar |=| rhs |-| IntLit 1, valueVar |=| rhs |+| IntLit 1]
   let tq2 syms = do
       rhs1 <- syms
       rhs2 <- syms
       guard $ rhs1 /= rhs2
       [valueVar |=| rhs1 |+| rhs2]
-      -- [valueVar |=| rhs1 |+| rhs2, valueVar |=| rhs1 |+| rhs2 |-| IntLit 1]
       -- [valueVar |=| rhs1 |+| rhs2, valueVar |=| rhs1 |+| rhs2 |+| IntLit 1, valueVar |=| rhs1 |+| rhs2 |-| IntLit 1]
         
   synthesize env typ templ cq (\syms -> tq0 ++ tq1 syms ++ tq2 syms)

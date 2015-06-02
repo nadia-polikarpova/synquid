@@ -46,8 +46,7 @@ genConstraints params cq tq env typ templ = if bottomUp params
       p <- constraintsTopDown env typ templ
       cs <- gets snd
       let cs' = concatMap split cs
-      let (clauses, qspaces) = partitionEithers $ map (toFormula cq tq) cs'
-      let qmap = Map.unions qspaces      
+      let (clauses, qmap) = toFormulas cq tq cs'
       debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (clauses, qmap, p)
       
     goBottomUp :: Generator ([Clause], QMap, LiquidProgram)
@@ -56,8 +55,7 @@ genConstraints params cq tq env typ templ = if bottomUp params
       addConstraint $ Subtype env t typ
       cs <- gets snd
       let cs' = concatMap split cs
-      let (clauses, qspaces) = partitionEithers $ map (toFormula cq tq) cs'
-      let qmap = Map.unions qspaces      
+      let (clauses, qmap) = toFormulas cq tq cs'
       debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (clauses, qmap, p)
 
 {- Implementation -}
@@ -80,17 +78,16 @@ addConstraint c = modify (\(i, cs) -> (i, c:cs))
 -- | 'constraintsTopDown' @env t templ@ : a liquid program and typing constraints 
 -- for a program of type @t@ following @templ@ in the typing environment @env@
 constraintsTopDown :: Environment -> RType -> Template -> Generator LiquidProgram
-constraintsTopDown env t (PSymbol _) = do
+constraintsTopDown env t (PSymbol s) = do
   abstract <- asks abstractLeaves
   t' <- if abstract then freshRefinements t else return t
-  let symbols = symbolsByShape (shape t') env
+  let symbols = symbolsByShape s env
   let leafFml = Map.mapWithKey (fmlForSymbol abstract t') symbols
   let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol abstract t') symbols  
-  if abstract
+  if abstract  
     then do
-      case t of
-        ScalarT _ _ -> addConstraint $ WellFormedScalar env t'
-        FunctionT _ _ _ -> (addConstraint $ WellFormedSymbol disjuncts) >> (addConstraint $ WellFormed (clearSymbols $ clearAssumptions env) t')      
+      addConstraint $ WellFormedLeaf t' (Map.elems $ Map.mapWithKey symbolType symbols)
+      when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
       addConstraint $ Subtype env t' t
     else addConstraint $ WellFormedSymbol disjuncts  
   return $ PSymbol leafFml
@@ -99,7 +96,7 @@ constraintsTopDown env t (PSymbol _) = do
                                                   then Subtype emptyEnv (symbolType symb symbT) t
                                                   else Subtype env (symbolType symb symbT) t
     fmlForSymbol abstract t symb symbT = let         
-        fmls = map fromHorn $ lefts $ map (toFormula trivialGen trivialGen) $ split (constraintForSymbol abstract t symb symbT)
+        fmls = map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split (constraintForSymbol abstract t symb symbT)
       in conjunction $ Set.fromList fmls
     symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
     symbolType _ t = t      
@@ -140,23 +137,19 @@ constraintsTopDown env t (PFix _ bodyTemp) = do
 -- | 'constraintsBottomUp' @env templ@ : a liquid program, its type, and typing constraints 
 -- for a program following @templ@ in the typing environment @env@  
 constraintsBottomUp :: Environment -> Template -> Generator (LiquidProgram, RType)
-constraintsBottomUp env (PSymbol t) = do
-  t' <- freshRefinements $ refine t
-  let symbols = symbolsByShape t env
-  let leafFml = Map.mapWithKey (fmlForSymbol t') symbols
-  let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t') symbols
-  case t of
-    ScalarT _ _ -> do
-      addConstraint $ WellFormedScalar env t'
-      return (PSymbol leafFml, t')
-    FunctionT _ _ _ -> do
-      addConstraint $ WellFormedSymbol disjuncts
-      addConstraint $ WellFormed (clearSymbols $ clearAssumptions env) t'
-      return (PSymbol leafFml, t') -- ToDo: use space union for all symbols as a search space
+constraintsBottomUp env (PSymbol s) = do
+  t <- freshRefinements $ refine s
+  let symbols = symbolsByShape s env
+  let leafFml = Map.mapWithKey (fmlForSymbol t) symbols
+  let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols
+  
+  addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
+  when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+  return (PSymbol leafFml, t)
   where    
-    constraintForSymbol t symb symbT = Subtype  (clearSymbols $ clearAssumptions env) (symbolType symb symbT) t
+    constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
     fmlForSymbol t symb symbT = let         
-        fmls = map fromHorn $ lefts $ map (toFormula trivialGen trivialGen) $ split (constraintForSymbol t symb symbT)
+        fmls = map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split (constraintForSymbol t symb symbT)
       in conjunction $ Set.fromList fmls
     symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
     symbolType _ t = t
@@ -179,7 +172,7 @@ constraintsBottomUp env (PIf _ thenTempl elseTempl) = do
   let envElse = addNegAssumption cond env
   (pThen, tThen) <- constraintsBottomUp envThen thenTempl
   (pElse, tElse) <- constraintsBottomUp envElse elseTempl
-  addConstraint $ WellFormed env t
+  addConstraint $ WellFormed (clearRanks env) t
   addConstraint $ WellFormedCond env cond
   addConstraint $ Subtype envThen tThen t
   addConstraint $ Subtype envElse tElse t  
@@ -203,27 +196,40 @@ split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
   split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol (Var y) tArg2 env) (renameVar x y tRes1) tRes2)
 split (WellFormed env (FunctionT x tArg tRes)) = 
-  split (WellFormed env tArg) ++ split (WellFormed (addSymbol (Var x) tArg (set ranks [] env)) tRes)
+  split (WellFormed env tArg) ++ split (WellFormed (addSymbol (Var x) tArg (clearRanks env)) tRes)
+split (WellFormedLeaf (FunctionT x tArg tRes) ts) =
+  split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y x tRes') ts))
 split (WellFormedSymbol disjuncts)
   | length disjuncts == 1   = concatMap split (head disjuncts)
   | otherwise               = [WellFormedSymbol $ map (concatMap split) disjuncts]
 split c = [c]
 
+toFormulas :: QualsGen -> QualsGen -> [Constraint] -> ([Clause], QMap)
+toFormulas cq tq cs = let (leafCs, nodeCs) = partition isWFLeaf cs
+  in execState (mapM_ (toFormula cq tq) nodeCs >> mapM_ (toFormula cq tq) leafCs) ([], Map.empty)
+
 -- | 'toFormula' @cq tq c@ : translate simple typing constraint @c@ into either a logical constraint or an element of the search space,
 -- given search space generators @cq@ and @tq@
-toFormula :: QualsGen -> QualsGen -> Constraint -> Either Clause QMap
+toFormula :: QualsGen -> QualsGen -> Constraint -> State ([Clause], QMap) ()
 toFormula _ _ (Subtype env (ScalarT IntT fml) (ScalarT IntT fml')) =
   let (poss, negs) = embedding env 
-  in Left $ Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)
+  in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
 toFormula _ tq (WellFormed env (ScalarT IntT (Unknown _ u))) = 
-  Right $ Map.singleton u $ tq ((Map.keys $ symbolsByShape (ScalarT IntT ()) env) ++ env^.ranks)
+  _2 %= Map.insert u (tq ((Map.keys $ symbolsByShape (ScalarT IntT ()) env) ++ env^.ranks))
 toFormula cq _ (WellFormedCond env (Unknown _ u)) = 
-  Right $ Map.singleton u $ cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
-toFormula _ _ (WellFormedScalar env (ScalarT IntT (Unknown _ u))) = 
-  let quals = map (valueVar |=|) (Map.keys $ symbolsByShape (ScalarT IntT ()) env)
-  in Right $ Map.singleton u $ QSpace quals (length quals)
+  _2 %= Map.insert u (cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env))
 toFormula _ _ (WellFormedSymbol disjuncts) =
-  Left $ Disjunctive $ map (map fromHorn . lefts . map (toFormula trivialGen trivialGen)) disjuncts   
+  _1 %= ((Disjunctive $ map (map fromHorn . fst . toFormulas trivialGen trivialGen) disjuncts) :)
+toFormula _ _ (WellFormedLeaf (ScalarT IntT (Unknown _ u)) ts) = do
+  quals <- (Set.toList . Set.unions) <$> mapM qualsFromType ts
+  _2 %= Map.insert u (QSpace quals (length quals))
+  where
+    qualsFromType (ScalarT IntT fml) = Set.unions <$> mapM spaceFromQual (Set.toList $ conjunctsOf fml)
+    spaceFromQual q@(Unknown _ _) = do
+      qmap <- gets snd
+      return $ Set.fromList $ lookupQualsSubst qmap q
+    spaceFromQual (BoolLit True) = return $ Set.empty
+    spaceFromQual q = return $ Set.singleton q  
 toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
 -- | 'extract' @prog sol@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
