@@ -43,7 +43,7 @@ shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 -- | Insert trivial refinements
 refine :: SType -> RType
 refine (ScalarT base _) = ScalarT base ftrue
-refine (FunctionT _ tArg tFun) = FunctionT dontCare (refine tArg) (refine tFun)
+refine (FunctionT x tArg tFun) = FunctionT x (refine tArg) (refine tFun)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType    
@@ -61,26 +61,17 @@ data Environment = Environment {
   _symbols :: Map Formula RType,                -- ^ Variables and constants (with their refinement types)
   _symbolsOfShape :: Map SType (Set Formula),   -- ^ Variables and constants indexed by their simple type
   _assumptions :: Set Formula,                  -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula,               -- ^ Negative unknown assumptions
-  _ranks :: [Formula]                           -- ^ Ranking functions
+  _negAssumptions :: Set Formula                -- ^ Negative unknown assumptions
 }
 
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
-emptyEnv = Environment Map.empty Map.empty Set.empty Set.empty []
+emptyEnv = Environment Map.empty Map.empty Set.empty Set.empty
 
 -- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
 addSymbol :: Formula -> RType -> Environment -> Environment
 addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertWith (Set.union) (shape t) (Set.singleton sym))
-
--- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
-addRank :: Formula -> Environment -> Environment
-addRank r = ranks %~ (r :)
-
-clearSymbols = set symbols Map.empty . set symbolsOfShape Map.empty
-clearAssumptions = set assumptions Set.empty . set negAssumptions Set.empty
-clearRanks = set ranks []
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x = valueVar |=| Var x
@@ -138,9 +129,9 @@ int_ = int ()
 -- | Building program templates
 sym s = Program (PSymbol ()) s
 (|$|) fun arg = let (FunctionT _ _ t) = typ fun in Program (PApp fun arg) t
-(|.|) s p = Program (PFun dontCare p) (FunctionT dontCare s (typ p))
+(|.|) x p = Program (PFun x p) (FunctionT x int_ (typ p))
 choice t e = Program (PIf () t e) (typ t)
-fix_ s p = Program (PFix dontCare p) s
+fix_ f p = Program (PFix f p) (typ p)
 
 infixr 5 |->|
 infixr 5 |$|

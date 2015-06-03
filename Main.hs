@@ -106,7 +106,7 @@ testLambda = do
             addSymbol (Var "inc") (FunctionT "x" nat (int (valueVar |=| Var "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = FunctionT "a" nat $ int (valueVar |=| Var "a")
-  let templ = int_ |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
+  let templ = "a" |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
   let tq0 = [valueVar |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
@@ -118,7 +118,7 @@ testLambda = do
 testMax2 = do
   let env = emptyEnv
   let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ int (valueVar |>=| Var "x" |&| valueVar |>=| Var "y")
-  let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
+  let templ = "x" |.| "y" |.| choice (sym int_) (sym int_)
   
   let cq syms = do
       lhs <- syms
@@ -140,7 +140,7 @@ testAbs = do
             addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
             id $ emptyEnv
   let typ = FunctionT "x" intAll $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
-  let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
+  let templ = "x" |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   let cq syms = do
       lhs <- syms
@@ -164,7 +164,7 @@ testPeano = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ int (valueVar |=| Var "y")
-  let templ = fix_ (int_ |->| int_) (int_ |.| choice 
+  let templ = fix_ "f" ("y" |.| choice 
                 (sym (int_ |->| int_) |$| sym int_)
                 (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
   
@@ -190,10 +190,10 @@ testAddition = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valueVar |=| Var "y" |+| Var "z")
-  let templ = fix_ (int_ |->| int_ |->| int_) (int_ |.| int_ |.| choice 
+  let templ = fix_ "plus" ("y" |.| "z" |.| choice 
                 (sym int_) 
                 (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
-  -- let templ = int_ |.| (fix_ (int_ |->| int_) (int_ |.| choice 
+  -- let templ = "y" |.| (fix_ "plus" ("z" |.| choice 
                 -- (sym int_) 
                 -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
   

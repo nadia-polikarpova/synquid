@@ -78,10 +78,10 @@ greatestFixPoint quals constraints candidateDoc = do
             newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
             go (newCandidates ++ rest)
           Horn fml -> do            
-            let modifiedConstraint = instantiateRhs sol fml
-            debugOutput candidates cand fml modifiedConstraint $ return ()
-            
+            let modifiedConstraint = instantiateRhs sol fml                        
             diffs <- strengthen quals modifiedConstraint sol
+            
+            debugOutput candidates cand fml modifiedConstraint $ return ()
                         
             (newCandidates, rest') <- if length diffs == 1
               then do -- Propagate the diff to all equivalent candidates
@@ -159,7 +159,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
         (concatMap (splitting Map.!) <$> pruneValuations usedLhsQuals (Map.keys splitting))   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))                                           -- Prune per-variable
       (return allSolutions)
-    debug 1 (text "Diffs:" $+$ vsep (map pretty pruned)) $ return ()
+    debug 1 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned)) $ return ()
     return pruned
   where
     unknowns = unknownsOf lhs
