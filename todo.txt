@@ -1,7 +1,4 @@
-- Fix \y.fix and top down
 - Block infeasible combinations of symbol qualifiers right away
-- Solve the whole disjunctive constraint and keep it (even better, trim it)
-
 - Do not treat neg assumptions as RHS (this enables vacuous branches!)
 
 - Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct

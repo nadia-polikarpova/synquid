@@ -35,7 +35,7 @@ solveWithParams params quals constraints candidateDoc = evalFixPointSolver go pa
       greatestFixPoint quals' constraints candidateDoc
       
 -- | Strategies for picking the next candidate solution to strengthen
-data CandidatePickStrategy = FirstCandidate | InitializedWeakCandidate
+data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate
       
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
@@ -78,15 +78,13 @@ greatestFixPoint quals constraints candidateDoc = do
             newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
             go (newCandidates ++ rest)
           Horn fml -> do            
-            let modifiedConstraint = instantiateRhs sol fml                        
-            diffs <- strengthen quals modifiedConstraint sol
-            
+            let modifiedConstraint = instantiateRhs sol fml 
             debugOutput candidates cand fml modifiedConstraint $ return ()
-                        
+            diffs <- strengthen quals modifiedConstraint sol                        
             (newCandidates, rest') <- if length diffs == 1
               then do -- Propagate the diff to all equivalent candidates
                 let unknowns = Set.map unknownName $ unknownsOf fml
-                let (equivs, nequivs) = partition (\(Candidate s _ _ _) -> restrictDomain unknowns s == restrictDomain unknowns sol) rest
+                let (equivs, nequivs) = partition (\(Candidate s valids invalids _) -> restrictDomain unknowns s == restrictDomain unknowns sol && Set.member constraint invalids) rest
                 nc <- mapM (\c -> updateCandidate constraint c diffs (head diffs)) (cand : equivs)
                 return (nc, nequivs)
               else do -- Only update the current candidate
@@ -120,8 +118,11 @@ greatestFixPoint quals constraints candidateDoc = do
           
     pickCandidate :: [Candidate] -> CandidatePickStrategy -> (Candidate, [Candidate])
     pickCandidate (cand:rest) FirstCandidate = (cand, rest)
+    pickCandidate cands WeakCandidate = let 
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (- totalQCount s)) cands  -- minimize strength
+      in (res, delete res cands)
     pickCandidate cands InitializedWeakCandidate = let 
-        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the umber of initialized unknowns and minimize strength
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the number of initialized unknowns and minimize strength
       in (res, delete res cands)
       
     pickConstraint (Candidate sol valids invalids _) strategy = do
