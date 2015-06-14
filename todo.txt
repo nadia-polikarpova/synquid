@@ -1,4 +1,5 @@
-- Measures
+- Recursion on lists
+- Sets
 - Case
 - Polymorphism
 - Higher-order functions

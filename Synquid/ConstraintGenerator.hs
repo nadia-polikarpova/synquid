@@ -23,7 +23,7 @@ import Control.Monad.Trans.Maybe
 type QualsGen = [Formula] -> QSpace
 
 -- | Empty state space generator
-trivialGen = const emptyQSpace
+emptyGen = const emptyQSpace
 
 -- | Parameters of constraint generation
 data ConsGenParams = ConsGenParams {
@@ -71,7 +71,7 @@ freshRefinements (ScalarT base _) = do
   k <- freshId "_u"  
   return $ ScalarT base (Unknown Map.empty k)
 freshRefinements (FunctionT x tArg tFun) = do
-  liftM3 FunctionT (freshId "_x") (freshRefinements tArg) (freshRefinements tFun)
+  liftM3 FunctionT (freshId ("_" ++ show (baseType tArg))) (freshRefinements tArg) (freshRefinements tFun)
   
 addConstraint c = modify (\(i, cs) -> (i, c:cs))  
   
@@ -208,11 +208,11 @@ toFormula _ _ (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml')) | baseT ==
   = let (poss, negs) = embedding env 
   in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
 toFormula _ tq (WellFormed env (ScalarT baseT (Unknown _ u))) = 
-  _2 %= Map.insert u (tq ((map (Var baseT) $ Map.keys $ symbolsByShape (ScalarT baseT ()) env)))
-toFormula cq _ (WellFormedCond env (Unknown _ u)) = -- TODO: allow conditions over other scalar variables
-  _2 %= Map.insert u (cq (map (Var IntT) $ Map.keys $ symbolsByShape (ScalarT IntT ()) env))
+  debug 0 (text "tq" <> parens (pretty u) <+> pretty (Var baseT valueVarName : allScalars env) <+> text "->" <+> pretty (tq $ Var baseT valueVarName : allScalars env)) $ _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
+toFormula cq _ (WellFormedCond env (Unknown _ u)) =
+  _2 %= Map.insert u (cq $ allScalars env)
 toFormula _ _ (WellFormedSymbol disjuncts) =
-  _1 %= ((Disjunctive $ map (map fromHorn . fst . toFormulas trivialGen trivialGen) disjuncts) :)
+  _1 %= ((Disjunctive $ map (map fromHorn . fst . toFormulas emptyGen emptyGen) disjuncts) :)
 toFormula _ _ (WellFormedLeaf (ScalarT baseT (Unknown _ u)) ts) = do
   spaces <- mapM qualsFromType ts
   let quals = Set.toList $ Set.unions $ spaces
@@ -238,7 +238,7 @@ extract (Program prog t) sol = (flip Program (typeApplySolution sol t)) <$> case
   where
     extractSymbol :: SMTSolver s => (Id, Constraint) -> MaybeT s (BareProgram Id Formula RType)
     extractSymbol (symb, c) = do   
-      let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split c
+      let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas emptyGen emptyGen $ split c
       let fml' = applySolution sol fml
       res <- debug 1 (text "Check symbol" <+> pretty symb <+> parens (pretty fml) <+> pretty fml') $ lift $ isValid fml'
       if res then debug 1 (text "OK") $ return (PSymbol symb) else debug 1 (text "MEH") $ mzero    

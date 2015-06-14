@@ -31,8 +31,9 @@ data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
   _intSort :: Maybe Sort,                     -- ^ Int sort
   _boolSort :: Maybe Sort,                    -- ^ Boolean sort
-  _listSort :: Maybe Sort,                    -- ^ Sort fo integer lists
-  _symbols :: Map Id Symbol,                  -- ^ Variable symbols
+  _listSort :: Maybe Sort,                    -- ^ Sort for integer lists
+  _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
+  _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
   _boolSortAux :: Maybe Sort,                 -- ^ Boolean sort in the auxiliary solver  
@@ -46,7 +47,8 @@ initZ3Data env env' = Z3Data {
   _intSort = Nothing,
   _boolSort = Nothing,
   _listSort = Nothing, 
-  _symbols = Map.empty,
+  _vars = Map.empty,
+  _measures = Map.empty,
   _controlLiterals = Bimap.empty,
   _auxEnv = env',
   _boolSortAux = Nothing,
@@ -97,7 +99,14 @@ toZ3 expr = case expr of
   Unknown _ ident -> error $ unwords ["toZ3: encountered a second-order unknown", ident]
   Unary op e -> toZ3 e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)  
+  Measure b ident arg -> do
+    decl <- measure b ident (baseTypeOf arg)
+    mapM toZ3 [arg] >>= mkApp decl
   where
+    sort BoolT = fromJust <$> use boolSort
+    sort IntT = fromJust <$> use intSort
+    sort ListT = fromJust <$> use listSort
+  
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
     unOp Not = mkNot
@@ -119,19 +128,38 @@ toZ3 expr = case expr of
         Implies -> mkImplies
         Iff -> mkIff
     list2 o x y = o [x, y]
-    
+      
+    -- | Lookup or create a variable with name `ident' and type `baseT' 
     var baseT ident = do
-      sort <- case baseT of
-        IntT -> fromJust <$> use intSort
-        ListT -> fromJust <$> use listSort
-      symbMb <- uses symbols (Map.lookup ident)
-      symb <- case symbMb of
-        Just s -> return s
+      s <- sort baseT
+      varMb <- uses vars (Map.lookup ident)
+            
+      case varMb of
+        Just v -> do
+          s' <- getSort v
+          if s == s'
+            then return v
+            else createVar baseT ident
+        Nothing -> createVar baseT ident
+
+    -- | Create and cache a variable with name `ident' and type `baseT'
+    createVar baseT ident = do
+      symb <- mkStringSymbol ident
+      v <- sort baseT >>= mkConst symb
+      vars %= Map.insert ident v
+      return v        
+      
+    -- | Lookup or create a measure declaration with name `ident', type `baseT', and argument type `argType'
+    measure baseT ident argType = do
+      declMb <- uses measures (Map.lookup ident)
+      case declMb of
+        Just d -> return d
         Nothing -> do
-          s <- mkStringSymbol ident
-          symbols %= Map.insert ident s
-          return s
-      mkConst symb sort
+          symb <- mkStringSymbol ident
+          argSort <- sort argType
+          decl <- sort baseT >>= mkFuncDecl symb [argSort]
+          measures %= Map.insert ident decl
+          return decl      
           
 instance SMTSolver Z3State where
   initSolver = do

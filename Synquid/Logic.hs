@@ -45,7 +45,7 @@ data Formula =
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
-  Measure BaseType Id [Formula]       -- ^ Measure application
+  Measure BaseType Id Formula         -- ^ Measure application
   deriving (Eq, Ord)
   
 valueVarName = "_v"
@@ -86,6 +86,7 @@ varsOf :: Formula -> Set Id
 varsOf (Var _ ident) = Set.singleton ident
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
+varsOf (Measure _ _ e) = varsOf e
 varsOf _ = Set.empty
 
 -- | 'unknownsOf' @fml@ : set of all predicate unknowns of @fml@
@@ -115,6 +116,20 @@ rightHandSide (Binary _ _ r) = r
 conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
 conjunctsOf f = Set.singleton f
 
+-- | Base type of a term in the refinement logic
+baseTypeOf :: Formula -> BaseType
+baseTypeOf (BoolLit _)                        = BoolT
+baseTypeOf (IntLit _)                         = IntT
+baseTypeOf (Var b _ )                         = b
+baseTypeOf (Unknown _ _)                      = BoolT
+baseTypeOf (Unary op _)
+  | op == Neg                                 = IntT
+  | otherwise                                 = BoolT
+baseTypeOf (Binary op _ _)
+  | op == Times || op == Plus || op == Minus  = IntT
+  | otherwise                                 = BoolT
+baseTypeOf (Measure b _ _)                    = b
+
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
@@ -124,6 +139,7 @@ substitute subst fml = case fml of
   Unknown s name -> Unknown (s `compose` subst) name 
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
+  Measure b name arg -> Measure b name (substitute subst arg)
   otherwise -> fml
   where
     compose old new = if Map.null old

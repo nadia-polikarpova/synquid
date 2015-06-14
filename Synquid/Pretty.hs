@@ -109,6 +109,14 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 
 {- Formulas -}
 
+instance Pretty BaseType where
+  pretty IntT = text "int"
+  pretty BoolT = text "bool"  
+  pretty ListT = text "list"
+  
+instance Show BaseType where
+  show = show . pretty  
+
 instance Pretty UnOp where
   pretty Neg = text "-"
   pretty Not = text "!"
@@ -160,6 +168,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
+    Measure b ident arg -> text ident <+> pretty arg
   )
   where
     n' = power fml
@@ -204,10 +213,6 @@ instance (Pretty s, Pretty c, Pretty t) => Pretty (Program s c t) where
   
 instance (Pretty v, Pretty s, Pretty c) => Show (Program v s c) where
   show = show . pretty
-
-instance Pretty BaseType where
-  pretty IntT = text "int"
-  pretty BoolT = text "bool"  
   
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
@@ -251,6 +256,7 @@ instance Pretty Constraint where
   pretty = prettyConstraint
   
 instance Pretty LeafConstraint where
+  -- pretty c = hMapDoc pretty pretty c
   pretty = const empty
   
 instance Pretty Candidate where

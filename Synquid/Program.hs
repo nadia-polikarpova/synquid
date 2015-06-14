@@ -77,6 +77,10 @@ varRefinement x b = Var b valueVarName |=| Var b x
 symbolsByShape :: SType -> Environment -> Map Id RType
 symbolsByShape s env = restrictDomain (Map.findWithDefault Set.empty s (env ^. symbolsOfShape)) (env ^. symbols)
 
+-- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
+allScalars :: Environment -> [Formula]
+allScalars env = concatMap (\b -> map (Var b) $ Set.toList $ Map.findWithDefault Set.empty (ScalarT b ()) (env ^. symbolsOfShape)) [BoolT, IntT, ListT]
+
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
 addAssumption f = assumptions %~ Set.insert f
