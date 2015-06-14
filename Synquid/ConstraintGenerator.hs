@@ -96,7 +96,7 @@ constraintsTopDown env t (Program templ s) = case templ of
       constraintForSymbol abstract t symb symbT = if abstract
                                                     then Subtype emptyEnv (symbolType symb symbT) t
                                                     else Subtype env (symbolType symb symbT) t
-      symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
+      symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
       symbolType _ t = t      
   PApp funTempl argTempl -> do
     x <- freshId "_x"
@@ -108,8 +108,9 @@ constraintsTopDown env t (Program templ s) = case templ of
     return $ Program (PApp fun arg) t
   PFun x bodyTempl -> do
     let (FunctionT y tArg tRes) = t
-    let env' = addSymbol (Var x) tArg env
-    pBody <- constraintsTopDown env' (renameVar y x tRes) bodyTempl
+    let env' = addSymbol x tArg env
+    let xVar = Var (baseType tArg) x -- TODO: higher-order functions
+    pBody <- constraintsTopDown env' (renameVar y xVar tRes) bodyTempl
     return $ Program (PFun x pBody) t
   PIf _ thenTempl elseTempl -> do
     cond <- Unknown Map.empty <$> freshId "_u"
@@ -122,8 +123,8 @@ constraintsTopDown env t (Program templ s) = case templ of
     t'@(FunctionT x tArg tRes) <- if abstract then freshRefinements t else return t
     let (Program (PFun argName _) _) = bodyTempl                  -- `bodyTempl' must be lambda
     let (ScalarT IntT fml) = tArg                                 -- assuming the argument we are recursing on is integer
-    let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var argName))
-    let env' = addSymbol (Var f) (FunctionT x tArg' tRes) env
+    let tArg' = ScalarT IntT (fml |&| (valInt |>=| IntLit 0) |&| (valInt |<| Var IntT argName))
+    let env' = addSymbol f (FunctionT x tArg' tRes) env
     pBody <- constraintsTopDown env' t bodyTempl
     when abstract $ (addConstraint $ WellFormed env t') >> (addConstraint $ Subtype env t' t)
     return $ Program (PFix f pBody) t'    
@@ -143,20 +144,22 @@ constraintsBottomUp env (Program templ s) = case templ of
     return $ Program (PSymbol leafConstraint) t
     where    
       constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
-      symbolType (Var x) (ScalarT b _) = ScalarT b (varRefinement x)
+      symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
       symbolType _ t = t
   PApp funTempl argTempl -> do
     fun <- constraintsBottomUp env funTempl
     arg <- constraintsBottomUp env argTempl
     let FunctionT x tArg tRes = typ fun
     addConstraint $ Subtype env (typ arg) tArg
-    return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName x $ typ arg) tRes)
+    let xVar = Var (baseType tArg) x -- TODO: higher-order functions
+    return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName xVar $ typ arg) tRes)
   PFun x bodyTempl -> do
     t@(FunctionT y tArg tRes) <- freshRefinements $ refine s
-    let env' = addSymbol (Var x) tArg env
+    let env' = addSymbol x tArg env
     pBody <- constraintsBottomUp env' bodyTempl
     addConstraint $ WellFormed env t
-    addConstraint $ Subtype env' (renameVar x y $ typ pBody) tRes
+    let yVar = Var (baseType tArg) y -- TODO: higher-order functions
+    addConstraint $ Subtype env' (renameVar x yVar $ typ pBody) tRes
     return $ Program (PFun x pBody) t
   PIf _ thenTempl elseTempl -> do
     t <- freshRefinements $ refine s
@@ -174,8 +177,8 @@ constraintsBottomUp env (Program templ s) = case templ of
     t@(FunctionT x tArg tRes) <- freshRefinements $ refine s      -- `s' must be a function type
     let (Program (PFun argName _) _) = bodyTempl                  -- `bodyTempl' must be lambda
     let (ScalarT IntT fml) = tArg                                 -- assuming the argument we are recursing on is integer
-    let tArg' = ScalarT IntT (fml |&| (valueVar |>=| IntLit 0) |&| (valueVar |<| Var argName))
-    let env' = addSymbol (Var f) (FunctionT x tArg' tRes) env
+    let tArg' = ScalarT IntT (fml |&| (valInt |>=| IntLit 0) |&| (valInt |<| Var IntT argName))
+    let env' = addSymbol f (FunctionT x tArg' tRes) env
     pBody <- constraintsBottomUp env' bodyTempl
     addConstraint $ WellFormed env t
     addConstraint $ Subtype env (typ pBody) t
@@ -184,11 +187,11 @@ constraintsBottomUp env (Program templ s) = case templ of
 -- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
-  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol (Var y) tArg2 env) (renameVar x y tRes1) tRes2)
+  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol y tArg2 env) (renameVar x (Var (baseType tArg2) y) tRes1) tRes2)
 split (WellFormed env (FunctionT x tArg tRes)) = 
-  split (WellFormed env tArg) ++ split (WellFormed (addSymbol (Var x) tArg env) tRes)
+  split (WellFormed env tArg) ++ split (WellFormed (addSymbol x tArg env) tRes)
 split (WellFormedLeaf (FunctionT x tArg tRes) ts) =
-  split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y x tRes') ts))
+  split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y (Var (baseType tArg) x) tRes') ts))
 split (WellFormedSymbol disjuncts)
   | length disjuncts == 1   = concatMap split (head disjuncts)
   | otherwise               = [WellFormedSymbol $ map (concatMap split) disjuncts]
@@ -201,22 +204,22 @@ toFormulas cq tq cs = let (leafCs, nodeCs) = partition isWFLeaf cs
 -- | 'toFormula' @cq tq c@ : translate simple typing constraint @c@ into either a logical constraint or an element of the search space,
 -- given search space generators @cq@ and @tq@
 toFormula :: QualsGen -> QualsGen -> Constraint -> State ([Clause], QMap) ()
-toFormula _ _ (Subtype env (ScalarT IntT fml) (ScalarT IntT fml')) =
-  let (poss, negs) = embedding env 
+toFormula _ _ (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml')) | baseT == baseT' 
+  = let (poss, negs) = embedding env 
   in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
-toFormula _ tq (WellFormed env (ScalarT IntT (Unknown _ u))) = 
-  _2 %= Map.insert u (tq ((Map.keys $ symbolsByShape (ScalarT IntT ()) env)))
-toFormula cq _ (WellFormedCond env (Unknown _ u)) = 
-  _2 %= Map.insert u (cq (Map.keys $ symbolsByShape (ScalarT IntT ()) env))
+toFormula _ tq (WellFormed env (ScalarT baseT (Unknown _ u))) = 
+  _2 %= Map.insert u (tq ((map (Var baseT) $ Map.keys $ symbolsByShape (ScalarT baseT ()) env)))
+toFormula cq _ (WellFormedCond env (Unknown _ u)) = -- TODO: allow conditions over other scalar variables
+  _2 %= Map.insert u (cq (map (Var IntT) $ Map.keys $ symbolsByShape (ScalarT IntT ()) env))
 toFormula _ _ (WellFormedSymbol disjuncts) =
   _1 %= ((Disjunctive $ map (map fromHorn . fst . toFormulas trivialGen trivialGen) disjuncts) :)
-toFormula _ _ (WellFormedLeaf (ScalarT IntT (Unknown _ u)) ts) = do
+toFormula _ _ (WellFormedLeaf (ScalarT baseT (Unknown _ u)) ts) = do
   spaces <- mapM qualsFromType ts
   let quals = Set.toList $ Set.unions $ spaces
   let n = maximum $ map Set.size spaces
   _2 %= Map.insert u (QSpace quals n)
   where
-    qualsFromType (ScalarT IntT fml) = Set.unions <$> mapM spaceFromQual (Set.toList $ conjunctsOf fml)
+    qualsFromType (ScalarT baseT fml) = Set.unions <$> mapM spaceFromQual (Set.toList $ conjunctsOf fml)
     spaceFromQual q@(Unknown _ _) = do
       qmap <- gets snd
       return $ Set.fromList $ lookupQualsSubst qmap q
@@ -233,7 +236,7 @@ extract (Program prog t) sol = (flip Program (typeApplySolution sol t)) <$> case
   PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (extract pThen sol) (extract pElse sol)      
   PFix f pBody -> liftM (PFix f) (extract pBody sol)
   where
-    extractSymbol :: SMTSolver s => (Formula, Constraint) -> MaybeT s (BareProgram Formula Formula RType)
+    extractSymbol :: SMTSolver s => (Id, Constraint) -> MaybeT s (BareProgram Id Formula RType)
     extractSymbol (symb, c) = do   
       let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas trivialGen trivialGen $ split c
       let fml' = applySolution sol fml

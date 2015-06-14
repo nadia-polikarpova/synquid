@@ -1,15 +1,16 @@
-- Block infeasible combinations of symbol qualifiers right away
+- Measures
+- Case
+- Polymorphism
+- Higher-order functions
+- Abstract refinements
+- Explicit search
+- Other Data types
+
+- Disjunctive constraints vs. indexed/disjunctive types vs. abstracting leaf types with smart constraint manipulation (just not all at once!)
+- Block infeasible combinations of symbol qualifiers right away; can we achieve more with search space manipulation?
 - Do not treat neg assumptions as RHS (this enables vacuous branches!)
 
 - Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct
-- Data types
 
-- Polymorphism
-- Higher-order functions
 - Parser for types and templates
-- Explicit search
 
-- Look at bad example for CEGIS: y >= x && x = i ==> y >= 5. Better when known lhs is stronger (y == x) or unknown lhs is weaker (x >= i) -> think about this
-- Second solver for CEGIS
-- Do we need multiple solutions for parameters? Do we need a lattice over them?
-- Use optimization instead of UNSAT cores in CEGIS?

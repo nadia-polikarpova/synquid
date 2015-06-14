@@ -14,10 +14,6 @@ import Data.Map (Map)
 import Control.Monad
 import Control.Lens
   
--- | Base types  
-data BaseType = BoolT | IntT
-  deriving (Eq, Ord)
-
 -- | Type skeletons parametrized by refinements  
 data TypeSkeleton r =
   ScalarT BaseType r |
@@ -32,6 +28,7 @@ type RType = TypeSkeleton Formula
 
 isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
+baseType (ScalarT b _) = b
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
 
@@ -46,8 +43,8 @@ refine (ScalarT base _) = ScalarT base ftrue
 refine (FunctionT x tArg tFun) = FunctionT x (refine tArg) (refine tFun)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
-renameVar :: Id -> Id -> RType -> RType    
-renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var new)) fml)
+renameVar :: Id -> Formula -> RType -> RType    
+renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old new) fml)
 renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg) (renameVar old new tRes)
 
 typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
@@ -58,10 +55,10 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 
 -- | Typing environment
 data Environment = Environment {
-  _symbols :: Map Formula RType,                -- ^ Variables and constants (with their refinement types)
-  _symbolsOfShape :: Map SType (Set Formula),   -- ^ Variables and constants indexed by their simple type
-  _assumptions :: Set Formula,                  -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula                -- ^ Negative unknown assumptions
+  _symbols :: Map Id RType,                -- ^ Variables and constants (with their refinement types)
+  _symbolsOfShape :: Map SType (Set Id),   -- ^ Variables and constants indexed by their simple type
+  _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
+  _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
 }
 
 makeLenses ''Environment  
@@ -70,14 +67,14 @@ makeLenses ''Environment
 emptyEnv = Environment Map.empty Map.empty Set.empty Set.empty
 
 -- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
-addSymbol :: Formula -> RType -> Environment -> Environment
+addSymbol :: Id -> RType -> Environment -> Environment
 addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertWith (Set.union) (shape t) (Set.singleton sym))
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
-varRefinement x = valueVar |=| Var x
+varRefinement x b = Var b valueVarName |=| Var b x
                   
 -- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
-symbolsByShape :: SType -> Environment -> Map Formula RType
+symbolsByShape :: SType -> Environment -> Map Id RType
 symbolsByShape s env = restrictDomain (Map.findWithDefault Set.empty s (env ^. symbolsOfShape)) (env ^. symbols)
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
@@ -93,16 +90,16 @@ embedding :: Environment -> (Set Formula, Set Formula)
 embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ env ^. symbols), env ^.negAssumptions)
   where
     embedBinding _ (ScalarT _ (BoolLit True)) = Set.empty -- Ignore trivial types
-    embedBinding (Var x) (ScalarT _ fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var x)) fml
+    embedBinding x (ScalarT baseT fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
     embedBinding _ _ = Set.empty
     
--- | Program skeletons parametrized by information stored in bound variable positions, symbols, and conditionals
+-- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram s c t =
-  PSymbol s |                         -- ^ Symbol (variable or constant)
-  PApp (Program s c t) (Program s c t) |  -- ^ Function application
-  PFun Id (Program s c t) |             -- ^ Lambda abstraction
-  PIf c (Program s c t) (Program s c t) | -- ^ Conditional
-  PFix Id (Program s c t)               -- ^ Fixpoint
+  PSymbol s |                               -- ^ Symbol (variable or constant)
+  PApp (Program s c t) (Program s c t) |    -- ^ Function application
+  PFun Id (Program s c t) |                 -- ^ Lambda abstraction
+  PIf c (Program s c t) (Program s c t) |   -- ^ Conditional
+  PFix Id (Program s c t)                   -- ^ Fixpoint
   
 data Program s c t = Program {
   content :: BareProgram s c t,
@@ -113,17 +110,19 @@ data Program s c t = Program {
 type Template = Program () () SType
 
 -- | Fully defined programs 
-type SimpleProgram = Program Formula Formula RType
+type SimpleProgram = Program Id Formula RType
 
 -- | For each symbol, a sufficient condition for the symbol to be a solution at a given leaf
-type LeafConstraint = Map Formula Constraint
+type LeafConstraint = Map Id Constraint
 
 -- | Programs where conditions and symbols are represented by constraints with unknowns
 type LiquidProgram = Program LeafConstraint Formula RType
 
 -- | Building type shapes
 int = ScalarT IntT
+list = ScalarT ListT
 int_ = int ()
+list_ = list ()
 (|->|) = FunctionT dontCare
 
 -- | Building program templates

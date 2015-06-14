@@ -156,7 +156,7 @@ fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> pretty i
-    Var ident -> text ident
+    Var b ident -> text ident
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2

@@ -31,6 +31,7 @@ data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
   _intSort :: Maybe Sort,                     -- ^ Int sort
   _boolSort :: Maybe Sort,                    -- ^ Boolean sort
+  _listSort :: Maybe Sort,                    -- ^ Sort fo integer lists
   _symbols :: Map Id Symbol,                  -- ^ Variable symbols
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
@@ -44,6 +45,7 @@ initZ3Data env env' = Z3Data {
   _mainEnv = env,
   _intSort = Nothing,
   _boolSort = Nothing,
+  _listSort = Nothing, 
   _symbols = Map.empty,
   _controlLiterals = Bimap.empty,
   _auxEnv = env',
@@ -91,7 +93,7 @@ toZ3 expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
   IntLit i -> mkIntNum i  
-  Var ident -> var ident
+  Var b ident -> var b ident
   Unknown _ ident -> error $ unwords ["toZ3: encountered a second-order unknown", ident]
   Unary op e -> toZ3 e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toZ3 e1 <*> toZ3 e2)  
@@ -118,15 +120,18 @@ toZ3 expr = case expr of
         Iff -> mkIff
     list2 o x y = o [x, y]
     
-    var ident = do
-      is <- fromJust <$> use intSort
+    var baseT ident = do
+      sort <- case baseT of
+        IntT -> fromJust <$> use intSort
+        ListT -> fromJust <$> use listSort
       symbMb <- uses symbols (Map.lookup ident)
-      case symbMb of
-        Just s -> mkConst s is
+      symb <- case symbMb of
+        Just s -> return s
         Nothing -> do
           s <- mkStringSymbol ident
           symbols %= Map.insert ident s
-          mkConst s is
+          return s
+      mkConst symb sort
           
 instance SMTSolver Z3State where
   initSolver = do
@@ -134,6 +139,8 @@ instance SMTSolver Z3State where
     intSort .= Just int
     bool <- mkBoolSort
     boolSort .= Just bool
+    list <- mkStringSymbol "intList" >>= mkUninterpretedSort
+    listSort .= Just list
     
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux

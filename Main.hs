@@ -23,8 +23,10 @@ import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 
-nat = int (valueVar |>=| IntLit 0)
+nat = int (valInt |>=| IntLit 0)
 intAll = int ftrue
+listAll = list ftrue
+intVar = Var IntT
 toSpace quals = QSpace quals (length quals)
 
 consGenParams = ConsGenParams {
@@ -74,51 +76,51 @@ synthesize env typ templ cq tq = do
     Just prog -> print $ programDoc pretty pretty (const empty) prog
   
 testApp = do
-  let env = addSymbol (Var "a") intAll .
-            addSymbol (Var "b") intAll .
-            addSymbol (Var "dec") (FunctionT "x" intAll (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "inc") (FunctionT "x" intAll (int (valueVar |=| Var "x" |+| IntLit 1))) .
+  let env = addSymbol "a" intAll .
+            addSymbol "b" intAll .
+            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
-  let typ = int (valueVar |>| Var "b")
+  let typ = int (valInt |>| intVar "b")
   let templ = sym (int_ |->| int_) |$| sym int_  
   let tq syms = do
       op <- [Ge, Le, Neq]
       rhs <- syms
-      return $ Binary op valueVar rhs
+      return $ Binary op valInt rhs
         
   synthesize env typ templ (const []) tq
   
 testApp2 = do
-  let env = addSymbol (Var "a") intAll .
-            addSymbol (Var "dec") (FunctionT "x" intAll (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "inc") (FunctionT "x" intAll (int (valueVar |=| Var "x" |+| IntLit 1))) .
+  let env = addSymbol "a" intAll .
+            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
-  let typ = int (valueVar |=| Var "a")
+  let typ = int (valInt |=| intVar "a")
   let templ = sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_  
   let tq syms = do
       rhs <- syms
-      [valueVar |=| rhs]
-      -- [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1]
+      [valInt |=| rhs]
+      -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
         
   synthesize env typ templ (const []) tq
   
 testLambda = do
-  let env = addSymbol (Var "dec") (FunctionT "x" nat (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "inc") (FunctionT "x" nat (int (valueVar |=| Var "x" |+| IntLit 1))) .
+  let env = addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
-  let typ = FunctionT "a" nat $ int (valueVar |=| Var "a")
+  let typ = FunctionT "a" nat $ int (valInt |=| intVar "a")
   let templ = "a" |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
-  let tq0 = [valueVar |>=| IntLit 0]
+  let tq0 = [valInt |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
-      [valueVar |=| rhs]
-      -- [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1]
+      [valInt |=| rhs]
+      -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
         
   synthesize env typ templ (const []) (\syms -> tq0 ++ tq1 syms)
   
 testMax2 = do
   let env = emptyEnv
-  let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ int (valueVar |>=| Var "x" |&| valueVar |>=| Var "y")
+  let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")
   let templ = "x" |.| "y" |.| choice (sym int_) (sym int_)
   
   let cq syms = do
@@ -131,16 +133,16 @@ testMax2 = do
   let tq syms = do
       op <- [Ge, Le, Neq]
       rhs <- syms
-      return $ Binary op valueVar rhs      
+      return $ Binary op valInt rhs      
   
   synthesize env typ templ cq tq  
  
 testAbs = do
   let env =             
-            addSymbol (Var "id") (FunctionT "x" intAll (int (valueVar |=| Var "x"))) .
-            addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
+            addSymbol "id" (FunctionT "x" intAll (int (valInt |=| intVar "x"))) .
+            addSymbol "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
             id $ emptyEnv
-  let typ = FunctionT "x" intAll $ int (valueVar |>=| Var "x" |&| valueVar |>=| IntLit 0)
+  let typ = FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)
   let templ = "x" |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   let cq syms = do
@@ -149,22 +151,22 @@ testAbs = do
       rhs <- syms ++ [IntLit 0]
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
-  let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0, valueVar |/=| IntLit 0]
+  let tq0 = [valInt |<=| IntLit 0, valInt |>=| IntLit 0, valInt |/=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
-      [valueVar |=| rhs, valueVar |>=| rhs, valueVar |=| fneg rhs]
+      [valInt |=| rhs, valInt |>=| rhs, valInt |=| fneg rhs]
         
   synthesize env typ templ cq (\syms -> tq0 ++ tq1 syms)
   
 testPeano = do
   let env =             
-            addSymbol (Var "dec") (FunctionT "x" nat (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "inc") (FunctionT "x" nat (int (valueVar |=| Var "x" |+| IntLit 1))) .
-            addSymbol (Var "neg") (FunctionT "x" intAll (int (valueVar |=| fneg (Var "x")))) .
-            addSymbol (Var "const0") (FunctionT "x" intAll (int (valueVar |=| IntLit 0))) .
+            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            addSymbol "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
+            addSymbol "const0" (FunctionT "x" intAll (int (valInt |=| IntLit 0))) .
             id $ emptyEnv
 
-  let typ = FunctionT "y" nat $ int (valueVar |=| Var "y")
+  let typ = FunctionT "y" nat $ int (valInt |=| intVar "y")
   let templ = fix_ "f" ("y" |.| choice 
                 (sym (int_ |->| int_) |$| sym int_)
                 (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
@@ -175,22 +177,22 @@ testPeano = do
       rhs <- syms ++ [IntLit 0]
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
-  let tq0 = [valueVar |>=| IntLit 0]
-  -- let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]
+  let tq0 = [valInt |>=| IntLit 0]
+  -- let tq0 = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
-      [valueVar |=| rhs]
-      -- [valueVar |=| rhs, valueVar |=| rhs |+| IntLit 1, valueVar |=| rhs |-| IntLit 1, valueVar |=| fneg rhs]
+      [valInt |=| rhs]
+      -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1, valInt |=| fneg rhs]
         
   synthesize env typ templ cq (\syms -> tq0 ++ tq1 syms)
   
 testAddition = do
   let env =
-            addSymbol (Var "dec") (FunctionT "x" nat (int (valueVar |=| Var "x" |-| IntLit 1))) .
-            addSymbol (Var "inc") (FunctionT "x" nat (int (valueVar |=| Var "x" |+| IntLit 1))) .
+            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
 
-  let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valueVar |=| Var "y" |+| Var "z")
+  let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
   -- let templ = fix_ "plus" ("y" |.| "z" |.| choice 
                 -- (sym int_) 
                 -- (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
@@ -204,18 +206,37 @@ testAddition = do
       rhs <- syms ++ [IntLit 0]
       guard $ lhs < rhs
       return $ Binary op lhs rhs  
-  let tq0 = [valueVar |<=| IntLit 0, valueVar |>=| IntLit 0]
+  let tq0 = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
   let tq1 syms = do
       rhs <- syms
       []
-      -- [valueVar |=| rhs, valueVar |=| rhs |-| IntLit 1, valueVar |=| rhs |+| IntLit 1]
+      -- [valInt |=| rhs, valInt |=| rhs |-| IntLit 1, valInt |=| rhs |+| IntLit 1]
   let tq2 syms = do
       rhs1 <- syms
       rhs2 <- syms
       guard $ rhs1 < rhs2
-      [valueVar |=| rhs1 |+| rhs2]
-      -- [valueVar |=| rhs1 |+| rhs2, valueVar |=| rhs1 |+| rhs2 |+| IntLit 1, valueVar |=| rhs1 |+| rhs2 |-| IntLit 1]
+      [valInt |=| rhs1 |+| rhs2]
+      -- [valInt |=| rhs1 |+| rhs2, valInt |=| rhs1 |+| rhs2 |+| IntLit 1, valInt |=| rhs1 |+| rhs2 |-| IntLit 1]
         
   synthesize env typ templ cq (\syms -> tq0 ++ tq1 syms ++ tq2 syms)
   
-main = testAddition
+testReplicate = do
+  let env =
+            addSymbol "nil" (ScalarT ListT ftrue) .
+            addSymbol "cons" (FunctionT "x" intAll (FunctionT "xs" listAll listAll)) .
+            id $ emptyEnv
+
+  let typ = FunctionT "y" intAll $ listAll
+  let templ = "y" |.| 
+                ((sym (int_ |->| list_ |->| list_) |$| sym int_) |$| (sym (int_ |->| list_ |->| list_) |$| sym int_) |$| sym list_)
+          
+  synthesize env typ templ (const []) (const [])  
+  
+-- main = testApp
+-- main = testApp2
+-- main = testLambda
+-- main = testMax2
+-- main = testAbs  
+-- main = testPeano  
+-- main = testAddition
+main = testReplicate

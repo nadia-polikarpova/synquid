@@ -16,6 +16,10 @@ import Control.Lens hiding (both)
 -- | Identifiers
 type Id = String
 
+-- | Base types  
+data BaseType = BoolT | IntT | ListT
+  deriving (Eq, Ord)
+
 {- Formulas of the refinement logic -}
 
 -- | Unary operators
@@ -31,16 +35,17 @@ type Substitution = Map Id Formula
 
 -- | 'inverse' @s@ : inverse of substitution @s@, provided that the range of @s@ only contains variables
 inverse :: Substitution -> Substitution
-inverse s = Map.fromList [(y, Var x) | (x, Var y) <- Map.toList s]
+inverse s = Map.fromList [(y, Var b x) | (x, Var b y) <- Map.toList s]
 
 -- | Formulas of the refinement logic
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
   IntLit Integer |                    -- ^ Integer literal
-  Var Id |                            -- ^ Input variable (universally quantified first-order variable)
+  Var BaseType Id |                   -- ^ Input variable (universally quantified first-order variable)
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
-  Binary BinOp Formula Formula        -- ^ Binary expression
+  Binary BinOp Formula Formula |      -- ^ Binary expression
+  Measure BaseType Id [Formula]       -- ^ Measure application
   deriving (Eq, Ord)
   
 valueVarName = "_v"
@@ -49,7 +54,8 @@ unknownName (Unknown _ name) = name
   
 ftrue = BoolLit True
 ffalse = BoolLit False
-valueVar = Var valueVarName
+valInt = Var IntT valueVarName
+valList = Var ListT valueVarName
 fneg = Unary Neg
 fnot = Unary Not
 (|*|) = Binary Times
@@ -77,7 +83,7 @@ infix 4 |<=>|
   
 -- | 'varsOf' @fml@ : set of all input variables of @fml@
 varsOf :: Formula -> Set Id
-varsOf (Var ident) = Set.singleton ident
+varsOf (Var _ ident) = Set.singleton ident
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
 varsOf _ = Set.empty
@@ -112,7 +118,7 @@ conjunctsOf f = Set.singleton f
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
-  Var name -> case Map.lookup name subst of
+  Var _ name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
   Unknown s name -> Unknown (s `compose` subst) name 
@@ -124,10 +130,12 @@ substitute subst fml = case fml of
       then new
       else if Map.null new
         then old
-        else  let ((x, Var y), old') = Map.deleteFindMin old
+        else  let ((x, Var b y), old') = Map.deleteFindMin old
               in case Map.lookup y new of
-                Nothing -> Map.insert x (Var y) $ compose old' new
-                Just (Var v) -> Map.insert x (Var v) $ compose old' (Map.delete y new)
+                Nothing -> Map.insert x (Var b y) $ compose old' new
+                Just (Var b' v) -> if b == b' 
+                  then Map.insert x (Var b v) $ compose old' (Map.delete y new)
+                  else error "Base type mismatch when composing pending substitutions"
 
 {- Qualifiers -}
 
