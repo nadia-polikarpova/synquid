@@ -230,27 +230,43 @@ testAddition = do
 -- | List programs  
   
 addLists =  addSymbol "nil" (list $ Measure IntT "len" valList |=| IntLit 0) .
-            addSymbol "cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1)))
+            addSymbol "cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1))) .
+            addSymbol "head" (FunctionT "xs" (list $ fnot (valList |=| listVar "nil")) intAll) .
+            addSymbol "tail" (FunctionT "xs" (list $ fnot (valList |=| listVar "nil")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| IntLit 1))
   
 testReplicate = do
   let env = addLists .
+            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             id $ emptyEnv
 
-  let typ = FunctionT "y" intAll (list $ Measure IntT "len" valList |=| IntLit 2)
-  let templ = "y" |.| 
-                ((sym (int_ |->| list_ |->| list_) |$| sym int_) |$| (sym (int_ |->| list_ |->| list_) |$| sym int_) |$| sym list_)
-                
+  let typ = FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n"))
+  let templ = fix_ "replicate" ("n" |.| "y" |.| choice
+                (sym list_)
+                ((sym (int_ |->| list_ |->| list_) |$| sym int_) |$| (sym (int_ |->| int_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_))
+          
+  let cq syms = do
+      lhs <- syms ++ [IntLit 0]
+      guard $ baseTypeOf lhs == IntT
+      op <- [Le, Ge, Neq]
+      rhs <- syms ++ [IntLit 0]
+      guard $ baseTypeOf rhs == IntT
+      guard $ lhs < rhs
+      return $ Binary op lhs rhs            
   let tq0 (val : _) = case val of
-                        Var ListT _ -> [Measure IntT "len" val |=| IntLit 2]
-                        _ -> []
+                        Var ListT _ -> []
+                        Var IntT _ -> [val |<=| IntLit 0, val |>=| IntLit 0]
   let tq1 (val : syms) = case val of
                           Var ListT _ -> do  
                                             rhs <- syms
                                             guard $ baseTypeOf rhs == IntT
                                             [Measure IntT "len" val |=| rhs]
-                          _ -> []
+                          Var IntT _ -> do
+                                            rhs <- syms
+                                            guard $ baseTypeOf rhs == IntT                          
+                                            [val |=| rhs]
           
-  synthesize env typ templ (const []) (tq0 |++| tq1)
+  synthesize env typ templ cq (tq0 |++| tq1)
   
 -- main = testApp
 -- main = testApp2
@@ -258,5 +274,5 @@ testReplicate = do
 -- main = testMax2
 -- main = testAbs  
 -- main = testPeano  
-main = testAddition
--- main = testReplicate
+-- main = testAddition
+main = testReplicate

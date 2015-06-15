@@ -1,6 +1,6 @@
-- Recursion on lists
 - Sets
 - Case
+- Recursion on lists
 - Polymorphism
 - Higher-order functions
 - Abstract refinements
