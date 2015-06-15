@@ -32,6 +32,7 @@ data Z3Data = Z3Data {
   _intSort :: Maybe Sort,                     -- ^ Int sort
   _boolSort :: Maybe Sort,                    -- ^ Boolean sort
   _listSort :: Maybe Sort,                    -- ^ Sort for integer lists
+  _setSort :: Maybe Sort,
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
@@ -47,6 +48,7 @@ initZ3Data env env' = Z3Data {
   _intSort = Nothing,
   _boolSort = Nothing,
   _listSort = Nothing, 
+  _setSort = Nothing,
   _vars = Map.empty,
   _measures = Map.empty,
   _controlLiterals = Bimap.empty,
@@ -85,8 +87,10 @@ withAuxSolver c = do
 
 evalZ3State :: Z3State a -> IO a
 evalZ3State f = do
-  env <- newEnv (Just QF_AUFLIA) stdOpts
-  env' <- newEnv (Just QF_AUFLIA) stdOpts
+  -- env <- newEnv (Just QF_AUFLIA) stdOpts
+  -- env' <- newEnv (Just QF_AUFLIA) stdOpts
+  env <- newEnv Nothing stdOpts
+  env' <- newEnv Nothing stdOpts  
   evalStateT f $ initZ3Data env env'
                 
 -- | Convert a first-order constraint to a Z3 AST.
@@ -94,6 +98,7 @@ toZ3 :: Formula -> Z3State AST
 toZ3 expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
+  SetLit xs -> setLiteral xs
   IntLit i -> mkIntNum i  
   Var b ident -> var b ident
   Unknown _ ident -> error $ unwords ["toZ3: encountered a second-order unknown", ident]
@@ -106,6 +111,12 @@ toZ3 expr = case expr of
     sort BoolT = fromJust <$> use boolSort
     sort IntT = fromJust <$> use intSort
     sort ListT = fromJust <$> use listSort
+    sort SetT = fromJust <$> use setSort
+    
+    setLiteral xs = do
+      emp <- (fromJust <$> use intSort) >>= mkEmptySet
+      elems <- mapM toZ3 xs
+      foldM mkSetAdd emp elems
   
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
@@ -115,7 +126,7 @@ toZ3 expr = case expr of
     binOp op =
       case op of
         Eq -> mkEq
-        Neq -> \ x y -> mkEq x y >>= mkNot
+        Neq -> list2 mkDistinct
         Gt -> mkGt
         Lt -> mkLt
         Le -> mkLe
@@ -127,6 +138,11 @@ toZ3 expr = case expr of
         Or    -> list2 mkOr
         Implies -> mkImplies
         Iff -> mkIff
+        Union -> list2 mkSetUnion
+        Intersect -> list2 mkSetIntersect
+        Diff -> mkSetDifference
+        Member -> mkSetMember
+        Subset -> mkSetSubset
     list2 o x y = o [x, y]
       
     -- | Lookup or create a variable with name `ident' and type `baseT' 
@@ -169,12 +185,15 @@ instance SMTSolver Z3State where
     boolSort .= Just bool
     list <- mkStringSymbol "intList" >>= mkUninterpretedSort
     listSort .= Just list
+    set <- mkSetSort int
+    setSort .= Just set    
     
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
 
   isValid fml = do
-      res <- local $ (toZ3 >=> assert) (fnot fml) >> check
+      res <- local $ (toZ3 >=> assert) (fnot fml) >> check      
+      
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    

@@ -17,7 +17,7 @@ import Control.Lens hiding (both)
 type Id = String
 
 -- | Base types  
-data BaseType = BoolT | IntT | ListT
+data BaseType = BoolT | IntT | ListT | SetT
   deriving (Eq, Ord)
 
 {- Formulas of the refinement logic -}
@@ -27,7 +27,13 @@ data UnOp = Neg | Not
   deriving (Eq, Ord)
 
 -- | Binary operators  
-data BinOp = Times | Plus | Minus | Eq | Neq | Lt | Le | Gt | Ge | And | Or | Implies | Iff
+data BinOp = 
+    Times | Plus | Minus |          -- ^ Int -> Int -> Int     
+    Eq | Neq |                      -- ^ a -> a -> Bool
+    Lt | Le | Gt | Ge |             -- ^ Int -> Int -> Bool
+    And | Or | Implies | Iff |      -- ^ Bool -> Bool -> Bool
+    Union | Intersect | Diff |      -- ^ Set -> Set -> Set
+    Member | Subset                 -- ^ Int/Set -> Set -> Bool
   deriving (Eq, Ord)
   
 -- | Variable substitution  
@@ -41,6 +47,7 @@ inverse s = Map.fromList [(y, Var b x) | (x, Var b y) <- Map.toList s]
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
   IntLit Integer |                    -- ^ Integer literal
+  SetLit [Formula] |                  -- ^ Set literal
   Var BaseType Id |                   -- ^ Input variable (universally quantified first-order variable)
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
@@ -73,16 +80,22 @@ fnot = Unary Not
 (|<=>|) = Binary Iff
 conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
 disjunction fmls = if Set.null fmls then ffalse else foldr1 (|||) (Set.toList fmls)
+(/+/) = Binary Union
+(/*/) = Binary Intersect
+(/-/) = Binary Diff
+fin = Binary Member
+(/<=/) = Binary Subset
 
 infixl 9 |*|
-infixl 8 |+|, |-|
-infixl 7 |=|, |/=|, |<|, |<=|, |>|, |>=|
+infixl 8 |+|, |-|, /+/, /-/, /*/
+infixl 7 |=|, |/=|, |<|, |<=|, |>|, |>=|, /<=/
 infixl 6 |&|, |||
 infixr 5 |=>|
 infix 4 |<=>|
   
 -- | 'varsOf' @fml@ : set of all input variables of @fml@
 varsOf :: Formula -> Set Id
+varsOf (SetLit elems) = Set.unions $ map varsOf elems
 varsOf (Var _ ident) = Set.singleton ident
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
@@ -120,6 +133,7 @@ conjunctsOf f = Set.singleton f
 baseTypeOf :: Formula -> BaseType
 baseTypeOf (BoolLit _)                        = BoolT
 baseTypeOf (IntLit _)                         = IntT
+baseTypeOf (SetLit _)                         = SetT
 baseTypeOf (Var b _ )                         = b
 baseTypeOf (Unknown _ _)                      = BoolT
 baseTypeOf (Unary op _)
@@ -133,6 +147,7 @@ baseTypeOf (Measure b _ _)                    = b
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
+  SetLit elems -> SetLit $ map (substitute subst) elems
   Var _ name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml

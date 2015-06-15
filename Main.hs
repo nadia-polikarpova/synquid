@@ -42,8 +42,8 @@ consGenParams = ConsGenParams {
 
 -- | Search parameters
 solverParams = SolverParams {
-  pruneQuals = True,
-  -- pruneQuals = False,
+  -- pruneQuals = True,
+  pruneQuals = False,
   -- optimalValuationsStrategy = UnsatCoreValuations,
   optimalValuationsStrategy = MarcoValuations,    
   -- optimalValuationsStrategy = BFSValuations,    
@@ -229,44 +229,45 @@ testAddition = do
   
 -- | List programs  
   
-addLists =  addSymbol "nil" (list $ Measure IntT "len" valList |=| IntLit 0) .
-            addSymbol "cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1))) .
-            addSymbol "head" (FunctionT "xs" (list $ fnot (valList |=| listVar "nil")) intAll) .
-            addSymbol "tail" (FunctionT "xs" (list $ fnot (valList |=| listVar "nil")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| IntLit 1))
+addLists =  addSymbol "nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
+                                    Measure SetT "elems" valList  |=| SetLit []) .
+            addSymbol "cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1 |&|
+                                                                                    Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"]))) .
+            addSymbol "head" (FunctionT "xs" (list $ valList |/=| listVar "nil") (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))) .
+            addSymbol "tail" (FunctionT "xs" (list $ valList |/=| listVar "nil") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| IntLit 1 |&|
+                                                                                         Measure SetT "elems" valList /<=/ Measure IntT "elems" (listVar "xs")))
   
 testReplicate = do
   let env = addLists .
-            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            addSymbol "0" (int (valInt |=| IntLit 0)) .
+            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             id $ emptyEnv
 
-  let typ = FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n"))
+  let typ = FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [intVar "y" |+| IntLit 1]))
   let templ = fix_ "replicate" ("n" |.| "y" |.| choice
                 (sym list_)
-                ((sym (int_ |->| list_ |->| list_) |$| sym int_) |$| (sym (int_ |->| int_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_))
+                ((sym (int_ |->| list_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| (sym (int_ |->| int_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_))
           
   let cq syms = do
-      lhs <- syms ++ [IntLit 0]
+      lhs <- syms
       guard $ baseTypeOf lhs == IntT
       op <- [Le, Ge, Neq]
-      rhs <- syms ++ [IntLit 0]
+      rhs <- syms
       guard $ baseTypeOf rhs == IntT
       guard $ lhs < rhs
       return $ Binary op lhs rhs            
-  let tq0 (val : _) = case val of
-                        Var ListT _ -> []
-                        Var IntT _ -> [val |<=| IntLit 0, val |>=| IntLit 0]
-  let tq1 (val : syms) = case val of
+  let tq (val : syms) = case val of
                           Var ListT _ -> do  
                                             rhs <- syms
                                             guard $ baseTypeOf rhs == IntT
-                                            [Measure IntT "len" val |=| rhs]
+                                            [Measure IntT "len" val |=| rhs, Measure SetT "elems" val /<=/ SetLit [rhs |+| IntLit 1]]
                           Var IntT _ -> do
                                             rhs <- syms
                                             guard $ baseTypeOf rhs == IntT                          
-                                            [val |=| rhs]
+                                            [val |<=| rhs, val |>=| rhs]
           
-  synthesize env typ templ cq (tq0 |++| tq1)
+  synthesize env typ templ cq tq
   
 -- main = testApp
 -- main = testApp2
@@ -276,3 +277,9 @@ testReplicate = do
 -- main = testPeano  
 -- main = testAddition
 main = testReplicate
+
+-- main = do
+  -- res <- evalZ3State $ do
+    -- initSolver
+    -- isValid $ SetLit [IntLit 2, IntLit 1] |=| SetLit [IntLit 1, IntLit 2]
+  -- print res

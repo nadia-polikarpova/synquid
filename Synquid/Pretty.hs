@@ -113,6 +113,7 @@ instance Pretty BaseType where
   pretty IntT = text "int"
   pretty BoolT = text "bool"  
   pretty ListT = text "list"
+  pretty SetT = text "set"
   
 instance Show BaseType where
   show = show . pretty  
@@ -138,6 +139,11 @@ instance Pretty BinOp where
   pretty Or = text "||"
   pretty Implies = text "==>"  
   pretty Iff = text "<==>"  
+  pretty Union = text "+"
+  pretty Intersect = text "*"
+  pretty Diff = text "-"
+  pretty Member = text "in"
+  pretty Subset = text "<="
   
 instance Show BinOp where
   show = show . pretty  
@@ -164,6 +170,7 @@ fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> pretty i
+    SetLit elems -> braces $ commaSep $ map pretty elems
     Var b ident -> text ident
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e

@@ -208,7 +208,7 @@ toFormula _ _ (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml')) | baseT ==
   = let (poss, negs) = embedding env 
   in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
 toFormula _ tq (WellFormed env (ScalarT baseT (Unknown _ u))) = 
-  debug 0 (text "tq" <> parens (pretty u) <+> pretty (Var baseT valueVarName : allScalars env) <+> text "->" <+> pretty (tq $ Var baseT valueVarName : allScalars env)) $ _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
+  _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
 toFormula cq _ (WellFormedCond env (Unknown _ u)) =
   _2 %= Map.insert u (cq $ allScalars env)
 toFormula _ _ (WellFormedSymbol disjuncts) =
