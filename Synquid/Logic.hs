@@ -58,6 +58,8 @@ data Formula =
 valueVarName = "_v"
 dontCare = "_"
 unknownName (Unknown _ name) = name
+varName (Var _ name) = name
+varType (Var t _) = t
   
 ftrue = BoolLit True
 ffalse = BoolLit False
@@ -96,9 +98,9 @@ infixr 5 |=>|
 infix 4 |<=>|
   
 -- | 'varsOf' @fml@ : set of all input variables of @fml@
-varsOf :: Formula -> Set Id
+varsOf :: Formula -> Set Formula
 varsOf (SetLit elems) = Set.unions $ map varsOf elems
-varsOf (Var _ ident) = Set.singleton ident
+varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
 varsOf (Measure _ _ e) = varsOf e

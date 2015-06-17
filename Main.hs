@@ -23,7 +23,7 @@ import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 
-(|++|) gen gen' = \symbs -> gen symbs ++ gen' symbs
+(|++|) gen gen' = \symbs -> nub $ gen symbs ++ gen' symbs
 infixr 5  |++|
 
 toSpace quals = QSpace quals (length quals)
@@ -36,8 +36,8 @@ consGenParams = ConsGenParams {
 
 -- | Search parameters
 solverParams = SolverParams {
-  -- pruneQuals = True,
-  pruneQuals = False,
+  pruneQuals = True,
+  -- pruneQuals = False,
   -- optimalValuationsStrategy = UnsatCoreValuations,
   optimalValuationsStrategy = MarcoValuations,    
   -- optimalValuationsStrategy = BFSValuations,    
@@ -52,16 +52,14 @@ solverParams = SolverParams {
 
 -- | 'synthesize' @env typ templ cq tq@ : synthesize and print a program that has a type @typ@ 
 -- in the typing environment @env@ and follows template @templ@,
--- using conditional qualifiers @cq@ and type qualifiers @tq@
-synthesize env typ templ cq tq = do
+-- using conditional qualifiers @cquals@ and type qualifiers @tquals@
+synthesize env typ templ cquals tquals = do
+  let cq = foldl (|++|) (const []) (map extractCondQGen cquals)
+  let tq = foldl (|++|) (const []) (map extractTypeQGen tquals) |++| extractQGenFromType typ
   let (clauses, qmap, p) = genConstraints consGenParams (toSpace . cq) (toSpace . tq) env typ templ
   
   putStr "Liquid Program\n"
   print $ pretty p
-  -- putStr "\nConstraints\n"
-  -- print $ vsep $ map pretty clauses
-  putStr "\nQmap\n"
-  print $ pretty qmap
   putStr "\n"
   
   mProg <- evalZ3State $ do
@@ -72,7 +70,30 @@ synthesize env typ templ cq tq = do
       Just sol -> debug 0 (pretty sol) $ runMaybeT $ extract sol p
   case mProg of
     Nothing -> putStr "No Solution"
-    Just prog -> print $ programDoc pretty pretty (const empty) prog
+    Just prog -> print $ text "Solution" $+$ programDoc pretty pretty (const empty) prog
+    
+  where
+    -- | 'extractQGenFromType' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
+    extractTypeQGen qual (val : syms) = let vars = varsOf qual in
+        if Set.member val vars
+          then allSubstitutions qual (Set.toList $ Set.delete val (varsOf qual)) syms -- val has correct base type
+          else []                                                                     -- val has wrong base type
+
+    -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
+    extractCondQGen qual syms = allSubstitutions qual (Set.toList $ varsOf qual) syms
+    
+    -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
+    extractQGenFromType :: RType -> [Formula] -> [Formula]
+    extractQGenFromType (ScalarT _ fml) syms = let fs = Set.toList $ conjunctsOf fml in concatMap (flip extractTypeQGen syms) fs
+    extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms ++ extractQGenFromType tRes syms    
+
+    -- | 'allSubstitutions' @qual vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@
+    allSubstitutions (BoolLit True) _ _ = []
+    allSubstitutions qual vars syms = do
+      let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, varType v == varType var]
+      subst <- Map.unions <$> mapM pickSubstForVar vars
+      guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
+      return $ substitute subst qual
     
 -- | Integer programs    
   
@@ -84,12 +105,12 @@ testApp = do
             id $ emptyEnv
   let typ = int (valInt |>| intVar "b")
   let templ = sym (int_ |->| int_) |$| sym int_  
-  let tq (_ : syms) = do
-      op <- [Ge, Le, Neq]
-      rhs <- syms
-      return $ Binary op valInt rhs
+  -- let tq (_ : syms) = do
+      -- op <- [Ge, Le, Neq]
+      -- rhs <- syms
+      -- return $ Binary op valInt rhs
         
-  synthesize env typ templ (const []) tq
+  synthesize env typ templ [] []
   
 testApp2 = do
   let env = addSymbol "a" intAll .
@@ -98,12 +119,12 @@ testApp2 = do
             id $ emptyEnv
   let typ = int (valInt |=| intVar "a")
   let templ = sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_  
-  let tq (_ : syms) = do
-      rhs <- syms
-      [valInt |=| rhs]
-      -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
+  -- let tq (_ : syms) = do
+      -- rhs <- syms
+      -- [valInt |=| rhs]
+      -- -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
         
-  synthesize env typ templ (const []) tq
+  synthesize env typ templ [] []
   
 testLambda = do
   let env = addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
@@ -111,32 +132,29 @@ testLambda = do
             id $ emptyEnv
   let typ = FunctionT "a" nat $ int (valInt |=| intVar "a")
   let templ = int_ |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
-  let tq0 _ = [valInt |>=| IntLit 0]
-  let tq1 (_ : syms) = do
-      rhs <- syms
-      [valInt |=| rhs]
-      -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
+  -- let tq0 _ = [valInt |>=| IntLit 0]
+  -- let tq1 (_ : syms) = do
+      -- rhs <- syms
+      -- [valInt |=| rhs]
+      -- -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
         
-  synthesize env typ templ (const []) (tq0 |++| tq1)
+  synthesize env typ templ [] []
   
 testMax2 = do
   let env = emptyEnv
   let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")
   let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
   
-  let cq syms = do
-      lhs <- syms
+  let cq = do
       op <- [Ge, Le, Neq]
-      rhs <- syms
-      guard $ lhs < rhs
-      return $ Binary op lhs rhs  
+      return $ Binary op (intVar "x") (intVar "y")  
       
-  let tq (_ : syms) = do
-      op <- [Ge, Le, Neq]
-      rhs <- syms
-      return $ Binary op valInt rhs      
+  -- let tq (_ : syms) = do
+      -- op <- [Ge, Le, Neq]
+      -- rhs <- syms
+      -- return $ Binary op valInt rhs      
   
-  synthesize env typ templ cq tq  
+  synthesize env typ templ cq []
  
 testAbs = do
   let env =             
@@ -146,18 +164,17 @@ testAbs = do
   let typ = FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)
   let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
-  let cq syms = do
-      lhs <- syms
+  let cq = do
       op <- [Ge, Le, Neq]
-      rhs <- syms ++ [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
-  let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0, valInt |/=| IntLit 0]
-  let tq1 (_ : syms) = do
-      rhs <- syms
-      [valInt |=| rhs, valInt |>=| rhs, valInt |=| fneg rhs]
+      rhs <- [intVar "y", IntLit 0]
+      return $ Binary op (intVar "x") rhs  
+      
+  -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0, valInt |/=| IntLit 0]
+  -- let tq1 (_ : syms) = do
+      -- rhs <- syms
+      -- [valInt |=| rhs, valInt |>=| rhs, valInt |=| fneg rhs]
         
-  synthesize env typ templ cq (tq0 |++| tq1)
+  synthesize env typ templ cq []
   
 testPeano = do
   let env =             
@@ -172,20 +189,19 @@ testPeano = do
                 (sym (int_ |->| int_) |$| sym int_)
                 (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
   
-  let cq syms = do
-      lhs <- syms
+  let cq = do
       op <- [Ge, Le, Neq]
-      rhs <- syms ++ [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
-  let tq0 _ = [valInt |>=| IntLit 0]
-  -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
-  let tq1 (_ : syms) = do
-      rhs <- syms
-      [valInt |=| rhs]
-      -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1, valInt |=| fneg rhs]
+      rhs <- [intVar "y", IntLit 0]
+      return $ Binary op (intVar "x") rhs
+      
+  -- let tq0 _ = [valInt |>=| IntLit 0]
+  -- -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
+  -- let tq1 (_ : syms) = do
+      -- rhs <- syms
+      -- [valInt |=| rhs]
+      -- -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1, valInt |=| fneg rhs]
         
-  synthesize env typ templ cq (tq0 |++| tq1)
+  synthesize env typ templ cq []
   
 testAddition = do
   let env =
@@ -201,25 +217,26 @@ testAddition = do
                 (sym int_) 
                 (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
   
-  let cq syms = do
-      lhs <- syms ++ [IntLit 0]
-      op <- [Le, Ge, Neq]
-      rhs <- syms ++ [IntLit 0]
-      guard $ lhs < rhs
-      return $ Binary op lhs rhs  
-  let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
-  let tq1 (_ : syms) = do
-      rhs <- syms
-      []
-      -- [valInt |=| rhs, valInt |=| rhs |-| IntLit 1, valInt |=| rhs |+| IntLit 1]
-  let tq2 (_ : syms) = do
-      rhs1 <- syms
-      rhs2 <- syms
-      guard $ rhs1 < rhs2
-      [valInt |=| rhs1 |+| rhs2]
-      -- [valInt |=| rhs1 |+| rhs2, valInt |=| rhs1 |+| rhs2 |+| IntLit 1, valInt |=| rhs1 |+| rhs2 |-| IntLit 1]
+  let cq = do
+      lhs <- [intVar "x", IntLit 0]
+      op <- [Ge, Le, Neq]
+      rhs <- [intVar "y", IntLit 0]
+      guard $ lhs /= rhs
+      return $ Binary op lhs rhs
+      
+  -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
+  -- let tq1 (_ : syms) = do
+      -- rhs <- syms
+      -- []
+      -- -- [valInt |=| rhs, valInt |=| rhs |-| IntLit 1, valInt |=| rhs |+| IntLit 1]
+  -- let tq2 (_ : syms) = do
+      -- rhs1 <- syms
+      -- rhs2 <- syms
+      -- guard $ rhs1 < rhs2
+      -- [valInt |=| rhs1 |+| rhs2]
+      -- -- [valInt |=| rhs1 |+| rhs2, valInt |=| rhs1 |+| rhs2 |+| IntLit 1, valInt |=| rhs1 |+| rhs2 |-| IntLit 1]
         
-  synthesize env typ templ cq (tq0 |++| tq1 |++| tq2)
+  synthesize env typ templ cq []
   
 -- | List programs  
   
@@ -239,25 +256,11 @@ testReplicate = do
                 (sym list_)
                 ((sym (int_ |->| list_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| (sym (int_ |->| int_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_))
           
-  let cq syms = do
-      lhs <- syms
-      guard $ baseTypeOf lhs == IntT
-      op <- [Le, Ge, Neq]
-      rhs <- syms
-      guard $ baseTypeOf rhs == IntT
-      guard $ lhs < rhs
-      return $ Binary op lhs rhs            
-  let tq (val : syms) = case val of
-                          Var ListT _ -> do  
-                                            rhs <- syms
-                                            guard $ baseTypeOf rhs == IntT
-                                            [Measure IntT "len" val |=| rhs, Measure SetT "elems" val /<=/ SetLit [rhs |+| IntLit 1]]
-                          Var IntT _ -> do
-                                            rhs <- syms
-                                            guard $ baseTypeOf rhs == IntT                          
-                                            [val |<=| rhs, val |>=| rhs]
-          
-  synthesize env typ templ cq tq
+  let cq = do
+      op <- [Ge, Le, Neq]
+      return $ Binary op (intVar "x") (intVar "y")
+      
+  synthesize env typ templ cq []
   
 testLength = do
   let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
@@ -269,16 +272,8 @@ testLength = do
   let templ = fix_ (list_ |.| match (sym list_)
                 (sym int_)
                 (sym (int_ |->| int_) |$| (sym (list_ |->| int_) |$| sym list_)))
-          
-  let tq (val : syms) = case val of
-                          Var ListT _ -> []
-                          Var IntT _ -> do
-                                            rhs <- syms
-                                            if baseTypeOf rhs == ListT
-                                              then [val |=| Measure IntT "len" rhs]
-                                              else [val |<=| rhs, val |>=| rhs]
-          
-  synthesize env typ templ (const []) tq
+
+  synthesize env typ templ [] []
   
 testConcat = do
   let env = id $ listEnv
@@ -289,30 +284,9 @@ testConcat = do
                 ((sym (int_ |->| list_ |->| list_) |$| 
                   (sym int_)) |$| 
                   ((sym (list_ |->| list_ |->| list_) |$| (sym list_)) |$| (sym list_))))
-                
-          
-  let tq1 (val : syms) = case val of
-                          Var ListT _ -> []
-                          Var IntT _ -> do
-                                            rhs <- syms
-                                            guard $ baseTypeOf rhs == IntT
-                                            [val |<=| rhs, val |>=| rhs]
-                                              
-  let tq2 (val : syms) = case val of
-                          Var ListT _ -> do
-                              rhs1 <- syms
-                              rhs2 <- syms
-                              guard $ rhs1 < rhs2
-                              guard $ baseTypeOf rhs1 == ListT
-                              guard $ baseTypeOf rhs2 == ListT
-                              [Measure IntT "len" valList |=| Measure IntT "len" rhs1 |+| Measure IntT "len" rhs2]
-                          Var IntT _ -> []
 
-          
-  synthesize env typ templ (const []) (tq1 |++| tq2)
-  
-  
-  
+  synthesize env typ templ [] []
+
 -- main = testApp
 -- main = testApp2
 -- main = testLambda
@@ -323,9 +297,3 @@ testConcat = do
 -- main = testReplicate
 -- main = testLength
 main = testConcat
-
--- main = do
-  -- res <- evalZ3State $ do
-    -- initSolver
-    -- isValid $ SetLit [IntLit 2, IntLit 1] |=| SetLit [IntLit 1, IntLit 2]
-  -- print res

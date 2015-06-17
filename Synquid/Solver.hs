@@ -31,7 +31,7 @@ solveWithParams params quals constraints candidateDoc = evalFixPointSolver go pa
     go = do      
       quals' <- ifM (asks pruneQuals)
         (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
-        (return quals)
+        (return quals)      
       greatestFixPoint quals' constraints candidateDoc
       
 -- | Strategies for picking the next candidate solution to strengthen
@@ -61,7 +61,7 @@ type FixPointSolver s a = ReaderT SolverParams s a
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
 greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> (Candidate -> Doc) -> FixPointSolver s (Maybe Solution)
 greatestFixPoint quals constraints candidateDoc = do
-    debug 1 (nest 2 $ text "Constraints" $+$ vsep (map pretty constraints)) $ return ()
+    debug 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals]) $ return ()
     let sol0 = topSolution quals
     (valids, invalids) <- partitionM (isValidClause . clauseApplySolution sol0) constraints
     if null invalids
@@ -168,7 +168,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     unknownsList = Set.toList unknowns
     lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst quals) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (valuation sol) unknowns `Set.union` knownConjuncts      -- already used qualifiers for the whole antecedent
-    rhsVars = varsOf rhs
+    rhsVars = Set.map varName $ varsOf rhs
         
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
