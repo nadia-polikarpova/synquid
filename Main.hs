@@ -23,12 +23,6 @@ import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 
-nat = int (valInt |>=| IntLit 0)
-intAll = int ftrue
-listAll = list ftrue
-intVar = Var IntT
-listVar = Var ListT
-
 (|++|) gen gen' = \symbs -> gen symbs ++ gen' symbs
 infixr 5  |++|
 
@@ -75,7 +69,7 @@ synthesize env typ templ cq tq = do
     mSol <- solveWithParams solverParams qmap clauses (candidateDoc p)
     case mSol of
       Nothing -> return Nothing
-      Just sol -> debug 0 (pretty sol) $ runMaybeT $ extract p sol  
+      Just sol -> debug 0 (pretty sol) $ runMaybeT $ extract sol p
   case mProg of
     Nothing -> putStr "No Solution"
     Just prog -> print $ programDoc pretty pretty (const empty) prog
@@ -116,7 +110,7 @@ testLambda = do
             addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = FunctionT "a" nat $ int (valInt |=| intVar "a")
-  let templ = "a" |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
+  let templ = int_ |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
   let tq0 _ = [valInt |>=| IntLit 0]
   let tq1 (_ : syms) = do
       rhs <- syms
@@ -128,7 +122,7 @@ testLambda = do
 testMax2 = do
   let env = emptyEnv
   let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")
-  let templ = "x" |.| "y" |.| choice (sym int_) (sym int_)
+  let templ = int_ |.| int_ |.| choice (sym int_) (sym int_)
   
   let cq syms = do
       lhs <- syms
@@ -150,7 +144,7 @@ testAbs = do
             addSymbol "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
             id $ emptyEnv
   let typ = FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)
-  let templ = "x" |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
+  let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   let cq syms = do
       lhs <- syms
@@ -174,7 +168,7 @@ testPeano = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ int (valInt |=| intVar "y")
-  let templ = fix_ "f" ("y" |.| choice 
+  let templ = fix_ (int_ |.| choice 
                 (sym (int_ |->| int_) |$| sym int_)
                 (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
   
@@ -200,10 +194,10 @@ testAddition = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
-  -- let templ = fix_ "plus" ("y" |.| "z" |.| choice 
+  -- let templ = fix_ (int_ |.| int_ |.| choice 
                 -- (sym int_) 
                 -- (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
-  let templ = "y" |.| (fix_ "y_plus" ("z" |.| choice 
+  let templ = int_ |.| (fix_ (int_ |.| choice 
                 (sym int_) 
                 (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
   
@@ -229,23 +223,19 @@ testAddition = do
   
 -- | List programs  
   
-addLists =  addSymbol "nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
-                                    Measure SetT "elems" valList  |=| SetLit []) .
-            addSymbol "cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1 |&|
-                                                                                    Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"]))) .
-            addSymbol "head" (FunctionT "xs" (list $ valList |/=| listVar "nil") (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))) .
-            addSymbol "tail" (FunctionT "xs" (list $ valList |/=| listVar "nil") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| IntLit 1 |&|
-                                                                                         Measure SetT "elems" valList /<=/ Measure IntT "elems" (listVar "xs")))
+-- addLists =  
+            -- addSymbol "head" (FunctionT "xs" (list $ valList |/=| listVar "nil") (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))) .
+            -- addSymbol "tail" (FunctionT "xs" (list $ valList |/=| listVar "nil") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| IntLit 1 |&|
+                                                                                         -- Measure SetT "elems" valList /<=/ Measure IntT "elems" (listVar "xs")))
   
 testReplicate = do
-  let env = addLists .
-            addSymbol "0" (int (valInt |=| IntLit 0)) .
+  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
             addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
-            id $ emptyEnv
+            id $ listEnv
 
   let typ = FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [intVar "y" |+| IntLit 1]))
-  let templ = fix_ "replicate" ("n" |.| "y" |.| choice
+  let templ = fix_ (int_ |.| int_ |.| choice
                 (sym list_)
                 ((sym (int_ |->| list_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| (sym (int_ |->| int_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_))
           
@@ -269,6 +259,60 @@ testReplicate = do
           
   synthesize env typ templ cq tq
   
+testLength = do
+  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
+            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            id $ listEnv
+
+  let typ = FunctionT "l" listAll (int $ IntLit 0 |<=| valInt |&| valInt |=| Measure IntT "len" (listVar "l"))
+  let templ = fix_ (list_ |.| match (sym list_)
+                (sym int_)
+                (sym (int_ |->| int_) |$| (sym (list_ |->| int_) |$| sym list_)))
+          
+  let tq (val : syms) = case val of
+                          Var ListT _ -> []
+                          Var IntT _ -> do
+                                            rhs <- syms
+                                            if baseTypeOf rhs == ListT
+                                              then [val |=| Measure IntT "len" rhs]
+                                              else [val |<=| rhs, val |>=| rhs]
+          
+  synthesize env typ templ (const []) tq
+  
+testConcat = do
+  let env = id $ listEnv
+
+  let typ = FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))
+  let templ = fix_ (list_ |.| list_ |.| match (sym list_) 
+                (sym list_) 
+                ((sym (int_ |->| list_ |->| list_) |$| 
+                  (sym int_)) |$| 
+                  ((sym (list_ |->| list_ |->| list_) |$| (sym list_)) |$| (sym list_))))
+                
+          
+  let tq1 (val : syms) = case val of
+                          Var ListT _ -> []
+                          Var IntT _ -> do
+                                            rhs <- syms
+                                            guard $ baseTypeOf rhs == IntT
+                                            [val |<=| rhs, val |>=| rhs]
+                                              
+  let tq2 (val : syms) = case val of
+                          Var ListT _ -> do
+                              rhs1 <- syms
+                              rhs2 <- syms
+                              guard $ rhs1 < rhs2
+                              guard $ baseTypeOf rhs1 == ListT
+                              guard $ baseTypeOf rhs2 == ListT
+                              [Measure IntT "len" valList |=| Measure IntT "len" rhs1 |+| Measure IntT "len" rhs2]
+                          Var IntT _ -> []
+
+          
+  synthesize env typ templ (const []) (tq1 |++| tq2)
+  
+  
+  
 -- main = testApp
 -- main = testApp2
 -- main = testLambda
@@ -276,7 +320,9 @@ testReplicate = do
 -- main = testAbs  
 -- main = testPeano  
 -- main = testAddition
-main = testReplicate
+-- main = testReplicate
+-- main = testLength
+main = testConcat
 
 -- main = do
   -- res <- evalZ3State $ do

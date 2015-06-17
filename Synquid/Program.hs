@@ -72,6 +72,14 @@ addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertW
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x b = Var b valueVarName |=| Var b x
+
+-- | Environment with only list constructors
+listEnv = addSymbol "Nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
+                                  Measure SetT "elems" valList  |=| SetLit []) .
+          addSymbol "Cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1 |&|
+                                                                                  Measure IntT "len" valList |>| IntLit 0 |&|
+                                                                                  Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"])))
+          $ emptyEnv
                   
 -- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
 symbolsByShape :: SType -> Environment -> Map Id RType
@@ -97,19 +105,27 @@ embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -
     embedBinding x (ScalarT baseT fml) = Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
     embedBinding _ _ = Set.empty
     
+-- | One case inside a pattern match expression
+data Case s c t = Case {
+  constructor :: Id,      -- ^ Constructor name
+  argNames :: [Id],       -- ^ Bindings for constructor arguments
+  expr :: Program s c t   -- ^ Result of the match in this case
+}    
+    
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram s c t =
   PSymbol s |                               -- ^ Symbol (variable or constant)
   PApp (Program s c t) (Program s c t) |    -- ^ Function application
   PFun Id (Program s c t) |                 -- ^ Lambda abstraction
   PIf c (Program s c t) (Program s c t) |   -- ^ Conditional
+  PMatch (Program s c t) [Case s c t] |     -- ^ Pattern match on datatypes
   PFix Id (Program s c t)                   -- ^ Fixpoint
   
+-- | Programs annotated with types  
 data Program s c t = Program {
   content :: BareProgram s c t,
   typ :: t
-}
-    
+}    
 -- | Program templates (skeleton + unrefined types of symbols)
 type Template = Program () () SType
 
@@ -122,19 +138,25 @@ type LeafConstraint = Map Id Constraint
 -- | Programs where conditions and symbols are represented by constraints with unknowns
 type LiquidProgram = Program LeafConstraint Formula RType
 
--- | Building type shapes
+-- | Building types
 int = ScalarT IntT
 list = ScalarT ListT
 int_ = int ()
 list_ = list ()
 (|->|) = FunctionT dontCare
+intAll = int ftrue
+nat = int (valInt |>=| IntLit 0)
+listAll = list ftrue
 
 -- | Building program templates
 sym s = Program (PSymbol ()) s
 (|$|) fun arg = let (FunctionT _ _ t) = typ fun in Program (PApp fun arg) t
-(|.|) x p = Program (PFun x p) (FunctionT x int_ (typ p))
+(|.|) t p = Program (PFun dontCare p) (FunctionT dontCare t (typ p))
 choice t e = Program (PIf () t e) (typ t)
-fix_ f p = Program (PFix f p) (typ p)
+match scrutinee nilCase consCase = Program 
+  (PMatch scrutinee [Case "Nil" [] nilCase, Case "Cons" [dontCare, dontCare] consCase]) 
+  (typ nilCase)
+fix_ p = Program (PFix dontCare p) (typ p)
 
 infixr 5 |->|
 infixr 5 |$|

@@ -203,6 +203,9 @@ prettyClause (Disjunctive disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\
 
 instance Pretty Clause where
   pretty = prettyClause
+  
+caseDoc :: (s -> Doc) -> (c -> Doc) -> (t -> Doc) -> Case s c t -> Doc
+caseDoc sdoc cdoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc sdoc cdoc tdoc (expr cas) 
 
 programDoc :: (s -> Doc) -> (c -> Doc) -> (t -> Doc) -> Program s c t -> Doc
 programDoc sdoc cdoc tdoc (Program p typ) = let 
@@ -213,6 +216,7 @@ programDoc sdoc cdoc tdoc (Program p typ) = let
     PApp f x -> parens (pDoc f <+> pDoc x)
     PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
     PIf c t e -> nest 2 $ withType (cdoc c <+> text "?") $+$ pDoc t <+> text ":" $+$ pDoc e
+    PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc) cases)
     PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
 
 instance (Pretty s, Pretty c, Pretty t) => Pretty (Program s c t) where
@@ -232,7 +236,7 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
--- prettyType (ScalarT base fml) = braces $ text valueVarName <> text ":" <> pretty base <+> text "|" <+> pretty fml
+-- prettyType (ScalarT base fml) = pretty base <> text "|" <> pretty fml
 prettyType (ScalarT base fml) = pretty fml
 prettyType (FunctionT x t1 t2) = text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2
 

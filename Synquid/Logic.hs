@@ -61,8 +61,10 @@ unknownName (Unknown _ name) = name
   
 ftrue = BoolLit True
 ffalse = BoolLit False
-valInt = Var IntT valueVarName
-valList = Var ListT valueVarName
+intVar = Var IntT
+listVar = Var ListT
+valInt = intVar valueVarName
+valList = listVar valueVarName
 fneg = Unary Neg
 fnot = Unary Not
 (|*|) = Binary Times
