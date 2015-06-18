@@ -74,7 +74,7 @@ freshRefinements (ScalarT base _) = do
   k <- freshId "u"  
   return $ ScalarT base (Unknown Map.empty k)
 freshRefinements (FunctionT x tArg tFun) = do
-  liftM3 FunctionT (freshVarId $ baseType tArg) (freshRefinements tArg) (freshRefinements tFun)
+  liftM3 FunctionT (if isFunctionType tArg then freshId "f" else freshVarId $ baseType tArg) (freshRefinements tArg) (freshRefinements tFun)
   
 addConstraint c = modify (\(i, cs) -> (i, c:cs))
 
@@ -125,8 +125,7 @@ constraintsTopDown env t (Program templ s) = case templ of
   PFun x bodyTempl -> do
     let (FunctionT y tArg tRes) = t
     let env' = addSymbol x tArg env
-    let xVar = Var (baseType tArg) x -- TODO: higher-order functions
-    pBody <- constraintsTopDown env' (renameVar y xVar tRes) bodyTempl
+    pBody <- constraintsTopDown env' (renameVar y x tArg tRes) bodyTempl
     return $ Program (PFun x pBody) t
   PIf _ thenTempl elseTempl -> do
     cond <- Unknown Map.empty <$> freshId "c"
@@ -175,15 +174,13 @@ constraintsBottomUp env (Program templ s) = case templ of
     arg <- constraintsBottomUp env argTempl
     let FunctionT x tArg tRes = typ fun
     addConstraint $ Subtype env (typ arg) tArg
-    let xVar = Var (baseType tArg) x -- TODO: higher-order functions
-    return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName xVar $ typ arg) tRes)
+    return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName x tArg $ typ arg) tRes)
   PFun x bodyTempl -> do
     t@(FunctionT y tArg tRes) <- freshRefinements $ refine s
     let env' = addSymbol x tArg env
     pBody <- constraintsBottomUp env' bodyTempl
     addConstraint $ WellFormed env t
-    let yVar = Var (baseType tArg) y -- TODO: higher-order functions
-    addConstraint $ Subtype env' (renameVar x yVar $ typ pBody) tRes
+    addConstraint $ Subtype env' (renameVar x y tArg $ typ pBody) tRes
     return $ Program (PFun x pBody) t
   PIf _ thenTempl elseTempl -> do
     t <- freshRefinements $ refine s
@@ -222,8 +219,9 @@ addCaseSymbols env x tX (Case consName argNames _) =
   case Map.lookup consName (env ^. symbols) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
     Just t -> addCaseSymbols' env argNames x tX t
-addCaseSymbols' env [] x tX t = addSymbol x (typeConjunction tX t) env
-addCaseSymbols' env (arg : args) x tX (FunctionT y tArg tRes) = addCaseSymbols' (addSymbol arg tArg env) args x tX (renameVar y (Var (baseType tArg) arg) tRes)
+addCaseSymbols' env [] x (ScalarT baseT fml) (ScalarT _ fml') = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
+  addAssumption (subst fml) . addNegAssumption (fnot $ subst fml') $ env -- fml' is added since it does not contain unknowns (it is the constructor type), and we want to allow vacuous cases
+addCaseSymbols' env (arg : args) x tX (FunctionT y tArg tRes) = addCaseSymbols' (addSymbol arg tArg env) args x tX (renameVar y arg tArg tRes)
 
 -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
 -- inside the body of the recursive function where its argument has name @argName@ and type @t@
@@ -234,11 +232,11 @@ recursiveTArg argName (ScalarT ListT fml) = ScalarT ListT (fml  |&|  Measure Int
 -- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
-  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol y tArg2 env) (renameVar x (Var (baseType tArg2) y) tRes1) tRes2)
+  split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol y tArg2 env) (renameVar x y tArg2 tRes1) tRes2)
 split (WellFormed env (FunctionT x tArg tRes)) = 
   split (WellFormed env tArg) ++ split (WellFormed (addSymbol x tArg env) tRes)
 split (WellFormedLeaf (FunctionT x tArg tRes) ts) =
-  split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y (Var (baseType tArg) x) tRes') ts))
+  split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y x tArg tRes') ts))
 split (WellFormedSymbol disjuncts)
   | length disjuncts == 1   = concatMap split (head disjuncts)
   | otherwise               = [WellFormedSymbol $ map (concatMap split) disjuncts]

@@ -43,9 +43,10 @@ refine (ScalarT base _) = ScalarT base ftrue
 refine (FunctionT x tArg tFun) = FunctionT x (refine tArg) (refine tFun)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
-renameVar :: Id -> Formula -> RType -> RType    
-renameVar old new (ScalarT base fml) = ScalarT base (substitute (Map.singleton old new) fml)
-renameVar old new (FunctionT x tArg tRes) = FunctionT x (renameVar old new tArg) (renameVar old new tRes)
+renameVar :: Id -> Id -> RType -> RType -> RType
+renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
+renameVar old new (ScalarT b _)  (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var b new)) fml)
+renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
 typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
 typeConjunction var (FunctionT x tArg tRes) = FunctionT x tArg (typeConjunction var tRes)
@@ -77,7 +78,6 @@ varRefinement x b = Var b valueVarName |=| Var b x
 listEnv = addSymbol "Nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
                                   Measure SetT "elems" valList  |=| SetLit []) .
           addSymbol "Cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1 |&|
-                                                                                  Measure IntT "len" valList |>| IntLit 0 |&|
                                                                                   Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"])))
           $ emptyEnv
                   

@@ -238,12 +238,23 @@ testAddition = do
         
   synthesize env typ templ cq []
   
+testCompose = do
+  let env = emptyEnv
+
+  let typ = FunctionT "f" (FunctionT "x" intAll (int $ valInt |>| intVar "x")) (FunctionT "y" intAll (int $ valInt |>| intVar "y"))
+  let templ = (int_ |->| int_) |.| int_ |.| (sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_)
+
+  synthesize env typ templ [] []  
+  
 -- | List programs  
   
--- addLists =  
-            -- addSymbol "head" (FunctionT "xs" (list $ valList |/=| listVar "nil") (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))) .
-            -- addSymbol "tail" (FunctionT "xs" (list $ valList |/=| listVar "nil") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| IntLit 1 |&|
-                                                                                         -- Measure SetT "elems" valList /<=/ Measure IntT "elems" (listVar "xs")))
+testHead = do
+  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
+            addSymbol "1" (int (valInt |=| IntLit 1)) .
+            id $ listEnv
+  let typ = FunctionT "xs" (list $ Measure IntT "len" valList |>| IntLit 0) (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))
+  let templ = list_ |.| match (sym list_) (sym int_) (sym int_)
+  synthesize env typ templ [] []
   
 testReplicate = do
   let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
@@ -264,18 +275,18 @@ testReplicate = do
   
 testLength = do
   let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             id $ listEnv
 
-  let typ = FunctionT "l" listAll (int $ IntLit 0 |<=| valInt |&| valInt |=| Measure IntT "len" (listVar "l"))
+  let typ = FunctionT "l" listAll (int $ valInt |=| Measure IntT "len" (listVar "l"))
   let templ = fix_ (list_ |.| match (sym list_)
                 (sym int_)
                 (sym (int_ |->| int_) |$| (sym (list_ |->| int_) |$| sym list_)))
 
-  synthesize env typ templ [] []
+  synthesize env typ templ [] [valInt |>=| IntLit 0]
   
-testConcat = do
+testAppend = do
   let env = id $ listEnv
 
   let typ = FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))
@@ -286,14 +297,34 @@ testConcat = do
                   ((sym (list_ |->| list_ |->| list_) |$| (sym list_)) |$| (sym list_))))
 
   synthesize env typ templ [] []
+  
+testStutter = do
+  let env = addSymbol "id" (FunctionT "x" listAll (list (valList |=| listVar "x"))) .
+            id $ listEnv
 
--- main = testApp
--- main = testApp2
--- main = testLambda
--- main = testMax2
--- main = testAbs  
--- main = testPeano  
--- main = testAddition
--- main = testReplicate
--- main = testLength
-main = testConcat
+  let typ = FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| IntLit 2 |*| Measure IntT "len" (listVar "xs") |&| Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs"))
+  let templ = fix_ (list_ |.| match (sym list_) 
+                (sym list_) 
+                ((sym (int_ |->| list_ |->| list_) |$| 
+                  (sym int_)) |$| 
+                  (sym (int_ |->| list_ |->| list_) |$| 
+                  (sym int_)) |$| (sym (list_ |->| list_) |$| sym list_)))
+
+  synthesize env typ templ [] []  
+  
+main = do
+  -- Integer programs
+  putStr "\n=== app ===\n";       testApp
+  putStr "\n=== app2 ===\n";      testApp2
+  putStr "\n=== lambda ===\n";    testLambda
+  putStr "\n=== max2 ===\n";      testMax2
+  putStr "\n=== abs ===\n";       testAbs  
+  putStr "\n=== peano ===\n";     testPeano  
+  putStr "\n=== addition ===\n";  testAddition
+  putStr "\n=== compose ===\n";   testCompose
+  -- List programs
+  putStr "\n=== head ===\n";      testHead
+  putStr "\n=== replicate ===\n"; testReplicate
+  putStr "\n=== length ===\n";    testLength
+  putStr "\n=== append ===\n";    testAppend
+  putStr "\n=== stutter ===\n";   testStutter

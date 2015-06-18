@@ -2,9 +2,11 @@
 - Higher-order functions
 - Abstract refinements
 - Explicit search
+- Make conditions programs
 - Other Data types
 
 - True precondition propagation phase before solving constraints?
+- Figure out assumptions in aggressive prune
 
 - Disjunctive constraints vs. indexed/disjunctive types vs. abstracting leaf types with smart constraint manipulation (just not all at once!)
 - Block infeasible combinations of symbol qualifiers right away; can we achieve more with search space manipulation?
