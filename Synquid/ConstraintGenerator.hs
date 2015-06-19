@@ -1,3 +1,4 @@
+-- | Generating synthesis constraints from specifications, qualifiers, and program templates
 module Synquid.ConstraintGenerator where
 
 import Synquid.Logic
@@ -56,7 +57,9 @@ genConstraints params cq tq env t templ = if bottomUp params
       cs <- gets snd
       let cs' = concatMap split cs
       let (clauses, qmap) = toFormulas cq tq cs'
-      debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (clauses, qmap, p)
+      debug 1 ( text "Typing Constraints" $+$ (vsep $ map pretty cs) $+$ 
+                text "Liquid Program" $+$ pretty p) $ 
+        return (clauses, qmap, p)
 
 {- Implementation -}
   
@@ -261,7 +264,7 @@ toFormula _ _ (WellFormedSymbol disjuncts) =
 toFormula _ _ (WellFormedLeaf (ScalarT baseT (Unknown _ u)) ts) = do
   spaces <- mapM qualsFromType ts
   let quals = Set.toList $ Set.unions $ spaces
-  let n = maximum $ map Set.size spaces
+  let n = if null spaces then 0 else maximum $ map Set.size spaces
   _2 %= Map.insert u (QSpace quals n)
   where
     qualsFromType (ScalarT baseT fml) = Set.unions <$> mapM spaceFromQual (Set.toList $ conjunctsOf fml)
