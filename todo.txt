@@ -1,11 +1,16 @@
+- Bidirectional type-checking:
+	- Modify solver to return candidates
+	- Modify constraint generator: split into I-propagation/E-guessing inside a backtracking monad with incremental pruning
+- Unit propagation in E-guessing the left-most term	
 - Polymorphism
+	- Implement shape unification
+	- Use it E-guessing
+- Additional pruning (when to apply matches and constructors?)
 - Higher-order functions
 - Abstract refinements
-- Explicit search
 - Make conditions programs
 - Other Data types
 
-- True precondition propagation phase before solving constraints?
 - Figure out assumptions in aggressive prune
 
 - Disjunctive constraints vs. indexed/disjunctive types vs. abstracting leaf types with smart constraint manipulation (just not all at once!)

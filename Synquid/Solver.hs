@@ -91,7 +91,7 @@ greatestFixPoint quals constraints candidateDoc = do
                 nc <- mapM (updateCandidate constraint cand diffs) diffs
                 return (nc, rest)
             case find (Set.null . invalidConstraints) newCandidates of
-              Just cand' -> return $ Just (solution cand') -- Solution found
+              Just cand' -> debug 1 (nest 2 $ text "Solution" $+$ pretty (solution cand')) $ return $ Just (solution cand') -- Solution found
               Nothing -> go (newCandidates ++ rest')
               
     instantiateRhs sol fml = case fml of

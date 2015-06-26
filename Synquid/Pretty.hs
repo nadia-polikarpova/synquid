@@ -218,7 +218,7 @@ programDoc sdoc cdoc tdoc (Program p typ) = let
     PIf c t e -> nest 2 $ withType (cdoc c <+> text "?") $+$ pDoc t <+> text ":" $+$ pDoc e
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc) cases)
     PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
-    PHole -> text "??"
+    PHole -> withType $ text "??"
 
 instance (Pretty s, Pretty c, Pretty t) => Pretty (Program s c t) where
   pretty = programDoc pretty pretty pretty

@@ -37,10 +37,15 @@ shape :: RType -> SType
 shape (ScalarT base _) = ScalarT base ()
 shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 
--- | Insert trivial refinements
-refine :: SType -> RType
-refine (ScalarT base _) = ScalarT base ftrue
-refine (FunctionT x tArg tFun) = FunctionT x (refine tArg) (refine tFun)
+-- | Insert weakest refinements
+refineTop :: SType -> RType
+refineTop (ScalarT base _) = ScalarT base ftrue
+refineTop (FunctionT x tArg tFun) = FunctionT x (refineBot tArg) (refineTop tFun)
+
+-- | Insert strongest refinements
+refineBot :: SType -> RType
+refineBot (ScalarT base _) = ScalarT base ffalse
+refineBot (FunctionT x tArg tFun) = FunctionT x (refineTop tArg) (refineBot tFun)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType -> RType
@@ -49,7 +54,10 @@ renameVar old new (ScalarT b _)  (ScalarT base fml) = ScalarT base (substitute (
 renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
 typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
-typeConjunction var (FunctionT x tArg tRes) = FunctionT x tArg (typeConjunction var tRes)
+typeConjunction var (FunctionT x tArg tRes) = FunctionT x (typeImplication var tArg) (typeConjunction var tRes)
+
+typeImplication (ScalarT _ cond) (ScalarT base fml) = ScalarT base (fnot cond ||| fml)
+typeImplication var (FunctionT x tArg tRes) = FunctionT x (typeConjunction var tArg) (typeImplication var tRes)
 
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 

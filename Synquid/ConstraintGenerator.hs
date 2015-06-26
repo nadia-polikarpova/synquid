@@ -90,7 +90,8 @@ addVariableNames (Program templ s) = (flip Program s) <$> case templ of
   PFun _ bodyTempl -> liftM2 PFun (freshId "x") (addVariableNames bodyTempl)  
   PIf _ thenTempl elseTempl -> liftM2 (PIf ()) (addVariableNames thenTempl) (addVariableNames elseTempl)
   PMatch scrTempl caseTempls -> liftM2 PMatch (addVariableNames scrTempl) (mapM addToCase caseTempls)
-  PFix _ bodyTempl -> liftM2 PFix (freshId "f") (addVariableNames bodyTempl)    
+  PFix _ bodyTempl -> liftM2 PFix (freshId "f") (addVariableNames bodyTempl)
+  PHole -> return templ
   where
     addToCase (Case consName args templ) = liftM2 (Case consName) (mapM (const (freshId "x")) args) (addVariableNames templ)  
   
@@ -119,7 +120,7 @@ constraintsTopDown env t (Program templ s) = case templ of
       symbolType _ t = t      
   PApp funTempl argTempl -> do
     x <- freshId "x"
-    tArg <- freshRefinements $ refine $ typ argTempl
+    tArg <- freshRefinements $ refineTop $ typ argTempl
     let tFun = FunctionT x tArg t
     fun <- constraintsTopDown env tFun funTempl
     arg <- constraintsTopDown env tArg argTempl     
@@ -137,7 +138,7 @@ constraintsTopDown env t (Program templ s) = case templ of
     addConstraint $ WellFormedCond env cond
     return $ Program (PIf cond pThen pElse) t
   PMatch scrutineeTempl caseTempls -> do
-    tScrutinee <- freshRefinements $ refine $ typ scrutineeTempl
+    tScrutinee <- freshRefinements $ refineTop $ typ scrutineeTempl
     pScrutinee <- constraintsTopDown env tScrutinee scrutineeTempl
     
     x <- freshVarId (baseType $ typ scrutineeTempl)                         -- Generate a fresh variable that will represent the scrutinee in the case environments    
@@ -160,7 +161,7 @@ constraintsTopDown env t (Program templ s) = case templ of
 constraintsBottomUp :: Environment -> Template -> Generator LiquidProgram
 constraintsBottomUp env (Program templ s) = case templ of
   PSymbol _ -> do
-    t <- freshRefinements $ refine s
+    t <- freshRefinements $ refineTop s
     let symbols = symbolsByShape s env
     let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
     let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols
@@ -179,14 +180,14 @@ constraintsBottomUp env (Program templ s) = case templ of
     addConstraint $ Subtype env (typ arg) tArg
     return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName x tArg $ typ arg) tRes)
   PFun x bodyTempl -> do
-    t@(FunctionT y tArg tRes) <- freshRefinements $ refine s
+    t@(FunctionT y tArg tRes) <- freshRefinements $ refineTop s
     let env' = addSymbol x tArg env
     pBody <- constraintsBottomUp env' bodyTempl
     addConstraint $ WellFormed env t
     addConstraint $ Subtype env' (renameVar x y tArg $ typ pBody) tRes
     return $ Program (PFun x pBody) t
   PIf _ thenTempl elseTempl -> do
-    t <- freshRefinements $ refine s
+    t <- freshRefinements $ refineTop s
     cond <- Unknown Map.empty <$> freshId "c"
     let envThen = addAssumption cond env
     let envElse = addNegAssumption cond env
@@ -198,7 +199,7 @@ constraintsBottomUp env (Program templ s) = case templ of
     addConstraint $ Subtype envElse (typ pElse) t  
     return $ Program (PIf cond pThen pElse) t
   PMatch scrutineeTempl caseTempls -> do
-    t <- freshRefinements $ refine s                                          -- Abstract the type of the match, since it has to be an upper bound of multiple cases 
+    t <- freshRefinements $ refineTop s                                          -- Abstract the type of the match, since it has to be an upper bound of multiple cases 
     pScrutinee <- constraintsBottomUp env scrutineeTempl                      -- Generate the scrutinee program
     
     x <- freshVarId (baseType $ typ scrutineeTempl)                           -- Generate a fresh variable that will represent the scrutinee in the case environments    
@@ -209,13 +210,14 @@ constraintsBottomUp env (Program templ s) = case templ of
     zipWithM_ (\env' t' -> addConstraint $ Subtype env' t' t) caseEnvs (map typ pCaseExprs)
     return $ Program (PMatch pScrutinee pCases) t    
   PFix f bodyTempl -> do
-    t@(FunctionT x tArg tRes) <- freshRefinements $ refine s                    -- `s' must be a function type
+    t@(FunctionT x tArg tRes) <- freshRefinements $ refineTop s                 -- `s' must be a function type
     let (Program (PFun argName _) _) = bodyTempl                                -- `bodyTempl' must be lambda
     let env' = addSymbol f (FunctionT x (recursiveTArg argName tArg) tRes) env  -- `f' is added to the environment with additional assumptions on its argument to ensure termination
     pBody <- constraintsBottomUp env' bodyTempl
     addConstraint $ WellFormed env t
     addConstraint $ Subtype env (typ pBody) t
     return $ Program (PFix f pBody) t
+  PHole -> return $ Program PHole (refineBot s)
 
 -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@ matches @case@.
 addCaseSymbols env x tX (Case consName argNames _) = 
@@ -284,6 +286,7 @@ extract sol (Program prog t) = let go = extract sol in (flip Program (typeApplyS
   PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (go pThen) (go pElse)
   PMatch pScr pCases -> liftM2 PMatch (go pScr) (mapM extractCase pCases)
   PFix f pBody -> liftM (PFix f) (go pBody)
+  PHole -> return PHole
   where
     extractSymbol (symb, c) = do   
       let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas emptyGen emptyGen $ split c

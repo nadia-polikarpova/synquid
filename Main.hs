@@ -9,6 +9,7 @@ import Synquid.TemplateGenerator
 import Synquid.Synthesizer
 
 import Control.Monad
+import Control.Monad.Stream
 
 templGenParams = TemplGenParams {
   maxDepth = -1
@@ -219,13 +220,13 @@ testHead = do
   synthesizeAndPrint env typ templ [] []
   
 testReplicate = do
-  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
+  let env = -- addSymbol "0" (int (valInt |=| IntLit 0)) .
             addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             id $ listEnv
 
   let typ = FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [intVar "y"]))
-  let templ = fix_ (int_ |.| int_ |.| choice (sym list_) (hole list_))
+  let templ = fix_ (int_ |.| int_ |.| choice (hole list_) (hole list_))
   
   -- let templ = fix_ (int_ |.| int_ |.| choice
                 -- (sym list_)
@@ -233,7 +234,7 @@ testReplicate = do
           
   let cq = do
       op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (intVar "y")
+      return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
       
   synthesizeAndPrint env typ templ cq []
   
@@ -279,25 +280,40 @@ testStutter = do
                   -- (sym (int_ |->| list_ |->| list_) |$| 
                   -- (sym int_)) |$| (sym (list_ |->| list_) |$| sym list_)))
 
-  synthesizeAndPrint env typ templ [] []  
+  synthesizeAndPrint env typ templ [] []
   
-main = do  
-  -- -- Integer programs
-  -- putStr "\n=== app ===\n";       testApp
-  -- putStr "\n=== app2 ===\n";      testApp2
-  -- putStr "\n=== lambda ===\n";    testLambda
-  -- putStr "\n=== max2 ===\n";      testMax2  
-  -- putStr "\n=== abs ===\n";       testAbs  
-  -- putStr "\n=== peano ===\n";     testPeano  
-  -- putStr "\n=== addition ===\n";  testAddition
-  -- putStr "\n=== compose ===\n";   testCompose
-  -- -- List programs
-  -- putStr "\n=== head ===\n";      testHead
-  -- putStr "\n=== replicate ===\n"; testReplicate
-  -- putStr "\n=== length ===\n";    testLength
-  -- putStr "\n=== append ===\n";    testAppend
+testDrop = do
+  let env = addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            id $ listEnv
+
+  let typ = FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| Measure IntT "len" (listVar "xs")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
+  let templ = fix_ (list_ |.| (int_ |.| (match (hole list_) 
+                (hole list_)
+                (choice (hole list_) (hole list_)))))
+  
+  let cq = do
+      lhs <- [intVar "x"]
+      op <- [Eq]
+      rhs <- [IntLit 0]
+      guard $ lhs /= rhs
+      return $ Binary op lhs rhs  
+    
+  synthesizeAndPrint env typ templ cq []  
+    
+main = do
+  -- Integer programs
+  putStr "\n=== app ===\n";       testApp
+  putStr "\n=== app2 ===\n";      testApp2
+  putStr "\n=== lambda ===\n";    testLambda
+  putStr "\n=== max2 ===\n";      testMax2  
+  putStr "\n=== abs ===\n";       testAbs  
+  putStr "\n=== peano ===\n";     testPeano  
+  putStr "\n=== addition ===\n";  testAddition
+  putStr "\n=== compose ===\n";   testCompose
+  -- List programs
+  putStr "\n=== head ===\n";      testHead
+  putStr "\n=== replicate ===\n"; testReplicate
+  putStr "\n=== length ===\n";    testLength
+  putStr "\n=== append ===\n";    testAppend
   putStr "\n=== stutter ===\n";   testStutter
-  
--- main = do
-  -- let res = take 20 $ toList $ templates templGenParams (Set.fromList [int_, list_, int_ |->| list_, list_ |->| int_, list_ |->| list_]) list_
-  -- print $ vsep (map (programDoc (const empty) (const empty) pretty) res)
+  putStr "\n=== drop ===\n";   testDrop
