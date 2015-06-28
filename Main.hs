@@ -13,10 +13,10 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 10,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
-  _condDepth = 0,
+  _condDepth = 1,
   _abstractLeafs = True
 }
 
@@ -201,7 +201,7 @@ testDrop = do
 main = do
   -- Integer programs
   -- putStr "\n=== app ===\n";       testApp
-  putStr "\n=== app2 ===\n";      testApp2
+  -- putStr "\n=== app2 ===\n";      testApp2
   -- putStr "\n=== lambda ===\n";    testLambda
   -- putStr "\n=== max2 ===\n";      testMax2  
   -- putStr "\n=== max3 ===\n";      testMax3  
@@ -214,4 +214,4 @@ main = do
   -- putStr "\n=== length ===\n";    testLength
   -- putStr "\n=== append ===\n";    testAppend
   -- putStr "\n=== stutter ===\n";   testStutter
-  -- putStr "\n=== drop ===\n";   testDrop
+  putStr "\n=== drop ===\n";   testDrop

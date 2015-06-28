@@ -130,8 +130,9 @@ generateE env s = generateVar `mplus` generateApp
       (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' sArg
       addConstraint $ Subtype env'' (typ arg) tArg
       
-      let env''' = addGhost x (typ arg) env''      
-      return (env''', Program (PApp fun arg) tRes)
+      y <- freshId "x" 
+      let env''' = addGhost y (typ arg) env''      
+      return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))      
       
     addGhost x (ScalarT baseT fml) env = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
       addAssumption (subst fml) env
