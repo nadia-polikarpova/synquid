@@ -13,10 +13,10 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 3,
+  _eGuessDepth = 10,
   _scrutineeDepth = 0,
-  _matchDepth = 0,
-  _condDepth = 2,
+  _matchDepth = 1,
+  _condDepth = 0,
   _abstractLeafs = True
 }
 
@@ -58,9 +58,12 @@ testApp = do
   synthesizeAndPrint env typ [] []
   
 testApp2 = do
-  let env = addSymbol "a" intAll .
-            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
+  let env = addSymbol "a" nat .
+            addSymbol "1" (int (valInt |=| IntLit 1)) .
+            -- addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            -- addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            addSymbol "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
+            addSymbol "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
             id $ emptyEnv
   let typ = int (valInt |=| intVar "a" |+| IntLit 5)
   
@@ -184,10 +187,11 @@ testDrop = do
             id $ listEnv
 
   let typ = FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| Measure IntT "len" (listVar "xs")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
+  -- let typ = FunctionT "n" nat (FunctionT "xs" (list $ Measure IntT "len" valList |<=| intVar "n") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
   
   let cq = do
       lhs <- [intVar "x"]
-      op <- [Eq]
+      op <- [Le, Ge, Neq]
       rhs <- [IntLit 0]
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
@@ -195,9 +199,9 @@ testDrop = do
   synthesizeAndPrint env typ cq []  
     
 main = do
-  -- -- Integer programs
+  -- Integer programs
   -- putStr "\n=== app ===\n";       testApp
-  -- putStr "\n=== app2 ===\n";      testApp2
+  putStr "\n=== app2 ===\n";      testApp2
   -- putStr "\n=== lambda ===\n";    testLambda
   -- putStr "\n=== max2 ===\n";      testMax2  
   -- putStr "\n=== max3 ===\n";      testMax3  
@@ -206,7 +210,7 @@ main = do
   -- putStr "\n=== compose ===\n";   testCompose
   -- List programs
   -- putStr "\n=== head ===\n";      testHead
-  putStr "\n=== replicate ===\n"; testReplicate
+  -- putStr "\n=== replicate ===\n"; testReplicate
   -- putStr "\n=== length ===\n";    testLength
   -- putStr "\n=== append ===\n";    testAppend
   -- putStr "\n=== stutter ===\n";   testStutter

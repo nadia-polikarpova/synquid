@@ -54,13 +54,6 @@ renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur i
 renameVar old new (ScalarT b _)  (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var b new)) fml)
 renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
-typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
--- typeConjunction var (FunctionT x tArg tRes) = FunctionT x (typeImplication var tArg) (typeConjunction var tRes)
-typeConjunction var (FunctionT x tArg tRes) = FunctionT x tArg (typeConjunction var tRes)
-
-typeImplication (ScalarT _ cond) (ScalarT base fml) = ScalarT base (fnot cond ||| fml)
-typeImplication var (FunctionT x tArg tRes) = FunctionT x (typeConjunction var tArg) (typeImplication var tRes)
-
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
@@ -68,7 +61,7 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 data Environment = Environment {
   _symbols :: Map Id RType,                -- ^ Variables and constants (with their refinement types)
   _symbolsOfShape :: Map SType (Set Id),   -- ^ Variables and constants indexed by their simple type
-  _constructors :: Map BaseType [Id],         -- ^ For each datatype, names of its constructors
+  _constructors :: Map BaseType [Id],      -- ^ For each datatype, names of its constructors
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
 }

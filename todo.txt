@@ -1,8 +1,8 @@
-- Fix type abstraction bug: propagate existential variables upwards
 - Incremental pruning (compare efficiency)
 
 	- max3: too many recursive calls
 	- replicate: matches nil
+	- app2: preconditions could help?
 
 - Search strategies: stream vs. increasing bounds, symbolic vs. explicit
 - Disjoint spaces in the solver

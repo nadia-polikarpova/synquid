@@ -77,11 +77,11 @@ freshRefinements (ScalarT base _) = do
   k <- freshId "u"  
   return $ ScalarT base (Unknown Map.empty k)
 freshRefinements (FunctionT x tArg tFun) = do
-  liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
+  liftM3 FunctionT (freshId "x") (freshRefinements tArg) (freshRefinements tFun)
   
 -- | 'generateE' @env s@ : explore all liquid e-terms of type shape @s@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)  
-generateE :: MonadPlus m => Environment -> SType -> Explorer m LiquidProgram
+generateE :: MonadPlus m => Environment -> SType -> Explorer m (Environment, LiquidProgram)
 generateE env s = generateVar `mplus` generateApp
   where
     -- | Explore all variables of shape @s@
@@ -95,10 +95,10 @@ generateE env s = generateVar `mplus` generateApp
               let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
               addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
               when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-              return $ Program (PSymbol leafConstraint) t
+              return (env, Program (PSymbol leafConstraint) t)
             else msum $ map genKnownSymbol $ Map.toList symbols
         
-    genKnownSymbol (name, t) = return $ Program (PSymbol $ Map.singleton name Unconstrained) (symbolType name t)
+    genKnownSymbol (name, t) = return (env, Program (PSymbol $ Map.singleton name Unconstrained) (symbolType name t))
     
     constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
     
@@ -124,12 +124,18 @@ generateE env s = generateVar `mplus` generateApp
           
     -- | Explore all applications of shape @s@ of an e-term to an i-term of shape @sArg@
     generateWithArgShape sArg = do
-      fun <- generateE env (FunctionT dontCare sArg s)
-      let FunctionT x tArg tRes = typ fun
+      (env', fun) <- generateE env (sArg |->| s)
+      let FunctionT x tArg tRes = typ fun            
+      -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
+      (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' sArg
+      addConstraint $ Subtype env'' (typ arg) tArg
       
-      y <- freshId "x"      
-      arg <- local (over eGuessDepth (-1 +) . set matchDepth 0 . set condDepth 0) $ generateI env tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
-      return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName y tArg $ typ arg) (renameVar x y tArg tRes))
+      let env''' = addGhost x (typ arg) env''      
+      return (env''', Program (PApp fun arg) tRes)
+      
+    addGhost x (ScalarT baseT fml) env = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
+      addAssumption (subst fml) env
+    addGhost _ (FunctionT _ _ _) env = env
      
 -- | 'generateI' @env t@ : explore all liquid terms of type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
@@ -156,8 +162,8 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
   where
     -- | Guess and check
     guessE = do
-      res <- generateE env (shape t)
-      addConstraint $ Subtype env (typ res) t
+      (env', res) <- generateE env (shape t)
+      addConstraint $ Subtype env' (typ res) t
       return res
       
     -- | Generate a match term of type @t@
@@ -166,15 +172,15 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
       if d == 0
         then mzero
         else do
-          let scrShape = ScalarT IListT ()                                                                                -- Pick a datatype to match on (TODO: other datatypes)
-          pScrutinee <- local (\params -> set eGuessDepth (view scrutineeDepth params) params) $ generateE env scrShape   -- Guess a scrutinee of the chosen shape
+          let scrShape = ScalarT IListT ()                                                                                        -- Pick a datatype to match on (TODO: other datatypes)
+          (env', pScrutinee) <- local (\params -> set eGuessDepth (view scrutineeDepth params) params) $ generateE env scrShape   -- Guess a scrutinee of the chosen shape
           
-          x <- freshId "x"                                                                                                -- Generate a fresh variable that will represent the scrutinee in the case environments
-          pCases <- mapM (generateCase x (typ pScrutinee)) $ (env ^. constructors) Map.! (baseType scrShape)              -- Generate a case for each constructor of the datatype
+          x <- freshId "x"                                                                                                        -- Generate a fresh variable that will represent the scrutinee in the case environments
+          pCases <- mapM (generateCase env' x (typ pScrutinee)) $ (env ^. constructors) Map.! (baseType scrShape)                 -- Generate a case for each constructor of the datatype
           return $ Program (PMatch pScrutinee pCases) t
       
     -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
-    generateCase scrName scrType consName = do
+    generateCase env scrName scrType consName = do
       case Map.lookup consName (env ^. symbols) of
         Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
         Just consT -> do
