@@ -29,6 +29,7 @@ type RType = TypeSkeleton Formula
 isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 baseType (ScalarT b _) = b
+baseType (FunctionT _ _ t) = baseType t
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
 
@@ -54,7 +55,8 @@ renameVar old new (ScalarT b _)  (ScalarT base fml) = ScalarT base (substitute (
 renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
 typeConjunction (ScalarT _ cond) (ScalarT base fml) = ScalarT base (cond |&| fml)
-typeConjunction var (FunctionT x tArg tRes) = FunctionT x (typeImplication var tArg) (typeConjunction var tRes)
+-- typeConjunction var (FunctionT x tArg tRes) = FunctionT x (typeImplication var tArg) (typeConjunction var tRes)
+typeConjunction var (FunctionT x tArg tRes) = FunctionT x tArg (typeConjunction var tRes)
 
 typeImplication (ScalarT _ cond) (ScalarT base fml) = ScalarT base (fnot cond ||| fml)
 typeImplication var (FunctionT x tArg tRes) = FunctionT x (typeConjunction var tArg) (typeImplication var tRes)
@@ -66,7 +68,7 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 data Environment = Environment {
   _symbols :: Map Id RType,                -- ^ Variables and constants (with their refinement types)
   _symbolsOfShape :: Map SType (Set Id),   -- ^ Variables and constants indexed by their simple type
-  _constructors :: Set Id,                 -- ^ Symbols that are datatype constructors
+  _constructors :: Map BaseType [Id],         -- ^ For each datatype, names of its constructors
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
 }
@@ -74,7 +76,7 @@ data Environment = Environment {
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
-emptyEnv = Environment Map.empty Map.empty Set.empty Set.empty Set.empty
+emptyEnv = Environment Map.empty Map.empty Map.empty Set.empty Set.empty
 
 -- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
 addSymbol :: Id -> RType -> Environment -> Environment
@@ -82,7 +84,7 @@ addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertW
 
 -- | 'addConstructor' @c t env@ : add type binding for a constructor @sym@ :: @t@ to @env@
 addConstructor :: Id -> RType -> Environment -> Environment
-addConstructor c t = addSymbol c t . (constructors %~ Set.insert c)
+addConstructor c t = addSymbol c t . (constructors %~ Map.insertWith (++) (baseType t) [c])
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x b = Var b valueVarName |=| Var b x
@@ -90,8 +92,9 @@ varRefinement x b = Var b valueVarName |=| Var b x
 -- | Environment with only list constructors
 listEnv = addConstructor "Nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
                                   Measure SetT "elems" valList  |=| SetLit []) .
-          addConstructor "Cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1 |&|
-                                                                                       Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"])))
+          addConstructor "Cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1
+                                                                                       |&| Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"]
+                                                                                       )))
           $ emptyEnv
                   
 -- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
@@ -100,7 +103,7 @@ symbolsByShape s env = restrictDomain (Map.findWithDefault Set.empty s (env ^. s
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> [Formula]
-allScalars env = concatMap (\b -> map (Var b) $ Set.toList $ Map.findWithDefault Set.empty (ScalarT b ()) (env ^. symbolsOfShape)) [BoolT, IntT, ListT]
+allScalars env = concatMap (\b -> map (Var b) $ Set.toList $ Map.findWithDefault Set.empty (ScalarT b ()) (env ^. symbolsOfShape)) [BoolT, IntT, IListT]
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
@@ -132,16 +135,13 @@ data BareProgram s c t =
   PFun Id (Program s c t) |                 -- ^ Lambda abstraction
   PIf c (Program s c t) (Program s c t) |   -- ^ Conditional
   PMatch (Program s c t) [Case s c t] |     -- ^ Pattern match on datatypes
-  PFix Id (Program s c t) |                 -- ^ Fixpoint
-  PHole                                     -- ^ Unknown subtree (to be expanded with a concrete program)
+  PFix Id (Program s c t)                   -- ^ Fixpoint
   
 -- | Programs annotated with types  
 data Program s c t = Program {
   content :: BareProgram s c t,
   typ :: t
-}    
--- | Program templates (skeleton + unrefined types of symbols)
-type Template = Program () () SType
+}
 
 -- | Fully defined programs 
 type SimpleProgram = Program Id Formula RType
@@ -154,7 +154,7 @@ type LiquidProgram = Program LeafConstraint Formula RType
 
 -- | Building types
 int = ScalarT IntT
-list = ScalarT ListT
+list = ScalarT IListT
 int_ = int ()
 list_ = list ()
 (|->|) = FunctionT dontCare
@@ -162,23 +162,11 @@ intAll = int ftrue
 nat = int (valInt |>=| IntLit 0)
 listAll = list ftrue
 
--- | Building program templates
-sym s = Program (PSymbol ()) s
-(|$|) fun arg = let (FunctionT _ _ t) = typ fun in Program (PApp fun arg) t
-(|.|) t p = Program (PFun dontCare p) (FunctionT dontCare t (typ p))
-choice t e = Program (PIf () t e) (typ t)
-match scrutinee nilCase consCase = Program 
-  (PMatch scrutinee [Case "Nil" [] nilCase, Case "Cons" [dontCare, dontCare] consCase]) 
-  (typ nilCase)
-fix_ p = Program (PFix dontCare p) (typ p)
-hole s = Program PHole s
-
 infixr 5 |->|
-infixr 5 |$|
-infixr 4 |.|
           
 -- | Typing constraints
-data Constraint = Subtype Environment RType RType
+data Constraint = Unconstrained
+  | Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
   | WellFormedLeaf RType [RType]

@@ -17,7 +17,7 @@ import Control.Lens hiding (both)
 type Id = String
 
 -- | Base types  
-data BaseType = BoolT | IntT | ListT | SetT
+data BaseType = BoolT | IntT | IListT | SetT
   deriving (Eq, Ord)
 
 {- Formulas of the refinement logic -}
@@ -64,7 +64,7 @@ varType (Var t _) = t
 ftrue = BoolLit True
 ffalse = BoolLit False
 intVar = Var IntT
-listVar = Var ListT
+listVar = Var IListT
 valInt = intVar valueVarName
 valList = listVar valueVarName
 fneg = Unary Neg

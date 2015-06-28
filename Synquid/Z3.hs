@@ -110,7 +110,7 @@ toZ3 expr = case expr of
   where
     sort BoolT = fromJust <$> use boolSort
     sort IntT = fromJust <$> use intSort
-    sort ListT = fromJust <$> use listSort
+    sort IListT = fromJust <$> use listSort
     sort SetT = fromJust <$> use setSort
     
     setLiteral xs = do

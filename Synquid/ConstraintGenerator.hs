@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 -- | Generating synthesis constraints from specifications, qualifiers, and program templates
 module Synquid.ConstraintGenerator where
 
@@ -6,12 +8,14 @@ import Synquid.Program
 import Synquid.Util
 import Synquid.Pretty
 import Synquid.SMTSolver
+import Data.Maybe
 import Data.Either
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative
@@ -26,216 +30,182 @@ type QualsGen = [Formula] -> QSpace
 -- | Empty state space generator
 emptyGen = const emptyQSpace
 
--- | Parameters of constraint generation
-data ConsGenParams = ConsGenParams {
-  bottomUp :: Bool,                                       -- ^ Should types be propagated bottom-up as opposed to top-down?
-  abstractLeaves :: Bool,
-  abstractFix :: Bool  
+-- | Parameters of program template exploration
+data ExplorerParams = ExplorerParams {
+  _eGuessDepth :: Int,      -- ^ Maximum depth of application trees
+  _scrutineeDepth :: Int,   -- ^ Maximum depth of application trees inside match scrutinees
+  _matchDepth :: Int,       -- ^ Maximum nesting level of matches
+  _condDepth :: Int,        -- ^ Maximum nesting level of conditionals
+  _abstractLeafs :: Bool    -- ^ Use symbolic leaf search?
 }
 
--- | 'genConstraints' @params cq tq env typ templ@ : given parameters @params@, search space generators for conditionals and types @cq@ and @tq@,
--- top-level type environment @env@, refinement type @typ@, and template @templ@,
--- generate a set of constraints, a search space map for the unknowns inside those constraints, and a liquid program,
--- such that a valid solution for the constraints would turn the liquid program into a simple program of type @typ@.
-genConstraints :: ConsGenParams -> QualsGen -> QualsGen -> Environment -> RType -> Template -> ([Clause], QMap, LiquidProgram)
-genConstraints params cq tq env t templ = if bottomUp params
-                                              then runReader (evalStateT goBottomUp (0, [])) params
-                                              else runReader (evalStateT goTopDown (0, [])) params
+makeLenses ''ExplorerParams
+
+-- | Computations that explore program templates (parametrized by the backtracking monad)
+type Explorer m = StateT (Int, [Constraint]) (ReaderT ExplorerParams m)
+
+--- | 'genConstraints' @params cq tq env typ@ : given parameters @params@, search space generators for conditionals and types @cq@ and @tq@,
+--- top-level type environment @env@, and refinement type @typ@,
+--- generate a set of constraints, a search space map for the unknowns inside those constraints, and a liquid program,
+--- such that a valid solution for the constraints, if exists, would turn the liquid program into a simple program of type @typ@.
+genConstraints :: MonadPlus m => ExplorerParams -> QualsGen -> QualsGen -> Environment -> RType -> m ([Clause], QMap, LiquidProgram)
+genConstraints params cq tq env t = runReaderT (evalStateT go (0, [])) params 
   where
-    goTopDown :: Generator ([Clause], QMap, LiquidProgram)
-    goTopDown = do
-      p <- addVariableNames templ >>= constraintsTopDown env t
-      cs <- gets snd
-      let cs' = concatMap split cs
-      let (clauses, qmap) = toFormulas cq tq cs'
-      debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return (clauses, qmap, p)
-      
-    goBottomUp :: Generator ([Clause], QMap, LiquidProgram)
-    goBottomUp = do
-      p <- addVariableNames templ >>= constraintsBottomUp env
-      addConstraint $ Subtype env (typ p) t
+    go = do
+      p <- generateI env t
       cs <- gets snd
       let cs' = concatMap split cs
       let (clauses, qmap) = toFormulas cq tq cs'
       debug 1 ( text "Typing Constraints" $+$ (vsep $ map pretty cs) $+$ 
-                text "Liquid Program" $+$ pretty p) $ 
-        return (clauses, qmap, p)
+          text "Liquid Program" $+$ pretty p) $ 
+          return (clauses, qmap, p)
 
 {- Implementation -}
-  
-type Generator = StateT (Int, [Constraint]) (Reader ConsGenParams)
 
-freshId :: String -> Generator String
-freshId prefix = ((prefix ++) . show) <$> state (\(i, cs) -> (i, (i + 1, cs)))
+addConstraint c = modify (\(i, cs) -> (i, c:cs))
 
-freshVarId :: BaseType -> Generator String
-freshVarId b = freshId $ show b
+-- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
+freshId :: MonadPlus m => String -> Explorer m String
+freshId prefix = do
+  i <- use _1
+  _1 .= i + 1
+  return $ prefix ++ show i
   
--- | 'freshRefinements' @t@ : a type with the same shape and value variables as @t@ but fresh unknowns as refinements
-freshRefinements :: RType -> Generator RType
+-- | 'freshRefinements @t@ : a type with the same shape and variables as @t@ but fresh unknowns as refinements
+freshRefinements :: MonadPlus m => RType -> Explorer m RType
 freshRefinements (ScalarT base _) = do
   k <- freshId "u"  
   return $ ScalarT base (Unknown Map.empty k)
 freshRefinements (FunctionT x tArg tFun) = do
-  liftM3 FunctionT (if isFunctionType tArg then freshId "f" else freshVarId $ baseType tArg) (freshRefinements tArg) (freshRefinements tFun)
+  liftM2 (FunctionT x) (freshRefinements tArg) (freshRefinements tFun)
   
-addConstraint c = modify (\(i, cs) -> (i, c:cs))
-
--- | 'addVariableNames' @templ@ : generate fresh names for all bound variables in @templ@
--- (this has to be done before generating constraints)
-addVariableNames :: Template -> Generator Template
-addVariableNames (Program templ s) = (flip Program s) <$> case templ of
-  PSymbol _ -> return templ
-  PApp funTempl argTempl -> liftM2 PApp (addVariableNames funTempl) (addVariableNames argTempl)
-  PFun _ bodyTempl -> liftM2 PFun (freshId "x") (addVariableNames bodyTempl)  
-  PIf _ thenTempl elseTempl -> liftM2 (PIf ()) (addVariableNames thenTempl) (addVariableNames elseTempl)
-  PMatch scrTempl caseTempls -> liftM2 PMatch (addVariableNames scrTempl) (mapM addToCase caseTempls)
-  PFix _ bodyTempl -> liftM2 PFix (freshId "f") (addVariableNames bodyTempl)
-  PHole -> return templ
+-- | 'generateE' @env s@ : explore all liquid e-terms of type shape @s@ in environment @env@
+-- (bottom-up phase of bidirectional typechecking)  
+generateE :: MonadPlus m => Environment -> SType -> Explorer m LiquidProgram
+generateE env s = generateVar `mplus` generateApp
   where
-    addToCase (Case consName args templ) = liftM2 (Case consName) (mapM (const (freshId "x")) args) (addVariableNames templ)  
-  
--- | 'constraintsTopDown' @env t templ@ : a liquid program and typing constraints 
--- for a program of type @t@ following @templ@ in the typing environment @env@
-constraintsTopDown :: Environment -> RType -> Template -> Generator LiquidProgram
-constraintsTopDown env t (Program templ s) = case templ of
-  PSymbol _ -> do
-    abstract <- asks abstractLeaves
-    t' <- if abstract then freshRefinements t else return t
-    let symbols = symbolsByShape s env
-    let leafConstraint = Map.mapWithKey (constraintForSymbol abstract t') symbols
-    let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol abstract t') symbols  
-    if abstract  
-      then do
-        addConstraint $ WellFormedLeaf t' (Map.elems $ Map.mapWithKey symbolType symbols)
-        when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-        addConstraint $ Subtype env t' t
-      else addConstraint $ WellFormedSymbol disjuncts  
-    return $ Program (PSymbol leafConstraint) t'
-    where    
-      constraintForSymbol abstract t symb symbT = if abstract
-                                                    then Subtype emptyEnv (symbolType symb symbT) t
-                                                    else Subtype env (symbolType symb symbT) t
-      symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
-      symbolType _ t = t      
-  PApp funTempl argTempl -> do
-    x <- freshId "x"
-    tArg <- freshRefinements $ refineTop $ typ argTempl
-    let tFun = FunctionT x tArg t
-    fun <- constraintsTopDown env tFun funTempl
-    arg <- constraintsTopDown env tArg argTempl     
-    addConstraint $ WellFormed env tArg
-    return $ Program (PApp fun arg) t
-  PFun x bodyTempl -> do
-    let (FunctionT y tArg tRes) = t
-    let env' = addSymbol x tArg env
-    pBody <- constraintsTopDown env' (renameVar y x tArg tRes) bodyTempl
-    return $ Program (PFun x pBody) t
-  PIf _ thenTempl elseTempl -> do
-    cond <- Unknown Map.empty <$> freshId "c"
-    pThen <- constraintsTopDown (addAssumption cond env) t thenTempl
-    pElse <- constraintsTopDown (addNegAssumption cond env) t elseTempl
-    addConstraint $ WellFormedCond env cond
-    return $ Program (PIf cond pThen pElse) t
-  PMatch scrutineeTempl caseTempls -> do
-    tScrutinee <- freshRefinements $ refineTop $ typ scrutineeTempl
-    pScrutinee <- constraintsTopDown env tScrutinee scrutineeTempl
+    -- | Explore all variables of shape @s@
+    generateVar = do
+          let symbols = symbolsByShape s env
+          abstract <- asks _abstractLeafs
+          if abstract && Map.size symbols > 1
+            then do
+              t <- freshRefinements $ refineTop s          
+              let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
+              let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
+              addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
+              when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+              return $ Program (PSymbol leafConstraint) t
+            else msum $ map genKnownSymbol $ Map.toList symbols
+        
+    genKnownSymbol (name, t) = return $ Program (PSymbol $ Map.singleton name Unconstrained) (symbolType name t)
     
-    x <- freshVarId (baseType $ typ scrutineeTempl)                         -- Generate a fresh variable that will represent the scrutinee in the case environments    
-    let caseEnvs = map (addCaseSymbols env x tScrutinee) caseTempls         -- Add bindings for constructor arguments and refine the scrutinee type in the environment of each case     
-    pCaseExprs <- zipWithM (\e temp -> constraintsTopDown e t temp) caseEnvs (map expr caseTempls)
-    let pCases = zipWith (\(Case c args _) e -> Case c args e) caseTempls pCaseExprs
-    addConstraint $ WellFormed env tScrutinee
-    return $ Program (PMatch pScrutinee pCases) t        
-  PFix f bodyTempl -> do
-    abstract <- asks abstractFix
-    t'@(FunctionT x tArg tRes) <- if abstract then freshRefinements t else return t
-    let (Program (PFun argName _) _) = bodyTempl                  -- `bodyTempl' must be lambda
-    let env' = addSymbol f (FunctionT x (recursiveTArg argName tArg) tRes) env
-    pBody <- constraintsTopDown env' t bodyTempl
-    when abstract $ (addConstraint $ WellFormed env t') >> (addConstraint $ Subtype env t' t)
-    return $ Program (PFix f pBody) t'    
-  
--- | 'constraintsBottomUp' @env templ@ : a liquid program, its type, and typing constraints 
--- for a program following @templ@ in the typing environment @env@  
-constraintsBottomUp :: Environment -> Template -> Generator LiquidProgram
-constraintsBottomUp env (Program templ s) = case templ of
-  PSymbol _ -> do
-    t <- freshRefinements $ refineTop s
-    let symbols = symbolsByShape s env
-    let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
-    let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols
+    constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
     
-    addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-    when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-    return $ Program (PSymbol leafConstraint) t
-    where    
-      constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
-      symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
-      symbolType _ t = t
-  PApp funTempl argTempl -> do
-    fun <- constraintsBottomUp env funTempl
-    arg <- constraintsBottomUp env argTempl
-    let FunctionT x tArg tRes = typ fun
-    addConstraint $ Subtype env (typ arg) tArg
-    return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName x tArg $ typ arg) tRes)
-  PFun x bodyTempl -> do
-    t@(FunctionT y tArg tRes) <- freshRefinements $ refineTop s
-    let env' = addSymbol x tArg env
-    pBody <- constraintsBottomUp env' bodyTempl
-    addConstraint $ WellFormed env t
-    addConstraint $ Subtype env' (renameVar x y tArg $ typ pBody) tRes
-    return $ Program (PFun x pBody) t
-  PIf _ thenTempl elseTempl -> do
-    t <- freshRefinements $ refineTop s
-    cond <- Unknown Map.empty <$> freshId "c"
-    let envThen = addAssumption cond env
-    let envElse = addNegAssumption cond env
-    pThen <- constraintsBottomUp envThen thenTempl
-    pElse <- constraintsBottomUp envElse elseTempl
-    addConstraint $ WellFormed env t
-    addConstraint $ WellFormedCond env cond
-    addConstraint $ Subtype envThen (typ pThen) t
-    addConstraint $ Subtype envElse (typ pElse) t  
-    return $ Program (PIf cond pThen pElse) t
-  PMatch scrutineeTempl caseTempls -> do
-    t <- freshRefinements $ refineTop s                                          -- Abstract the type of the match, since it has to be an upper bound of multiple cases 
-    pScrutinee <- constraintsBottomUp env scrutineeTempl                      -- Generate the scrutinee program
+    symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
+    symbolType _ t = t    
     
-    x <- freshVarId (baseType $ typ scrutineeTempl)                           -- Generate a fresh variable that will represent the scrutinee in the case environments    
-    let caseEnvs = map (addCaseSymbols env x (typ pScrutinee)) caseTempls         -- Add bindings for constructor arguments and refine the scrutinee type in the environment of each case     
-    pCaseExprs <- zipWithM constraintsBottomUp caseEnvs (map expr caseTempls)
-    let pCases = zipWith (\(Case c args _) e -> Case c args e) caseTempls pCaseExprs
-    addConstraint $ WellFormed env t
-    zipWithM_ (\env' t' -> addConstraint $ Subtype env' t' t) caseEnvs (map typ pCaseExprs)
-    return $ Program (PMatch pScrutinee pCases) t    
-  PFix f bodyTempl -> do
-    t@(FunctionT x tArg tRes) <- freshRefinements $ refineTop s                 -- `s' must be a function type
-    let (Program (PFun argName _) _) = bodyTempl                                -- `bodyTempl' must be lambda
-    let env' = addSymbol f (FunctionT x (recursiveTArg argName tArg) tRes) env  -- `f' is added to the environment with additional assumptions on its argument to ensure termination
-    pBody <- constraintsBottomUp env' bodyTempl
-    addConstraint $ WellFormed env t
-    addConstraint $ Subtype env (typ pBody) t
-    return $ Program (PFix f pBody) t
-  PHole -> return $ Program PHole (refineBot s)
-
--- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@ matches @case@.
-addCaseSymbols env x tX (Case consName argNames _) = 
-  case Map.lookup consName (env ^. symbols) of
-    Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
-    Just t -> addCaseSymbols' env argNames x tX t
-addCaseSymbols' env [] x (ScalarT baseT fml) (ScalarT _ fml') = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
-  addAssumption (subst fml) . addNegAssumption (fnot $ subst fml') $ env -- fml' is added since it does not contain unknowns (it is the constructor type), and we want to allow vacuous cases
-addCaseSymbols' env (arg : args) x tX (FunctionT y tArg tRes) = addCaseSymbols' (addSymbol arg tArg env) args x tX (renameVar y arg tArg tRes)
-
--- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
--- inside the body of the recursive function where its argument has name @argName@ and type @t@
--- (@t@ strengthened with a termination condition)
-recursiveTArg argName (ScalarT IntT fml) = ScalarT IntT (fml  |&|  valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)
-recursiveTArg argName (ScalarT ListT fml) = ScalarT ListT (fml  |&|  Measure IntT "len" valList |<| Measure IntT "len" (listVar argName))
+    -- | Explore all applications of shape @s@ of an e-term to an i-term
+    generateApp = do
+      d <- asks _eGuessDepth
+      if d == 0 
+        then mzero 
+        else 
+          -- Since we know that the head of an e-term is always a variable, 
+          -- check the function variables in the context to decide what the last argument shape can be
+          let argShapes = nub $ catMaybes $ map (argProducing s) $ Map.keys (env ^. symbolsOfShape)
+          in msum $ map generateWithArgShape argShapes
+         
+    -- | 'argProducing' @s sF@ : if @sF@ is a function type that can eventually produce @s@, the type of the last argument in @sF@ before @s@;
+    -- otherwise Nothing
+    argProducing :: SType -> SType -> Maybe SType
+    argProducing s (ScalarT _ _) = Nothing
+    argProducing s (FunctionT _ sArg sRes) = if s == sRes then Just sArg else argProducing s sRes          
+          
+    -- | Explore all applications of shape @s@ of an e-term to an i-term of shape @sArg@
+    generateWithArgShape sArg = do
+      fun <- generateE env (FunctionT dontCare sArg s)
+      let FunctionT x tArg tRes = typ fun
+      
+      y <- freshId "x"      
+      arg <- local (over eGuessDepth (-1 +) . set matchDepth 0 . set condDepth 0) $ generateI env tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
+      return $ Program (PApp fun arg) (typeConjunction (renameVar valueVarName y tArg $ typ arg) (renameVar x y tArg tRes))
+     
+-- | 'generateI' @env t@ : explore all liquid terms of type @t@ in environment @env@
+-- (top-down phase of bidirectional typechecking)  
+generateI :: MonadPlus m => Environment -> RType -> Explorer m LiquidProgram
+generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
+  where
+    generateFix x tArg tRes = do
+      -- TODO: abstract fix type?
+      f <- freshId "f"
+      y <- freshId "x"
+      let env' =  addSymbol x tArg .
+                  addSymbol f (FunctionT y (recursiveTArg x tArg) (renameVar x y tArg tRes))
+                  $ env
+      pBody <- generateI env' tRes
+      return $ Program (PFix f (Program (PFun x pBody) t)) t
+      
+    -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
+    -- inside the body of the recursive function where its argument has name @argName@ and type @t@
+    -- (@t@ strengthened with a termination condition)
+    recursiveTArg argName (ScalarT IntT fml) = ScalarT IntT (fml  |&|  valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)
+    recursiveTArg argName (ScalarT IListT fml) = ScalarT IListT (fml  |&|  Measure IntT "len" valList |<| Measure IntT "len" (listVar argName))
+          
+generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
+  where
+    -- | Guess and check
+    guessE = do
+      res <- generateE env (shape t)
+      addConstraint $ Subtype env (typ res) t
+      return res
+      
+    -- | Generate a match term of type @t@
+    generateMatch = do
+      d <- asks _matchDepth
+      if d == 0
+        then mzero
+        else do
+          let scrShape = ScalarT IListT ()                                                                                -- Pick a datatype to match on (TODO: other datatypes)
+          pScrutinee <- local (\params -> set eGuessDepth (view scrutineeDepth params) params) $ generateE env scrShape   -- Guess a scrutinee of the chosen shape
+          
+          x <- freshId "x"                                                                                                -- Generate a fresh variable that will represent the scrutinee in the case environments
+          pCases <- mapM (generateCase x (typ pScrutinee)) $ (env ^. constructors) Map.! (baseType scrShape)              -- Generate a case for each constructor of the datatype
+          return $ Program (PMatch pScrutinee pCases) t
+      
+    -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
+    generateCase scrName scrType consName = do
+      case Map.lookup consName (env ^. symbols) of
+        Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
+        Just consT -> do
+          (args, caseEnv) <- addCaseSymbols env scrName scrType consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment
+          pCaseExpr <- local (over matchDepth (-1 +)) $ generateI caseEnv t          
+          return $ Case consName args pCaseExpr
+          
+    -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
+    addCaseSymbols env x (ScalarT baseT fml) (ScalarT _ fml') = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
+      return $ ([], addAssumption (subst fml) . addNegAssumption (fnot $ subst fml') $ env) -- fml' is added since it does not contain unknowns (it is the constructor type), and we want to allow vacuous cases
+    addCaseSymbols env x tX (FunctionT y tArg tRes) = do
+      argName <- freshId "y"
+      (args, env') <- addCaseSymbols (addSymbol argName tArg env) x tX (renameVar y argName tArg tRes)
+      return (argName : args, env')          
+    
+    -- | Generate a conditional term of type @t@
+    generateIf = do
+      d <- asks _condDepth
+      if d == 0
+        then mzero
+        else do    
+          cond <- Unknown Map.empty `liftM` freshId "c"
+          pThen <- local (over condDepth (-1 +)) $ generateI (addAssumption cond env) t
+          pElse <- local (over condDepth (-1 +)) $ generateI (addNegAssumption cond env) t
+          addConstraint $ WellFormedCond env cond
+          return $ Program (PIf cond pThen pElse) t
+      
       
 -- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
+split Unconstrained = []
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
   split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol y tArg2 env) (renameVar x y tArg2 tRes1) tRes2)
 split (WellFormed env (FunctionT x tArg tRes)) = 
@@ -286,7 +256,6 @@ extract sol (Program prog t) = let go = extract sol in (flip Program (typeApplyS
   PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (go pThen) (go pElse)
   PMatch pScr pCases -> liftM2 PMatch (go pScr) (mapM extractCase pCases)
   PFix f pBody -> liftM (PFix f) (go pBody)
-  PHole -> return PHole
   where
     extractSymbol (symb, c) = do   
       let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas emptyGen emptyGen $ split c

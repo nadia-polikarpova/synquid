@@ -12,7 +12,6 @@ import Synquid.Z3
 import Synquid.Program
 import Synquid.Pretty
 import Synquid.ConstraintGenerator
-import Synquid.TemplateGenerator
 
 import Data.Maybe
 import Data.List
@@ -22,6 +21,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Monad
 import Control.Monad.Stream
+import Control.Monad.Logic
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Applicative
@@ -32,55 +32,24 @@ import System.IO.Unsafe
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: TemplGenParams -> ConsGenParams -> SolverParams -> Environment -> RType -> Template -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
-synthesize templGenParams consGenParams solverParams env typ templ cquals tquals = exploreTemplates2
+synthesize :: ExplorerParams -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
+synthesize genParams solverParams env typ cquals tquals = evalZ3State $ runMaybeT $ msum $ map checkTemplate $ observeAll templates  
   where
+    templates :: Logic ([Clause], QMap, LiquidProgram)
+    templates = genConstraints genParams condQualsGen typeQualsGen env typ
+  
     -- | Qualifier generator for conditionals
     condQualsGen = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
     
     -- | Qualifier generator for types
-    typeQualsGen = toSpace . foldl (|++|) (extractQGenFromType typ) (map extractTypeQGen tquals)
-    
-    -- | All argument types of a function type
-    allArgTypes (ScalarT _ _) = Set.empty
-    allArgTypes (FunctionT _ tArg tRes) = Set.insert tArg $ allArgTypes tRes    
-    
-    -- | Type shapes leafs can have in a template
-    leafShapes = let 
-        res = shape $ typ
-        symbols = Map.keysSet (env ^. symbolsOfShape)
-        cons = [s | (s, names) <- Map.toList (env ^. symbolsOfShape), not $ Set.null $ names `Set.intersection` (env ^. constructors)]
-      in Set.insert res $                             -- result type (because of recursion)
-         symbols `Set.union`                          -- type shapes of components
-         (Set.unions $ map allArgTypes (res : cons))  -- all argument types of the result type (for lambda arguments) and of constructors (for match bindings)
-    
-    -- | Interleave template exploration and constraint solving
-    exploreTemplates1 :: IO (Maybe SimpleProgram)
-    exploreTemplates1 = return . listToMaybe . toList $ do
-      templ' <- exapansions templGenParams leafShapes templ
-      case resForTemplate consGenParams solverParams env typ condQualsGen typeQualsGen templ' of
+    typeQualsGen = toSpace . foldl (|++|) (extractQGenFromType typ) (map extractTypeQGen tquals)  
+  
+    checkTemplate (clauses, qmap, p) = do
+      lift initSolver
+      mSol <- lift $ solveWithParams solverParams qmap clauses (candidateDoc p)
+      case mSol of
         Nothing -> mzero
-        Just prog -> return prog
-        
-    -- | First explore all templates, then start solving constraints; this has the benefit of only creating an SMT solver once
-    exploreTemplates2 :: IO (Maybe SimpleProgram)
-    exploreTemplates2 = do
-      let templs = toList $ exapansions templGenParams leafShapes templ
-      evalZ3State $ runMaybeT $ msum $ map (synthesizeForTemplate consGenParams solverParams env typ condQualsGen typeQualsGen) templs  
-
--- | Pure wrapper around 'synthesizeForTemplate'      
-resForTemplate :: ConsGenParams -> SolverParams -> Environment -> RType -> QualsGen -> QualsGen -> Template -> Maybe SimpleProgram
-resForTemplate consGenParams solverParams env typ cq tq templ = unsafePerformIO $ evalZ3State $ runMaybeT $ synthesizeForTemplate consGenParams solverParams env typ cq tq templ
-      
--- | Synthesize a solution for a given fully expanded template, if it exisits
-synthesizeForTemplate :: ConsGenParams -> SolverParams -> Environment -> RType -> QualsGen -> QualsGen -> Template -> MaybeT Z3State SimpleProgram
-synthesizeForTemplate consGenParams solverParams env typ cq tq templ = do
-  let (clauses, qmap, p) = genConstraints consGenParams cq tq env typ templ
-  lift initSolver
-  mSol <- lift $ solveWithParams solverParams qmap clauses (candidateDoc p)
-  case mSol of
-    Nothing -> mzero
-    Just sol -> extract sol p
+        Just sol -> extract sol p
     
 {- Qualifier Generators -}
 
@@ -110,4 +79,5 @@ allSubstitutions qual vars syms = do
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
   return $ substitute subst qual
+
     

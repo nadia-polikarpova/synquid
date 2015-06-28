@@ -5,23 +5,22 @@ import Synquid.Solver
 import Synquid.Program
 import Synquid.Pretty
 import Synquid.ConstraintGenerator
-import Synquid.TemplateGenerator
 import Synquid.Synthesizer
 
 import Control.Monad
 import Control.Monad.Stream
+import Control.Monad.Trans.List
 
-templGenParams = TemplGenParams {
-  maxDepth = -1
+-- | Parameters for template exploration
+explorerParams = ExplorerParams {
+  _eGuessDepth = 3,
+  _scrutineeDepth = 0,
+  _matchDepth = 0,
+  _condDepth = 2,
+  _abstractLeafs = True
 }
 
-consGenParams = ConsGenParams {
-  bottomUp = True,
-  abstractLeaves = True,
-  abstractFix = True
-}
-
--- | Search parameters
+-- | Parameters for constraint solving
 solverParams = SolverParams {
   pruneQuals = True,
   -- pruneQuals = False,
@@ -37,11 +36,10 @@ solverParams = SolverParams {
   constraintPickStrategy = SmallSpaceConstraint
   }
   
-synthesizeAndPrint env typ templ cquals tquals = do
+synthesizeAndPrint env typ cquals tquals = do
   print $ nest 2 $ text "Spec" $+$ pretty typ
-  print $ nest 2 $ text "Template" $+$ pretty templ
   print empty
-  mProg <- synthesize templGenParams consGenParams solverParams env typ templ cquals tquals
+  mProg <- synthesize explorerParams solverParams env typ cquals tquals
   case mProg of
     Nothing -> putStr "No Solution"
     Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty (const empty) prog
@@ -56,15 +54,8 @@ testApp = do
             addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = int (valInt |>| intVar "b")
-  let templ = hole int_
   
-  -- let templ = sym (int_ |->| int_) |$| sym int_  
-  -- let tq (_ : syms) = do
-      -- op <- [Ge, Le, Neq]
-      -- rhs <- syms
-      -- return $ Binary op valInt rhs
-        
-  synthesizeAndPrint env typ templ [] []
+  synthesizeAndPrint env typ [] []
   
 testApp2 = do
   let env = addSymbol "a" intAll .
@@ -72,47 +63,36 @@ testApp2 = do
             addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = int (valInt |=| intVar "a" |+| IntLit 5)
-  let templ = hole int_
   
-  -- let templ = sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_  
-  -- let tq (_ : syms) = do
-      -- rhs <- syms
-      -- [valInt |=| rhs]
-      -- -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
-        
-  synthesizeAndPrint env typ templ [] []
+  synthesizeAndPrint env typ [] []
   
 testLambda = do
-  let env = addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+  let env = -- addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
-  let typ = FunctionT "a" nat $ int (valInt |=| intVar "a" |+| IntLit 2)
-  let templ = int_ |.| hole int_
+  let typ = FunctionT "a" nat $ int (valInt |=| intVar "a" |+| IntLit 5)
   
-  -- let templ = int_ |.| sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_
-  -- let tq0 _ = [valInt |>=| IntLit 0]
-  -- let tq1 (_ : syms) = do
-      -- rhs <- syms
-      -- [valInt |=| rhs]
-      -- -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1]
-        
-  synthesizeAndPrint env typ templ [] []
+  synthesizeAndPrint env typ [] []
   
 testMax2 = do
   let env = emptyEnv
   let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")
-  let templ = int_ |.| int_ |.| choice (hole int_) (hole int_)
   
   let cq = do
       op <- [Ge, Le, Neq]
       return $ Binary op (intVar "x") (intVar "y")  
       
-  -- let tq (_ : syms) = do
-      -- op <- [Ge, Le, Neq]
-      -- rhs <- syms
-      -- return $ Binary op valInt rhs      
+  synthesizeAndPrint env typ cq []
   
-  synthesizeAndPrint env typ templ cq []
+testMax3 = do
+  let env = emptyEnv
+  let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
+  
+  let cq = do
+      op <- [Ge, Le, Neq]
+      return $ Binary op (intVar "x") (intVar "y")  
+      
+  synthesizeAndPrint env typ cq []  
    
 testAbs = do
   let env =             
@@ -120,48 +100,14 @@ testAbs = do
             addSymbol "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
             id $ emptyEnv
   let typ = FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)  
-  let templ = int_ |.| choice (hole int_) (hole int_)
-  -- let templ = int_ |.| choice (sym (int_ |->| int_) |$| sym int_) (sym (int_ |->| int_) |$| sym int_)
   
   let cq = do
       op <- [Ge, Le, Neq]
       rhs <- [intVar "y", IntLit 0]
       return $ Binary op (intVar "x") rhs  
       
-  -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0, valInt |/=| IntLit 0]
-  -- let tq1 (_ : syms) = do
-      -- rhs <- syms
-      -- [valInt |=| rhs, valInt |>=| rhs, valInt |=| fneg rhs]
-        
-  synthesizeAndPrint env typ templ cq []
-  
-testPeano = do
-  let env =             
-            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
-            addSymbol "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
-            addSymbol "const0" (FunctionT "x" intAll (int (valInt |=| IntLit 0))) .
-            id $ emptyEnv
+  synthesizeAndPrint env typ cq []
 
-  let typ = FunctionT "y" nat $ int (valInt |=| intVar "y")
-  let templ = fix_ (int_ |.| choice 
-                (sym (int_ |->| int_) |$| sym int_)
-                (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_))))
-  
-  let cq = do
-      op <- [Ge, Le, Neq]
-      rhs <- [intVar "y", IntLit 0]
-      return $ Binary op (intVar "x") rhs
-      
-  -- let tq0 _ = [valInt |>=| IntLit 0]
-  -- -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
-  -- let tq1 (_ : syms) = do
-      -- rhs <- syms
-      -- [valInt |=| rhs]
-      -- -- [valInt |=| rhs, valInt |=| rhs |+| IntLit 1, valInt |=| rhs |-| IntLit 1, valInt |=| fneg rhs]
-        
-  synthesizeAndPrint env typ templ cq []
-  
 testAddition = do
   let env =
             addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
@@ -169,13 +115,6 @@ testAddition = do
             id $ emptyEnv
 
   let typ = FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
-  -- let templ = fix_ (int_ |.| int_ |.| choice 
-                -- (sym int_) 
-                -- (sym (int_ |->| int_) |$| ((sym (int_ |->| int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_)))
-  -- let templ = int_ |.| (fix_ (int_ |.| choice 
-                -- (sym int_) 
-                -- (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| (sym (int_ |->| int_) |$| sym int_)))))
-  let templ = fix_ (int_ |.| fix_ (int_ |.| choice (hole int_) (hole int_)))
   
   let cq = do
       lhs <- [intVar "x", IntLit 0]
@@ -184,40 +123,23 @@ testAddition = do
       guard $ lhs /= rhs
       return $ Binary op lhs rhs
       
-  -- let tq0 _ = [valInt |<=| IntLit 0, valInt |>=| IntLit 0]
-  -- let tq1 (_ : syms) = do
-      -- rhs <- syms
-      -- []
-      -- -- [valInt |=| rhs, valInt |=| rhs |-| IntLit 1, valInt |=| rhs |+| IntLit 1]
-  -- let tq2 (_ : syms) = do
-      -- rhs1 <- syms
-      -- rhs2 <- syms
-      -- guard $ rhs1 < rhs2
-      -- [valInt |=| rhs1 |+| rhs2]
-      -- -- [valInt |=| rhs1 |+| rhs2, valInt |=| rhs1 |+| rhs2 |+| IntLit 1, valInt |=| rhs1 |+| rhs2 |-| IntLit 1]
-        
-  synthesizeAndPrint env typ templ cq []
+  synthesizeAndPrint env typ cq []
   
 testCompose = do
   let env = emptyEnv
-
   let typ = FunctionT "f" (FunctionT "x" intAll (int $ valInt |=| intVar "x" |+| IntLit 1)) (FunctionT "y" intAll (int $ valInt |=| intVar "y" |+| IntLit 2))
-  let templ = (int_ |->| int_) |.| int_ |.| hole int_
-  -- let templ = (int_ |->| int_) |.| int_ |.| (sym (int_ |->| int_) |$| sym (int_ |->| int_) |$| sym int_)
 
-  synthesizeAndPrint env typ templ [] []  
+  synthesizeAndPrint env typ [] []  
   
--- | List programs  
-  
+-- | List programs
+
 testHead = do
   let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
             addSymbol "1" (int (valInt |=| IntLit 1)) .
             id $ listEnv
   let typ = FunctionT "xs" (list $ Measure IntT "len" valList |>| IntLit 0) (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))
-  let templ = list_ |.| match (hole list_) (hole int_) (hole int_)
   
-  -- let templ = list_ |.| match (sym list_) (sym int_) (sym int_)  
-  synthesizeAndPrint env typ templ [] []
+  synthesizeAndPrint env typ [] []
   
 testReplicate = do
   let env = -- addSymbol "0" (int (valInt |=| IntLit 0)) .
@@ -226,70 +148,42 @@ testReplicate = do
             id $ listEnv
 
   let typ = FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [intVar "y"]))
-  let templ = fix_ (int_ |.| int_ |.| choice (hole list_) (hole list_))
-  
-  -- let templ = fix_ (int_ |.| int_ |.| choice
-                -- (sym list_)
-                -- ((sym (int_ |->| list_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| (sym (int_ |->| int_ |->| list_) |$| (sym (int_ |->| int_) |$| sym int_)) |$| sym int_))  
           
   let cq = do
       op <- [Ge, Le, Neq]
       return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
       
-  synthesizeAndPrint env typ templ cq []
+  synthesizeAndPrint env typ cq []
   
 testLength = do
   let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             id $ listEnv
 
   let typ = FunctionT "l" listAll (int $ valInt |=| Measure IntT "len" (listVar "l"))
-  let templ = fix_ (list_ |.| match (hole list_) (hole int_) (hole int_))
-  
-  -- let templ = fix_ (list_ |.| match (sym list_)
-                -- (sym int_)
-                -- (sym (int_ |->| int_) |$| (sym (list_ |->| int_) |$| sym list_)))  
 
-  synthesizeAndPrint env typ templ [] [valInt |>=| IntLit 0]
+  synthesizeAndPrint env typ [] [valInt |>=| IntLit 0]
   
 testAppend = do
   let env = id $ listEnv
 
   let typ = FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))
-  let templ = fix_ (list_ |.| list_ |.| match (hole list_) (hole list_) (hole list_))
-  
-  -- let templ = fix_ (list_ |.| list_ |.| match (sym list_) 
-                -- (sym list_) 
-                -- ((sym (int_ |->| list_ |->| list_) |$| 
-                  -- (sym int_)) |$| 
-                  -- ((sym (list_ |->| list_ |->| list_) |$| (sym list_)) |$| (sym list_))))
 
-  synthesizeAndPrint env typ templ [] []
+  synthesizeAndPrint env typ [] []
   
 testStutter = do
   let env = id $ listEnv
 
   let typ = FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| IntLit 2 |*| Measure IntT "len" (listVar "xs") |&| Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs"))
-  let templ = fix_ (list_ |.| match (hole list_) (hole list_) (hole list_))
   
-  -- let templ = fix_ (list_ |.| match (sym list_) 
-                -- (sym list_) 
-                -- ((sym (int_ |->| list_ |->| list_) |$| 
-                  -- (sym int_)) |$| 
-                  -- (sym (int_ |->| list_ |->| list_) |$| 
-                  -- (sym int_)) |$| (sym (list_ |->| list_) |$| sym list_)))
-
-  synthesizeAndPrint env typ templ [] []
+  synthesizeAndPrint env typ [] []
   
 testDrop = do
   let env = addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             id $ listEnv
 
   let typ = FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| Measure IntT "len" (listVar "xs")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
-  let templ = fix_ (list_ |.| (int_ |.| (match (hole list_) 
-                (hole list_)
-                (choice (hole list_) (hole list_)))))
   
   let cq = do
       lhs <- [intVar "x"]
@@ -298,22 +192,22 @@ testDrop = do
       guard $ lhs /= rhs
       return $ Binary op lhs rhs  
     
-  synthesizeAndPrint env typ templ cq []  
+  synthesizeAndPrint env typ cq []  
     
 main = do
-  -- Integer programs
-  putStr "\n=== app ===\n";       testApp
-  putStr "\n=== app2 ===\n";      testApp2
-  putStr "\n=== lambda ===\n";    testLambda
-  putStr "\n=== max2 ===\n";      testMax2  
-  putStr "\n=== abs ===\n";       testAbs  
-  putStr "\n=== peano ===\n";     testPeano  
-  putStr "\n=== addition ===\n";  testAddition
-  putStr "\n=== compose ===\n";   testCompose
+  -- -- Integer programs
+  -- putStr "\n=== app ===\n";       testApp
+  -- putStr "\n=== app2 ===\n";      testApp2
+  -- putStr "\n=== lambda ===\n";    testLambda
+  -- putStr "\n=== max2 ===\n";      testMax2  
+  -- putStr "\n=== max3 ===\n";      testMax3  
+  -- putStr "\n=== abs ===\n";       testAbs  
+  -- putStr "\n=== addition ===\n";  testAddition
+  -- putStr "\n=== compose ===\n";   testCompose
   -- List programs
-  putStr "\n=== head ===\n";      testHead
+  -- putStr "\n=== head ===\n";      testHead
   putStr "\n=== replicate ===\n"; testReplicate
-  putStr "\n=== length ===\n";    testLength
-  putStr "\n=== append ===\n";    testAppend
-  putStr "\n=== stutter ===\n";   testStutter
-  putStr "\n=== drop ===\n";   testDrop
+  -- putStr "\n=== length ===\n";    testLength
+  -- putStr "\n=== append ===\n";    testAppend
+  -- putStr "\n=== stutter ===\n";   testStutter
+  -- putStr "\n=== drop ===\n";   testDrop

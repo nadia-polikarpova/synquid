@@ -112,7 +112,7 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 instance Pretty BaseType where
   pretty IntT = text "int"
   pretty BoolT = text "bool"  
-  pretty ListT = text "list"
+  pretty IListT = text "list"
   pretty SetT = text "set"
   
 instance Show BaseType where
@@ -218,7 +218,6 @@ programDoc sdoc cdoc tdoc (Program p typ) = let
     PIf c t e -> nest 2 $ withType (cdoc c <+> text "?") $+$ pDoc t <+> text ":" $+$ pDoc e
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc) cases)
     PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
-    PHole -> withType $ text "??"
 
 instance (Pretty s, Pretty c, Pretty t) => Pretty (Program s c t) where
   pretty = programDoc pretty pretty pretty
@@ -258,6 +257,7 @@ instance Pretty Environment where
   pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions))
   
 prettyConstraint :: Constraint -> Doc  
+prettyConstraint (Unconstrained) = text "TRUE"
 prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
