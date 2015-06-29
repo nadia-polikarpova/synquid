@@ -16,8 +16,11 @@ explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
-  _condDepth = 1,
-  _abstractLeafs = True
+  _condDepth = 2,
+  _abstractLeafs = True,
+  _condQualsGen = undefined,
+  _typeQualsGen = undefined,
+  _solver = trivialSolver
 }
 
 -- | Parameters for constraint solving
@@ -89,7 +92,10 @@ testMax2 = do
   synthesizeAndPrint env typ cq []
   
 testMax3 = do
-  let env = emptyEnv
+  let env =
+            -- addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            id $ emptyEnv
   let typ = FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
   
   let cq = do
@@ -205,7 +211,7 @@ main = do
   -- putStr "\n=== app2 ===\n";      testApp2
   -- putStr "\n=== lambda ===\n";    testLambda
   -- putStr "\n=== max2 ===\n";      testMax2  
-  -- putStr "\n=== max3 ===\n";      testMax3  
+  putStr "\n=== max3 ===\n";      testMax3  
   -- putStr "\n=== abs ===\n";       testAbs  
   -- putStr "\n=== addition ===\n";  testAddition
   -- putStr "\n=== compose ===\n";   testCompose
@@ -215,4 +221,4 @@ main = do
   -- putStr "\n=== length ===\n";    testLength
   -- putStr "\n=== append ===\n";    testAppend
   -- putStr "\n=== stutter ===\n";   testStutter
-  putStr "\n=== drop ===\n";   testDrop
+  -- putStr "\n=== drop ===\n";   testDrop

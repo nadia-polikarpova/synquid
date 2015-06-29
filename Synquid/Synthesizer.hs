@@ -33,23 +33,35 @@ import System.IO.Unsafe
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
 synthesize :: ExplorerParams -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
-synthesize genParams solverParams env typ cquals tquals = evalZ3State $ runMaybeT $ msum $ map checkTemplate $ observeAll templates  
+synthesize genParams solverParams env typ cquals tquals = 
+  -- case toList programs of
+  case observeMany 1 programs of
+    [] -> return Nothing
+    p : _ -> return $ Just p
   where
-    templates :: Logic ([Clause], QMap, LiquidProgram)
-    templates = genConstraints genParams condQualsGen typeQualsGen env typ
+    -- programs :: Stream SimpleProgram
+    programs :: Logic SimpleProgram
+    programs = let
+        genParams' = over solver (\s -> s { csRefine = refine, csExtract = extract }) .
+                     set condQualsGen condQuals .
+                     set typeQualsGen typeQuals
+                     $ genParams
+      in genConstraints genParams' env typ
+      
+    refine clauses qmap p cands = unsafePerformIO $ evalZ3State $ do
+      initSolver
+      refineCandidates (solverParams { candDoc = candidateDoc p }) qmap clauses cands
+      
+    extract :: LiquidProgram -> Candidate -> SimpleProgram  
+    extract p cand = fromJust . unsafePerformIO . evalZ3State . runMaybeT $ do
+      lift initSolver 
+      extractProgram (solution cand) p
   
     -- | Qualifier generator for conditionals
-    condQualsGen = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
+    condQuals = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
     
     -- | Qualifier generator for types
-    typeQualsGen = toSpace . foldl (|++|) (extractQGenFromType typ) (map extractTypeQGen tquals)  
-  
-    checkTemplate (clauses, qmap, p) = do
-      lift initSolver
-      mSol <- lift $ solveWithParams solverParams { candDoc = candidateDoc p } qmap clauses
-      case mSol of
-        Nothing -> mzero
-        Just sol -> extract sol p
+    typeQuals = toSpace . foldl (|++|) (extractQGenFromType typ) (map extractTypeQGen tquals)  
     
 {- Qualifier Generators -}
 
@@ -79,5 +91,3 @@ allSubstitutions qual vars syms = do
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
   return $ substitute subst qual
-
-    

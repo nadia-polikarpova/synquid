@@ -36,39 +36,80 @@ data ExplorerParams = ExplorerParams {
   _scrutineeDepth :: Int,   -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,       -- ^ Maximum nesting level of matches
   _condDepth :: Int,        -- ^ Maximum nesting level of conditionals
-  _abstractLeafs :: Bool    -- ^ Use symbolic leaf search?
+  _abstractLeafs :: Bool,   -- ^ Use symbolic leaf search?
+  _condQualsGen :: QualsGen,
+  _typeQualsGen :: QualsGen,
+  _solver :: ConstraintSolver
 }
 
 makeLenses ''ExplorerParams
 
+data ExplorerState = ExplorerState {
+  _idCount :: Int,
+  _unsolvedConstraints :: [Constraint],
+  _qualifierMap :: QMap,
+  _candidates :: [Candidate]
+}
+
+makeLenses ''ExplorerState
+
 -- | Computations that explore program templates (parametrized by the backtracking monad)
-type Explorer m = StateT (Int, [Constraint]) (ReaderT ExplorerParams m)
+type Explorer m = StateT ExplorerState (ReaderT ExplorerParams m)
 
 --- | 'genConstraints' @params cq tq env typ@ : given parameters @params@, search space generators for conditionals and types @cq@ and @tq@,
 --- top-level type environment @env@, and refinement type @typ@,
 --- generate a set of constraints, a search space map for the unknowns inside those constraints, and a liquid program,
 --- such that a valid solution for the constraints, if exists, would turn the liquid program into a simple program of type @typ@.
-genConstraints :: MonadPlus m => ExplorerParams -> QualsGen -> QualsGen -> Environment -> RType -> m ([Clause], QMap, LiquidProgram)
-genConstraints params cq tq env t = runReaderT (evalStateT go (0, [])) params 
+-- genConstraints :: MonadPlus m => ExplorerParams -> QualsGen -> QualsGen -> Environment -> RType -> m ([Clause], QMap, LiquidProgram)
+genConstraints :: MonadPlus m => ExplorerParams -> Environment -> RType -> m SimpleProgram
+genConstraints params env t = runReaderT (evalStateT go initState) params 
   where
+    initState = ExplorerState 0 [] Map.empty (csInit $ _solver params)
+  
+    go :: MonadPlus m => Explorer m SimpleProgram
     go = do
-      p <- generateI env t
-      cs <- gets snd
-      let cs' = concatMap split cs
-      let (clauses, qmap) = toFormulas cq tq cs'
-      debug 1 ( text "Typing Constraints" $+$ (vsep $ map pretty cs) $+$ 
-          text "Liquid Program" $+$ pretty p) $ 
-          return (clauses, qmap, p)
+      p <- generateI env t          
+      s <- asks _solver
+      cands <- use candidates
+      return $ csExtract s p (head cands)
 
 {- Implementation -}
 
-addConstraint c = modify (\(i, cs) -> (i, c:cs))
+-- | Impose constraint @c@ on the program
+addConstraint c = unsolvedConstraints %= (c :)
 
+-- | Solve all currently unsolved constraints
+-- (program @p@ is only used for debug information)
+solveConstraints :: MonadPlus m => LiquidProgram -> Explorer m ()
+solveConstraints p = do
+  -- Convert new constraints into formulas and augment the current qualifier map with new unknowns
+  cs <- use unsolvedConstraints
+  let cs' = concatMap split cs  
+  oldQuals <- use qualifierMap
+  cq <- asks _condQualsGen
+  tq <- asks _typeQualsGen
+  let (clauses, newQuals) = toFormulas cq tq cs'
+  let qmap = Map.union oldQuals newQuals
+  debug 1 ( text "Typing Constraints" $+$ (vsep $ map pretty cs) $+$ 
+    text "Liquid Program" $+$ pretty p) $ 
+    return ()
+  
+  -- Refine the current candidate solutions using the new constraints; fail if no solution
+  cands <- use candidates      
+  s <- asks _solver
+  let cands' = csRefine s clauses qmap p cands
+  guard (not $ null cands')
+  
+  -- Update state
+  unsolvedConstraints .= []
+  candidates .= cands'
+  qualifierMap .= qmap
+  
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: MonadPlus m => String -> Explorer m String
 freshId prefix = do
-  i <- use _1
-  _1 .= i + 1
+  i <- use idCount
+  idCount .= i + 1
   return $ prefix ++ show i
   
 -- | 'freshRefinements @t@ : a type with the same shape and variables as @t@ but fresh unknowns as refinements
@@ -129,6 +170,7 @@ generateE env s = generateVar `mplus` generateApp
       -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
       (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' sArg
       addConstraint $ Subtype env'' (typ arg) tArg
+      solveConstraints arg
       
       y <- freshId "x" 
       let env''' = addGhost y (typ arg) env''      
@@ -153,6 +195,11 @@ generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
       pBody <- generateI env' tRes
       return $ Program (PFix f (Program (PFun x pBody) t)) t
       
+    -- generateFix x tArg tRes = do
+      -- let env' = addSymbol x tArg env
+      -- pBody <- generateI env' tRes
+      -- return $ Program (PFun x pBody) t      
+      
     -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
     -- inside the body of the recursive function where its argument has name @argName@ and type @t@
     -- (@t@ strengthened with a termination condition)
@@ -165,6 +212,7 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
     guessE = do
       (env', res) <- generateE env (shape t)
       addConstraint $ Subtype env' (typ res) t
+      solveConstraints res
       return res
       
     -- | Generate a match term of type @t@
@@ -204,9 +252,9 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
         then mzero
         else do    
           cond <- Unknown Map.empty `liftM` freshId "c"
-          pThen <- local (over condDepth (-1 +)) $ generateI (addAssumption cond env) t
-          pElse <- local (over condDepth (-1 +)) $ generateI (addNegAssumption cond env) t
           addConstraint $ WellFormedCond env cond
+          pThen <- local (over condDepth (-1 +)) $ generateI (addAssumption cond env) t
+          pElse <- local (over condDepth (-1 +)) $ generateI (addNegAssumption cond env) t          
           return $ Program (PIf cond pThen pElse) t
       
       
@@ -254,9 +302,9 @@ toFormula _ _ (WellFormedLeaf (ScalarT baseT (Unknown _ u)) ts) = do
     spaceFromQual q = return $ Set.singleton q  
 toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
--- | 'extract' @sol prog@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
-extract :: SMTSolver s => Solution -> LiquidProgram -> MaybeT s SimpleProgram
-extract sol (Program prog t) = let go = extract sol in (flip Program (typeApplySolution sol t)) <$> case prog of
+-- | 'extractProgram' @sol prog@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
+extractProgram :: SMTSolver s => Solution -> LiquidProgram -> MaybeT s SimpleProgram
+extractProgram sol (Program prog t) = let go = extractProgram sol in (flip Program (typeApplySolution sol t)) <$> case prog of
   PSymbol leafConstraint -> msum $ map extractSymbol (Map.toList $ leafConstraint)     
   PApp pFun pArg -> liftM2 PApp (go pFun) (go pArg)
   PFun x pBody -> liftM (PFun x) (go pBody)
@@ -270,4 +318,4 @@ extract sol (Program prog t) = let go = extract sol in (flip Program (typeApplyS
       res <- debug 1 (text "Check symbol" <+> pretty symb <+> parens (pretty fml) <+> pretty fml') $ lift $ isValid fml'
       if res then debug 1 (text "OK") $ return (PSymbol symb) else debug 1 (text "MEH") $ mzero
       
-    extractCase (Case consName argNames expr) = liftM (Case consName argNames) (extract sol expr)
+    extractCase (Case consName argNames expr) = liftM (Case consName argNames) (extractProgram sol expr)

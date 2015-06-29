@@ -267,5 +267,4 @@ data Candidate = Candidate {
     validConstraints :: Set Clause,
     invalidConstraints :: Set Clause,
     label :: String
-  } deriving (Eq, Ord)  
-
+  } deriving (Eq, Ord)

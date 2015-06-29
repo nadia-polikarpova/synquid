@@ -24,15 +24,22 @@ import Control.Lens hiding (both)
 
 evalFixPointSolver = runReaderT
 
--- | 'solveWithParams' @params quals constraints@: 'greatestFixPoint' @quals constraints@ with solver parameters @params@
-solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Clause] -> s (Maybe Solution)
-solveWithParams params quals constraints = evalFixPointSolver go params
+-- | 'refineCandidates' @params quals constraints cands@: solve @constraints@ using @quals@ starting from initial candidated @cands@;
+-- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution.
+refineCandidates :: SMTSolver s => SolverParams -> QMap -> [Clause] -> [Candidate] -> s [Candidate]
+refineCandidates params quals constraints cands = evalFixPointSolver go params
   where
-    go = do      
-      quals' <- ifM (asks pruneQuals)
-        (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
-        (return quals)      
-      greatestFixPoint quals' constraints
+    go = do
+      debug 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals]) $ return ()
+      cands' <- mapM addConstraints cands
+      case find (Set.null . invalidConstraints) cands' of
+        Just c -> return $ c : delete c cands'
+        Nothing -> greatestFixPoint quals cands'
+      
+    addConstraints (Candidate sol valids invalids label) = do
+      let sol' = merge (topSolution quals) sol  -- Add new unknowns
+      (valids', invalids') <- partitionM (isValidClause . clauseApplySolution sol') constraints -- Evaluate new constraints
+      return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
 
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate
@@ -60,41 +67,34 @@ type FixPointSolver s a = ReaderT SolverParams s a
 {- Implementation -}
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
-greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> FixPointSolver s (Maybe Solution)
-greatestFixPoint quals constraints = do
-    debug 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals]) $ return ()
-    let sol0 = topSolution quals
-    (valids, invalids) <- partitionM (isValidClause . clauseApplySolution sol0) constraints
-    if null invalids
-      then return $ Just sol0
-      else go [Candidate sol0 (Set.fromList valids) (Set.fromList invalids) "0"]
+greatestFixPoint :: SMTSolver s => QMap -> [Candidate] -> FixPointSolver s [Candidate]
+greatestFixPoint _ [] = return []
+greatestFixPoint quals candidates = do
+    (cand@(Candidate sol _ _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
+    constraint <- asks constraintPickStrategy >>= pickConstraint cand
+    case constraint of
+      Disjunctive disjuncts -> do
+        debugOutputSplit candidates cand constraint
+        newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
+        greatestFixPoint quals (newCandidates ++ rest)
+      Horn fml -> do            
+        let modifiedConstraint = instantiateRhs sol fml 
+        debugOutput candidates cand fml modifiedConstraint
+        diffs <- strengthen quals modifiedConstraint sol                        
+        (newCandidates, rest') <- if length diffs == 1
+          then do -- Propagate the diff to all equivalent candidates
+            let unknowns = Set.map unknownName $ unknownsOf fml
+            let (equivs, nequivs) = partition (\(Candidate s valids invalids _) -> restrictDomain unknowns s == restrictDomain unknowns sol && Set.member constraint invalids) rest
+            nc <- mapM (\c -> updateCandidate constraint c diffs (head diffs)) (cand : equivs)
+            return (nc, nequivs)
+          else do -- Only update the current candidate
+            nc <- mapM (updateCandidate constraint cand diffs) diffs
+            return (nc, rest)
+        case find (Set.null . invalidConstraints) newCandidates of
+          Just cand' -> debug 1 (nest 2 $ text "Solution" $+$ pretty (solution cand')) $ return $ cand' : (delete cand' newCandidates ++ rest')  -- Solution found
+          Nothing -> greatestFixPoint quals (newCandidates ++ rest')
+
   where
-    go [] = return Nothing
-    go candidates = do
-        (cand@(Candidate sol _ _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
-        constraint <- asks constraintPickStrategy >>= pickConstraint cand
-        case constraint of
-          Disjunctive disjuncts -> do
-            debugOutputSplit candidates cand constraint
-            newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
-            go (newCandidates ++ rest)
-          Horn fml -> do            
-            let modifiedConstraint = instantiateRhs sol fml 
-            debugOutput candidates cand fml modifiedConstraint
-            diffs <- strengthen quals modifiedConstraint sol                        
-            (newCandidates, rest') <- if length diffs == 1
-              then do -- Propagate the diff to all equivalent candidates
-                let unknowns = Set.map unknownName $ unknownsOf fml
-                let (equivs, nequivs) = partition (\(Candidate s valids invalids _) -> restrictDomain unknowns s == restrictDomain unknowns sol && Set.member constraint invalids) rest
-                nc <- mapM (\c -> updateCandidate constraint c diffs (head diffs)) (cand : equivs)
-                return (nc, nequivs)
-              else do -- Only update the current candidate
-                nc <- mapM (updateCandidate constraint cand diffs) diffs
-                return (nc, rest)
-            case find (Set.null . invalidConstraints) newCandidates of
-              Just cand' -> debug 1 (nest 2 $ text "Solution" $+$ pretty (solution cand')) $ return $ Just (solution cand') -- Solution found
-              Nothing -> go (newCandidates ++ rest')
-              
     instantiateRhs sol fml = case fml of
       Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
