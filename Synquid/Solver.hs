@@ -25,15 +25,15 @@ import Control.Lens hiding (both)
 evalFixPointSolver = runReaderT
 
 -- | 'solveWithParams' @params quals constraints@: 'greatestFixPoint' @quals constraints@ with solver parameters @params@
-solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Clause] -> (Candidate -> Doc) -> s (Maybe Solution)
-solveWithParams params quals constraints candidateDoc = evalFixPointSolver go params
+solveWithParams :: SMTSolver s => SolverParams -> QMap -> [Clause] -> s (Maybe Solution)
+solveWithParams params quals constraints = evalFixPointSolver go params
   where
     go = do      
       quals' <- ifM (asks pruneQuals)
         (traverse (traverseOf qualifiers pruneQualifiers) quals) -- remove redundant qualifiers
         (return quals)      
-      greatestFixPoint quals' constraints candidateDoc
-      
+      greatestFixPoint quals' constraints
+
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate
       
@@ -50,7 +50,8 @@ data SolverParams = SolverParams {
   semanticPrune :: Bool,                                  -- ^ After solving each constraints, remove semantically non-optimal solutions
   agressivePrune :: Bool,                                 -- ^ Perform pruning on the LHS-pValuation of as opposed to per-variable valuations
   candidatePickStrategy :: CandidatePickStrategy,         -- ^ How should the next candidate solution to strengthen be picked?
-  constraintPickStrategy :: ConstraintPickStrategy        -- ^ How should the next constraint to solve be picked?
+  constraintPickStrategy :: ConstraintPickStrategy,       -- ^ How should the next constraint to solve be picked?
+  candDoc :: Candidate -> Doc                             -- ^ How should candidate solutions be printed in debug output?
 }
  
 -- | Fix point solver execution 
@@ -59,8 +60,8 @@ type FixPointSolver s a = ReaderT SolverParams s a
 {- Implementation -}
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
-greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> (Candidate -> Doc) -> FixPointSolver s (Maybe Solution)
-greatestFixPoint quals constraints candidateDoc = do
+greatestFixPoint :: SMTSolver s => QMap -> [Clause] -> FixPointSolver s (Maybe Solution)
+greatestFixPoint quals constraints = do
     debug 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals]) $ return ()
     let sol0 = topSolution quals
     (valids, invalids) <- partitionM (isValidClause . clauseApplySolution sol0) constraints
@@ -74,12 +75,12 @@ greatestFixPoint quals constraints candidateDoc = do
         constraint <- asks constraintPickStrategy >>= pickConstraint cand
         case constraint of
           Disjunctive disjuncts -> do
-            debugOutputSplit candidates cand constraint $ return ()
+            debugOutputSplit candidates cand constraint
             newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
             go (newCandidates ++ rest)
           Horn fml -> do            
             let modifiedConstraint = instantiateRhs sol fml 
-            debugOutput candidates cand fml modifiedConstraint $ return ()
+            debugOutput candidates cand fml modifiedConstraint
             diffs <- strengthen quals modifiedConstraint sol                        
             (newCandidates, rest') <- if length diffs == 1
               then do -- Propagate the diff to all equivalent candidates
@@ -135,16 +136,22 @@ greatestFixPoint quals constraints candidateDoc = do
             let spaceSize (Horn fml) = maxValSize quals sol (unknownsOf (leftHandSide fml))
             return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList hs)
 
-    debugOutput cands cand inv modified = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
-      text "Chosen candidate:" <+> candidateDoc cand,
-      text "Invalid Constraint:" <+> pretty inv,
-      text "Strengthening:" <+> pretty modified]
+    debugOutput cands cand inv modified = do
+      candidateDoc <- asks candDoc
+      debug 1 (vsep [
+        nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
+        text "Chosen candidate:" <+> candidateDoc cand,
+        text "Invalid Constraint:" <+> pretty inv,
+        text "Strengthening:" <+> pretty modified]) $
+        return ()
       
-    debugOutputSplit cands cand inv = debug 1 $ vsep [
-      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
-      text "Chosen candidate:" <+> candidateDoc cand, 
-      text "Splitting Invalid Constraint:" <+> pretty inv]      
+    debugOutputSplit cands cand inv = do
+      candidateDoc <- asks candDoc 
+      debug 1 (vsep [
+        nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
+        text "Chosen candidate:" <+> candidateDoc cand, 
+        text "Splitting Invalid Constraint:" <+> pretty inv]) $
+        return ()
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".

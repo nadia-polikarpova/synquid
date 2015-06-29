@@ -46,7 +46,7 @@ synthesize genParams solverParams env typ cquals tquals = evalZ3State $ runMaybe
   
     checkTemplate (clauses, qmap, p) = do
       lift initSolver
-      mSol <- lift $ solveWithParams solverParams qmap clauses (candidateDoc p)
+      mSol <- lift $ solveWithParams solverParams { candDoc = candidateDoc p } qmap clauses
       case mSol of
         Nothing -> mzero
         Just sol -> extract sol p

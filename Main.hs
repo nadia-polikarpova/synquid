@@ -33,7 +33,8 @@ solverParams = SolverParams {
   -- agressivePrune = False,    
   candidatePickStrategy = InitializedWeakCandidate,
   -- candidatePickStrategy = WeakCandidate,
-  constraintPickStrategy = SmallSpaceConstraint
+  constraintPickStrategy = SmallSpaceConstraint,
+  candDoc = const empty
   }
   
 synthesizeAndPrint env typ cquals tquals = do

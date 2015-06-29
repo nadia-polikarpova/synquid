@@ -1,16 +1,13 @@
 - Incremental pruning (compare efficiency)
+- Disjoint spaces in the solver
 
 	- max3: too many recursive calls
 	- replicate: matches nil
 	- app2: preconditions could help?
 
 - Search strategies: stream vs. increasing bounds, symbolic vs. explicit
-- Disjoint spaces in the solver
 - Compare my times to Steve
 
-- Bidirectional type-checking:
-	- Modify solver to return candidates
-	- Modify constraint generator: split into I-propagation/E-guessing inside a backtracking monad with incremental pruning
 - Polymorphism
 	- Implement shape unification
 	- Use it E-guessing
