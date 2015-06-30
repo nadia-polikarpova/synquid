@@ -244,7 +244,8 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
           
     -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
     addCaseSymbols env x (ScalarT baseT fml) (ScalarT _ fml') = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
-      return $ ([], addAssumption (subst fml) . addNegAssumption (fnot $ subst fml') $ env) -- fml' is added since it does not contain unknowns (it is the constructor type), and we want to allow vacuous cases
+      return $ ([], addAssumption (subst fml) . addNegAssumption (fnot $ subst fml') $ env) -- here vacuous cases are allowed
+      -- return $ ([], addAssumption (subst fml) . addAssumption (subst fml') $ env) -- here disallowed unless no other choice
     addCaseSymbols env x tX (FunctionT y tArg tRes) = do
       argName <- freshId "y"
       (args, env') <- addCaseSymbols (addSymbol argName tArg env) x tX (renameVar y argName tArg tRes)
