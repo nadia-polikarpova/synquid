@@ -74,6 +74,7 @@ explore params env t = do
     go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m SimpleProgram
     go = do
       p <- generateI env t          
+      -- solveConstraints p
       solv <- asks _solver
       cands <- use candidates
       lift . lift . lift $ (csExtract solv) p (head cands)
@@ -102,7 +103,7 @@ solveConstraints p = do
   -- Refine the current candidate solutions using the new constraints; fail if no solution
   cands <- use candidates      
   solv <- asks _solver
-  cands' <- lift . lift .lift $ (csRefine solv) clauses qmap p cands
+  cands' <- if null clauses then return cands else lift . lift .lift $ (csRefine solv) clauses qmap p cands
   guard (not $ null cands')
   
   -- Update state
@@ -191,14 +192,23 @@ generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType ->
 generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
   where
     generateFix x tArg tRes = do
-      -- TODO: abstract fix type?
-      f <- freshId "f"
+      -- TODO: abstract fix type?      
       y <- freshId "x"
-      let env' =  addSymbol x tArg .
-                  addSymbol f (FunctionT y (recursiveTArg x tArg) (renameVar x y tArg tRes))
-                  $ env
-      pBody <- generateI env' tRes
-      return $ Program (PFix f (Program (PFun x pBody) t)) t
+      
+      let recTArgMb = recursiveTArg x tArg
+      case recTArgMb of
+        Nothing -> do -- Cannot recurse on this argument: generate an ordinary abstraction
+          let env' =  addSymbol x tArg env
+          pBody <- generateI env' tRes
+          return $ Program (PFun x pBody) t
+                  
+        Just recTArg -> do  -- Can recurse on this argument: generate a fixpoint
+          f <- freshId "f"      
+          let env' =  addSymbol x tArg .
+                      addSymbol f (FunctionT y recTArg (renameVar x y tArg tRes))
+                      $ env
+          pBody <- generateI env' tRes
+          return $ Program (PFix f (Program (PFun x pBody) t)) t
       
     -- generateFix x tArg tRes = do
       -- let env' = addSymbol x tArg env
@@ -208,8 +218,11 @@ generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
     -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
     -- inside the body of the recursive function where its argument has name @argName@ and type @t@
     -- (@t@ strengthened with a termination condition)
-    recursiveTArg argName (ScalarT IntT fml) = ScalarT IntT (fml  |&|  valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)
-    recursiveTArg argName (ScalarT IListT fml) = ScalarT IListT (fml  |&|  Measure IntT "len" valList |<| Measure IntT "len" (listVar argName))
+    recursiveTArg _ (FunctionT _ _ _) = Nothing
+    recursiveTArg argName (ScalarT IntT fml) = Just $ ScalarT IntT (fml  |&|  valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)
+    recursiveTArg argName (ScalarT dt@(DatatypeT name) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
+      Nothing -> Nothing
+      Just metric -> Just $ ScalarT (DatatypeT name) (fml |&| metric (Var dt valueVarName) |<| metric (Var dt argName))
           
 generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
   where
@@ -226,11 +239,11 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
       if d == 0
         then mzero
         else do
-          let scrShape = ScalarT IListT ()                                                                                        -- Pick a datatype to match on (TODO: other datatypes)
-          (env', pScrutinee) <- local (\params -> set eGuessDepth (view scrutineeDepth params) params) $ generateE env scrShape   -- Guess a scrutinee of the chosen shape
+          scrDT <- msum (map return $ Map.keys (env ^. datatypes))                                         -- Pick a datatype to match on
+          (env', pScrutinee) <- local (\params -> set eGuessDepth (view scrutineeDepth params) params) $ generateE env (ScalarT (DatatypeT scrDT) ())   -- Guess a scrutinee of the chosen shape
           
           x <- freshId "x"                                                                                                        -- Generate a fresh variable that will represent the scrutinee in the case environments
-          pCases <- mapM (generateCase env' x (typ pScrutinee)) $ (env ^. constructors) Map.! (baseType scrShape)                 -- Generate a case for each constructor of the datatype
+          pCases <- mapM (generateCase env' x (typ pScrutinee)) $ ((env ^. datatypes) Map.! scrDT) ^. constructors                -- Generate a case for each constructor of the datatype
           return $ Program (PMatch pScrutinee pCases) t
       
     -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
@@ -285,6 +298,8 @@ toFormulas cq tq cs = let (leafCs, nodeCs) = partition isWFLeaf cs
 -- | 'toFormula' @cq tq c@ : translate simple typing constraint @c@ into either a logical constraint or an element of the search space,
 -- given search space generators @cq@ and @tq@
 toFormula :: QualsGen -> QualsGen -> Constraint -> State ([Clause], QMap) ()
+toFormula _ _ (Subtype env (ScalarT baseT _) (ScalarT baseT' (BoolLit True))) | baseT == baseT' 
+  = return ()
 toFormula _ _ (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml')) | baseT == baseT' 
   = let (poss, negs) = embedding env 
   in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)

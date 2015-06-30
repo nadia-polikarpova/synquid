@@ -1,4 +1,3 @@
-- Other data types
 - Polymorphism
 - Higher-order functions
 - Abstract refinements

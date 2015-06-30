@@ -31,8 +31,8 @@ data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
   _intSort :: Maybe Sort,                     -- ^ Int sort
   _boolSort :: Maybe Sort,                    -- ^ Boolean sort
-  _listSort :: Maybe Sort,                    -- ^ Sort for integer lists
-  _setSort :: Maybe Sort,
+  _setSort :: Maybe Sort,                     -- ^ Sort for integer sets
+  _datatypeSorts :: Map Id Sort,              -- ^ Sorts for user-defined datatypes
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
@@ -47,8 +47,8 @@ initZ3Data env env' = Z3Data {
   _mainEnv = env,
   _intSort = Nothing,
   _boolSort = Nothing,
-  _listSort = Nothing, 
   _setSort = Nothing,
+  _datatypeSorts = Map.empty,
   _vars = Map.empty,
   _measures = Map.empty,
   _controlLiterals = Bimap.empty,
@@ -110,8 +110,15 @@ toZ3 expr = case expr of
   where
     sort BoolT = fromJust <$> use boolSort
     sort IntT = fromJust <$> use intSort
-    sort IListT = fromJust <$> use listSort
     sort SetT = fromJust <$> use setSort
+    sort (DatatypeT name) = do
+      resMb <- uses datatypeSorts (Map.lookup name)
+      case resMb of
+        Just s -> return s
+        Nothing -> do
+          s <- mkStringSymbol name >>= mkUninterpretedSort
+          datatypeSorts %= Map.insert name s
+          return s                  
     
     setLiteral xs = do
       emp <- (fromJust <$> use intSort) >>= mkEmptySet
@@ -183,8 +190,6 @@ instance SMTSolver Z3State where
     intSort .= Just int
     bool <- mkBoolSort
     boolSort .= Just bool
-    list <- mkStringSymbol "intList" >>= mkUninterpretedSort
-    listSort .= Just list
     set <- mkSetSort int
     setSort .= Just set    
     

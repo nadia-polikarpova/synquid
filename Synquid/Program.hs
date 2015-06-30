@@ -57,11 +57,19 @@ renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVa
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
+-- | User-defined datatype representation
+data Datatype = Datatype {
+  _constructors :: [Id],                    -- ^ Constructor names
+  _wfMetric :: Maybe (Formula -> Formula)   -- ^ Given a datatype term, returns an integer term that can serve as a well-founded metric for recursion
+}
+
+makeLenses ''Datatype
+
 -- | Typing environment
 data Environment = Environment {
   _symbols :: Map Id RType,                -- ^ Variables and constants (with their refinement types)
   _symbolsOfShape :: Map SType (Set Id),   -- ^ Variables and constants indexed by their simple type
-  _constructors :: Map BaseType [Id],      -- ^ For each datatype, names of its constructors
+  _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
 }
@@ -75,20 +83,12 @@ emptyEnv = Environment Map.empty Map.empty Map.empty Set.empty Set.empty
 addSymbol :: Id -> RType -> Environment -> Environment
 addSymbol sym t = (symbols %~ Map.insert sym t) . (symbolsOfShape %~ Map.insertWith (Set.union) (shape t) (Set.singleton sym))
 
--- | 'addConstructor' @c t env@ : add type binding for a constructor @sym@ :: @t@ to @env@
-addConstructor :: Id -> RType -> Environment -> Environment
-addConstructor c t = addSymbol c t . (constructors %~ Map.insertWith (++) (baseType t) [c])
+-- | 'addDatatype' @name env@ : add datatype @name@ to the environment
+addDatatype :: Id -> Datatype -> Environment -> Environment
+addDatatype name dt = over datatypes (Map.insert name dt)
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x b = Var b valueVarName |=| Var b x
-
--- | Environment with only list constructors
-listEnv = addConstructor "Nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
-                                  Measure SetT "elems" valList  |=| SetLit []) .
-          addConstructor "Cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1
-                                                                                       |&| Measure SetT "elems" valList |=| Measure IntT "elems" (listVar "xs") /+/ SetLit [intVar "x"]
-                                                                                       )))
-          $ emptyEnv
                   
 -- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
 symbolsByShape :: SType -> Environment -> Map Id RType
@@ -96,7 +96,7 @@ symbolsByShape s env = restrictDomain (Map.findWithDefault Set.empty s (env ^. s
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> [Formula]
-allScalars env = concatMap (\b -> map (Var b) $ Set.toList $ Map.findWithDefault Set.empty (ScalarT b ()) (env ^. symbolsOfShape)) [BoolT, IntT, IListT]
+allScalars env = concatMap (\b -> map (Var b) $ Set.toList $ Map.findWithDefault Set.empty (ScalarT b ()) (env ^. symbolsOfShape)) ([BoolT, IntT] ++ map DatatypeT (Map.keys (env ^. datatypes)))
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
@@ -147,13 +147,10 @@ type LiquidProgram = Program LeafConstraint Formula RType
 
 -- | Building types
 int = ScalarT IntT
-list = ScalarT IListT
 int_ = int ()
-list_ = list ()
 (|->|) = FunctionT dontCare
 intAll = int ftrue
 nat = int (valInt |>=| IntLit 0)
-listAll = list ftrue
 
 infixr 5 |->|
           

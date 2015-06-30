@@ -111,9 +111,9 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 
 instance Pretty BaseType where
   pretty IntT = text "int"
-  pretty BoolT = text "bool"  
-  pretty IListT = text "list"
+  pretty BoolT = text "bool"    
   pretty SetT = text "set"
+  pretty (DatatypeT name) = text name
   
 instance Show BaseType where
   show = show . pretty  
