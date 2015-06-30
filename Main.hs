@@ -4,7 +4,7 @@ import Synquid.Logic
 import Synquid.Solver
 import Synquid.Program
 import Synquid.Pretty
-import Synquid.ConstraintGenerator
+import Synquid.Explorer
 import Synquid.Synthesizer
 
 import Control.Monad
@@ -20,7 +20,7 @@ explorerParams = ExplorerParams {
   _abstractLeafs = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
-  _solver = trivialSolver
+  _solver = undefined
 }
 
 -- | Parameters for constraint solving
@@ -74,10 +74,10 @@ testApp2 = do
   synthesizeAndPrint env typ [] []
   
 testLambda = do
-  let env = -- addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+  let env = addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
-  let typ = FunctionT "a" nat $ int (valInt |=| intVar "a" |+| IntLit 5)
+  let typ = FunctionT "a" nat $ int (valInt |=| intVar "a" |+| IntLit 3)
   
   synthesizeAndPrint env typ [] []
   
@@ -211,7 +211,7 @@ main = do
   -- putStr "\n=== app2 ===\n";      testApp2
   -- putStr "\n=== lambda ===\n";    testLambda
   -- putStr "\n=== max2 ===\n";      testMax2  
-  putStr "\n=== max3 ===\n";      testMax3  
+  -- putStr "\n=== max3 ===\n";      testMax3
   -- putStr "\n=== abs ===\n";       testAbs  
   -- putStr "\n=== addition ===\n";  testAddition
   -- putStr "\n=== compose ===\n";   testCompose
@@ -221,4 +221,4 @@ main = do
   -- putStr "\n=== length ===\n";    testLength
   -- putStr "\n=== append ===\n";    testAppend
   -- putStr "\n=== stutter ===\n";   testStutter
-  -- putStr "\n=== drop ===\n";   testDrop
+  putStr "\n=== drop ===\n";   testDrop

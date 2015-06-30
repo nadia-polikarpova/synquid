@@ -1,21 +1,14 @@
-- Incremental pruning (compare efficiency)
-- Disjoint spaces in the solver
-
-	- max3: too many recursive calls
-	- replicate: matches nil
-	- app2: preconditions could help?
-
-- Search strategies: stream vs. increasing bounds, symbolic vs. explicit
-- Compare my times to Steve
-
+- No spurious branches
+- Other data types
 - Polymorphism
-	- Implement shape unification
-	- Use it E-guessing
-- Additional pruning (when to apply matches and constructors?)
 - Higher-order functions
 - Abstract refinements
+
+- Optimize	
+	- Search strategies (symbolic vs explicit, e-guess caching)
+	- Disjoint spaces in the solver
+
 - Make conditions programs
-- Other Data types
 
 - Figure out assumptions in aggressive prune
 

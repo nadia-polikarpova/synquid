@@ -22,10 +22,14 @@ import Control.Lens hiding (both)
 
 {- Interface -}
 
-evalFixPointSolver = runReaderT
+-- | 'initialCandidate' : initial candidate solution
+initialCandidate :: SMTSolver s => s Candidate
+initialCandidate = do
+  initSolver
+  return $ Candidate (topSolution Map.empty) Set.empty Set.empty "0"
 
--- | 'refineCandidates' @params quals constraints cands@: solve @constraints@ using @quals@ starting from initial candidated @cands@;
--- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution.
+-- | 'refineCandidates' @params quals constraints cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
+-- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
 refineCandidates :: SMTSolver s => SolverParams -> QMap -> [Clause] -> [Candidate] -> s [Candidate]
 refineCandidates params quals constraints cands = evalFixPointSolver go params
   where
@@ -61,10 +65,12 @@ data SolverParams = SolverParams {
   candDoc :: Candidate -> Doc                             -- ^ How should candidate solutions be printed in debug output?
 }
  
+{- Implementation -}
+
 -- | Fix point solver execution 
 type FixPointSolver s a = ReaderT SolverParams s a
 
-{- Implementation -}
+evalFixPointSolver = runReaderT
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
 greatestFixPoint :: SMTSolver s => QMap -> [Candidate] -> FixPointSolver s [Candidate]

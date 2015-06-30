@@ -167,16 +167,4 @@ data Constraint = Unconstrained
   
 isWFLeaf (WellFormedLeaf _ _) = True
 isWFLeaf _ = False
-
-data ConstraintSolver = ConstraintSolver {
-    csInit :: [Candidate],
-    csRefine :: [Clause] -> QMap -> LiquidProgram -> [Candidate] -> [Candidate],
-    csExtract :: LiquidProgram -> Candidate -> SimpleProgram
-}
-
-trivialSolver = ConstraintSolver 
-  [Candidate (topSolution Map.empty) Set.empty Set.empty "0"]
-  undefined
-  undefined
-
   

@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Generating synthesis constraints from specifications, qualifiers, and program templates
-module Synquid.ConstraintGenerator where
+module Synquid.Explorer where
 
 import Synquid.Logic
 import Synquid.Program
@@ -30,57 +30,62 @@ type QualsGen = [Formula] -> QSpace
 -- | Empty state space generator
 emptyGen = const emptyQSpace
 
--- | Parameters of program template exploration
-data ExplorerParams = ExplorerParams {
-  _eGuessDepth :: Int,      -- ^ Maximum depth of application trees
-  _scrutineeDepth :: Int,   -- ^ Maximum depth of application trees inside match scrutinees
-  _matchDepth :: Int,       -- ^ Maximum nesting level of matches
-  _condDepth :: Int,        -- ^ Maximum nesting level of conditionals
-  _abstractLeafs :: Bool,   -- ^ Use symbolic leaf search?
-  _condQualsGen :: QualsGen,
-  _typeQualsGen :: QualsGen,
-  _solver :: ConstraintSolver
+-- | Incremental second-order constraint solver
+data ConstraintSolver s = ConstraintSolver {
+  csInit :: s Candidate,                                                          -- ^ Initial candidate solution
+  csRefine :: [Clause] -> QMap -> LiquidProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
+  csExtract :: LiquidProgram -> Candidate -> s SimpleProgram                      -- ^ Extract a program from a valid solution
+}
+
+-- | Parameters of program exploration
+data ExplorerParams s = ExplorerParams {
+  _eGuessDepth :: Int,            -- ^ Maximum depth of application trees
+  _scrutineeDepth :: Int,         -- ^ Maximum depth of application trees inside match scrutinees
+  _matchDepth :: Int,             -- ^ Maximum nesting level of matches
+  _condDepth :: Int,              -- ^ Maximum nesting level of conditionals
+  _abstractLeafs :: Bool,         -- ^ Use symbolic leaf search?
+  _condQualsGen :: QualsGen,      -- ^ Qualifier generator for conditionals
+  _typeQualsGen :: QualsGen,      -- ^ Qualifier generator for types
+  _solver :: ConstraintSolver s   -- ^ Constraint solver
 }
 
 makeLenses ''ExplorerParams
 
+-- | State of program exploration
 data ExplorerState = ExplorerState {
-  _idCount :: Int,
-  _unsolvedConstraints :: [Constraint],
-  _qualifierMap :: QMap,
-  _candidates :: [Candidate]
+  _idCount :: Int,                      -- ^ Number of unique identifiers issued so far
+  _candidates :: [Candidate],           -- ^ Current set of candidate solutions to unknowns
+  _unsolvedConstraints :: [Constraint], -- ^ Typing constraints accumulated since the candidates have been last refined
+  _qualifierMap :: QMap                 -- ^ State spaces for all the unknowns
 }
 
 makeLenses ''ExplorerState
 
--- | Computations that explore program templates (parametrized by the backtracking monad)
-type Explorer m = StateT ExplorerState (ReaderT ExplorerParams m)
+-- | Computations that explore programs, parametrized by the the constraint solver and the backtracking monad
+type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams s) (m s))
 
---- | 'genConstraints' @params cq tq env typ@ : given parameters @params@, search space generators for conditionals and types @cq@ and @tq@,
---- top-level type environment @env@, and refinement type @typ@,
---- generate a set of constraints, a search space map for the unknowns inside those constraints, and a liquid program,
---- such that a valid solution for the constraints, if exists, would turn the liquid program into a simple program of type @typ@.
--- genConstraints :: MonadPlus m => ExplorerParams -> QualsGen -> QualsGen -> Environment -> RType -> m ([Clause], QMap, LiquidProgram)
-genConstraints :: MonadPlus m => ExplorerParams -> Environment -> RType -> m SimpleProgram
-genConstraints params env t = runReaderT (evalStateT go initState) params 
+-- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
+-- exploration is driven by @params@
+explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Environment -> RType -> m s SimpleProgram
+explore params env t = do
+    initCand <- lift $ csInit (_solver params)
+    runReaderT (evalStateT go (ExplorerState 0 [initCand] [] Map.empty)) params 
   where
-    initState = ExplorerState 0 [] Map.empty (csInit $ _solver params)
-  
-    go :: MonadPlus m => Explorer m SimpleProgram
+    go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m SimpleProgram
     go = do
       p <- generateI env t          
-      s <- asks _solver
+      solv <- asks _solver
       cands <- use candidates
-      return $ csExtract s p (head cands)
+      lift . lift . lift $ (csExtract solv) p (head cands)
 
 {- Implementation -}
 
--- | Impose constraint @c@ on the program
+-- | Impose typing constraint @c@ on the programs
 addConstraint c = unsolvedConstraints %= (c :)
 
 -- | Solve all currently unsolved constraints
 -- (program @p@ is only used for debug information)
-solveConstraints :: MonadPlus m => LiquidProgram -> Explorer m ()
+solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) =>LiquidProgram -> Explorer s m ()
 solveConstraints p = do
   -- Convert new constraints into formulas and augment the current qualifier map with new unknowns
   cs <- use unsolvedConstraints
@@ -96,8 +101,8 @@ solveConstraints p = do
   
   -- Refine the current candidate solutions using the new constraints; fail if no solution
   cands <- use candidates      
-  s <- asks _solver
-  let cands' = csRefine s clauses qmap p cands
+  solv <- asks _solver
+  cands' <- lift . lift .lift $ (csRefine solv) clauses qmap p cands
   guard (not $ null cands')
   
   -- Update state
@@ -106,14 +111,14 @@ solveConstraints p = do
   qualifierMap .= qmap
   
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
-freshId :: MonadPlus m => String -> Explorer m String
+freshId :: (Monad s, MonadTrans m, MonadPlus (m s)) =>String -> Explorer s m String
 freshId prefix = do
   i <- use idCount
   idCount .= i + 1
   return $ prefix ++ show i
   
 -- | 'freshRefinements @t@ : a type with the same shape and variables as @t@ but fresh unknowns as refinements
-freshRefinements :: MonadPlus m => RType -> Explorer m RType
+freshRefinements :: (Monad s, MonadTrans m, MonadPlus (m s)) => RType -> Explorer s m RType
 freshRefinements (ScalarT base _) = do
   k <- freshId "u"  
   return $ ScalarT base (Unknown Map.empty k)
@@ -122,7 +127,7 @@ freshRefinements (FunctionT x tArg tFun) = do
   
 -- | 'generateE' @env s@ : explore all liquid e-terms of type shape @s@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)  
-generateE :: MonadPlus m => Environment -> SType -> Explorer m (Environment, LiquidProgram)
+generateE :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> SType -> Explorer s m (Environment, LiquidProgram)
 generateE env s = generateVar `mplus` generateApp
   where
     -- | Explore all variables of shape @s@
@@ -182,7 +187,7 @@ generateE env s = generateVar `mplus` generateApp
      
 -- | 'generateI' @env t@ : explore all liquid terms of type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
-generateI :: MonadPlus m => Environment -> RType -> Explorer m LiquidProgram
+generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType -> Explorer s m LiquidProgram
 generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
   where
     generateFix x tArg tRes = do

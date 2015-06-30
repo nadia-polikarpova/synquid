@@ -11,7 +11,7 @@ import Synquid.SMTSolver
 import Synquid.Z3
 import Synquid.Program
 import Synquid.Pretty
-import Synquid.ConstraintGenerator
+import Synquid.Explorer
 
 import Data.Maybe
 import Data.List
@@ -19,43 +19,41 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Control.Monad
-import Control.Monad.Stream
 import Control.Monad.Logic
-import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Applicative
 import Control.Lens
-import System.IO.Unsafe
 
 -- | 'synthesize' @templGenParam consGenParams solverParams env typ templ cq tq@ : synthesize a program that has a type @typ@ 
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
-synthesize genParams solverParams env typ cquals tquals = 
-  -- case toList programs of
-  case observeMany 1 programs of
+synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
+synthesize explorerParams solverParams env typ cquals tquals = do
+  ps <- evalZ3State $ observeManyT 1 $ programs
+  case ps of
     [] -> return Nothing
     p : _ -> return $ Just p
+    
   where
-    -- programs :: Stream SimpleProgram
-    programs :: Logic SimpleProgram
+    -- | Stream of programs that satisfy the specification
+    programs :: LogicT Z3State SimpleProgram
     programs = let
-        genParams' = over solver (\s -> s { csRefine = refine, csExtract = extract }) .
-                     set condQualsGen condQuals .
-                     set typeQualsGen typeQuals
-                     $ genParams
-      in genConstraints genParams' env typ
+        -- Initialize missing explorer parameters
+        explorerParams' =  set solver (ConstraintSolver init refine extract) .
+                           set condQualsGen condQuals .
+                           set typeQualsGen typeQuals
+                           $ explorerParams
+      in explore explorerParams' env typ
       
-    refine clauses qmap p cands = unsafePerformIO $ evalZ3State $ do
-      initSolver
-      refineCandidates (solverParams { candDoc = candidateDoc p }) qmap clauses cands
+    init :: Z3State Candidate
+    init = initialCandidate
       
-    extract :: LiquidProgram -> Candidate -> SimpleProgram  
-    extract p cand = fromJust . unsafePerformIO . evalZ3State . runMaybeT $ do
-      lift initSolver 
-      extractProgram (solution cand) p
+    refine :: [Clause] -> QMap -> LiquidProgram -> [Candidate] -> Z3State [Candidate]
+    refine clauses qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap clauses cands
+      
+    extract :: LiquidProgram -> Candidate -> Z3State SimpleProgram  
+    extract p cand = fromJust <$> (runMaybeT $ extractProgram (solution cand) p)
   
     -- | Qualifier generator for conditionals
     condQuals = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
