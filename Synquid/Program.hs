@@ -120,9 +120,8 @@ makeLenses ''Datatype
 
 -- | Typing environment
 data Environment = Environment {
-  _symbols :: Map Id RSchema,                -- ^ Variables and constants (with their refinement types)
-  _boundTypeVars :: [Id],
-  -- _instantiations :: TypeSubstitution Formula,
+  _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types)
+  _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
@@ -135,11 +134,15 @@ emptyEnv = Environment Map.empty [] Map.empty Set.empty Set.empty
 
 -- | 'addSymbol' @sym t env@ : add type binding @sym@ :: Monotype @t@ to @env@
 addSymbol :: Id -> RType -> Environment -> Environment
-addSymbol sym t = symbols %~ Map.insert sym (Monotype t)
+addSymbol sym t = addPolySymbol sym (Monotype t)
 
 -- | 'addPolySymbol' @sym sch env@ : add type binding @sym@ :: @sch@ to @env@
 addPolySymbol :: Id -> RSchema -> Environment -> Environment
-addPolySymbol sym sch = symbols %~ Map.insert sym sch
+addPolySymbol sym sch = let n = arity (toMonotype sch) in symbols %~ Map.insertWith (Map.union) n (Map.singleton sym sch)
+
+symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
+
+allSymbols env = Map.unions $ Map.elems (env ^. symbols)
 
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment
 addDatatype :: Id -> Datatype -> Environment -> Environment
@@ -154,11 +157,11 @@ varRefinement x b = Var b valueVarName |=| Var b x
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> [Formula]
-allScalars env = map (uncurry $ flip Var) $ Map.toList $ Map.mapMaybe baseType (env ^. symbols)
+allScalars env = map (uncurry $ flip Var) $ Map.toList $ Map.mapMaybe baseType (symbolsOfArity 0 env)
   where
     baseType (Forall _ _) = Nothing -- TODO: what to do with polymorphic scalars like Nil?
     baseType (Monotype (ScalarT b _)) = Just b
-    baseType (Monotype (FunctionT _ _ _)) = Nothing
+    -- baseType (Monotype (FunctionT _ _ _)) = Nothing
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
@@ -170,11 +173,11 @@ addNegAssumption f = negAssumptions %~ Set.insert f
 
 -- | Positive and negative formulas encoded in an environment    
 embedding :: Environment -> (Set Formula, Set Formula)    
-embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ env ^. symbols), env ^.negAssumptions)
+embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ symbolsOfArity 0 env), env ^.negAssumptions)
   where
     embedBinding _ (Monotype (ScalarT _ (BoolLit True))) = Set.empty -- Ignore trivial types
     embedBinding x (Monotype (ScalarT baseT fml)) = Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
-    embedBinding _ _ = Set.empty
+    -- embedBinding _ _ = Set.empty
     
 {- Program terms -}    
     

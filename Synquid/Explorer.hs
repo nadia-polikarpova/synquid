@@ -134,31 +134,38 @@ generateE env s = generateVar `mplus` generateApp
   where
     -- | Explore all variables of shape @s@
     generateVar = do
-          symbols <- symbolsByShape s env
-          -- abstract <- asks _abstractLeafs
-          -- if abstract && Map.size symbols > 1
-            -- then do
-              -- t <- freshRefinements $ refine s          
-              -- let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
-              -- let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
-              -- addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-              -- when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-              -- return (env, Program (PSymbol leafConstraint) t)
-            -- else msum $ map genKnownSymbol $ Map.toList symbols
-          msum $ map genKnownSymbol $ Map.toList symbols
-                  
-    genKnownSymbol (name, (typeSubst, sch)) = case sch of 
-      Monotype t -> return (env, Program (PSymbol (Map.singleton name Unconstrained) Map.empty) (symbolType name t)) -- Precise match
-      sch -> do -- Unification
+      symbols <- symbolsUnifyingWith s env
+      abstract <- asks _abstractLeafs
+      if abstract && Map.size symbols > 1
+        then do
+          let sameShape (_, t1) (_, t2) = shape t1 == shape t2 
+          ts <- mapM instantiate (Map.toList symbols)
+          let symbolsByShape = map Map.fromList $ groupBy sameShape $ zip (Map.keys symbols) ts
+          msum $ map abstractVarOfShape symbolsByShape
+        else msum $ map genKnownSymbol $ Map.toList symbols
+      
+    instantiate (name, (typeSubst, sch)) = case sch of 
+      Monotype t -> return (symbolType name t)
+      _ -> do -- Unification
         let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst
-        ts <- mapM (freshRefinements . refine) (Map.elems rhsSubst)
-        mapM_ (addConstraint . WellFormed emptyEnv) ts
-        let rhsSubst' = Map.fromList $ zip (Map.keys rhsSubst) ts        
-        return (env, Program
-                  (PSymbol (Map.singleton name Unconstrained) rhsSubst')
-                  (typeSubstitute andClean rhsSubst' $ toMonotype sch))
+        rhsSubst' <- T.mapM (freshRefinements . refine) rhsSubst
+        mapM_ (addConstraint . WellFormed emptyEnv) (Map.elems rhsSubst')
+        return $ typeSubstitute andClean rhsSubst' (toMonotype sch)
+      
+    abstractVarOfShape symbols = do
+      let s = shape $ head $ Map.elems symbols
+      t <- freshRefinements $ refine s          
+      let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
+      let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
+      addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
+      when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+      return (env, Program (PSymbol leafConstraint Map.empty) t)
+                  
+    genKnownSymbol (name, typeInfo) = do
+      t <- instantiate (name, typeInfo)
+      return (env, Program (PSymbol (Map.singleton name Unconstrained) Map.empty) t)
 
-    constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
+    constraintForSymbol t name t' = Subtype env t' t
     
     symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
     symbolType _ t = t    
@@ -166,7 +173,7 @@ generateE env s = generateVar `mplus` generateApp
     -- | Explore all applications of shape @s@ of an e-term to an i-term
     generateApp = do
       d <- asks _eGuessDepth
-      let maxArity = foldr max 0 (map (arity . toMonotype) (Map.elems (env ^. symbols)))
+      let maxArity = fst $ Map.findMax (env ^. symbols)
       if d == 0 || arity s == maxArity
         then mzero 
         else do          
@@ -184,7 +191,7 @@ generateE env s = generateVar `mplus` generateApp
           
           y <- freshId "x" 
           let env''' = addGhost y (typ arg) env''      
-          return (env''', Program (PApp (instantiateSymbols u fun) arg) (renameVar x y tArg tRes'))      
+          return (env''', Program (PApp (instantiateSymbols u fun) arg) (renameVar x y tArg tRes'))
       
     addGhost x (ScalarT baseT fml) env = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
       addAssumption (subst fml) env
@@ -252,7 +259,7 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
       
     -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
     generateCase env scrName scrType consName = do
-      case Map.lookup consName (env ^. symbols) of
+      case Map.lookup consName (allSymbols env) of
         Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
         Just consT -> do
           (args, caseEnv) <- addCaseSymbols env scrName scrType (toMonotype consT) -- Add bindings for constructor arguments and refine the scrutinee type in the environment
@@ -368,11 +375,9 @@ unifier bvs (FunctionT _ argL resL) (Monotype (FunctionT _ argR resR)) = do
 unifier bvs lhs (Forall a sch) = unifier bvs lhs sch
 unifier _ _ _ = Nothing
 
--- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
-symbolsByShape :: (Monad s, MonadTrans m, MonadPlus (m s)) => SType -> Environment -> Explorer s m (Map Id (TypeSubstitution (), RSchema))
-symbolsByShape s env = do
-  res <- T.mapM unify (env ^. symbols)
-  return $ Map.map (over _1 fromJust) $ Map.filter (isJust . fst) $ res
+-- | 'symbolsUnifyingWith' @s env@ : symbols of simple type @s@ in @env@ 
+symbolsUnifyingWith :: (Monad s, MonadTrans m, MonadPlus (m s)) => SType -> Environment -> Explorer s m (Map Id (TypeSubstitution (), RSchema))
+symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . fst)) `liftM` T.mapM unify (symbolsOfArity (arity s) env)
   where
     unify sch = do
       sch' <- freshTypeVars sch

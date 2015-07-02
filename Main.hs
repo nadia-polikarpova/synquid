@@ -13,7 +13,7 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 2,
@@ -70,7 +70,7 @@ testApp2 = do
             addSymbol "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
             addSymbol "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
             id $ emptyEnv
-  let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 2)
+  let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 5)
   
   synthesizeAndPrint env typ [] []
   
@@ -164,8 +164,9 @@ testCompose = do
   synthesizeAndPrint env typ [] []    
   
 testPolymorphic = do
-  let env = -- addPolySymbol "coerce" (Forall "a" $ Forall "b" $ Monotype $ FunctionT "x" (vartAll "a") (vartAll "b")) .
+  let env = -- addPolySymbol "coerce" (Forall "a" $ Forall "b" $ Monotype $ FunctionT "x" (vartAll "a") (vartAll "b")) .            
             addPolySymbol "id" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (vart "a" $ valVart "a" |=| vartVar "a" "x")) .
+            addSymbol "inc" (FunctionT "x" nat nat) .
             id $ emptyEnv
   let typ = Monotype $ FunctionT "x" intAll nat
   
@@ -330,7 +331,7 @@ testFlatten = do
 main = do
   -- Integer programs
   -- putStr "\n=== app ===\n";       testApp
-  putStr "\n=== app2 ===\n";      testApp2  
+  -- putStr "\n=== app2 ===\n";      testApp2  
   -- putStr "\n=== lambda ===\n";    testLambda
   -- putStr "\n=== max2 ===\n";      testMax2  
   -- putStr "\n=== max3 ===\n";      testMax3
@@ -340,7 +341,7 @@ main = do
   -- putStr "\n=== id ===\n";       testId
   -- putStr "\n=== const ===\n";       testConst
   -- putStr "\n=== compose ===\n";   testCompose  
-  -- putStr "\n=== polymorphic ===\n";   testPolymorphic
+  putStr "\n=== polymorphic ===\n";   testPolymorphic
   -- List programs
   -- putStr "\n=== head ===\n";      testHead
   -- putStr "\n=== replicate ===\n"; testReplicate
