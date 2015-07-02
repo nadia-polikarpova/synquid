@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
 
 -- | Generating synthesis constraints from specifications, qualifiers, and program templates
 module Synquid.Explorer where
@@ -15,6 +15,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Traversable as T
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
@@ -133,7 +134,7 @@ generateE env s = generateVar `mplus` generateApp
   where
     -- | Explore all variables of shape @s@
     generateVar = do
-          let symbols = symbolsByShape s env
+          symbols <- symbolsByShape s env
           -- abstract <- asks _abstractLeafs
           -- if abstract && Map.size symbols > 1
             -- then do
@@ -145,16 +146,17 @@ generateE env s = generateVar `mplus` generateApp
               -- return (env, Program (PSymbol leafConstraint) t)
             -- else msum $ map genKnownSymbol $ Map.toList symbols
           msum $ map genKnownSymbol $ Map.toList symbols
-        
+                  
     genKnownSymbol (name, (typeSubst, sch)) = case sch of 
       Monotype t -> return (env, Program (PSymbol (Map.singleton name Unconstrained) Map.empty) (symbolType name t)) -- Precise match
       sch -> do -- Unification
-        ts <- mapM (freshRefinements . refine) (Map.elems typeSubst)
+        let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst
+        ts <- mapM (freshRefinements . refine) (Map.elems rhsSubst)
         mapM_ (addConstraint . WellFormed emptyEnv) ts
-        let typeSubst' = Map.fromList $ zip (Map.keys typeSubst) ts        
+        let rhsSubst' = Map.fromList $ zip (Map.keys rhsSubst) ts        
         return (env, Program
-                      (PSymbol (Map.singleton name Unconstrained) typeSubst')
-                      (typeSubstitute typeSubst' $ toMonotype sch))
+                  (PSymbol (Map.singleton name Unconstrained) rhsSubst')
+                  (typeSubstitute andClean rhsSubst' $ toMonotype sch))
 
     constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
     
@@ -164,32 +166,25 @@ generateE env s = generateVar `mplus` generateApp
     -- | Explore all applications of shape @s@ of an e-term to an i-term
     generateApp = do
       d <- asks _eGuessDepth
-      if d == 0 
+      let maxArity = foldr max 0 (map (arity . toMonotype) (Map.elems (env ^. symbols)))
+      if d == 0 || arity s == maxArity
         then mzero 
-        else 
-          -- Since we know that the head of an e-term is always a variable, 
-          -- check the function variables in the context to decide what the last argument shape can be
-          let argShapes = undefined -- nub $ catMaybes $ map (argProducing s) $ Map.keys (env ^. symbolsOfShape)
-          in msum $ map generateWithArgShape argShapes
-         
-    -- | 'argProducing' @s sF@ : if @sF@ is a function type that can eventually produce @s@, the type of the last argument in @sF@ before @s@;
-    -- otherwise Nothing
-    argProducing :: SType -> SType -> Maybe SType
-    argProducing s (ScalarT _ _) = Nothing
-    argProducing s (FunctionT _ sArg sRes) = if s == sRes then Just sArg else argProducing s sRes          
+        else do          
+          a <- freshId "_a"
+          (env', fun) <- generateE env ((ScalarT (TypeVarT a) ()) |->| s) -- Find all functions that unify with (? -> s)
+          let FunctionT _ tArg tRes = typ fun
+          debug 1 (text "Function type" <+> pretty (typ fun)) $ return ()
           
-    -- | Explore all applications of shape @s@ of an e-term to an i-term of shape @sArg@
-    generateWithArgShape sArg = do
-      (env', fun) <- generateE env (sArg |->| s)
-      let FunctionT x tArg tRes = typ fun            
-      -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
-      (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' sArg
-      addConstraint $ Subtype env'' (typ arg) tArg
-      solveConstraints arg
-      
-      y <- freshId "x" 
-      let env''' = addGhost y (typ arg) env''      
-      return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))      
+          -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
+          (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
+          let u = fromJust $ unifier (env ^. boundTypeVars) tArg (Monotype $ typ arg)
+          let FunctionT x tArg' tRes' = typeSubstitute andClean u (typ fun)
+          addConstraint $ Subtype env'' (typ arg) tArg'
+          solveConstraints arg
+          
+          y <- freshId "x" 
+          let env''' = addGhost y (typ arg) env''      
+          return (env''', Program (PApp (instantiateSymbols u fun) arg) (renameVar x y tArg tRes'))      
       
     addGhost x (ScalarT baseT fml) env = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
       addAssumption (subst fml) env
@@ -349,3 +344,47 @@ extractProgram sol (Program prog sch) = let go = extractProgram sol in (flip Pro
       if res then debug 1 (text "OK") $ return (PSymbol symb subst) else debug 1 (text "MEH") $ mzero
       
     extractCase (Case consName argNames expr) = liftM (Case consName argNames) (extractProgram sol expr)
+    
+{- Utility -}
+
+-- | 'unifier' @bvs t sch@ : most general unifier of a type @t@ and schema @sch@, 
+-- where types variables @bvs@ can occur in @t@ but are bound in the context and thus cannot be substituted;
+-- we assume that the free types variables of @t@ and @sch@ and bound variables of @sch@ are all pairwise disjoint;
+unifier :: (Pretty (TypeSkeleton r), Pretty (SchemaSkeleton r)) => [Id] -> TypeSkeleton r -> SchemaSkeleton r -> Maybe (TypeSubstitution r)
+unifier bvs lhs@(ScalarT (TypeVarT name) _) rhs@(Monotype t) -- RHS has to be a monotype because all LHS-variables are on the left of an arrow
+  | not $ name `elem` bvs = if Set.member name (typeVarsOf t) 
+      then error $ show $ text "unifier: free type variable" <+> text name <+> text "occurs on both sides:" <+> commaSep [pretty lhs, pretty rhs]
+      else Just $ Map.singleton name t   -- Free type variable on the left      
+unifier bvs lhs rhs@(Monotype (ScalarT (TypeVarT name) _))
+  | not $ name `elem` bvs = if Set.member name (typeVarsOf lhs) 
+      then error $ show $ text "unifier: free type variable" <+> text name <+> text "occurs on both sides:" <+> commaSep [pretty lhs, pretty rhs]
+      else Just $ Map.singleton name lhs   -- Free type variable on the right
+unifier _ lhs@(ScalarT baseL _) rhs@(Monotype (ScalarT baseR _))
+  | baseL == baseR = Just $ Map.empty                    -- TODO: polymorphic datatypes
+unifier bvs (FunctionT _ argL resL) (Monotype (FunctionT _ argR resR)) = do
+  uL <- unifier bvs argL (Monotype argR)
+  uR <- unifier bvs (typeSubstitute const uL resL) (Monotype $ typeSubstitute const uL resR)
+  return $ Map.union uL uR
+unifier bvs lhs (Forall a sch) = unifier bvs lhs sch
+unifier _ _ _ = Nothing
+
+-- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
+symbolsByShape :: (Monad s, MonadTrans m, MonadPlus (m s)) => SType -> Environment -> Explorer s m (Map Id (TypeSubstitution (), RSchema))
+symbolsByShape s env = do
+  res <- T.mapM unify (env ^. symbols)
+  return $ Map.map (over _1 fromJust) $ Map.filter (isJust . fst) $ res
+  where
+    unify sch = do
+      sch' <- freshTypeVars sch
+      let res = unifier (env ^. boundTypeVars) s (polyShape sch') 
+      debug 1 (text "unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')]) <+> text "->" <+> pretty res) $ return (res, sch')
+    
+-- | Replace all bound type variables with fresh identifiers    
+freshTypeVars :: (Monad s, MonadTrans m, MonadPlus (m s)) => SchemaSkeleton r -> Explorer s m (SchemaSkeleton r)    
+freshTypeVars t@(Monotype _) = return t
+freshTypeVars (Forall a sch) = do
+  a' <- freshId "a"
+  sch' <- freshTypeVars $ schemaRenameTypeVar a a' sch
+  return $ Forall a' sch'
+      
+

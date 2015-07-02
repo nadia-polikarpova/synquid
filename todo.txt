@@ -1,5 +1,8 @@
-- Polymorphism
+- Symbol abstraction
+- Polymorphic datatypes
+- When instantiating a symbol, also substitute type vars inside the refinements
 - Higher-order functions
+
 - Abstract refinements
 
 - Optimize	

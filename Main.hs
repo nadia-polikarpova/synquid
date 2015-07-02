@@ -13,7 +13,7 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 3,
+  _eGuessDepth = 2,
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 2,
@@ -46,8 +46,8 @@ synthesizeAndPrint env typ cquals tquals = do
   mProg <- synthesize explorerParams solverParams env typ cquals tquals
   case mProg of
     Nothing -> putStr "No Solution"
-    -- Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty (const empty) prog
-    Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty pretty prog
+    Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty (const empty) pretty prog
+    -- Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty pretty pretty prog
   print empty
     
 {- Integer programs -}
@@ -70,7 +70,7 @@ testApp2 = do
             addSymbol "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
             addSymbol "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
             id $ emptyEnv
-  let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 5)
+  let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 2)
   
   synthesizeAndPrint env typ [] []
   
@@ -164,9 +164,10 @@ testCompose = do
   synthesizeAndPrint env typ [] []    
   
 testPolymorphic = do
-  let env = addPolySymbol "magic" (Forall "a" $ Monotype $ vartAll "a") .
+  let env = -- addPolySymbol "coerce" (Forall "a" $ Forall "b" $ Monotype $ FunctionT "x" (vartAll "a") (vartAll "b")) .
+            addPolySymbol "id" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (vart "a" $ valVart "a" |=| vartVar "a" "x")) .
             id $ emptyEnv
-  let typ = Monotype $ nat
+  let typ = Monotype $ FunctionT "x" intAll nat
   
   synthesizeAndPrint env typ [] []
   
@@ -328,8 +329,8 @@ testFlatten = do
     
 main = do
   -- Integer programs
-  putStr "\n=== app ===\n";       testApp
-  -- putStr "\n=== app2 ===\n";      testApp2  
+  -- putStr "\n=== app ===\n";       testApp
+  putStr "\n=== app2 ===\n";      testApp2  
   -- putStr "\n=== lambda ===\n";    testLambda
   -- putStr "\n=== max2 ===\n";      testMax2  
   -- putStr "\n=== max3 ===\n";      testMax3

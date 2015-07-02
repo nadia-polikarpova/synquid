@@ -82,8 +82,12 @@ fnot = Unary Not
 (|||) = Binary Or
 (|=>|) = Binary Implies
 (|<=>|) = Binary Iff
-conjunction fmls = if Set.null fmls then ftrue else foldr1 (|&|) (Set.toList fmls)
-disjunction fmls = if Set.null fmls then ffalse else foldr1 (|||) (Set.toList fmls)
+
+andClean l r = if l == ftrue then r else (if r == ftrue then l else l |&| r)    
+orClean l r = if l == ffalse then r else (if r == ffalse then l else l ||| r)    
+conjunction fmls = foldr andClean ftrue (Set.toList fmls)
+disjunction fmls = foldr orClean ffalse (Set.toList fmls)
+
 (/+/) = Binary Union
 (/*/) = Binary Intersect
 (/-/) = Binary Diff

@@ -165,20 +165,17 @@ toZ3 expr = case expr of
     -- | Lookup or create a variable with name `ident' and type `baseT' 
     var baseT ident = do
       s <- sort baseT
-      varMb <- uses vars (Map.lookup ident)
+      let ident' = ident ++ show baseT
+      varMb <- uses vars (Map.lookup ident')
             
       case varMb of
-        Just v -> do
-          s' <- getSort v
-          if s == s'
-            then return v
-            else createVar baseT ident
-        Nothing -> createVar baseT ident
+        Just v -> return v
+        Nothing -> createVar s ident'
 
     -- | Create and cache a variable with name `ident' and type `baseT'
-    createVar baseT ident = do
+    createVar sort ident = do
       symb <- mkStringSymbol ident
-      v <- sort baseT >>= mkConst symb
+      v <- mkConst symb sort
       vars %= Map.insert ident v
       return v        
       

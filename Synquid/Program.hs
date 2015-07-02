@@ -27,12 +27,13 @@ isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
 
+arity (FunctionT _ _ t) = arity t + 1
+arity _ = 0
+
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   Forall Id (SchemaSkeleton r)
   
--- isMonotype (Monotype _) = True
--- isMonotype (_) = False
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
 toMonotype (Forall _ t) = toMonotype t
@@ -40,45 +41,33 @@ toMonotype (Forall _ t) = toMonotype t
 -- | Mapping from type variables to types
 type TypeSubstitution r = Map Id (TypeSkeleton r)
 
--- | 'typeSubstitute' @subst t@ : substitute all free type variables in @t@
-typeSubstitute :: TypeSubstitution r -> TypeSkeleton r -> TypeSkeleton r
-typeSubstitute subst t@(ScalarT baseT r) = case baseT of
+-- | 'typeSubstitute' @combineR subst t@ : substitute all free type variables in @t@ combining refinements using @combineR@
+typeSubstitute :: (r -> r -> r) -> TypeSubstitution r -> TypeSkeleton r -> TypeSkeleton r
+typeSubstitute combineR subst t@(ScalarT baseT r) = case baseT of
   TypeVarT name -> case Map.lookup name subst of
-    Just t' -> t'
+    Just (ScalarT baseT' r') -> ScalarT baseT' (combineR r r')
+    Just t' -> t' -- TODO: how to combine refinements?
     Nothing -> t
   _ -> t -- TODO: datatype
-typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
+typeSubstitute combineR subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute combineR subst tArg) (typeSubstitute combineR subst tRes)
 
-schemaSubstitute :: TypeSubstitution r -> SchemaSkeleton r -> SchemaSkeleton r
-schemaSubstitute subst (Monotype t) = Monotype $ typeSubstitute subst t
-schemaSubstitute subst (Forall a sch) = Forall a (schemaSubstitute (Map.delete a subst) sch)
-  
+-- | 'renameTypeVar' @old new t@ : rename type variable @old@ into @new@ in @t@
+renameTypeVar old new t@(ScalarT (TypeVarT name) r)
+  | name == old   = ScalarT (TypeVarT new) r
+  | otherwise     = t
+renameTypeVar old new t@(ScalarT _ _) = t
+renameTypeVar old new (FunctionT x tArg tRes) = FunctionT x (renameTypeVar old new tArg) (renameTypeVar old new tRes)
+
+-- | 'schemaRenameTypeVar' @old new sch@ : rename type variable @old@ into @new@ in @sch@
+schemaRenameTypeVar old new (Monotype t) = Monotype $ renameTypeVar old new t
+schemaRenameTypeVar old new (Forall a sch) = Forall a $ schemaRenameTypeVar old new sch
+
+-- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
 typeVarsOf t@(ScalarT baseT r) = case baseT of
   TypeVarT name -> Set.singleton name
   _ -> Set.empty
 typeVarsOf (FunctionT _ tArg tRes) = typeVarsOf tArg `Set.union` typeVarsOf tRes
-
--- | Assumptions: FV(lhs) and FV(rhs) are disjoint, lhs does not contain forall types
-unifier :: [Id] -> TypeSkeleton r -> SchemaSkeleton r -> Maybe (TypeSubstitution r)
--- unifier bvs lhs@(ScalarT (TypeVarT name) _) rhs
-  -- | not $ name `elem` bvs = if Set.member name (typeVarsOf rhs) 
-      -- then error $ unwords ["unifier: free type variable occurs on both sides", name] 
-      -- else Just $ Map.singleton name rhs   -- Free type variable on the left
-unifier bvs lhs (Monotype (ScalarT (TypeVarT name) _))
-  | not $ name `elem` bvs = if Set.member name (typeVarsOf lhs) 
-      then error $ unwords ["unifier: free type variable occurs on both sides", name] 
-      else Just $ Map.singleton name lhs   -- Free type variable on the right
-unifier _ lhs@(ScalarT baseL _) rhs@(Monotype (ScalarT baseR _))
-  | baseL == baseR = Just Map.empty                           -- TODO: polymorphic datatypes
-unifier bvs (FunctionT _ argL resL) (Monotype (FunctionT _ argR resR)) = do
-  uL <- unifier bvs argL (Monotype argR)
-  uR <- unifier bvs (typeSubstitute uL resL) (Monotype $ typeSubstitute uL resR)
-  return $ Map.union uL uR
-unifier bvs lhs (Forall a sch) = if a `elem` bvs
-  then error $ unwords ["unifier: bound type variable of rhs already bound in the context", a] 
-  else unifier bvs lhs sch
-unifier _ _ _ = Nothing  
 
 {- Refinement types -}
 
@@ -94,11 +83,12 @@ type SSchema = SchemaSkeleton ()
 -- | Refinement schemas  
 type RSchema = SchemaSkeleton Formula
 
--- | Forget refinements
+-- | Forget refinements of a type
 shape :: RType -> SType  
 shape (ScalarT base _) = ScalarT base ()
 shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 
+-- | Forget refinements of a schema
 polyShape :: RSchema -> SSchema
 polyShape (Monotype t) = Monotype (shape t)
 polyShape (Forall a sch) = Forall a (polyShape sch)
@@ -114,6 +104,7 @@ renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur i
 renameVar old new (ScalarT b _)  (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var b new)) fml)
 renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
+-- | Instantiate unknowns in a type
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
@@ -131,6 +122,7 @@ makeLenses ''Datatype
 data Environment = Environment {
   _symbols :: Map Id RSchema,                -- ^ Variables and constants (with their refinement types)
   _boundTypeVars :: [Id],
+  -- _instantiations :: TypeSubstitution Formula,
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
@@ -141,10 +133,11 @@ makeLenses ''Environment
 -- | Environment with no symbols or assumptions
 emptyEnv = Environment Map.empty [] Map.empty Set.empty Set.empty
 
--- | 'addSymbol' @sym t env@ : add type binding @sym@ :: @t@ to @env@
+-- | 'addSymbol' @sym t env@ : add type binding @sym@ :: Monotype @t@ to @env@
 addSymbol :: Id -> RType -> Environment -> Environment
 addSymbol sym t = symbols %~ Map.insert sym (Monotype t)
 
+-- | 'addPolySymbol' @sym sch env@ : add type binding @sym@ :: @sch@ to @env@
 addPolySymbol :: Id -> RSchema -> Environment -> Environment
 addPolySymbol sym sch = symbols %~ Map.insert sym sch
 
@@ -152,17 +145,12 @@ addPolySymbol sym sch = symbols %~ Map.insert sym sch
 addDatatype :: Id -> Datatype -> Environment -> Environment
 addDatatype name dt = over datatypes (Map.insert name dt)
 
+-- | 'addTypeVar' @a@ : Add bound type variable @a@ to the environment
 addTypeVar :: Id -> Environment -> Environment
 addTypeVar a = over boundTypeVars (a :)
 
 -- | 'varRefinement' @v x@ : refinement of a scalar variable
 varRefinement x b = Var b valueVarName |=| Var b x
-                  
--- | 'symbolsByShape' @s env@ : symbols of simple type @s@ in @env@ 
-symbolsByShape :: SType -> Environment -> Map Id (TypeSubstitution (), RSchema)
-symbolsByShape s env = Map.map (over _1 fromJust) $ Map.filter (isJust . fst) $ Map.map unify (env ^. symbols)
-  where
-    unify sch = (unifier (env ^. boundTypeVars) s (polyShape sch), sch)
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> [Formula]
@@ -229,6 +217,18 @@ intAll = int ftrue
 nat = int (valInt |>=| IntLit 0)
 
 infixr 5 |->|
+
+-- | 'instantiateSymbols' @subst p@ : apply @subst@ to polymorphic symbols
+instantiateSymbols :: TypeSubstitution Formula -> LiquidProgram -> LiquidProgram
+instantiateSymbols subst (Program body t) = (flip Program (typeSubstitute andClean subst t)) $ case body of
+  PSymbol s subst' -> PSymbol s (Map.union subst' $ restrictDomain (typeVarsOf t) subst)
+  PApp f arg -> PApp (instantiateSymbols subst f) (instantiateSymbols subst arg)
+  PFun x body -> PFun x (instantiateSymbols subst body)
+  PIf c t e -> PIf c (instantiateSymbols subst t) (instantiateSymbols subst e)
+  PMatch scr cases -> PMatch (instantiateSymbols subst scr) (map instantiateCase cases)
+  PFix f body -> PFix f (instantiateSymbols subst body)
+  where
+    instantiateCase (Case cons args e) = Case cons args (instantiateSymbols subst e)  
 
 {- Typing constraints -}
           
