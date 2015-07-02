@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
 module Synquid.Pretty (   
   -- * Interface
@@ -110,9 +110,10 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 {- Formulas -}
 
 instance Pretty BaseType where
-  pretty IntT = text "int"
-  pretty BoolT = text "bool"    
-  pretty SetT = text "set"
+  pretty IntT = text "Int"
+  pretty BoolT = text "Bool"    
+  pretty SetT = text "Set"
+  pretty (TypeVarT name) = text name
   pretty (DatatypeT name) = text name
   
 instance Show BaseType where
@@ -204,30 +205,30 @@ prettyClause (Disjunctive disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\
 instance Pretty Clause where
   pretty = prettyClause
   
-caseDoc :: (s -> Doc) -> (c -> Doc) -> (t -> Doc) -> Case s c t -> Doc
+caseDoc :: (s -> Doc) -> (c -> Doc) -> (TypeSkeleton t -> Doc) -> Case s c t -> Doc
 caseDoc sdoc cdoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc sdoc cdoc tdoc (expr cas) 
 
-programDoc :: (s -> Doc) -> (c -> Doc) -> (t -> Doc) -> Program s c t -> Doc
+programDoc :: (s -> Doc) -> (c -> Doc) -> (TypeSkeleton t -> Doc) -> Program s c t -> Doc
 programDoc sdoc cdoc tdoc (Program p typ) = let 
     pDoc = programDoc sdoc cdoc tdoc
     withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
   in case p of
-    PSymbol s -> withType $ sdoc s
+    PSymbol s subst -> withType $ (option (not $ Map.null subst) $ hMapDoc text tdoc subst) <+> sdoc s
     PApp f x -> parens (pDoc f <+> pDoc x)
     PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
     PIf c t e -> nest 2 $ withType (cdoc c <+> text "?") $+$ pDoc t <+> text ":" $+$ pDoc e
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc) cases)
     PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
 
-instance (Pretty s, Pretty c, Pretty t) => Pretty (Program s c t) where
+instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Pretty (Program s c t) where
   pretty = programDoc pretty pretty pretty
   
-instance (Pretty v, Pretty s, Pretty c) => Show (Program v s c) where
+instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Show (Program s c t) where
   show = show . pretty
   
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
-prettySType (FunctionT _ t1 t2) = pretty t1 <+> text "->" <+> pretty t2 
+prettySType (FunctionT _ t1 t2) = parens (pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty SType where
   pretty = prettySType
@@ -236,16 +237,36 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
--- prettyType (ScalarT base fml) = pretty base <> text "|" <> pretty fml
-prettyType (ScalarT base fml) = pretty fml
-prettyType (FunctionT x t1 t2) = text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2
+prettyType (ScalarT base (BoolLit True)) = pretty base
+prettyType (ScalarT base fml) = pretty base <> text "|" <> pretty fml
+prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty RType where
   pretty = prettyType
   
 instance Show RType where
  show = show . pretty  
-  
+ 
+prettySSchema :: SSchema -> Doc
+prettySSchema (Monotype t) = pretty t
+prettySSchema (Forall a t) = angles (text a) <+> pretty t
+ 
+instance Pretty SSchema where
+  pretty sch = case sch of
+    Monotype t -> pretty t
+    Forall a sch' -> angles (text a) <+> pretty sch'
+    
+instance Show SSchema where
+ show = show . pretty      
+ 
+instance Pretty RSchema where
+  pretty sch = case sch of
+    Monotype t -> pretty t
+    Forall a sch' -> angles (text a) <+> pretty sch'
+    
+instance Show RSchema where
+ show = show . pretty       
+    
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
@@ -275,7 +296,7 @@ instance Pretty Candidate where
   pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))  
     
 candidateDoc :: LiquidProgram -> Candidate -> Doc
-candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc (const empty) condDoc typDoc prog
+candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc (const empty) condDoc typeDoc prog
   where
     condDoc fml = pretty $ applySolution sol fml
-    typDoc t = pretty $ typeApplySolution sol t
+    typeDoc t = pretty $ typeApplySolution sol t

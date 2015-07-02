@@ -86,7 +86,7 @@ addConstraint c = unsolvedConstraints %= (c :)
 
 -- | Solve all currently unsolved constraints
 -- (program @p@ is only used for debug information)
-solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) =>LiquidProgram -> Explorer s m ()
+solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) => LiquidProgram -> Explorer s m ()
 solveConstraints p = do
   -- Convert new constraints into formulas and augment the current qualifier map with new unknowns
   cs <- use unsolvedConstraints
@@ -134,19 +134,28 @@ generateE env s = generateVar `mplus` generateApp
     -- | Explore all variables of shape @s@
     generateVar = do
           let symbols = symbolsByShape s env
-          abstract <- asks _abstractLeafs
-          if abstract && Map.size symbols > 1
-            then do
-              t <- freshRefinements $ refineTop s          
-              let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
-              let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
-              addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-              when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
-              return (env, Program (PSymbol leafConstraint) t)
-            else msum $ map genKnownSymbol $ Map.toList symbols
+          -- abstract <- asks _abstractLeafs
+          -- if abstract && Map.size symbols > 1
+            -- then do
+              -- t <- freshRefinements $ refine s          
+              -- let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
+              -- let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
+              -- addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
+              -- when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+              -- return (env, Program (PSymbol leafConstraint) t)
+            -- else msum $ map genKnownSymbol $ Map.toList symbols
+          msum $ map genKnownSymbol $ Map.toList symbols
         
-    genKnownSymbol (name, t) = return (env, Program (PSymbol $ Map.singleton name Unconstrained) (symbolType name t))
-    
+    genKnownSymbol (name, (typeSubst, sch)) = case sch of 
+      Monotype t -> return (env, Program (PSymbol (Map.singleton name Unconstrained) Map.empty) (symbolType name t)) -- Precise match
+      sch -> do -- Unification
+        ts <- mapM (freshRefinements . refine) (Map.elems typeSubst)
+        mapM_ (addConstraint . WellFormed emptyEnv) ts
+        let typeSubst' = Map.fromList $ zip (Map.keys typeSubst) ts        
+        return (env, Program
+                      (PSymbol (Map.singleton name Unconstrained) typeSubst')
+                      (typeSubstitute typeSubst' $ toMonotype sch))
+
     constraintForSymbol t symb symbT = Subtype emptyEnv (symbolType symb symbT) t
     
     symbolType x (ScalarT b _) = ScalarT b (varRefinement x b)
@@ -160,7 +169,7 @@ generateE env s = generateVar `mplus` generateApp
         else 
           -- Since we know that the head of an e-term is always a variable, 
           -- check the function variables in the context to decide what the last argument shape can be
-          let argShapes = nub $ catMaybes $ map (argProducing s) $ Map.keys (env ^. symbolsOfShape)
+          let argShapes = undefined -- nub $ catMaybes $ map (argProducing s) $ Map.keys (env ^. symbolsOfShape)
           in msum $ map generateWithArgShape argShapes
          
     -- | 'argProducing' @s sF@ : if @sF@ is a function type that can eventually produce @s@, the type of the last argument in @sF@ before @s@;
@@ -188,26 +197,25 @@ generateE env s = generateVar `mplus` generateApp
      
 -- | 'generateI' @env t@ : explore all liquid terms of type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
-generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType -> Explorer s m LiquidProgram
-generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
+generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType -> Explorer s m LiquidProgram  
+
+generateI env t@(FunctionT x tArg tRes) = generateFix
   where
-    generateFix x tArg tRes = do
+    generateFix = do
       -- TODO: abstract fix type?      
       y <- freshId "x"
+      let env' = addSymbol x tArg $ env
       
       let recTArgMb = recursiveTArg x tArg
       case recTArgMb of
-        Nothing -> do -- Cannot recurse on this argument: generate an ordinary abstraction
-          let env' =  addSymbol x tArg env
+        Nothing -> do -- Cannot recurse on this argument: generate an ordinary abstraction          
           pBody <- generateI env' tRes
           return $ Program (PFun x pBody) t
                   
         Just recTArg -> do  -- Can recurse on this argument: generate a fixpoint
           f <- freshId "f"      
-          let env' =  addSymbol x tArg .
-                      addSymbol f (FunctionT y recTArg (renameVar x y tArg tRes))
-                      $ env
-          pBody <- generateI env' tRes
+          let env'' = addSymbol f (FunctionT y recTArg (renameVar x y tArg tRes)) $ env'
+          pBody <- generateI env'' tRes
           return $ Program (PFix f (Program (PFun x pBody) t)) t
       
     -- generateFix x tArg tRes = do
@@ -220,6 +228,7 @@ generateI env t@(FunctionT x tArg tRes) = generateFix x tArg tRes
     -- (@t@ strengthened with a termination condition)
     recursiveTArg _ (FunctionT _ _ _) = Nothing
     recursiveTArg argName (ScalarT IntT fml) = Just $ ScalarT IntT (fml  |&|  valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)
+    recursiveTArg argName (ScalarT (TypeVarT _) fml) = Nothing
     recursiveTArg argName (ScalarT dt@(DatatypeT name) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just metric -> Just $ ScalarT (DatatypeT name) (fml |&| metric (Var dt valueVarName) |<| metric (Var dt argName))
@@ -251,7 +260,7 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
       case Map.lookup consName (env ^. symbols) of
         Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
         Just consT -> do
-          (args, caseEnv) <- addCaseSymbols env scrName scrType consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment
+          (args, caseEnv) <- addCaseSymbols env scrName scrType (toMonotype consT) -- Add bindings for constructor arguments and refine the scrutinee type in the environment
           pCaseExpr <- local (over matchDepth (-1 +)) $ generateI caseEnv t          
           return $ Case consName args pCaseExpr
           
@@ -280,11 +289,11 @@ generateI env t@(ScalarT _ _) = guessE `mplus` generateMatch `mplus` generateIf
 -- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
 split Unconstrained = []
-split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) =
+split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) = -- TODO: rename type vars
   split (Subtype env tArg2 tArg1) ++ split (Subtype (addSymbol y tArg2 env) (renameVar x y tArg2 tRes1) tRes2)
 split (WellFormed env (FunctionT x tArg tRes)) = 
   split (WellFormed env tArg) ++ split (WellFormed (addSymbol x tArg env) tRes)
-split (WellFormedLeaf (FunctionT x tArg tRes) ts) =
+split (WellFormedLeaf (FunctionT x tArg tRes) ts) = -- TODO: typ vars?
   split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y x tArg tRes') ts))
 split (WellFormedSymbol disjuncts)
   | length disjuncts == 1   = concatMap split (head disjuncts)
@@ -325,18 +334,18 @@ toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
 
 -- | 'extractProgram' @sol prog@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
 extractProgram :: SMTSolver s => Solution -> LiquidProgram -> MaybeT s SimpleProgram
-extractProgram sol (Program prog t) = let go = extractProgram sol in (flip Program (typeApplySolution sol t)) <$> case prog of
-  PSymbol leafConstraint -> msum $ map extractSymbol (Map.toList $ leafConstraint)     
+extractProgram sol (Program prog sch) = let go = extractProgram sol in (flip Program (typeApplySolution sol sch)) <$> case prog of
+  PSymbol leafConstraint subst -> msum $ map (extractSymbol $ Map.map (typeApplySolution sol) subst) (Map.toList $ leafConstraint) -- TODO: different substitutions
   PApp pFun pArg -> liftM2 PApp (go pFun) (go pArg)
   PFun x pBody -> liftM (PFun x) (go pBody)
   PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (go pThen) (go pElse)
   PMatch pScr pCases -> liftM2 PMatch (go pScr) (mapM extractCase pCases)
   PFix f pBody -> liftM (PFix f) (go pBody)
   where
-    extractSymbol (symb, c) = do   
+    extractSymbol subst (symb, c) = do   
       let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas emptyGen emptyGen $ split c
       let fml' = applySolution sol fml
       res <- debug 1 (text "Check symbol" <+> pretty symb <+> parens (pretty fml) <+> pretty fml') $ lift $ isValid fml'
-      if res then debug 1 (text "OK") $ return (PSymbol symb) else debug 1 (text "MEH") $ mzero
+      if res then debug 1 (text "OK") $ return (PSymbol symb subst) else debug 1 (text "MEH") $ mzero
       
     extractCase (Case consName argNames expr) = liftM (Case consName argNames) (extractProgram sol expr)

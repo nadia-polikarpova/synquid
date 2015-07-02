@@ -28,8 +28,12 @@ import Control.Lens
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
-synthesize explorerParams solverParams env typ cquals tquals = do
+synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RSchema -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
+synthesize explorerParams solverParams env (Monotype t) cquals tquals = synthesizeMonotype explorerParams solverParams env t cquals tquals
+synthesize explorerParams solverParams env (Forall a sch) cquals tquals = synthesize explorerParams solverParams (addTypeVar a env) sch cquals tquals
+
+synthesizeMonotype :: ExplorerParams Z3State -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
+synthesizeMonotype explorerParams solverParams env typ cquals tquals = do
   ps <- evalZ3State $ observeManyT 1 $ programs
   case ps of
     [] -> return Nothing
@@ -68,7 +72,7 @@ infixr 5  |++|
 
 toSpace quals = QSpace quals (length quals)
 
--- | 'extractQGenFromType' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
+-- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
 extractTypeQGen qual (val : syms) = let vars = varsOf qual in
     if Set.member val vars
       then allSubstitutions qual (Set.toList $ Set.delete val (varsOf qual)) syms -- val has correct base type

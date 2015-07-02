@@ -32,6 +32,7 @@ data Z3Data = Z3Data {
   _intSort :: Maybe Sort,                     -- ^ Int sort
   _boolSort :: Maybe Sort,                    -- ^ Boolean sort
   _setSort :: Maybe Sort,                     -- ^ Sort for integer sets
+  _typeVarSorts :: Map Id Sort,
   _datatypeSorts :: Map Id Sort,              -- ^ Sorts for user-defined datatypes
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
@@ -48,6 +49,7 @@ initZ3Data env env' = Z3Data {
   _intSort = Nothing,
   _boolSort = Nothing,
   _setSort = Nothing,
+  _typeVarSorts = Map.empty,
   _datatypeSorts = Map.empty,
   _vars = Map.empty,
   _measures = Map.empty,
@@ -111,6 +113,14 @@ toZ3 expr = case expr of
     sort BoolT = fromJust <$> use boolSort
     sort IntT = fromJust <$> use intSort
     sort SetT = fromJust <$> use setSort
+    sort (TypeVarT name) = do
+      resMb <- uses typeVarSorts (Map.lookup name)
+      case resMb of
+        Just s -> return s
+        Nothing -> do
+          s <- mkStringSymbol name >>= mkUninterpretedSort
+          typeVarSorts %= Map.insert name s
+          return s                      
     sort (DatatypeT name) = do
       resMb <- uses datatypeSorts (Map.lookup name)
       case resMb of
@@ -118,7 +128,7 @@ toZ3 expr = case expr of
         Nothing -> do
           s <- mkStringSymbol name >>= mkUninterpretedSort
           datatypeSorts %= Map.insert name s
-          return s                  
+          return s
     
     setLiteral xs = do
       emp <- (fromJust <$> use intSort) >>= mkEmptySet

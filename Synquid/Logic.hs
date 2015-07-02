@@ -17,7 +17,7 @@ import Control.Lens hiding (both)
 type Id = String
 
 -- | Base types  
-data BaseType = BoolT | IntT | SetT | DatatypeT Id 
+data BaseType = BoolT | IntT | SetT | TypeVarT Id | DatatypeT Id 
   deriving (Eq, Ord)
   
 dtName (DatatypeT name) = name  
