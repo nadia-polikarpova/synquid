@@ -78,6 +78,8 @@ explore params env t = do
       -- solveConstraints p
       solv <- asks _solver
       cands <- use candidates
+      debug 1 ( nest 2 (text "Liquid Program" $+$ pretty p) $+$
+                nest 2 (text "Solution" $+$ pretty (solution $ head cands))) $ return ()
       lift . lift . lift $ (csExtract solv) p (head cands)
 
 {- Implementation -}
@@ -97,9 +99,9 @@ solveConstraints p = do
   tq <- asks _typeQualsGen
   let (clauses, newQuals) = toFormulas cq tq cs'
   let qmap = Map.union oldQuals newQuals
-  debug 1 ( text "Typing Constraints" $+$ (vsep $ map pretty cs) $+$ 
-    text "Liquid Program" $+$ pretty p) $ 
-    return ()
+  debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs) 
+    -- $+$ text "Liquid Program" $+$ pretty p
+    ) $ return ()
   
   -- Refine the current candidate solutions using the new constraints; fail if no solution
   cands <- use candidates      

@@ -17,7 +17,7 @@ import Control.Lens hiding (both)
 type Id = String
 
 -- | Base types  
-data BaseType = BoolT | IntT | SetT | TypeVarT Id | DatatypeT Id 
+data BaseType = BoolT | IntT | TypeVarT Id | DatatypeT Id | SetT BaseType
   deriving (Eq, Ord)
   
 dtName (DatatypeT name) = name  
@@ -49,7 +49,7 @@ inverse s = Map.fromList [(y, Var b x) | (x, Var b y) <- Map.toList s]
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
   IntLit Integer |                    -- ^ Integer literal
-  SetLit [Formula] |                  -- ^ Set literal
+  SetLit BaseType [Formula] |         -- ^ Set literal
   Var BaseType Id |                   -- ^ Input variable (universally quantified first-order variable)
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
@@ -103,7 +103,7 @@ infix 4 |<=>|
   
 -- | 'varsOf' @fml@ : set of all input variables of @fml@
 varsOf :: Formula -> Set Formula
-varsOf (SetLit elems) = Set.unions $ map varsOf elems
+varsOf (SetLit _ elems) = Set.unions $ map varsOf elems
 varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
@@ -141,7 +141,7 @@ conjunctsOf f = Set.singleton f
 baseTypeOf :: Formula -> BaseType
 baseTypeOf (BoolLit _)                        = BoolT
 baseTypeOf (IntLit _)                         = IntT
-baseTypeOf (SetLit _)                         = SetT
+baseTypeOf (SetLit b _)                       = SetT b
 baseTypeOf (Var b _ )                         = b
 baseTypeOf (Unknown _ _)                      = BoolT
 baseTypeOf (Unary op _)
@@ -155,7 +155,7 @@ baseTypeOf (Measure b _ _)                    = b
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
-  SetLit elems -> SetLit $ map (substitute subst) elems
+  SetLit b elems -> SetLit b $ map (substitute subst) elems
   Var _ name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml

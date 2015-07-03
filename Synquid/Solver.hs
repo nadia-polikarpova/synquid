@@ -97,7 +97,7 @@ greatestFixPoint quals candidates = do
             nc <- mapM (updateCandidate constraint cand diffs) diffs
             return (nc, rest)
         case find (Set.null . invalidConstraints) newCandidates of
-          Just cand' -> debug 1 (nest 2 $ text "Solution" $+$ pretty (solution cand')) $ return $ cand' : (delete cand' newCandidates ++ rest')  -- Solution found
+          Just cand' -> return $ cand' : (delete cand' newCandidates ++ rest')  -- Solution found
           Nothing -> greatestFixPoint quals (newCandidates ++ rest')
 
   where

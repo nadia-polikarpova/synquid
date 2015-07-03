@@ -112,7 +112,7 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 instance Pretty BaseType where
   pretty IntT = text "Int"
   pretty BoolT = text "Bool"    
-  pretty SetT = text "Set"
+  pretty (SetT b) = text "Set" <+> pretty b
   pretty (TypeVarT name) = text name
   pretty (DatatypeT name) = text name
   
@@ -171,8 +171,8 @@ fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> pretty i
-    SetLit elems -> braces $ commaSep $ map pretty elems
-    Var b ident -> text ident
+    SetLit _ elems -> braces $ commaSep $ map pretty elems
+    Var _ ident -> text ident
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
