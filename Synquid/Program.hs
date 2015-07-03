@@ -18,7 +18,7 @@ import Control.Lens
   
 -- | Type skeletons parametrized by refinements  
 data TypeSkeleton r =
-  ScalarT BaseType r |
+  ScalarT BaseType [TypeSkeleton r] r |
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r)  
   deriving (Eq, Ord)
   
@@ -43,19 +43,23 @@ type TypeSubstitution r = Map Id (TypeSkeleton r)
 
 -- | 'typeSubstitute' @combineR subst t@ : substitute all free type variables in @t@ combining refinements using @combineR@
 typeSubstitute :: (r -> r -> r) -> TypeSubstitution r -> TypeSkeleton r -> TypeSkeleton r
-typeSubstitute combineR subst t@(ScalarT baseT r) = case baseT of
+typeSubstitute combineR subst t@(ScalarT baseT tArgs r) = case baseT of
   TypeVarT name -> case Map.lookup name subst of
-    Just (ScalarT baseT' r') -> ScalarT baseT' (combineR r r')
+    Just (ScalarT baseT' tArgs' r') -> ScalarT baseT' tArgs' (combineR r r')
     Just t' -> t' -- TODO: how to combine refinements?
     Nothing -> t
-  _ -> t -- TODO: datatype
+  DatatypeT name -> let tArgs' = map (typeSubstitute combineR subst) tArgs in ScalarT baseT tArgs' r
+  _ -> t
 typeSubstitute combineR subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute combineR subst tArg) (typeSubstitute combineR subst tRes)
 
+schemaSubstitute combineR subst (Monotype t) = Monotype $ typeSubstitute combineR subst t
+schemaSubstitute combineR subst (Forall a sch) = Forall a $ schemaSubstitute combineR subst sch
+
 -- | 'renameTypeVar' @old new t@ : rename type variable @old@ into @new@ in @t@
-renameTypeVar old new t@(ScalarT (TypeVarT name) r)
-  | name == old   = ScalarT (TypeVarT new) r
+renameTypeVar old new t@(ScalarT (TypeVarT name) [] r)
+  | name == old   = ScalarT (TypeVarT new) [] r
   | otherwise     = t
-renameTypeVar old new t@(ScalarT _ _) = t
+renameTypeVar old new (ScalarT baseT tArgs r) = let tArgs' = map (renameTypeVar old new) tArgs in ScalarT baseT tArgs' r 
 renameTypeVar old new (FunctionT x tArg tRes) = FunctionT x (renameTypeVar old new tArg) (renameTypeVar old new tRes)
 
 -- | 'schemaRenameTypeVar' @old new sch@ : rename type variable @old@ into @new@ in @sch@
@@ -64,9 +68,9 @@ schemaRenameTypeVar old new (Forall a sch) = Forall a $ schemaRenameTypeVar old 
 
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
-typeVarsOf t@(ScalarT baseT r) = case baseT of
-  TypeVarT name -> Set.singleton name
-  _ -> Set.empty
+typeVarsOf t@(ScalarT baseT tArgs r) = case baseT of
+  TypeVarT name -> Set.singleton name  
+  _ -> Set.unions (map typeVarsOf tArgs)
 typeVarsOf (FunctionT _ tArg tRes) = typeVarsOf tArg `Set.union` typeVarsOf tRes
 
 {- Refinement types -}
@@ -85,7 +89,7 @@ type RSchema = SchemaSkeleton Formula
 
 -- | Forget refinements of a type
 shape :: RType -> SType  
-shape (ScalarT base _) = ScalarT base ()
+shape (ScalarT base tArgs _) = ScalarT base (map shape tArgs) ()
 shape (FunctionT _ tArg tFun) = FunctionT dontCare (shape tArg) (shape tFun)
 
 -- | Forget refinements of a schema
@@ -95,21 +99,22 @@ polyShape (Forall a sch) = Forall a (polyShape sch)
 
 -- | Insert trivial refinements
 refine :: SType -> RType
-refine (ScalarT base _) = ScalarT base ftrue
+refine (ScalarT base tArgs _) = ScalarT base (map refine tArgs) ftrue
 refine (FunctionT x tArg tFun) = FunctionT x (refine tArg) (refine tFun)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType -> RType
 renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
-renameVar old new (ScalarT b _)  (ScalarT base fml) = ScalarT base (substitute (Map.singleton old (Var b new)) fml)
-renameVar old new t              (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
+renameVar old new t@(ScalarT b _ _)  (ScalarT base tArgs fml) = ScalarT base (map (renameVar old new t) tArgs) (substitute (Map.singleton old (Var b new)) fml)
+renameVar old new t                (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
 -- | Instantiate unknowns in a type
-typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
+typeApplySolution sol (ScalarT base tArgs fml) = ScalarT base (map (typeApplySolution sol) tArgs) (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
 -- | User-defined datatype representation
 data Datatype = Datatype {
+  _typeArgCount :: Int,
   _constructors :: [Id],                    -- ^ Constructor names
   _wfMetric :: Maybe (Formula -> Formula)   -- ^ Given a datatype term, returns an integer term that can serve as a well-founded metric for recursion
 }
@@ -121,6 +126,7 @@ makeLenses ''Datatype
 -- | Typing environment
 data Environment = Environment {
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types)
+  _constants :: Set Id,
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
@@ -130,15 +136,18 @@ data Environment = Environment {
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
-emptyEnv = Environment Map.empty [] Map.empty Set.empty Set.empty
+emptyEnv = Environment Map.empty Set.empty [] Map.empty Set.empty Set.empty
 
--- | 'addSymbol' @sym t env@ : add type binding @sym@ :: Monotype @t@ to @env@
-addSymbol :: Id -> RType -> Environment -> Environment
-addSymbol sym t = addPolySymbol sym (Monotype t)
+addVariable :: Id -> RType -> Environment -> Environment
+addVariable name t = let n = arity t in symbols %~ Map.insertWith (Map.union) n (Map.singleton name (Monotype t))
 
--- | 'addPolySymbol' @sym sch env@ : add type binding @sym@ :: @sch@ to @env@
-addPolySymbol :: Id -> RSchema -> Environment -> Environment
-addPolySymbol sym sch = let n = arity (toMonotype sch) in symbols %~ Map.insertWith (Map.union) n (Map.singleton sym sch)
+-- | 'addConstant' @name t env@ : add type binding @name@ :: Monotype @t@ to @env@
+addConstant :: Id -> RType -> Environment -> Environment
+addConstant name t = addPolyConstant name (Monotype t)
+
+-- | 'addPolyConstant' @name sch env@ : add type binding @name@ :: @sch@ to @env@
+addPolyConstant :: Id -> RSchema -> Environment -> Environment
+addPolyConstant name sch = let n = arity (toMonotype sch) in (symbols %~ Map.insertWith (Map.union) n (Map.singleton name sch)) . (constants %~ Set.insert name)
 
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
 
@@ -160,7 +169,7 @@ allScalars :: Environment -> [Formula]
 allScalars env = map (uncurry $ flip Var) $ Map.toList $ Map.mapMaybe baseType (symbolsOfArity 0 env)
   where
     baseType (Forall _ _) = Nothing -- TODO: what to do with polymorphic scalars like Nil?
-    baseType (Monotype (ScalarT b _)) = Just b
+    baseType (Monotype (ScalarT b _ _)) = Just b
     -- baseType (Monotype (FunctionT _ _ _)) = Nothing
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
@@ -173,11 +182,13 @@ addNegAssumption f = negAssumptions %~ Set.insert f
 
 -- | Positive and negative formulas encoded in an environment    
 embedding :: Environment -> (Set Formula, Set Formula)    
-embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls s t -> fmls `Set.union` embedBinding s t) Set.empty $ symbolsOfArity 0 env), env ^.negAssumptions)
+embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name t -> fmls `Set.union` embedBinding name t) Set.empty $ symbolsOfArity 0 env), env ^.negAssumptions)
   where
-    embedBinding _ (Monotype (ScalarT _ (BoolLit True))) = Set.empty -- Ignore trivial types
-    embedBinding x (Monotype (ScalarT baseT fml)) = Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
-    -- embedBinding _ _ = Set.empty
+    embedBinding _ (Monotype (ScalarT _ _ (BoolLit True))) = Set.empty -- Ignore trivial types
+    embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
+      then Set.empty -- Ignore constants
+      else Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
+    embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants
     
 {- Program terms -}    
     
@@ -213,11 +224,16 @@ type LeafConstraint = Map Id Constraint
 type LiquidProgram = Program LeafConstraint Formula Formula
 
 -- | Building types
-int = ScalarT IntT
+int = ScalarT IntT []
 int_ = int ()
-(|->|) = FunctionT dontCare
 intAll = int ftrue
 nat = int (valInt |>=| IntLit 0)
+
+vart n = ScalarT (TypeVarT n) []
+vart_ n = vart n ()
+vartAll n = vart n ftrue
+
+(|->|) = FunctionT dontCare
 
 infixr 5 |->|
 

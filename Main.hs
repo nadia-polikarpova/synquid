@@ -53,30 +53,30 @@ synthesizeAndPrint env typ cquals tquals = do
 {- Integer programs -}
   
 testApp = do
-  let env = addSymbol "a" intAll .
-            addSymbol "b" intAll .
-            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
+  let env = addVariable "a" intAll .
+            addVariable "b" intAll .
+            addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = Monotype $ int (valInt |>| intVar "b")
   
   synthesizeAndPrint env typ [] []
   
 testApp2 = do
-  let env = addSymbol "a" nat .
-            addSymbol "1" (int (valInt |=| IntLit 1)) .
-            -- addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            -- addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
-            addSymbol "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
-            addSymbol "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
+  let env = addVariable "a" nat .
+            addConstant "1" (int (valInt |=| IntLit 1)) .
+            -- addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            -- addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            addConstant "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
+            addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
             id $ emptyEnv
   let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 5)
   
   synthesizeAndPrint env typ [] []
   
 testLambda = do
-  let env = addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
+  let env = addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = Monotype $ FunctionT "a" nat $ int (valInt |=| intVar "a" |+| IntLit 3)
   
@@ -94,8 +94,8 @@ testMax2 = do
   
 testMax3 = do
   let env =
-            -- addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            -- addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
   
@@ -107,8 +107,8 @@ testMax3 = do
    
 testAbs = do
   let env =             
-            addSymbol "id" (FunctionT "x" intAll (int (valInt |=| intVar "x"))) .
-            addSymbol "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
+            addConstant "id" (FunctionT "x" intAll (int (valInt |=| intVar "x"))) .
+            addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
             id $ emptyEnv
   let typ = Monotype $ FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)  
   
@@ -121,8 +121,8 @@ testAbs = do
 
 testAddition = do
   let env =
-            addSymbol "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
 
   let typ = Monotype $ FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
@@ -138,8 +138,6 @@ testAddition = do
     
 {- Polymorphic programs -}
 
-vart n = ScalarT (TypeVarT n)
-vartAll n = vart n ftrue
 vartVar n = Var (TypeVarT n)
 valVart n = vartVar n valueVarName
 
@@ -164,9 +162,9 @@ testCompose = do
   synthesizeAndPrint env typ [] []    
   
 testPolymorphic = do
-  let env = -- addPolySymbol "coerce" (Forall "a" $ Forall "b" $ Monotype $ FunctionT "x" (vartAll "a") (vartAll "b")) .            
-            addPolySymbol "id" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (vart "a" $ valVart "a" |=| vartVar "a" "x")) .
-            addSymbol "inc" (FunctionT "x" nat nat) .
+  let env = -- addPolyConstant "coerce" (Forall "a" $ Forall "b" $ Monotype $ FunctionT "x" (vartAll "a") (vartAll "b")) .            
+            addPolyConstant "id" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (vart "a" $ valVart "a" |=| vartVar "a" "x")) .
+            addConstant "inc" (FunctionT "x" nat nat) .
             id $ emptyEnv
   let typ = Monotype $ FunctionT "x" intAll nat
   
@@ -176,110 +174,118 @@ testPolymorphic = do
 {- List programs -}
 
 listT = DatatypeT "list"
-list = ScalarT listT
+list = ScalarT listT [vartAll "a"]
 listAll = list ftrue
 listVar = Var listT
 valList = listVar valueVarName
 
+intlist = ScalarT listT [intAll]
+natlist = ScalarT listT [nat]
+
 -- | Add list datatype to the environment
-addList = addDatatype "list" (Datatype ["Nil", "Cons"] (Just $ Measure IntT "len")) .
-          addSymbol "Nil" (list $ Measure IntT "len" valList    |=| IntLit 0 |&|
-                                  Measure SetT "elems" valList  |=| SetLit []) .
-          addSymbol "Cons" (FunctionT "x" intAll (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1
-                                                                                   |&| Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs") /+/ SetLit [intVar "x"]
+addList = addDatatype "list" (Datatype 1 ["Nil", "Cons"] (Just $ Measure IntT "len")) .
+          addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ Measure IntT "len" valList    |=| IntLit 0
+                                  -- |&| Measure SetT "elems" valList  |=| SetLit []
+                                ) .
+          addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $  Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| IntLit 1
+                                                                                   -- |&| Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs") /+/ SetLit [intVar "x"]
                                                                                    )))
 
 testHead = do
-  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "1" (int (valInt |=| IntLit 1)) .
+  let env = -- addConstant "0" (int (valInt |=| IntLit 0)) .
+            -- addConstant "1" (int (valInt |=| IntLit 1)) .
             addList $ emptyEnv
-  let typ = Monotype $ FunctionT "xs" (list $ Measure IntT "len" valList |>| IntLit 0) (int $ valInt `fin` Measure SetT "elems" (listVar "xs"))
+  let typ = Forall "a" $ Monotype $ FunctionT "xs" (list $ Measure IntT "len" valList |>| IntLit 0) (vart "a" $ valVart "a" `fin` Measure SetT "elems" (listVar "xs"))
   
   synthesizeAndPrint env typ [] []
   
 testReplicate = do
-  let env = -- addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+  let env = -- addConstant "-1" (int (valInt |=| IntLit (-1))) .
+            -- addConstant "1" (int (valInt |=| IntLit 1)) .
+            addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "n" nat (FunctionT "y" intAll (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [intVar "y"]))
+  -- let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [vartVar "a" "y"]))
+  -- let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (list $ Measure IntT "len" valList |=| intVar "n" |&| Measure SetT "elems" valList /<=/ SetLit [vartVar "a" "y"]))
+  -- let typ = Forall "a" $ Monotype $ (FunctionT "y" (vartAll "a") (ScalarT listT [vart "a" $ valVart "a" |=| vartVar "a" "y"] $ Measure IntT "len" valList |=| IntLit 2))
+  let typ = Monotype $ (FunctionT "n" nat (natlist $ Measure IntT "len" valList |=| intVar "n"))
           
   let cq = do
       op <- [Ge, Le, Neq]
       return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
       
-  synthesizeAndPrint env typ cq []
+  synthesizeAndPrint env typ cq [valVart "a" |=| vartVar "a" "z"]
   
-testLength = do
-  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
-            addList $ emptyEnv
+-- testLength = do
+  -- let env = addConstant "0" (int (valInt |=| IntLit 0)) .
+            -- addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            -- addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            -- addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "l" listAll (int $ valInt |=| Measure IntT "len" (listVar "l"))
+  -- let typ = Monotype $ FunctionT "l" listAll (int $ valInt |=| Measure IntT "len" (listVar "l"))
 
-  synthesizeAndPrint env typ [] [valInt |>=| IntLit 0]
+  -- synthesizeAndPrint env typ [] [valInt |>=| IntLit 0]
   
-testAppend = do
-  let env = addList $ emptyEnv
+-- testAppend = do
+  -- let env = addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))
+  -- let typ = Monotype $ FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))
 
-  synthesizeAndPrint env typ [] []
+  -- synthesizeAndPrint env typ [] []
   
-testStutter = do
-  let env = addList $ emptyEnv
+-- testStutter = do
+  -- let env = addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| IntLit 2 |*| Measure IntT "len" (listVar "xs") |&| Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs"))
+  -- let typ = Monotype $ FunctionT "xs" listAll (list $ Measure IntT "len" valList |=| IntLit 2 |*| Measure IntT "len" (listVar "xs") |&| Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs"))
   
-  synthesizeAndPrint env typ [] []
+  -- synthesizeAndPrint env typ [] []
   
-testDrop = do
-  let env = addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addList $ emptyEnv
+-- testDrop = do
+  -- let env = addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            -- addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| Measure IntT "len" (listVar "xs")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
-  -- let typ = Monotype $ FunctionT "n" nat (FunctionT "xs" (list $ Measure IntT "len" valList |<=| intVar "n") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
+  -- let typ = Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| Measure IntT "len" (listVar "xs")) (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
+  -- -- let typ = Monotype $ FunctionT "n" nat (FunctionT "xs" (list $ Measure IntT "len" valList |<=| intVar "n") (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |-| intVar "n"))
   
-  let cq = do
-      lhs <- [intVar "x"]
-      op <- [Le, Ge, Neq]
-      rhs <- [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
+  -- let cq = do
+      -- lhs <- [intVar "x"]
+      -- op <- [Le, Ge, Neq]
+      -- rhs <- [IntLit 0]
+      -- guard $ lhs /= rhs
+      -- return $ Binary op lhs rhs  
     
-  synthesizeAndPrint env typ cq []  
+  -- synthesizeAndPrint env typ cq []  
   
-testDelete = do
-  let env = addList $ emptyEnv
+-- testDelete = do
+  -- let env = addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "x" intAll (FunctionT "xs" listAll (list $ Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs") /-/ SetLit [intVar "x"]))
+  -- let typ = Monotype $ FunctionT "x" intAll (FunctionT "xs" listAll (list $ Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs") /-/ SetLit [intVar "x"]))
       
-  synthesizeAndPrint env typ [intVar "x" |=| intVar "y"] []  
+  -- synthesizeAndPrint env typ [intVar "x" |=| intVar "y"] []  
   
 {- Tree programs -}
 
 treeT = DatatypeT "tree"
-tree = ScalarT treeT
+tree = ScalarT treeT []
 treeAll = tree ftrue
 treeVar = Var treeT
 valTree = treeVar valueVarName
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "tree" (Datatype ["Empty", "Node"] (Just $ Measure IntT "size")) .
-          addSymbol "Empty" (tree $  
+addTree = addDatatype "tree" (Datatype 0 ["Empty", "Node"] (Just $ Measure IntT "size")) .
+          addConstant "Empty" (tree $  
             Measure IntT "size" valTree  |=| IntLit 0
             |&| Measure SetT "telems" valTree  |=| SetLit []
             ) .
-          addSymbol "Node" (FunctionT "x" intAll (FunctionT "l" treeAll (FunctionT "r" treeAll (tree $  
+          addConstant "Node" (FunctionT "x" intAll (FunctionT "l" treeAll (FunctionT "r" treeAll (tree $  
             Measure IntT "size" valTree |=| Measure IntT "size" (treeVar "l") |+| Measure IntT "size" (treeVar "r") |+| IntLit 1
             |&| Measure SetT "telems" valTree |=| Measure SetT "telems" (treeVar "l") /+/ Measure SetT "telems" (treeVar "r") /+/ SetLit [intVar "x"]
             ))))            
             
 testRoot = do
-  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "1" (int (valInt |=| IntLit 1)) .
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .
+            addConstant "1" (int (valInt |=| IntLit 1)) .
             addTree $ emptyEnv
   let typ = Monotype $ FunctionT "t" (tree $ Measure IntT "size" valTree |>| IntLit 0) (int $ valInt `fin` Measure SetT "telems" (treeVar "t"))
   
@@ -287,9 +293,9 @@ testRoot = do
             
               
 testTreeGen = do
-  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "1" (int (valInt |=| IntLit 0)) .
-            addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .
+            addConstant "1" (int (valInt |=| IntLit 0)) .
+            addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addTree $ emptyEnv
 
   let typ = Monotype $ FunctionT "n" nat (tree $ Measure IntT "size" valTree |=| intVar "n")
@@ -301,12 +307,12 @@ testTreeGen = do
   synthesizeAndPrint env typ cq []
   
 testTreeSize = do
-  let env = addSymbol "0" (int (valInt |=| IntLit 0)) .
-            addSymbol "1" (int (valInt |=| IntLit 0)) .
-            -- addSymbol "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            -- addSymbol "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
-            addSymbol "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
-            -- addSymbol "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .            
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .
+            addConstant "1" (int (valInt |=| IntLit 0)) .
+            -- addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            -- addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            addConstant "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
+            -- addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .            
             addTree $ emptyEnv
 
   let typ = Monotype $ FunctionT "t" treeAll (int $ valInt |=| Measure IntT "size" (treeVar "t"))
@@ -314,12 +320,12 @@ testTreeSize = do
   synthesizeAndPrint env typ [] []
             
 testFlatten = do
-  -- let env = addSymbol "append" (FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs") /+/ Measure SetT "elems" (listVar "ys")))) .
+  -- let env = addConstant "append" (FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure SetT "elems" valList |=| Measure SetT "elems" (listVar "xs") /+/ Measure SetT "elems" (listVar "ys")))) .
             -- addList $ addTree $ emptyEnv
 
   -- let typ = Monotype $ FunctionT "t" treeAll (list $ Measure SetT "elems" valList |=| Measure SetT "telems" (treeVar "t"))
   
-  let env = addSymbol "append" (FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))) .
+  let env = addConstant "append" (FunctionT "xs" listAll (FunctionT "ys" listAll (list $ Measure IntT "len" valList |=| Measure IntT "len" (listVar "xs") |+| Measure IntT "len" (listVar "ys")))) .
             addList $ addTree $ emptyEnv
 
   let typ = Monotype $ FunctionT "t" treeAll (list $ Measure IntT "len" valList |=| Measure IntT "size" (treeVar "t"))
@@ -341,10 +347,10 @@ main = do
   -- putStr "\n=== id ===\n";       testId
   -- putStr "\n=== const ===\n";       testConst
   -- putStr "\n=== compose ===\n";   testCompose  
-  putStr "\n=== polymorphic ===\n";   testPolymorphic
+  -- putStr "\n=== polymorphic ===\n";   testPolymorphic
   -- List programs
   -- putStr "\n=== head ===\n";      testHead
-  -- putStr "\n=== replicate ===\n"; testReplicate
+  putStr "\n=== replicate ===\n"; testReplicate
   -- putStr "\n=== length ===\n";    testLength
   -- putStr "\n=== append ===\n";    testAppend
   -- putStr "\n=== stutter ===\n";   testStutter

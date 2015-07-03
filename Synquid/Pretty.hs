@@ -221,13 +221,13 @@ programDoc sdoc cdoc tdoc tdoc' (Program p typ) = let
     PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
 
 instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Pretty (Program s c t) where
-  pretty = programDoc pretty pretty (const empty) pretty
+  pretty = programDoc pretty pretty pretty pretty
   
 instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Show (Program s c t) where
   show = show . pretty
   
 prettySType :: SType -> Doc
-prettySType (ScalarT base _) = pretty base
+prettySType (ScalarT base args _) = pretty base <+> hsep (map pretty args)
 prettySType (FunctionT _ t1 t2) = parens (pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty SType where
@@ -237,8 +237,8 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
-prettyType (ScalarT base (BoolLit True)) = pretty base
-prettyType (ScalarT base fml) = pretty base <> text "|" <> pretty fml
+prettyType (ScalarT base args (BoolLit True)) = pretty base <+> hsep (map pretty args)
+prettyType (ScalarT base args fml) = pretty base <+> hsep (map pretty args) <> text "|" <> pretty fml
 prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty RType where
