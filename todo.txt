@@ -1,8 +1,6 @@
-- Make sets generic
-
+- Propagate env out of generateI as well, and use generateI for arguments? Advantage: can generate lambdas as arguments
 - When instantiating a symbol, also substitute type vars inside the refinements
 - Fix symbol instantiations (in abstract symbols, should be one per leaf constraint)
-- Higher-order functions
 
 - Abstract refinements
 

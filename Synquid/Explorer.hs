@@ -162,7 +162,7 @@ generateE env s = generateVar `mplus` generateApp
       let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
       let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
       addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-      when (isFunctionType s) $ addConstraint $ WellFormedFunction disjuncts
+      addConstraint $ WellFormedFunction disjuncts
       return (env, Program (PSymbol leafConstraint Map.empty) t)
                   
     genKnownSymbol (name, typeInfo) = do
