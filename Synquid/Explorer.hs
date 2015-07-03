@@ -159,7 +159,7 @@ generateE env s = generateVar `mplus` generateApp
       let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
       let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
       addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-      when (isFunctionType s) $ addConstraint $ WellFormedSymbol disjuncts
+      when (isFunctionType s) $ addConstraint $ WellFormedFunction disjuncts
       return (env, Program (PSymbol leafConstraint Map.empty) t)
                   
     genKnownSymbol (name, typeInfo) = do
@@ -183,7 +183,6 @@ generateE env s = generateVar `mplus` generateApp
           a <- freshId "_a"
           (env', fun) <- generateE env (vart_ a |->| s) -- Find all functions that unify with (? -> s)
           let FunctionT _ tArg tRes = typ fun
-          debug 1 (text "Function type" <+> pretty (typ fun)) $ return ()
           
           -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
@@ -255,6 +254,7 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
           scrDT <- msum (map return $ Map.keys (env ^. datatypes))                                         -- Pick a datatype to match on
           tArgs <- map vart_ `liftM` replicateM (((env ^. datatypes) Map.! scrDT) ^. typeArgCount) (freshId "_a")
           (env', pScrutinee) <- local (\params -> set eGuessDepth (view scrutineeDepth params) params) $ generateE env (ScalarT (DatatypeT scrDT) tArgs ())   -- Guess a scrutinee of the chosen shape
+          guard (Set.null $ typeVarsOf (typ pScrutinee) `Set.difference` Set.fromList (env ^. boundTypeVars)) -- Reject scrutinees with free type variables
           
           x <- freshId "x"                                                                                                        -- Generate a fresh variable that will represent the scrutinee in the case environments
           pCases <- mapM (generateCase env' x (typ pScrutinee)) $ ((env ^. datatypes) Map.! scrDT) ^. constructors                -- Generate a case for each constructor of the datatype
@@ -264,10 +264,16 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
     generateCase env scrName scrType consName = do
       case Map.lookup consName (allSymbols env) of
         Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
-        Just consT -> do
-          (args, caseEnv) <- addCaseSymbols env scrName scrType (toMonotype consT) -- Add bindings for constructor arguments and refine the scrutinee type in the environment
+        Just consSch -> do
+          consT <- toMonotype `liftM` freshTypeVars consSch          
+          let u = fromJust $ unifier (env ^. boundTypeVars) scrType (Monotype $ lastType $ consT)
+          let consT' = typeSubstitute andClean u consT
+          (args, caseEnv) <- addCaseSymbols env scrName scrType consT' -- Add bindings for constructor arguments and refine the scrutinee type in the environment
           pCaseExpr <- local (over matchDepth (-1 +)) $ generateI caseEnv t          
           return $ Case consName args pCaseExpr
+          
+    lastType t@(ScalarT _ _ _) = t
+    lastType (FunctionT _ _ tRes) = lastType tRes
           
     -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
     addCaseSymbols env x (ScalarT baseT _ fml) (ScalarT _ _ fml') = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
@@ -298,13 +304,17 @@ split (Subtype env (ScalarT baseT tArgs fml) (ScalarT baseT' tArgs' fml')) =
   (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) : concatMap split (zipWith (Subtype env) tArgs tArgs') -- assuming covariance
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) = -- TODO: rename type vars
   split (Subtype env tArg2 tArg1) ++ split (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2)
+split (WellFormed env (ScalarT baseT tArgs fml)) = 
+  (WellFormed env (ScalarT baseT tArgs fml)) : concatMap (split . WellFormed env) tArgs
 split (WellFormed env (FunctionT x tArg tRes)) = 
-  split (WellFormed env tArg) ++ split (WellFormed (addVariable x tArg env) tRes)
-split (WellFormedLeaf (FunctionT x tArg tRes) ts) = -- TODO: type vars?
+  split (WellFormed env tArg) ++ split (WellFormed (addVariable x tArg env) tRes)  
+split (WellFormedLeaf (ScalarT baseT tArgs fml) ts) =  
+  (WellFormedLeaf (ScalarT baseT [] fml) ts) : concatMap split (zipWith WellFormedLeaf tArgs (map typeArgs ts))
+split (WellFormedLeaf (FunctionT x tArg tRes) ts) =
   split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y x tArg tRes') ts))
-split (WellFormedSymbol disjuncts)
+split (WellFormedFunction disjuncts)
   | length disjuncts == 1   = concatMap split (head disjuncts)
-  | otherwise               = [WellFormedSymbol $ map (concatMap split) disjuncts]
+  | otherwise               = [WellFormedFunction $ map (concatMap split) disjuncts]
 split c = [c]
 
 toFormulas :: QualsGen -> QualsGen -> [Constraint] -> ([Clause], QMap)
@@ -323,7 +333,7 @@ toFormula _ tq (WellFormed env (ScalarT baseT _ (Unknown _ u))) =
   _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
 toFormula cq _ (WellFormedCond env (Unknown _ u)) =
   _2 %= Map.insert u (cq $ allScalars env)
-toFormula _ _ (WellFormedSymbol disjuncts) =
+toFormula _ _ (WellFormedFunction disjuncts) =
   _1 %= ((Disjunctive $ map (map fromHorn . fst . toFormulas emptyGen emptyGen) disjuncts) :)
 toFormula _ _ (WellFormedLeaf (ScalarT baseT _ (Unknown _ u)) ts) = do
   spaces <- mapM qualsFromType ts
@@ -390,7 +400,7 @@ symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . f
     unify sch = do
       sch' <- freshTypeVars sch
       let res = unifier (env ^. boundTypeVars) s (polyShape sch') 
-      debug 1 (text "unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')]) <+> text "->" <+> pretty res) $ return (res, sch')
+      debug 1 (text "Unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')]) <+> text "->" <+> pretty res) $ return (res, sch')
     
 -- | Replace all bound type variables with fresh identifiers    
 freshTypeVars :: (Monad s, MonadTrans m, MonadPlus (m s)) => SchemaSkeleton r -> Explorer s m (SchemaSkeleton r)    

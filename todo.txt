@@ -1,3 +1,5 @@
+- Make sets generic
+
 - When instantiating a symbol, also substitute type vars inside the refinements
 - Fix symbol instantiations (in abstract symbols, should be one per leaf constraint)
 - Higher-order functions

@@ -227,7 +227,7 @@ instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)
   show = show . pretty
   
 prettySType :: SType -> Doc
-prettySType (ScalarT base args _) = pretty base <+> hsep (map pretty args)
+prettySType (ScalarT base args _) = pretty base <+> hsep (map (parens . pretty) args)
 prettySType (FunctionT _ t1 t2) = parens (pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty SType where
@@ -237,8 +237,8 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
-prettyType (ScalarT base args (BoolLit True)) = pretty base <+> hsep (map pretty args)
-prettyType (ScalarT base args fml) = pretty base <+> hsep (map pretty args) <> text "|" <> pretty fml
+prettyType (ScalarT base args (BoolLit True)) = pretty base <+> hsep (map (parens . pretty) args)
+prettyType (ScalarT base args fml) = pretty base <+> hsep (map (parens . pretty) args) <> text "|" <> pretty fml
 prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty RType where
@@ -276,7 +276,7 @@ instance Pretty (TypeSubstitution Formula) where
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
--- prettyBindings env = commaSep (map pretty (Map.elems (env ^. symbols))) 
+-- prettyBindings env = commaSep (map pretty (Map.keys (allSymbols env))) 
 -- prettyBindings env = hMapDoc pretty pretty (env ^. symbols)
 prettyBindings env = empty
   
@@ -288,7 +288,7 @@ prettyConstraint (Unconstrained) = text "TRUE"
 prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
-prettyConstraint (WellFormedSymbol disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
+prettyConstraint (WellFormedFunction disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
 prettyConstraint (WellFormedLeaf t ts) = nest 2 $ pretty t <+> text "ONE OF" $+$ (vsep $ map pretty ts)
   
 instance Pretty Constraint where

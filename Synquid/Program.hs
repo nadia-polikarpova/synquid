@@ -26,6 +26,7 @@ isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
+typeArgs (ScalarT _ tArgs _) = tArgs
 
 arity (FunctionT _ _ t) = arity t + 1
 arity _ = 0
@@ -257,7 +258,7 @@ data Constraint = Unconstrained
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
   | WellFormedLeaf RType [RType]
-  | WellFormedSymbol [[Constraint]]  
+  | WellFormedFunction [[Constraint]]  
   
 isWFLeaf (WellFormedLeaf _ _) = True
 isWFLeaf _ = False
