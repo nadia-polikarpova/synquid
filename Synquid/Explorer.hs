@@ -45,6 +45,7 @@ data ExplorerParams s = ExplorerParams {
   _matchDepth :: Int,             -- ^ Maximum nesting level of matches
   _condDepth :: Int,              -- ^ Maximum nesting level of conditionals
   _abstractLeafs :: Bool,         -- ^ Use symbolic leaf search?
+  _enableFix :: Bool,             -- ^ Generate recursive functions?
   _condQualsGen :: QualsGen,      -- ^ Qualifier generator for conditionals
   _typeQualsGen :: QualsGen,      -- ^ Qualifier generator for types
   _solver :: ConstraintSolver s   -- ^ Constraint solver
@@ -212,22 +213,17 @@ generateI env t@(FunctionT x tArg tRes) = generateFix
       y <- freshId "x"
       let env' = addVariable x tArg $ env
       
+      recursive <- asks _enableFix      
       let recTArgMb = recursiveTArg x tArg
-      case recTArgMb of
-        Nothing -> do -- Cannot recurse on this argument: generate an ordinary abstraction          
-          pBody <- generateI env' tRes
-          return $ Program (PFun x pBody) t
-                  
-        Just recTArg -> do  -- Can recurse on this argument: generate a fixpoint
+      if recursive && isJust (recTArgMb) 
+        then do  -- Can recurse on this argument: generate a fixpoint
           f <- freshId "f"      
-          let env'' = addVariable f (FunctionT y recTArg (renameVar x y tArg tRes)) $ env'
+          let env'' = addVariable f (FunctionT y (fromJust recTArgMb) (renameVar x y tArg tRes)) $ env'
           pBody <- generateI env'' tRes
           return $ Program (PFix f (Program (PFun x pBody) t)) t
-      
-    -- generateFix x tArg tRes = do
-      -- let env' = addVariable x tArg env
-      -- pBody <- generateI env' tRes
-      -- return $ Program (PFun x pBody) t      
+        else do -- Cannot recurse on this argument or recursion is disabled: generate an ordinary abstraction          
+          pBody <- generateI env' tRes
+          return $ Program (PFun x pBody) t
       
     -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
     -- inside the body of the recursive function where its argument has name @argName@ and type @t@
