@@ -1,12 +1,11 @@
-- Propagate env out of generateI as well, and use generateI for arguments? Advantage: can generate lambdas as arguments
 - When instantiating a symbol, also substitute type vars inside the refinements
+- Propagate env out of generateI as well, and use generateI for arguments? Advantage: can generate lambdas as arguments
 - Fix symbol instantiations (in abstract symbols, should be one per leaf constraint)
+
+- E-guess caching
 
 - Abstract refinements
 
-- Optimize	
-	- Search strategies (symbolic vs explicit, e-guess caching)
-	- Disjoint spaces in the solver
 
 - Make conditions programs
 

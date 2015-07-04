@@ -53,8 +53,27 @@ typeSubstitute combineR subst t@(ScalarT baseT tArgs r) = case baseT of
   _ -> t
 typeSubstitute combineR subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute combineR subst tArg) (typeSubstitute combineR subst tRes)
 
+rTypeSubstitute subst = typeSubstitute andClean subst
+-- rTypeSubstitute subst = typeSubstitute (\fml1 fml2 -> typeSubstituteFML subst fml1 `andClean` fml2) subst
+
 schemaSubstitute combineR subst (Monotype t) = Monotype $ typeSubstitute combineR subst t
 schemaSubstitute combineR subst (Forall a sch) = Forall a $ schemaSubstitute combineR subst sch
+
+-- typeSubstituteFML :: TypeSubstitution r -> Formula -> Formula
+-- typeSubstituteFML subst fml = case fml of 
+  -- SetLit b es -> SetLit (substBaseType b) (map (typeSubstituteFML subst) es)
+  -- Var b name -> Var (substBaseType b) name
+  -- -- Unknown s name -> WHAT TO DO?
+  -- Unary op e -> Unary op (typeSubstituteFML subst e)
+  -- Binary op l r -> Binary op (typeSubstituteFML subst l) (typeSubstituteFML subst r)
+  -- Measure b name e -> Measure (substBaseType b) name (typeSubstituteFML subst e)
+  -- _ -> fml
+  -- where
+    -- substBaseType b@(TypeVarT name) = case Map.lookup name subst of
+      -- Just (ScalarT b' _ _) -> b'
+      -- Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
+      -- Nothing -> b
+    -- substBaseType b = b
 
 -- | 'renameTypeVar' @old new t@ : rename type variable @old@ into @new@ in @t@
 renameTypeVar old new t@(ScalarT (TypeVarT name) [] r)
@@ -108,6 +127,9 @@ renameVar :: Id -> Id -> RType -> RType -> RType
 renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
 renameVar old new t@(ScalarT b _ _)  (ScalarT base tArgs fml) = ScalarT base (map (renameVar old new t) tArgs) (substitute (Map.singleton old (Var b new)) fml)
 renameVar old new t                (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
+
+unknownsOfType (ScalarT _ tArgs fml) = Set.unions $ unknownsOf fml : map unknownsOfType tArgs
+unknownsOfType (FunctionT _ tArg tRes) = unknownsOfType tArg `Set.union` unknownsOfType tRes
 
 -- | Instantiate unknowns in a type
 typeApplySolution sol (ScalarT base tArgs fml) = ScalarT base (map (typeApplySolution sol) tArgs) (applySolution sol fml)
@@ -240,7 +262,7 @@ infixr 5 |->|
 
 -- | 'instantiateSymbols' @subst p@ : apply @subst@ to polymorphic symbols
 instantiateSymbols :: TypeSubstitution Formula -> LiquidProgram -> LiquidProgram
-instantiateSymbols subst (Program body t) = (flip Program (typeSubstitute andClean subst t)) $ case body of
+instantiateSymbols subst (Program body t) = (flip Program (rTypeSubstitute subst t)) $ case body of
   PSymbol s subst' -> PSymbol s (Map.union subst' $ restrictDomain (typeVarsOf t) subst)
   PApp f arg -> PApp (instantiateSymbols subst f) (instantiateSymbols subst arg)
   PFun x body -> PFun x (instantiateSymbols subst body)

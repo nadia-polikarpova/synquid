@@ -98,7 +98,7 @@ findJustM f (x : xs) = do
     Just res -> return $ Just res
     
 -- | Monadic version of if-then-else  
-ifM ::(Functor m, Monad m) => m Bool -> m a -> m a -> m a
+ifM :: Monad m => m Bool -> m a -> m a -> m a
 ifM cond t e = cond >>= (\res -> if res then t else e)  
 
 -- | Monadic equivalent of 'Set.partition'

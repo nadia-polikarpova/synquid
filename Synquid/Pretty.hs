@@ -296,7 +296,8 @@ instance Pretty Constraint where
   
 instance Pretty LeafConstraint where
   -- pretty c = hMapDoc pretty pretty c
-  pretty = const empty
+  pretty c = let syms = Map.keys c in if length syms == 1 then text (head syms) else braces (commaSep (map text syms))
+  -- pretty = const empty
   
 instance Pretty Candidate where
   pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))  

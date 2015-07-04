@@ -46,6 +46,7 @@ data ExplorerParams s = ExplorerParams {
   _condDepth :: Int,              -- ^ Maximum nesting level of conditionals
   _abstractLeafs :: Bool,         -- ^ Use symbolic leaf search?
   _enableFix :: Bool,             -- ^ Generate recursive functions?
+  _incrementalSolving :: Bool,    -- ^ Solve constraints as they appear (as opposed to all at once)?
   _condQualsGen :: QualsGen,      -- ^ Qualifier generator for conditionals
   _typeQualsGen :: QualsGen,      -- ^ Qualifier generator for types
   _solver :: ConstraintSolver s   -- ^ Constraint solver
@@ -75,8 +76,8 @@ explore params env t = do
   where
     go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m SimpleProgram
     go = do
-      p <- generateI env t          
-      -- solveConstraints p
+      p <- generateI env t
+      ifM (asks _incrementalSolving) (return ()) (solveConstraints p)
       solv <- asks _solver
       cands <- use candidates
       debug 1 ( nest 2 (text "Liquid Program" $+$ pretty p) $+$
@@ -101,7 +102,7 @@ solveConstraints p = do
   let (clauses, newQuals) = toFormulas cq tq cs'
   let qmap = Map.union oldQuals newQuals
   debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs) 
-    -- $+$ text "Liquid Program" $+$ pretty p
+    $+$ text "Liquid Program" $+$ programDoc pretty pretty (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) pretty p
     ) $ return ()
   
   -- Refine the current candidate solutions using the new constraints; fail if no solution
@@ -154,7 +155,7 @@ generateE env s = generateVar `mplus` generateApp
         let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst
         rhsSubst' <- T.mapM (freshRefinements . refine) rhsSubst
         mapM_ (addConstraint . WellFormed env) (Map.elems rhsSubst')
-        return $ typeSubstitute andClean rhsSubst' (toMonotype sch)
+        return $ rTypeSubstitute rhsSubst' (toMonotype sch)
       
     abstractVarOfShape symbols = do
       let s = shape $ head $ Map.elems symbols
@@ -190,9 +191,9 @@ generateE env s = generateVar `mplus` generateApp
           -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
           let u = fromJust $ unifier (env ^. boundTypeVars) tArg (Monotype $ typ arg)
-          let FunctionT x tArg' tRes' = typeSubstitute andClean u (typ fun)
+          let FunctionT x tArg' tRes' = rTypeSubstitute u (typ fun)
           addConstraint $ Subtype env'' (typ arg) tArg'
-          solveConstraints arg
+          ifM (asks _incrementalSolving) (solveConstraints arg) (return ())
           
           y <- freshId "x" 
           let env''' = addGhost y (typ arg) env''      
@@ -240,7 +241,7 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
     guessE = do
       (env', res) <- generateE env (shape t)
       addConstraint $ Subtype env' (typ res) t
-      solveConstraints res
+      ifM (asks _incrementalSolving) (solveConstraints res) (return ())
       return res
       
     -- | Generate a match term of type @t@
@@ -265,7 +266,7 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
         Just consSch -> do
           consT <- toMonotype `liftM` freshTypeVars consSch          
           let u = fromJust $ unifier (env ^. boundTypeVars) scrType (Monotype $ lastType $ consT)
-          let consT' = typeSubstitute andClean u consT
+          let consT' = rTypeSubstitute u consT
           (args, caseEnv) <- addCaseSymbols env scrName scrType consT' -- Add bindings for constructor arguments and refine the scrutinee type in the environment
           pCaseExpr <- local (over matchDepth (-1 +)) $ generateI caseEnv t          
           return $ Case consName args pCaseExpr
