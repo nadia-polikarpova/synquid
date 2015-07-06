@@ -1,4 +1,5 @@
-- When instantiating a symbol, also substitute type vars inside the refinements
+- Earlier arguments should be usable inside polymorphic instantiations of later arguments
+
 - Propagate env out of generateI as well, and use generateI for arguments? Advantage: can generate lambdas as arguments
 - Fix symbol instantiations (in abstract symbols, should be one per leaf constraint)
 

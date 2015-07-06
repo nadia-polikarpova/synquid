@@ -152,9 +152,8 @@ generateE env s = generateVar `mplus` generateApp
     instantiate (name, (typeSubst, sch)) = case sch of 
       Monotype t -> return (symbolType name t)
       _ -> do -- Unification
-        let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst
-        rhsSubst' <- T.mapM (freshRefinements . refine) rhsSubst
-        mapM_ (addConstraint . WellFormed env) (Map.elems rhsSubst')
+        let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst        
+        rhsSubst' <- freshRefinementsSubst env rhsSubst
         return $ rTypeSubstitute rhsSubst' (toMonotype sch)
       
     abstractVarOfShape symbols = do
@@ -190,17 +189,18 @@ generateE env s = generateVar `mplus` generateApp
           
           -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
-          let u = fromJust $ unifier (env ^. boundTypeVars) tArg (Monotype $ typ arg)
-          let FunctionT x tArg' tRes' = rTypeSubstitute u (typ fun)
+          let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (polyShape $ Monotype $ typ arg)
+          u' <- freshRefinementsSubst env'' u
+          let FunctionT x tArg' tRes' = rTypeSubstitute u' (typ fun)
           addConstraint $ Subtype env'' (typ arg) tArg'
           ifM (asks _incrementalSolving) (solveConstraints arg) (return ())
           
           y <- freshId "x" 
           let env''' = addGhost y (typ arg) env''      
-          return (env''', Program (PApp (instantiateSymbols u fun) arg) (renameVar x y tArg tRes'))
+          return (env''', Program (PApp (instantiateSymbols u' fun) arg) (renameVar x y tArg tRes'))
       
-    addGhost x (ScalarT baseT _ fml) env = let subst = substitute (Map.singleton valueVarName (Var baseT x)) in 
-      addAssumption (subst fml) env
+    addGhost x t@(ScalarT baseT _ fml) env = addVariable x t env
+      -- let subst = substitute (Map.singleton valueVarName (Var baseT x)) in addAssumption (subst fml) env
     addGhost _ (FunctionT _ _ _) env = env
      
 -- | 'generateI' @env t@ : explore all liquid terms of type @t@ in environment @env@
@@ -402,11 +402,17 @@ symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . f
       debug 1 (text "Unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')]) <+> text "->" <+> pretty res) $ return (res, sch')
     
 -- | Replace all bound type variables with fresh identifiers    
-freshTypeVars :: (Monad s, MonadTrans m, MonadPlus (m s)) => SchemaSkeleton r -> Explorer s m (SchemaSkeleton r)    
+freshTypeVars :: (Monad s, MonadTrans m, MonadPlus (m s)) => RSchema -> Explorer s m RSchema    
 freshTypeVars t@(Monotype _) = return t
 freshTypeVars (Forall a sch) = do
   a' <- freshId "a"
-  sch' <- freshTypeVars $ schemaRenameTypeVar a a' sch
+  sch' <- freshTypeVars $ rSchemaSubstitute (Map.singleton a (vartAll a')) sch
   return $ Forall a' sch'
+  
+freshRefinementsSubst env subst = do
+  subst' <- T.mapM (freshRefinements . refine) subst
+  mapM_ (addConstraint . WellFormed env) (Map.elems subst')
+  return subst'
+
       
 

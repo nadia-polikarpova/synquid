@@ -83,14 +83,20 @@ extractCondQGen qual syms = allSubstitutions qual (Set.toList $ varsOf qual) sym
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
 extractQGenFromType :: RType -> [Formula] -> [Formula]
-extractQGenFromType (ScalarT _ tArgs fml) syms = let fs = Set.toList $ conjunctsOf fml 
+extractQGenFromType (ScalarT _ tArgs fml) syms = let fs = if isJust (baseTypeOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms (hack in the absence of abstract refinements)
   in concatMap (flip extractTypeQGen syms) fs ++ concatMap (flip extractQGenFromType syms) tArgs
 extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms ++ extractQGenFromType tRes syms    
 
 -- | 'allSubstitutions' @qual vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@
 allSubstitutions (BoolLit True) _ _ = []
 allSubstitutions qual vars syms = do
-  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, varType v == varType var]
+  let syms' = map extractPrimitiveConst syms
+  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms', baseTypeOf v == baseTypeOf var]
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
   return $ substitute subst qual
+  
+extractPrimitiveConst v@(Var IntT name) = case reads name of
+  [] -> v
+  (i, _):_ -> IntLit i
+extractPrimitiveConst v = v  

@@ -172,7 +172,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     SetLit _ elems -> braces $ commaSep $ map pretty elems
-    Var _ ident -> text ident
+    Var b ident -> text ident -- <> text ":" <> pretty  b
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
@@ -276,9 +276,9 @@ instance Pretty (TypeSubstitution Formula) where
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
--- prettyBindings env = commaSep (map pretty (Map.keys (allSymbols env))) 
+prettyBindings env = commaSep (map pretty (Set.toList $ Map.keysSet (allSymbols env) Set.\\ (env ^. constants))) 
 -- prettyBindings env = hMapDoc pretty pretty (env ^. symbols)
-prettyBindings env = empty
+-- prettyBindings env = empty
   
 instance Pretty Environment where
   pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions))

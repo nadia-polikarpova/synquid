@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 
 import Control.Lens hiding (both)
+import Control.Monad
 
 -- | Identifiers
 type Id = String
@@ -20,6 +21,9 @@ type Id = String
 data BaseType = BoolT | IntT | TypeVarT Id | DatatypeT Id | SetT BaseType
   deriving (Eq, Ord)
   
+isSetT (SetT _) = True
+isSetT _ = False
+elemT (SetT b) = b
 dtName (DatatypeT name) = name  
 
 {- Formulas of the refinement logic -}
@@ -138,20 +142,25 @@ conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
 conjunctsOf f = Set.singleton f
 
 -- | Base type of a term in the refinement logic
-baseTypeOf :: Formula -> BaseType
-baseTypeOf (BoolLit _)                        = BoolT
-baseTypeOf (IntLit _)                         = IntT
-baseTypeOf (SetLit b _)                       = SetT b
-baseTypeOf (Var b _ )                         = b
-baseTypeOf (Unknown _ _)                      = BoolT
-baseTypeOf (Unary op _)
-  | op == Neg                                 = IntT
-  | otherwise                                 = BoolT
-baseTypeOf (Binary op _ _)
-  | op == Times || op == Plus || op == Minus  = IntT
-  | otherwise                                 = BoolT
-baseTypeOf (Measure b _ _)                    = b
-
+baseTypeOf :: Formula -> Maybe BaseType
+baseTypeOf (BoolLit _)                        = Just $ BoolT
+baseTypeOf (IntLit _)                         = Just $ IntT
+baseTypeOf (SetLit b es)                      = mapM_ (\e -> baseTypeOf e >>= guard . (== b)) es >> return (SetT b)  
+baseTypeOf (Var b _ )                         = Just $ b
+baseTypeOf (Unknown _ _)                      = Just $ BoolT
+baseTypeOf (Unary op e)
+  | op == Neg                                 = (baseTypeOf e >>= guard . (== IntT)) >> return IntT
+  | otherwise                                 = (baseTypeOf e >>= guard . (== BoolT)) >> return BoolT
+baseTypeOf (Binary op e1 e2)
+  | op == Times || op == Plus || op == Minus            = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return IntT
+  | op == Eq  || op == Neq                              = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (l == r); return BoolT
+  | op == Lt || op == Le || op == Gt || op == Ge        = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return BoolT
+  | op == And || op == Or || op == Implies || op == Iff = do l <- baseTypeOf e1; guard (l == BoolT); r <- baseTypeOf e2; guard (r == BoolT); return BoolT
+  | op == Union || op == Intersect || op == Diff        = do l <- baseTypeOf e1; guard (isSetT l); r <- baseTypeOf e2; guard (r == l); return l
+  | op == Member                                        = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (r == SetT l); return BoolT 
+  | op == Subset                                        = do l <- baseTypeOf e1; guard (isSetT l); r <- baseTypeOf e2; guard (r == l); return BoolT
+baseTypeOf (Measure b _ _)                    = Just $ b
+  
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of

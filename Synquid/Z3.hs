@@ -124,7 +124,8 @@ toAST expr = case expr of
   Unary op e -> toAST e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toAST e1 <*> toAST e2)  
   Measure b ident arg -> do
-    decl <- measure b ident (baseTypeOf arg)
+    let tArg = fromJust $ baseTypeOf arg
+    decl <- measure b (ident ++ show tArg) tArg
     mapM toAST [arg] >>= mkApp decl
   where
     setLiteral b xs = do

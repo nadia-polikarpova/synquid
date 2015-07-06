@@ -47,44 +47,34 @@ typeSubstitute :: (r -> r -> r) -> TypeSubstitution r -> TypeSkeleton r -> TypeS
 typeSubstitute combineR subst t@(ScalarT baseT tArgs r) = case baseT of
   TypeVarT name -> case Map.lookup name subst of
     Just (ScalarT baseT' tArgs' r') -> ScalarT baseT' tArgs' (combineR r r')
-    Just t' -> t' -- TODO: how to combine refinements?
+    Just t' -> error $ unwords ["typeSubstitute: cannot substitute function type for", name] -- t' -- Function types can't have refinements
     Nothing -> t
   DatatypeT name -> let tArgs' = map (typeSubstitute combineR subst) tArgs in ScalarT baseT tArgs' r
   _ -> t
 typeSubstitute combineR subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute combineR subst tArg) (typeSubstitute combineR subst tRes)
 
-rTypeSubstitute subst = typeSubstitute andClean subst
--- rTypeSubstitute subst = typeSubstitute (\fml1 fml2 -> typeSubstituteFML subst fml1 `andClean` fml2) subst
+rTypeSubstitute subst = typeSubstitute (\fml1 fml2 -> typeSubstituteFML subst fml1 `andClean` fml2) subst
 
 schemaSubstitute combineR subst (Monotype t) = Monotype $ typeSubstitute combineR subst t
 schemaSubstitute combineR subst (Forall a sch) = Forall a $ schemaSubstitute combineR subst sch
 
--- typeSubstituteFML :: TypeSubstitution r -> Formula -> Formula
--- typeSubstituteFML subst fml = case fml of 
-  -- SetLit b es -> SetLit (substBaseType b) (map (typeSubstituteFML subst) es)
-  -- Var b name -> Var (substBaseType b) name
-  -- -- Unknown s name -> WHAT TO DO?
-  -- Unary op e -> Unary op (typeSubstituteFML subst e)
-  -- Binary op l r -> Binary op (typeSubstituteFML subst l) (typeSubstituteFML subst r)
-  -- Measure b name e -> Measure (substBaseType b) name (typeSubstituteFML subst e)
-  -- _ -> fml
-  -- where
-    -- substBaseType b@(TypeVarT name) = case Map.lookup name subst of
-      -- Just (ScalarT b' _ _) -> b'
-      -- Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
-      -- Nothing -> b
-    -- substBaseType b = b
+rSchemaSubstitute subst = schemaSubstitute (\fml1 fml2 -> typeSubstituteFML subst fml1 `andClean` fml2) subst
 
--- | 'renameTypeVar' @old new t@ : rename type variable @old@ into @new@ in @t@
-renameTypeVar old new t@(ScalarT (TypeVarT name) [] r)
-  | name == old   = ScalarT (TypeVarT new) [] r
-  | otherwise     = t
-renameTypeVar old new (ScalarT baseT tArgs r) = let tArgs' = map (renameTypeVar old new) tArgs in ScalarT baseT tArgs' r 
-renameTypeVar old new (FunctionT x tArg tRes) = FunctionT x (renameTypeVar old new tArg) (renameTypeVar old new tRes)
-
--- | 'schemaRenameTypeVar' @old new sch@ : rename type variable @old@ into @new@ in @sch@
-schemaRenameTypeVar old new (Monotype t) = Monotype $ renameTypeVar old new t
-schemaRenameTypeVar old new (Forall a sch) = Forall a $ schemaRenameTypeVar old new sch
+typeSubstituteFML :: TypeSubstitution r -> Formula -> Formula
+typeSubstituteFML subst fml = case fml of 
+  SetLit b es -> SetLit (substBaseType b) (map (typeSubstituteFML subst) es)
+  Var b name -> Var (substBaseType b) name
+  -- Unknown s name -> WHAT TO DO?
+  Unary op e -> Unary op (typeSubstituteFML subst e)
+  Binary op l r -> Binary op (typeSubstituteFML subst l) (typeSubstituteFML subst r)
+  Measure b name e -> Measure (substBaseType b) name (typeSubstituteFML subst e)
+  _ -> fml
+  where
+    substBaseType b@(TypeVarT name) = case Map.lookup name subst of
+      Just (ScalarT b' _ _) -> b'
+      Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
+      Nothing -> b
+    substBaseType b = b
 
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
@@ -208,9 +198,10 @@ embedding :: Environment -> (Set Formula, Set Formula)
 embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name t -> fmls `Set.union` embedBinding name t) Set.empty $ symbolsOfArity 0 env), env ^.negAssumptions)
   where
     embedBinding _ (Monotype (ScalarT _ _ (BoolLit True))) = Set.empty -- Ignore trivial types
-    embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
-      then Set.empty -- Ignore constants
-      else Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
+    embedBinding x (Monotype (ScalarT baseT _ fml)) = Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml    
+    -- embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
+      -- then Set.empty -- Ignore constants
+      -- else Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants
     
 {- Program terms -}    
@@ -251,6 +242,7 @@ int = ScalarT IntT []
 int_ = int ()
 intAll = int ftrue
 nat = int (valInt |>=| IntLit 0)
+pos = int (valInt |>| IntLit 0)
 
 vart n = ScalarT (TypeVarT n) []
 vart_ n = vart n ()
