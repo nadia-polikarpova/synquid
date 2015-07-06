@@ -15,10 +15,10 @@ import Control.Monad.Trans.List
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 0,
-  _condDepth = 0,
-  _abstractLeafs = True,
-  _enableFix = False,
+  _matchDepth = 1,
+  _condDepth = 1,
+  _abstractLeafs = False,
+  _enableFix = True,
   _incrementalSolving = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
@@ -300,15 +300,18 @@ valIncList = incListVar valueVarName
 intInclist = ScalarT incListT [intAll]
 natInclist = ScalarT incListT [nat]
 
+mILen = Measure IntT "len"
+mIElems = Measure (SetT IntT) "elems"
+
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
-                                                               -- |&| mElems valIncList  |=| SetLit (TypeVarT "a") []
+                                                               |&| mElems valIncList  |=| SetLit (TypeVarT "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
                                                          (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>| vartVar "a" "x"] ftrue) 
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1
-                                                                -- |&| mElems valIncList |=| mElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
+                                                                |&| mElems valIncList |=| mElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
                                                           )))
 
 testMakeIncList = do
@@ -318,34 +321,31 @@ testMakeIncList = do
             addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             addIncList $ emptyEnv
 
-  let typ = Monotype $ natInclist $ mLen valIncList |=| IntLit 2
+  let typ = Monotype $ natInclist $ mIElems valIncList |=| SetLit IntT [IntLit 0, IntLit 1]
+          
+  -- We only need this because our scraper don't instantiate types
+  let tq = do
+      op <- [Gt]
+      return $ Binary op valInt (intVar "x")
+      
+  synthesizeAndPrint env typ [] tq                                                          
+  
+testIncListInsert = do
+  let env = addIncList $ emptyEnv
+
+  -- let typ = Monotype $ (FunctionT "x" intAll (FunctionT "xs" (ScalarT incListT [int $ valInt |>=| intVar "x"] $ ftrue) (intInclist $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit IntT [intVar "x"])))
+  let typ = Monotype $ (FunctionT "x" intAll (FunctionT "xs" (ScalarT incListT [intAll] ftrue) (intInclist $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit IntT [intVar "x"])))
           
   let cq = do
-      op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
+      op <- [Ge]
+      return $ Binary op (intVar "x") (intVar "y")
 
   let tq = do
-      op <- [Ge, Le, Neq]
+      op <- [Ge]
       return $ Binary op valInt (intVar "x")
       
   synthesizeAndPrint env typ cq tq                                                          
-  
--- testIncListInsert = do
-  -- let env = addIncList $ emptyEnv
-
-  -- let typ = Monotype $ (FunctionT x intAll (FunctionT xs intInclist $ mLen valIncList |=| IntLit 2
-          
-  -- let cq = do
-      -- op <- [Ge, Le, Neq]
-      -- return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
-
-  -- let tq = do
-      -- op <- [Ge, Le, Neq]
-      -- return $ Binary op valInt (intVar "x")
-      
-  -- synthesizeAndPrint env typ cq tq                                                          
-  
-  
+    
 {- Tree programs -}
 
 -- treeT = DatatypeT "tree"
@@ -438,9 +438,10 @@ main = do
   -- putStr "\n=== stutter ===\n";   testStutter
   -- putStr "\n=== drop ===\n";   testDrop
   -- putStr "\n=== delete ===\n";   testDelete
-  putStr "\n=== use map ===\n";   testUseMap
+  -- putStr "\n=== use map ===\n";   testUseMap
   -- putStr "\n=== use fold1 ===\n";   testUseFold1
   -- putStr "\n=== make inc list ===\n";   testMakeIncList
+   putStr "\n=== inc list insert ===\n"; testIncListInsert
   -- Tree programs
   -- putStr "\n=== root ===\n";      testRoot
   -- putStr "\n=== tree gen ===\n";     testTreeGen

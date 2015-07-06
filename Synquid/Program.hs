@@ -43,22 +43,22 @@ toMonotype (Forall _ t) = toMonotype t
 type TypeSubstitution r = Map Id (TypeSkeleton r)
 
 -- | 'typeSubstitute' @combineR subst t@ : substitute all free type variables in @t@ combining refinements using @combineR@
-typeSubstitute :: (r -> r -> r) -> TypeSubstitution r -> TypeSkeleton r -> TypeSkeleton r
-typeSubstitute combineR subst t@(ScalarT baseT tArgs r) = case baseT of
+typeSubstitute :: (r -> r) -> (r -> r -> r) -> TypeSubstitution r -> TypeSkeleton r -> TypeSkeleton r
+typeSubstitute updateR combineR subst t@(ScalarT baseT tArgs r) = let rUp = updateR r in case baseT of
   TypeVarT name -> case Map.lookup name subst of
-    Just (ScalarT baseT' tArgs' r') -> ScalarT baseT' tArgs' (combineR r r')
+    Just (ScalarT baseT' tArgs' r') -> ScalarT baseT' tArgs' (combineR rUp r')
     Just t' -> error $ unwords ["typeSubstitute: cannot substitute function type for", name] -- t' -- Function types can't have refinements
-    Nothing -> t
-  DatatypeT name -> let tArgs' = map (typeSubstitute combineR subst) tArgs in ScalarT baseT tArgs' r
-  _ -> t
-typeSubstitute combineR subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute combineR subst tArg) (typeSubstitute combineR subst tRes)
+    Nothing -> ScalarT baseT tArgs rUp
+  DatatypeT name -> let tArgs' = map (typeSubstitute updateR combineR subst) tArgs in ScalarT baseT tArgs' rUp
+  _ -> ScalarT baseT tArgs rUp
+typeSubstitute updateR combineR subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute updateR combineR subst tArg) (typeSubstitute updateR combineR subst tRes)
 
-rTypeSubstitute subst = typeSubstitute (\fml1 fml2 -> typeSubstituteFML subst fml1 `andClean` fml2) subst
+rTypeSubstitute subst = typeSubstitute (typeSubstituteFML subst) andClean subst
 
-schemaSubstitute combineR subst (Monotype t) = Monotype $ typeSubstitute combineR subst t
-schemaSubstitute combineR subst (Forall a sch) = Forall a $ schemaSubstitute combineR subst sch
+schemaSubstitute updateR combineR subst (Monotype t) = Monotype $ typeSubstitute updateR combineR subst t
+schemaSubstitute updateR combineR subst (Forall a sch) = Forall a $ schemaSubstitute updateR combineR subst sch
 
-rSchemaSubstitute subst = schemaSubstitute (\fml1 fml2 -> typeSubstituteFML subst fml1 `andClean` fml2) subst
+rSchemaSubstitute subst = schemaSubstitute (typeSubstituteFML subst) andClean subst
 
 typeSubstituteFML :: TypeSubstitution r -> Formula -> Formula
 typeSubstituteFML subst fml = case fml of 
@@ -74,6 +74,7 @@ typeSubstituteFML subst fml = case fml of
       Just (ScalarT b' _ _) -> b'
       Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
       Nothing -> b
+    substBaseType (SetT b) = SetT (substBaseType b)
     substBaseType b = b
 
 -- | 'typeVarsOf' @t@ : all type variables in @t@

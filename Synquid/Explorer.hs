@@ -389,7 +389,7 @@ unifier _ _ _ = Nothing
 listUnifier _ [] [] = Just $ Map.empty
 listUnifier bvs (lhs : lhss) (rhs : rhss) = do
   u <- unifier bvs lhs rhs
-  u' <- listUnifier bvs (map (typeSubstitute const u) lhss) (map (schemaSubstitute const u) rhss)
+  u' <- listUnifier bvs (map (typeSubstitute id const u) lhss) (map (schemaSubstitute id const u) rhss)
   return $ u `Map.union` u'
 
 -- | 'symbolsUnifyingWith' @s env@ : symbols of simple type @s@ in @env@ 
@@ -403,16 +403,14 @@ symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . f
     
 -- | Replace all bound type variables with fresh identifiers    
 freshTypeVars :: (Monad s, MonadTrans m, MonadPlus (m s)) => RSchema -> Explorer s m RSchema    
-freshTypeVars t@(Monotype _) = return t
-freshTypeVars (Forall a sch) = do
-  a' <- freshId "a"
-  sch' <- freshTypeVars $ rSchemaSubstitute (Map.singleton a (vartAll a')) sch
-  return $ Forall a' sch'
+freshTypeVars sch = freshTypeVars' Map.empty sch
+  where
+    freshTypeVars' subst (Forall a sch) = do
+      a' <- freshId "a"      
+      (Forall a') `liftM` freshTypeVars' (Map.insert a (vartAll a') subst) sch
+    freshTypeVars' subst (Monotype t) = return $ Monotype $ rTypeSubstitute subst t
   
 freshRefinementsSubst env subst = do
   subst' <- T.mapM (freshRefinements . refine) subst
   mapM_ (addConstraint . WellFormed env) (Map.elems subst')
   return subst'
-
-      
-
