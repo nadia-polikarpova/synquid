@@ -18,4 +18,6 @@ replicate = fix \f . \n . \x .
     else Cons x (f (dec n) x)
 ```
 
-Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.org/citation.cfm?doid=2737924.2738007) and [liquid types](http://dl.acm.org/citation.cfm?doid=1375581.1375602).  
+Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.org/citation.cfm?doid=2737924.2738007) and [liquid types](http://dl.acm.org/citation.cfm?doid=1375581.1375602).
+
+**This project is still under construction; the first release will be out soon!**
