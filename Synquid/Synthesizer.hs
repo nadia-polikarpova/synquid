@@ -63,7 +63,10 @@ synthesizeMonotype explorerParams solverParams env typ cquals tquals = do
     condQuals = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
     
     -- | Qualifier generator for types
-    typeQuals = toSpace . foldl (|++|) (extractQGenFromType typ) (map extractTypeQGen tquals)  
+    typeQuals = toSpace . foldl (|++|) 
+      (extractQGenFromType typ) -- extract from spec
+      (map extractTypeQGen tquals ++ -- extract from given qualifiers
+      map (extractQGenFromType . toMonotype) (Map.elems $ allSymbols env)) -- extract from components
     
 {- Qualifier Generators -}
 
@@ -83,7 +86,7 @@ extractCondQGen qual syms = allSubstitutions qual (Set.toList $ varsOf qual) sym
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
 extractQGenFromType :: RType -> [Formula] -> [Formula]
-extractQGenFromType (ScalarT _ tArgs fml) syms = let fs = if isJust (baseTypeOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms (hack in the absence of abstract refinements)
+extractQGenFromType (ScalarT _ tArgs fml) syms = let fs = if isJust (baseTypeOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
   in concatMap (flip extractTypeQGen syms) fs ++ concatMap (flip extractQGenFromType syms) tArgs
 extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms ++ extractQGenFromType tRes syms    
 

@@ -165,6 +165,7 @@ addPolyConstant name sch = let n = arity (toMonotype sch) in (symbols %~ Map.ins
 
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
 
+allSymbols :: Environment -> Map Id RSchema
 allSymbols env = Map.unions $ Map.elems (env ^. symbols)
 
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment

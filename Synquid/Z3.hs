@@ -84,7 +84,8 @@ toSort b = do
       s <- case b of
         BoolT -> mkBoolSort
         IntT -> mkIntSort
-        TypeVarT name -> mkStringSymbol name >>= mkUninterpretedSort
+        -- TypeVarT name -> mkStringSymbol name >>= mkUninterpretedSort
+        TypeVarT name -> mkIntSort
         DatatypeT name -> mkStringSymbol name >>= mkUninterpretedSort
         SetT b -> toSort b >>= mkSetSort          
       sorts %= Map.insert b s
@@ -189,11 +190,6 @@ toAST expr = case expr of
           
 instance SMTSolver Z3State where
   initSolver = do
-    -- int <- mkIntSort
-    -- intSort .= Just int
-    -- bool <- mkBoolSort
-    -- boolSort .= Just bool
-    
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
 

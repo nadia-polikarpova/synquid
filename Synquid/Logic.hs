@@ -156,7 +156,8 @@ baseTypeOf (Unary op e)
 baseTypeOf (Binary op e1 e2)
   | op == Times || op == Plus || op == Minus            = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return IntT
   | op == Eq  || op == Neq                              = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (l == r); return BoolT
-  | op == Lt || op == Le || op == Gt || op == Ge        = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return BoolT
+  -- | op == Lt || op == Le || op == Gt || op == Ge        = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return BoolT
+  | op == Lt || op == Le || op == Gt || op == Ge        = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (l == r); return BoolT -- make comparisons generic
   | op == And || op == Or || op == Implies || op == Iff = do l <- baseTypeOf e1; guard (l == BoolT); r <- baseTypeOf e2; guard (r == BoolT); return BoolT
   | op == Union || op == Intersect || op == Diff        = do l <- baseTypeOf e1; guard (isSetT l); r <- baseTypeOf e2; guard (r == l); return l
   | op == Member                                        = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (r == SetT l); return BoolT 

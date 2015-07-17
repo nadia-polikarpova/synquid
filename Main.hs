@@ -367,7 +367,7 @@ intInclist = ScalarT incListT [intAll]
 natInclist = ScalarT incListT [nat]
 
 mILen = Measure IntT "len"
-mIElems = Measure (SetT IntT) "elems"
+mIElems = Measure (SetT $ TypeVarT "a") "elems"
 
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
@@ -389,45 +389,33 @@ testMakeIncList = do
 
   let typ = Monotype $ natInclist $ mIElems valIncList |=| SetLit IntT [IntLit 0, IntLit 1]
           
-  -- We only need this because our scraper don't instantiate types
-  let tq = do
-      op <- [Gt]
-      return $ Binary op valInt (intVar "x")
-      
-  synthesizeAndPrint "make" env typ [] tq                                                          
+  synthesizeAndPrint "make" env typ [] []                                                          
   
 testIncListInsert = do
   let env = addIncList $ emptyEnv
 
-  -- let typ = Monotype $ (FunctionT "x" intAll (FunctionT "xs" (ScalarT incListT [int $ valInt |>=| intVar "x"] $ ftrue) (intInclist $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit IntT [intVar "x"])))
-  let typ = Monotype $ (FunctionT "xs" (ScalarT incListT [intAll] ftrue) (FunctionT "x" intAll (intInclist $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit IntT [intVar "x"])))
-  -- let typ = Forall "a" (Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mElems valIncList |=| mElems (incListVar "xs") /+/ SetLit IntT [intVar "x"]))))
+  let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "x" (vartAll "a") (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
           
   let cq = do
       op <- [Ge]
-      return $ Binary op (intVar "x") (intVar "y")
+      return $ Binary op (vartVar "a" "x") (vartVar "a" "y")
 
-  let tq = do
-      op <- [Ge]
-      return $ Binary op valInt (intVar "x")
-      
-  synthesizeAndPrint "insert" env typ cq tq
+  synthesizeAndPrint "insert" env typ cq []
   
 testIncListMerge = do
-  let env = addConstant "insert" (FunctionT "xs" (ScalarT incListT [intAll] ftrue) (FunctionT "x" intAll (intInclist $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit IntT [intVar "x"]))) .
+  let env = addPolyConstant "insert" (Forall "a" $ Monotype $ (
+                                      FunctionT "xs" (incList ftrue) 
+                                      (FunctionT "x" (vartAll "a") 
+                                      (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))) .
             addIncList $ emptyEnv
 
-  let typ = Monotype $ (FunctionT "xs" (ScalarT incListT [intAll] ftrue) (FunctionT "ys" (ScalarT incListT [intAll] ftrue)  (intInclist $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
+  let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
           
   let cq = do
       op <- [Ge]
       return $ Binary op (intVar "x") (intVar "y")
 
-  let tq = do
-      op <- [Ge]
-      return $ Binary op valInt (intVar "x")
-      
-  synthesizeAndPrint "merge" env typ cq tq                                                          
+  synthesizeAndPrint "merge" env typ cq []                                                          
   
     
 {- Tree programs -}
