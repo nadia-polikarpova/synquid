@@ -46,6 +46,7 @@ data ExplorerParams s = ExplorerParams {
   _condDepth :: Int,              -- ^ Maximum nesting level of conditionals
   _abstractLeafs :: Bool,         -- ^ Use symbolic leaf search?
   _enableFix :: Bool,             -- ^ Generate recursive functions?
+  _abstractFix :: Bool,
   _incrementalSolving :: Bool,    -- ^ Solve constraints as they appear (as opposed to all at once)?
   _condQualsGen :: QualsGen,      -- ^ Qualifier generator for conditionals
   _typeQualsGen :: QualsGen,      -- ^ Qualifier generator for types
@@ -149,16 +150,30 @@ generateE env s = generateVar `mplus` generateApp
           msum $ map abstractVarOfShape symbolsByShape
         else msum $ map genKnownSymbol $ Map.toList symbols
       
-    instantiate (name, (typeSubst, sch)) = case sch of 
-      Monotype t -> return (symbolType name t)
-      _ -> do -- Unification
-        let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst        
-        rhsSubst' <- freshRefinementsSubst env rhsSubst
-        return $ rTypeSubstitute rhsSubst' (toMonotype sch)
+    instantiate (name, (typeSubst, sch)) = if name == "f1"
+      then do
+        t <- freshRefinementsLI (toMonotype sch)
+        addConstraint $ WellFormed env t
+        return t
+      else case sch of 
+        Monotype t -> return (symbolType name t)
+        _ -> do -- Unification
+          let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst        
+          rhsSubst' <- freshRefinementsSubst env rhsSubst
+          return $ rTypeSubstitute rhsSubst' (toMonotype sch)
+          
+    freshRefinementsLI t = do
+      k <- freshId "u"
+      return $ insertRefinement k t
+    insertRefinement k (ScalarT b [] fml) = ins' k (ScalarT b [] fml)
+    insertRefinement k (ScalarT b args fml) = ScalarT b (map (ins' k) args) fml
+    insertRefinement k (FunctionT x tArg tRes) = FunctionT x (insertRefinement k tArg) (insertRefinement k tRes)
+    ins' k (ScalarT b [] fml) = ScalarT b [] (fml `andClean` (Unknown Map.empty k))
+    
       
     abstractVarOfShape symbols = do
       let s = shape $ head $ Map.elems symbols
-      t <- freshRefinements $ refine s          
+      t <- freshRefinements $ refine s
       let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
       let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
       addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
@@ -187,7 +202,6 @@ generateE env s = generateVar `mplus` generateApp
           (env', fun) <- generateE env (vart_ a |->| s) -- Find all functions that unify with (? -> s)
           let FunctionT _ tArg tRes = typ fun
           
-          -- arg <- local (over eGuessDepth (-1 +) . set matchDepth 0) $ generateI env' tArg -- the argument is an i-term but matches and conditionals are disallowed; TODO: is this complete?
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
           let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (polyShape $ Monotype $ typ arg)
           u' <- freshRefinementsSubst env'' u
@@ -210,7 +224,6 @@ generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType ->
 generateI env t@(FunctionT x tArg tRes) = generateFix
   where
     generateFix = do
-      -- TODO: abstract fix type?      
       y <- freshId "x"
       let env' = addVariable x tArg $ env
       
@@ -218,10 +231,32 @@ generateI env t@(FunctionT x tArg tRes) = generateFix
       let recTArgMb = recursiveTArg x tArg
       if recursive && isJust (recTArgMb) 
         then do  -- Can recurse on this argument: generate a fixpoint
-          f <- freshId "f"      
+          f <- freshId "f"
+          -- abstract <- asks _abstractFix
+          -- if abstract
+            -- then do
+              -- -- u <- Unknown Map.empty `liftM` freshId "c"
+              -- -- let ScalarT b1 args1 fml1 = tArg
+              -- -- let ScalarT b2 args2 fml2 = tRes
+              -- -- let ScalarT b1 [] fml3 = head args1
+              -- -- let arg' = ScalarT b1 [] (fml3 `andClean` u)
+              -- -- let tArg' = ScalarT b1 [arg'] fml1
+              -- -- let tRes' = ScalarT b2 [arg'] fml2
+              
+              -- -- tRes' <- freshRefinements tRes
+              -- -- let t' = FunctionT x tArg tRes'
+              -- -- addConstraint $ WellFormed env t'
+              -- -- addConstraint $ Subtype env t' t
+              -- let env'' = addPolyConstant f (Forall "a" $ Monotype $ FunctionT y (fromJust recTArgMb) (renameVar x y tArg tRes)) $ env'
+              -- pBody <- generateI env'' tRes
+              -- return $ Program (PFix f (Program (PFun x pBody) t)) t
+            -- else do 
+              -- let env'' = addVariable f (FunctionT y (fromJust recTArgMb) (renameVar x y tArg tRes)) $ env'
+              -- pBody <- generateI env'' tRes
+              -- return $ Program (PFix f (Program (PFun x pBody) t)) t
           let env'' = addVariable f (FunctionT y (fromJust recTArgMb) (renameVar x y tArg tRes)) $ env'
           pBody <- generateI env'' tRes
-          return $ Program (PFix f (Program (PFun x pBody) t)) t
+          return $ Program (PFix f (Program (PFun x pBody) t)) t              
         else do -- Cannot recurse on this argument or recursion is disabled: generate an ordinary abstraction          
           pBody <- generateI env' tRes
           return $ Program (PFun x pBody) t
@@ -330,6 +365,8 @@ toFormula _ _ (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) | ba
   in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
 toFormula _ tq (WellFormed env (ScalarT baseT _ (Unknown _ u))) = 
   _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
+toFormula _ tq (WellFormed env (ScalarT baseT _ _)) = 
+  return ()
 toFormula cq _ (WellFormedCond env (Unknown _ u)) =
   _2 %= Map.insert u (cq $ allScalars env)
 toFormula _ _ (WellFormedFunction disjuncts) =

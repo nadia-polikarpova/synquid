@@ -69,6 +69,8 @@ varType (Var t _) = t
   
 ftrue = BoolLit True
 ffalse = BoolLit False
+boolVar = Var BoolT
+valBool = boolVar valueVarName
 intVar = Var IntT
 valInt = intVar valueVarName
 fneg = Unary Neg
@@ -184,7 +186,7 @@ substitute subst fml = case fml of
                 Just (Var b' v) -> if b == b' 
                   then Map.insert x (Var b v) $ compose old' (Map.delete y new)
                   else error "Base type mismatch when composing pending substitutions"
-
+                  
 {- Qualifiers -}
 
 -- | Search space for valuations of a single unknown

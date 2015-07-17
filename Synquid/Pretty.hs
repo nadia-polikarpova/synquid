@@ -39,7 +39,10 @@ module Synquid.Pretty (
   vMapDoc,
   -- * Other
   programDoc,
-  candidateDoc
+  candidateDoc,
+  -- * Counting
+  typeNodeCount,
+  programNodeCount
 ) where
 
 import Synquid.Logic
@@ -172,7 +175,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     SetLit _ elems -> braces $ commaSep $ map pretty elems
-    Var b ident -> text ident <> text ":" <> pretty  b
+    Var b ident -> text ident -- <> text ":" <> pretty  b
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
@@ -216,7 +219,7 @@ programDoc sdoc cdoc tdoc tdoc' (Program p typ) = let
     PSymbol s subst -> withType $ (option (not $ Map.null subst) $ hMapDoc text tdoc' subst) <+> sdoc s
     PApp f x -> parens (pDoc f <+> pDoc x)
     PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
-    PIf c t e -> nest 2 $ withType (cdoc c <+> text "?") $+$ pDoc t <+> text ":" $+$ pDoc e
+    PIf c t e -> nest 2 $ withType (text "if" <+> cdoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc tdoc') cases)
     PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
 
@@ -307,3 +310,29 @@ candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> program
   where
     condDoc fml = pretty $ applySolution sol fml
     typeDoc t = pretty $ typeApplySolution sol t
+    
+{- AST node counting -}
+
+-- | 'fmlNodeCount' @fml@ : size of @fml@ (in AST nodes)
+fmlNodeCount :: Formula -> Int
+fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
+fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
+fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
+fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
+fmlNodeCount _ = 1
+
+-- | 'typeNodeCount' @t@ : cumulative size of all refinements in @t@
+typeNodeCount :: RType -> Int 
+typeNodeCount (ScalarT _ tArgs fml) = fmlNodeCount fml + sum (map typeNodeCount tArgs)
+typeNodeCount (FunctionT _ tArg tRes) = typeNodeCount tArg + typeNodeCount tRes 
+
+-- | 'programNodeCount' @p@ : size of @p@ (in AST nodes)
+programNodeCount :: SimpleProgram -> Int
+programNodeCount (Program p _) = case p of 
+  PSymbol _ _ -> 1
+  PApp e1 e2 -> 1 + programNodeCount e1 + programNodeCount e2
+  PFun _ e -> 1 + programNodeCount e 
+  PIf c e1 e2 -> 1 + fmlNodeCount c + programNodeCount e1 + programNodeCount e2
+  PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
+  PFix _ e -> 1 + programNodeCount e
+
