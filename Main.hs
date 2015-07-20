@@ -13,10 +13,10 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
-  _condDepth = 2,
+  _condDepth = 1,
   _abstractLeafs = False,
   _fixStrategy = FirstArgument,
   _polyRecursion = True,

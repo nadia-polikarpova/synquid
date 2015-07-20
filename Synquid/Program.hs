@@ -140,17 +140,19 @@ makeLenses ''Datatype
 -- | Typing environment
 data Environment = Environment {
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types)
-  _constants :: Set Id,
+  _constants :: Set Id,                    -- ^ Subset of symbols that are constants
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
+  _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
+  _shapeConstraints :: Map Id SType        -- ^ For polymorphic recursive calls, the shape their types must have
 }
 
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
-emptyEnv = Environment Map.empty Set.empty [] Map.empty Set.empty Set.empty
+emptyEnv :: Environment
+emptyEnv = Environment Map.empty Set.empty [] Map.empty Set.empty Set.empty Map.empty
 
 addVariable :: Id -> RType -> Environment -> Environment
 addVariable name t = addPolyVariable name (Monotype t)

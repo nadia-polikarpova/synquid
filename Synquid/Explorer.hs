@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, TupleSections #-}
 
 -- | Generating synthesis constraints from specifications, qualifiers, and program templates
 module Synquid.Explorer where
@@ -107,7 +107,7 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix env t
       -- TODO: add unification constraint
       let env' = if polymorphic
                     then let tvs = env ^. boundTypeVars in 
-                      foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs)) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
+                      foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
                     else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
       p <- generateI env' t
       return $ if null recCalls then p else Program (PFix (map fst recCalls) p) t
@@ -275,8 +275,8 @@ generateE env s = generateVar `mplus` generateApp
           let env''' = addGhost y (typ arg) env''      
           return (env''', Program (PApp (instantiateSymbols u' fun) arg) (renameVar x y tArg tRes'))
       
-    addGhost x t@(ScalarT baseT _ fml) env = addVariable x t env
-      -- let subst = substitute (Map.singleton valueVarName (Var baseT x)) in addAssumption (subst fml) env
+    addGhost x t@(ScalarT baseT _ fml) env = -- addVariable x t env
+      let subst = substitute (Map.singleton valueVarName (Var baseT x)) in addAssumption (subst fml) env
     addGhost _ (FunctionT _ _ _) env = env      
     
 {- Constraint solving -}
@@ -423,16 +423,24 @@ listUnifier bvs (lhs : lhss) (rhs : rhss) = do
   u <- unifier bvs lhs rhs
   u' <- listUnifier bvs (map (typeSubstitute id const u) lhss) (map (typeSubstitute id const u) rhss)
   return $ u `Map.union` u'
+  
+pair x y = (x, y)  
 
 -- | 'symbolsUnifyingWith' @s env@ : symbols of simple type @s@ in @env@ 
 symbolsUnifyingWith :: (Monad s, MonadTrans m, MonadPlus (m s)) => SType -> Environment -> Explorer s m (Map Id (TypeSubstitution (), RSchema))
-symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . fst)) `liftM` T.mapM unify (symbolsOfArity (arity s) env)
+symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . fst) . Map.fromList) `liftM` mapM unify (Map.toList $ symbolsOfArity (arity s) env)
   where
-    unify sch = do
+    unify (name, sch) = (name, ) `liftM` do
       sch' <- freshTypeVars sch
-      debug 1 (text "Unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')])) $ return ()
-      let res = unifier (env ^. boundTypeVars) s (shape $ toMonotype sch') 
-      debug 1 (text "->" <+> pretty res) $ return (res, sch')
+      case Map.lookup name (env ^. shapeConstraints) of
+        Nothing -> do -- No constraints on shape of sch': simply unify with s
+          let res = unifier (env ^. boundTypeVars) s (shape $ toMonotype sch') 
+          debug 1 (text "Unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')]) <+> text "->" <+> pretty res) $ return (res, sch')
+        Just s' -> do -- The shape of sch' has to be s' (used in polymorphic recursion)
+          let res = fromJust $ unifier (env ^. boundTypeVars) s' (shape $ toMonotype sch')
+          case unifier (env ^. boundTypeVars) s' s of
+            Nothing -> return (Nothing, sch')
+            Just res' -> return (Just $ Map.union res res', sch')
     
 -- | Replace all bound type variables with fresh identifiers    
 freshTypeVars :: (Monad s, MonadTrans m, MonadPlus (m s)) => RSchema -> Explorer s m RSchema    
