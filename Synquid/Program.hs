@@ -153,7 +153,10 @@ makeLenses ''Environment
 emptyEnv = Environment Map.empty Set.empty [] Map.empty Set.empty Set.empty
 
 addVariable :: Id -> RType -> Environment -> Environment
-addVariable name t = let n = arity t in symbols %~ Map.insertWith (Map.union) n (Map.singleton name (Monotype t))
+addVariable name t = addPolyVariable name (Monotype t)
+
+addPolyVariable :: Id -> RSchema -> Environment -> Environment
+addPolyVariable name sch = let n = arity (toMonotype sch) in (symbols %~ Map.insertWith (Map.union) n (Map.singleton name sch))
 
 -- | 'addConstant' @name t env@ : add type binding @name@ :: Monotype @t@ to @env@
 addConstant :: Id -> RType -> Environment -> Environment
@@ -161,7 +164,7 @@ addConstant name t = addPolyConstant name (Monotype t)
 
 -- | 'addPolyConstant' @name sch env@ : add type binding @name@ :: @sch@ to @env@
 addPolyConstant :: Id -> RSchema -> Environment -> Environment
-addPolyConstant name sch = let n = arity (toMonotype sch) in (symbols %~ Map.insertWith (Map.union) n (Map.singleton name sch)) . (constants %~ Set.insert name)
+addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert name)
 
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
 
@@ -222,7 +225,7 @@ data BareProgram s c t =
   PFun Id (Program s c t) |                 -- ^ Lambda abstraction
   PIf c (Program s c t) (Program s c t) |   -- ^ Conditional
   PMatch (Program s c t) [Case s c t] |     -- ^ Pattern match on datatypes
-  PFix Id (Program s c t)                   -- ^ Fixpoint  
+  PFix [Id] (Program s c t)                 -- ^ Fixpoint  
   
 -- | Programs annotated with types  
 data Program s c t = Program {
@@ -262,7 +265,7 @@ instantiateSymbols subst (Program body t) = (flip Program (rTypeSubstitute subst
   PFun x body -> PFun x (instantiateSymbols subst body)
   PIf c t e -> PIf c (instantiateSymbols subst t) (instantiateSymbols subst e)
   PMatch scr cases -> PMatch (instantiateSymbols subst scr) (map instantiateCase cases)
-  PFix f body -> PFix f (instantiateSymbols subst body)
+  PFix fs body -> PFix fs (instantiateSymbols subst body)
   where
     instantiateCase (Case cons args e) = Case cons args (instantiateSymbols subst e)  
 

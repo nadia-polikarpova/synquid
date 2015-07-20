@@ -175,7 +175,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     SetLit _ elems -> braces $ commaSep $ map pretty elems
-    Var b ident -> text ident -- <> text ":" <> pretty  b
+    Var b ident -> text ident <> text ":" <> pretty  b
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
@@ -221,7 +221,7 @@ programDoc sdoc cdoc tdoc tdoc' (Program p typ) = let
     PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
     PIf c t e -> nest 2 $ withType (text "if" <+> cdoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc tdoc') cases)
-    PFix f e -> nest 2 $ withType (text "fix" <+> text f <+> text ".") $+$ pDoc e
+    PFix fs e -> nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
 
 instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Pretty (Program s c t) where
   pretty = programDoc pretty pretty pretty pretty

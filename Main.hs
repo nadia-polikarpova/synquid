@@ -13,13 +13,13 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
-  _condDepth = 1,
+  _condDepth = 2,
   _abstractLeafs = False,
-  _enableFix = True,
-  _abstractFix = True,
+  _fixStrategy = FirstArgument,
+  _polyRecursion = True,
   _incrementalSolving = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
@@ -394,7 +394,8 @@ testMakeIncList = do
 testIncListInsert = do
   let env = addIncList $ emptyEnv
 
-  let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "x" (vartAll "a") (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
+  -- let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "x" (vartAll "a") (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
+  let typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
           
   let cq = do
       op <- [Ge]
@@ -490,22 +491,22 @@ testTreeSize = do
   
     
 main = do
-  -- Integer programs
-  -- testApp
-  -- testApp2  
-  -- testLambda
+  -- -- Integer programs
+  -- -- testApp
+  -- -- testApp2  
+  -- -- testLambda
   -- testMax2  
   -- testMax3
-  -- testMax4
+  -- -- testMax4
   -- testAbs  
   -- testAddition
-  -- testMult
-  -- Polymorphic programs
-  -- testId
-  -- testConst
-  -- testCompose  
-  -- testPolymorphic
-  -- -- List programs
+  -- -- testMult
+  -- -- Polymorphic programs
+  -- -- testId
+  -- -- testConst
+  -- -- testCompose  
+  -- -- testPolymorphic
+  -- -- -- List programs
   -- testHead
   -- testReplicate
   -- testLength
@@ -515,11 +516,11 @@ main = do
   -- testDrop
   -- testDelete
   -- testMap
-  -- testUseMap
+  testUseMap
   -- testUseFold1
   -- testMakeIncList
   testIncListInsert
-  -- testIncListMerge
+  testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

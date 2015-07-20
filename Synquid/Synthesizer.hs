@@ -29,11 +29,7 @@ import Control.Lens
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
 synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RSchema -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
-synthesize explorerParams solverParams env (Monotype t) cquals tquals = synthesizeMonotype explorerParams solverParams env t cquals tquals
-synthesize explorerParams solverParams env (Forall a sch) cquals tquals = synthesize explorerParams solverParams (addTypeVar a env) sch cquals tquals
-
-synthesizeMonotype :: ExplorerParams Z3State -> SolverParams -> Environment -> RType -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
-synthesizeMonotype explorerParams solverParams env typ cquals tquals = do
+synthesize explorerParams solverParams env sch cquals tquals = do
   ps <- evalZ3State $ observeManyT 1 $ programs
   case ps of
     [] -> return Nothing
@@ -48,7 +44,7 @@ synthesizeMonotype explorerParams solverParams env typ cquals tquals = do
                            set condQualsGen condQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
-      in explore explorerParams' env typ
+      in explore explorerParams' env sch
       
     init :: Z3State Candidate
     init = initialCandidate
@@ -64,7 +60,7 @@ synthesizeMonotype explorerParams solverParams env typ cquals tquals = do
     
     -- | Qualifier generator for types
     typeQuals = toSpace . foldl (|++|) 
-      (extractQGenFromType typ) -- extract from spec
+      (extractQGenFromType (toMonotype sch)) -- extract from spec
       (map extractTypeQGen tquals ++ -- extract from given qualifiers
       map (extractQGenFromType . toMonotype) (Map.elems $ allSymbols env)) -- extract from components
     
