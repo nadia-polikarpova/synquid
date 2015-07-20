@@ -13,7 +13,7 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 3,
+  _eGuessDepth = 2,
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 2,
@@ -516,11 +516,11 @@ main = do
   -- testDrop
   -- testDelete
   -- testMap
-  testUseMap
+  -- testUseMap
   -- testUseFold1
   -- testMakeIncList
   testIncListInsert
-  testIncListMerge
+  -- testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

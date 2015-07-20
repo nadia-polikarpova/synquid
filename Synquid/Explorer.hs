@@ -178,7 +178,7 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
         Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
         Just consSch -> do
           consT <- toMonotype `liftM` freshTypeVars consSch          
-          let u = fromJust $ unifier (env ^. boundTypeVars) scrType (Monotype $ lastType $ consT)
+          let u = fromJust $ unifier (env ^. boundTypeVars) scrType (lastType $ consT)
           let consT' = rTypeSubstitute u consT
           (args, caseEnv) <- addCaseSymbols env scrName scrType consT' -- Add bindings for constructor arguments and refine the scrutinee type in the environment
           pCaseExpr <- local (over matchDepth (-1 +)) $ generateI caseEnv t          
@@ -265,7 +265,7 @@ generateE env s = generateVar `mplus` generateApp
           let FunctionT _ tArg tRes = typ fun
           
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
-          let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (polyShape $ Monotype $ typ arg)
+          let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (shape $ typ arg)
           u' <- freshRefinementsSubst env'' u
           let FunctionT x tArg' tRes' = rTypeSubstitute u' (typ fun)
           addConstraint $ Subtype env'' (typ arg) tArg'
@@ -401,25 +401,27 @@ freshRefinements (FunctionT x tArg tFun) = do
 -- | 'unifier' @bvs t sch@ : most general unifier of a type @t@ and schema @sch@, 
 -- where types variables @bvs@ can occur in @t@ but are bound in the context and thus cannot be substituted;
 -- we assume that the free types variables of @t@ and @sch@ and bound variables of @sch@ are all pairwise disjoint;
-unifier :: (Pretty (TypeSkeleton r), Pretty (SchemaSkeleton r)) => [Id] -> TypeSkeleton r -> SchemaSkeleton r -> Maybe (TypeSubstitution r)
-unifier bvs lhs@(ScalarT (TypeVarT name) [] _) rhs@(Monotype t) -- RHS has to be a monotype because all LHS-variables are on the left of an arrow
-  | not $ name `elem` bvs = if Set.member name (typeVarsOf t) 
-      then error $ show $ text "unifier: free type variable" <+> text name <+> text "occurs on both sides:" <+> commaSep [pretty lhs, pretty rhs]
-      else Just $ Map.singleton name t   -- Free type variable on the left      
-unifier bvs lhs rhs@(Monotype (ScalarT (TypeVarT name) [] _))
+unifier :: (Pretty (TypeSkeleton r), Eq r) => [Id] -> TypeSkeleton r -> TypeSkeleton r -> Maybe (TypeSubstitution r)
+unifier bvs lhs rhs | lhs == rhs = Just $ Map.empty
+unifier bvs lhs@(ScalarT (TypeVarT name) [] _) rhs
+  | not $ name `elem` bvs = if Set.member name (typeVarsOf rhs) 
+      then Nothing 
+      -- error $ show $ text "unifier: free type variable" <+> text name <+> text "occurs on both sides:" <+> commaSep [pretty lhs, pretty rhs]
+      else Just $ Map.singleton name rhs   -- Free type variable on the left      
+unifier bvs lhs rhs@(ScalarT (TypeVarT name) [] _)
   | not $ name `elem` bvs = if Set.member name (typeVarsOf lhs) 
-      then error $ show $ text "unifier: free type variable" <+> text name <+> text "occurs on both sides:" <+> commaSep [pretty lhs, pretty rhs]
+      then Nothing
+      -- error $ show $ text "unifier: free type variable" <+> text name <+> text "occurs on both sides:" <+> commaSep [pretty lhs, pretty rhs]
       else Just $ Map.singleton name lhs   -- Free type variable on the right
-unifier bvs lhs@(ScalarT baseL argsL _) rhs@(Monotype (ScalarT baseR argsR _))
-  | baseL == baseR = listUnifier bvs argsL (map Monotype argsR)
-unifier bvs (FunctionT _ argL resL) (Monotype (FunctionT _ argR resR)) = listUnifier bvs [argL, resL] [Monotype argR, Monotype resR]
-unifier bvs lhs (Forall a sch) = unifier bvs lhs sch
+unifier bvs lhs@(ScalarT baseL argsL _) rhs@(ScalarT baseR argsR _)
+  | baseL == baseR = listUnifier bvs argsL argsR
+unifier bvs (FunctionT _ argL resL) (FunctionT _ argR resR) = listUnifier bvs [argL, resL] [argR, resR]
 unifier _ _ _ = Nothing
 
 listUnifier _ [] [] = Just $ Map.empty
 listUnifier bvs (lhs : lhss) (rhs : rhss) = do
   u <- unifier bvs lhs rhs
-  u' <- listUnifier bvs (map (typeSubstitute id const u) lhss) (map (schemaSubstitute id const u) rhss)
+  u' <- listUnifier bvs (map (typeSubstitute id const u) lhss) (map (typeSubstitute id const u) rhss)
   return $ u `Map.union` u'
 
 -- | 'symbolsUnifyingWith' @s env@ : symbols of simple type @s@ in @env@ 
@@ -429,7 +431,7 @@ symbolsUnifyingWith s env = (Map.map (over _1 fromJust) . Map.filter (isJust . f
     unify sch = do
       sch' <- freshTypeVars sch
       debug 1 (text "Unifier" <+> parens (commaSep [pretty s, pretty (polyShape sch')])) $ return ()
-      let res = unifier (env ^. boundTypeVars) s (polyShape sch') 
+      let res = unifier (env ^. boundTypeVars) s (shape $ toMonotype sch') 
       debug 1 (text "->" <+> pretty res) $ return (res, sch')
     
 -- | Replace all bound type variables with fresh identifiers    
