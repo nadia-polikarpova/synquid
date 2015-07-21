@@ -226,16 +226,14 @@ generateE env s = generateVar `mplus` generateApp
           msum $ map abstractVarOfShape symbolsByShape
         else msum $ map genKnownSymbol $ Map.toList symbols
       
-    instantiate (name, (typeSubst, sch)) = case sch of 
-      Monotype t -> return (symbolType name t)
-      _ -> do -- Unification
-        let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst        
-        rhsSubst' <- freshRefinementsSubst env rhsSubst
-        return $ rTypeSubstitute rhsSubst' (toMonotype sch)
-      
+    instantiate (name, (typeSubst, sch)) = do
+      let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst        
+      rhsSubst' <- freshRefinementsSubst env rhsSubst
+      return $ symbolType name $ rTypeSubstitute rhsSubst' (toMonotype sch)
+
     abstractVarOfShape symbols = do
       let s = shape $ head $ Map.elems symbols
-      t <- freshRefinements $ refine s
+      t <- freshRefinements env $ refine s
       let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
       let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
       addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
@@ -264,6 +262,14 @@ generateE env s = generateVar `mplus` generateApp
           (env', fun) <- generateE env (vart_ a |->| s) -- Find all functions that unify with (? -> s)
           let FunctionT _ tArg tRes = typ fun
           
+          -- if isFunctionType tArg
+            -- then do
+              -- arg <- generateI env' tArg
+              -- let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (shape $ typ arg)
+              -- u' <- freshRefinementsSubst env' u
+              -- let FunctionT x tArg' tRes' = rTypeSubstitute u' (typ fun)              
+              -- return (env', Program (PApp (instantiateSymbols u' fun) arg) tRes')
+            -- else do
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
           let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (shape $ typ arg)
           u' <- freshRefinementsSubst env'' u
@@ -271,7 +277,7 @@ generateE env s = generateVar `mplus` generateApp
           addConstraint $ Subtype env'' (typ arg) tArg'
           ifM (asks _incrementalSolving) (solveConstraints arg) (return ())
           
-          y <- freshId "x" 
+          y <- freshId "g" 
           let env''' = addGhost y (typ arg) env''      
           return (env''', Program (PApp (instantiateSymbols u' fun) arg) (renameVar x y tArg tRes'))
       
@@ -390,13 +396,15 @@ freshId prefix = do
   return $ prefix ++ show i
   
 -- | 'freshRefinements @t@ : a type with the same shape and variables as @t@ but fresh unknowns as refinements
-freshRefinements :: (Monad s, MonadTrans m, MonadPlus (m s)) => RType -> Explorer s m RType
-freshRefinements (ScalarT base args _) = do
+freshRefinements :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType -> Explorer s m RType
+freshRefinements env t@(ScalarT (TypeVarT a) [] _)
+  | not (a `elem` env ^. boundTypeVars) = return t
+freshRefinements env (ScalarT base args _) = do
   k <- freshId "u"
-  args' <- mapM freshRefinements args
+  args' <- mapM (freshRefinements env) args
   return $ ScalarT base args' (Unknown Map.empty k)
-freshRefinements (FunctionT x tArg tFun) = do
-  liftM3 FunctionT (freshId "x") (freshRefinements tArg) (freshRefinements tFun)
+freshRefinements env (FunctionT x tArg tFun) = do
+  liftM3 FunctionT (freshId "x") (freshRefinements env tArg) (freshRefinements env tFun)
 
 -- | 'unifier' @bvs t sch@ : most general unifier of a type @t@ and schema @sch@, 
 -- where types variables @bvs@ can occur in @t@ but are bound in the context and thus cannot be substituted;
@@ -452,6 +460,6 @@ freshTypeVars sch = freshTypeVars' Map.empty sch
     freshTypeVars' subst (Monotype t) = return $ Monotype $ rTypeSubstitute subst t
   
 freshRefinementsSubst env subst = do
-  subst' <- T.mapM (freshRefinements . refine) subst
+  subst' <- T.mapM (freshRefinements env . refine) subst
   mapM_ (addConstraint . WellFormed env) (Map.elems subst')
   return subst'

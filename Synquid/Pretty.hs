@@ -48,6 +48,7 @@ module Synquid.Pretty (
 import Synquid.Logic
 import Synquid.Program
 import Synquid.SMTSolver
+import Synquid.Util
 
 import Text.PrettyPrint.ANSI.Leijen hiding ((<+>), (<$>), hsep, vsep)
 import qualified Text.PrettyPrint.ANSI.Leijen as L
@@ -279,8 +280,8 @@ instance Pretty (TypeSubstitution Formula) where
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
-prettyBindings env = commaSep (map pretty (Set.toList $ Map.keysSet (allSymbols env) Set.\\ (env ^. constants))) 
--- prettyBindings env = hMapDoc pretty pretty (env ^. symbols)
+-- prettyBindings env = commaSep (map pretty (Set.toList $ Map.keysSet (allSymbols env) Set.\\ (env ^. constants))) 
+prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
   
 instance Pretty Environment where

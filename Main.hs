@@ -13,7 +13,7 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 3,
+  _eGuessDepth = 2,
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 1,
@@ -506,7 +506,7 @@ main = do
   -- -- testConst
   -- -- testCompose  
   -- -- testPolymorphic
-  -- -- -- List programs
+  -- -- List programs
   -- testHead
   -- testReplicate
   -- testLength
@@ -520,7 +520,7 @@ main = do
   -- testUseFold1
   -- testMakeIncList
   testIncListInsert
-  -- testIncListMerge
+  testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
