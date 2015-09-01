@@ -163,7 +163,7 @@ power (Binary op _ _)
   | op `elem` [And, Or] = 2
   | op `elem` [Implies] = 1
   | op `elem` [Iff] = 0
-power _ = 6
+power _ = 7
 
 -- | Pretty-printed formula  
 fmlDoc :: Formula -> Doc
@@ -176,11 +176,11 @@ fmlDocAt n fml = condParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> pretty i
     SetLit _ elems -> braces $ commaSep $ map pretty elems
-    Var b ident -> text ident <> text ":" <> pretty  b
+    Var b ident -> text ident -- <> text ":" <> pretty  b
     Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    Measure b ident arg -> text ident <> text ":" <> pretty  b <+> pretty arg
+    Measure b ident arg -> text ident <+> pretty arg -- text ident <> text ":" <> pretty  b <+> pretty arg
   )
   where
     n' = power fml
@@ -242,7 +242,7 @@ instance Show SType where
   
 prettyType :: RType -> Doc
 prettyType (ScalarT base args (BoolLit True)) = pretty base <+> hsep (map (parens . pretty) args)
-prettyType (ScalarT base args fml) = pretty base <+> hsep (map (parens . pretty) args) <> text "|" <> pretty fml
+prettyType (ScalarT base args fml) = braces (pretty base <+> hsep (map (parens . pretty) args) <> text "|" <> pretty fml)
 prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty RType where

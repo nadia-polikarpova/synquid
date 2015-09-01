@@ -40,7 +40,7 @@ synthesize explorerParams solverParams env sch cquals tquals = do
     programs :: LogicT Z3State SimpleProgram
     programs = let
         -- Initialize missing explorer parameters
-        explorerParams' =  set solver (ConstraintSolver init refine extract) .
+        explorerParams' =  set solver (ConstraintSolver init refine extract prune) .
                            set condQualsGen condQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
@@ -54,6 +54,9 @@ synthesize explorerParams solverParams env sch cquals tquals = do
       
     extract :: LiquidProgram -> Candidate -> Z3State SimpleProgram  
     extract p cand = fromJust <$> (runMaybeT $ extractProgram (solution cand) p)
+    
+    prune :: QSpace -> Z3State QSpace  
+    prune = pruneQualifiers solverParams
   
     -- | Qualifier generator for conditionals
     condQuals = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)

@@ -44,6 +44,9 @@ refineCandidates params quals constraints cands = evalFixPointSolver go params
       let sol' = merge (topSolution quals) sol  -- Add new unknowns
       (valids', invalids') <- partitionM (isValidClause . clauseApplySolution sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
+      
+pruneQualifiers :: SMTSolver s => SolverParams -> QSpace -> s QSpace    
+pruneQualifiers params quals = evalFixPointSolver (ifM (asks pruneQuals) (pruneQSpace quals) (return quals)) params
 
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate
@@ -294,9 +297,11 @@ pruneValuations assumptions = let isSubsumed val vals = let fml = conjunction (v
   in prune isSubsumed
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
-pruneQualifiers :: SMTSolver s => [Formula] -> FixPointSolver s [Formula]   
-pruneQualifiers = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
-  in prune isSubsumed
+pruneQSpace :: SMTSolver s => QSpace -> FixPointSolver s QSpace 
+pruneQSpace qSpace = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
+  in do
+    quals <- prune isSubsumed (qSpace ^. qualifiers)
+    return $ set qualifiers quals qSpace
   
 -- | 'prune' @isSubsumed xs@ : prune all elements of @xs@ subsumed by another element according to @isSubsumed@  
 prune :: SMTSolver s => (a -> [a] -> FixPointSolver s Bool) -> [a] -> FixPointSolver s [a]

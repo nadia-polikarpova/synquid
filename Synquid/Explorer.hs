@@ -35,7 +35,8 @@ emptyGen = const emptyQSpace
 data ConstraintSolver s = ConstraintSolver {
   csInit :: s Candidate,                                                          -- ^ Initial candidate solution
   csRefine :: [Clause] -> QMap -> LiquidProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
-  csExtract :: LiquidProgram -> Candidate -> s SimpleProgram                      -- ^ Extract a program from a valid solution
+  csExtract :: LiquidProgram -> Candidate -> s SimpleProgram,                     -- ^ Extract a program from a valid solution
+  csPruneQuals :: QSpace -> s QSpace
 }
 
 -- | Choices for the type of terminating fixpoint operator
@@ -291,6 +292,8 @@ generateE env s = generateVar `mplus` generateApp
 -- (program @p@ is only used for debug information)
 solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) => LiquidProgram -> Explorer s m ()
 solveConstraints p = do
+  solv <- asks _solver
+
   -- Convert new constraints into formulas and augment the current qualifier map with new unknowns
   cs <- use unsolvedConstraints
   let cs' = concatMap split cs  
@@ -298,15 +301,15 @@ solveConstraints p = do
   cq <- asks _condQualsGen
   tq <- asks _typeQualsGen
   let (clauses, newQuals) = toFormulas cq tq cs'
-  let qmap = Map.union oldQuals newQuals
+  newQuals' <- T.mapM (lift . lift . lift . csPruneQuals solv) newQuals
+  let qmap = Map.union oldQuals newQuals'
   debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs) 
     $+$ text "Liquid Program" $+$ programDoc pretty pretty (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) pretty p
     ) $ return ()
   
   -- Refine the current candidate solutions using the new constraints; fail if no solution
-  cands <- use candidates      
-  solv <- asks _solver
-  cands' <- if null clauses then return cands else lift . lift .lift $ (csRefine solv) clauses qmap p cands
+  cands <- use candidates        
+  cands' <- if null clauses then return cands else lift . lift .lift $ csRefine solv clauses qmap p cands
   guard (not $ null cands')
   
   -- Update state

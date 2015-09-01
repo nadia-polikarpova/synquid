@@ -13,7 +13,7 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 1,
@@ -45,12 +45,12 @@ solverParams = SolverParams {
   
 synthesizeAndPrint name env typ cquals tquals = do
   print $ text "===" <> text name <> text "==="
-  print $ nest 2 $ text "Spec" $+$ pretty typ $+$ parens (text "Size:" <+> pretty (typeNodeCount $ toMonotype typ) <+> text "Quals" <+> pretty (length cquals + length tquals))
+  print $ nest 2 $ text "Spec" $+$ pretty typ -- $+$ parens (text "Size:" <+> pretty (typeNodeCount $ toMonotype typ) <+> text "Quals" <+> pretty (length cquals + length tquals))
   print empty
   mProg <- synthesize explorerParams solverParams env typ cquals tquals
   case mProg of
     Nothing -> putStr "No Solution"
-    Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty (const empty) pretty prog $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
+    Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty (const empty) pretty prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
   print empty
     
 {- Integer programs -}
@@ -98,7 +98,7 @@ testMax2 = do
 testMax3 = do
   let env =
             -- addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            -- addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
   let typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
   
@@ -231,6 +231,7 @@ addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
                                                             |&| mElems valList  |=| SetLit (TypeVarT "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| IntLit 1
+                                                                                                                     |&| mLen valList |>| IntLit 0
                                                                                                                      |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
                                                                                    )))
                                                                                                                                                                       
@@ -240,19 +241,27 @@ testHead = do
   
   synthesizeAndPrint "head" env typ [] []
   
+testNull = do
+  let env = addConstant "true" (bool valBool) .
+            addConstant "false" (bool (fnot valBool)) .
+            addList $ emptyEnv
+  let typ = Forall "a" $ Monotype $ FunctionT "xs" (listAll) (bool $ valBool |=| (mLen (listVar "xs") |=| IntLit 0))
+  
+  synthesizeAndPrint "null" env typ [] []  
+  
 testReplicate = do
-  let env = -- addConstant "1" (int (valInt |=| IntLit 1)) .
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .
             addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .            
+            -- addPolyConstant "genInc" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (vart "a" (valVart "a" |>| vartVar "a" "x"))) .
             addList $ emptyEnv
 
-  -- let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT listT [vart "a" $ valVart "a" |=| vartVar "a" "y"] $ mLen valList |=| intVar "n"))
+  -- let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT listT [vart "a" $ valVart "a" |>| vartVar "a" "y"] $ mLen valList |=| intVar "n"))
   let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT listT [vartAll "a"] $ mLen valList |=| intVar "n"))
-  -- let typ = Monotype $ ScalarT listT [nat] $ mLen valList |=| IntLit 1
           
   let cq = do
       op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
+      return $ Binary op (intVar "x") (intVar "y")
       
   synthesizeAndPrint "replicate" env typ cq []
   
@@ -398,7 +407,7 @@ testIncListInsert = do
   let typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
           
   let cq = do
-      op <- [Ge]
+      op <- [Ge, Le, Neq]
       return $ Binary op (vartVar "a" "x") (vartVar "a" "y")
 
   synthesizeAndPrint "insert" env typ cq []
@@ -466,7 +475,7 @@ testTreeSize = do
   let env = addConstant "0" (int (valInt |=| IntLit 0)) .
             addConstant "1" (int (valInt |=| IntLit 0)) .
             -- addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            -- addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             addConstant "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
             -- addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .            
             addTree $ emptyEnv
@@ -497,10 +506,10 @@ main = do
   -- -- testLambda
   -- testMax2  
   -- testMax3
-  -- -- testMax4
+  -- testMax4
   -- testAbs  
   -- testAddition
-  -- -- testMult
+  -- testMult
   -- -- Polymorphic programs
   -- -- testId
   -- -- testConst
@@ -508,7 +517,8 @@ main = do
   -- -- testPolymorphic
   -- -- List programs
   -- testHead
-  -- testReplicate
+  -- testNull
+  testReplicate
   -- testLength
   -- testAppend
   -- testStutter
@@ -519,8 +529,8 @@ main = do
   -- testUseMap
   -- testUseFold1
   -- testMakeIncList
-  testIncListInsert
-  testIncListMerge
+  -- testIncListInsert
+  -- testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
