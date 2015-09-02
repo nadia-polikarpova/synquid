@@ -3,3 +3,5 @@ syntax: glob
 *.o
 ./dist
 *~
+./.cabal-sandbox
+./cabal.sandbox.config
