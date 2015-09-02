@@ -90,8 +90,8 @@ testMax2 = do
   let typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")
   
   let cq = do
-      op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (intVar "y")  
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (intVar "y")  
       
   synthesizeAndPrint "max2" env typ cq []
   
@@ -103,8 +103,8 @@ testMax3 = do
   let typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
   
   let cq = do
-      op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (intVar "y")  
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (intVar "y")  
       
   synthesizeAndPrint "max3" env typ cq []
   
@@ -117,8 +117,8 @@ testMax4 = do
                 int (valInt |>=| intVar "w" |&| valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
   
   let cq = do
-      op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (intVar "y")  
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (intVar "y")  
       
   synthesizeAndPrint "max4" env typ cq []    
    
@@ -130,9 +130,9 @@ testAbs = do
   let typ = Monotype $ FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)  
   
   let cq = do
-      op <- [Ge, Le, Neq]
-      rhs <- [intVar "y", IntLit 0]
-      return $ Binary op (intVar "x") rhs  
+        op <- [Ge, Le, Neq]
+        rhs <- [intVar "y", IntLit 0]
+        return $ Binary op (intVar "x") rhs  
       
   synthesizeAndPrint "abs" env typ cq []
 
@@ -145,11 +145,11 @@ testAddition = do
   let typ = Monotype $ FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
   
   let cq = do
-      lhs <- [intVar "x", IntLit 0]
-      op <- [Ge, Le, Neq]
-      rhs <- [intVar "y", IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs
+        lhs <- [intVar "x", IntLit 0]
+        op <- [Ge, Le, Neq]
+        rhs <- [intVar "y", IntLit 0]
+        guard $ lhs /= rhs
+        return $ Binary op lhs rhs
       
   synthesizeAndPrint "add" env typ cq []
   
@@ -251,8 +251,8 @@ testReplicate = do
   -- let typ = Monotype $ ScalarT listT [nat] $ mLen valList |=| IntLit 1
           
   let cq = do
-      op <- [Ge, Le, Neq]
-      return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (IntLit 0) -- (intVar "y")
       
   synthesizeAndPrint "replicate" env typ cq []
   
@@ -291,11 +291,11 @@ testTake = do
   let typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| intVar "n"))
   
   let cq = do
-      lhs <- [intVar "x"]
-      op <- [Le, Ge, Neq]
-      rhs <- [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
+        lhs <- [intVar "x"]
+        op <- [Le, Ge, Neq]
+        rhs <- [IntLit 0]
+        guard $ lhs /= rhs
+        return $ Binary op lhs rhs  
     
   synthesizeAndPrint "take" env typ cq []    
   
@@ -306,11 +306,11 @@ testDrop = do
   let typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| mLen (listVar "xs") |-| intVar "n"))
   
   let cq = do
-      lhs <- [intVar "x"]
-      op <- [Le, Ge, Neq]
-      rhs <- [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
+        lhs <- [intVar "x"]
+        op <- [Le, Ge, Neq]
+        rhs <- [IntLit 0]
+        guard $ lhs /= rhs
+        return $ Binary op lhs rhs  
     
   synthesizeAndPrint "drop" env typ cq []  
   
@@ -398,8 +398,8 @@ testIncListInsert = do
   let typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
           
   let cq = do
-      op <- [Ge]
-      return $ Binary op (vartVar "a" "x") (vartVar "a" "y")
+        op <- [Ge]
+        return $ Binary op (vartVar "a" "x") (vartVar "a" "y")
 
   synthesizeAndPrint "insert" env typ cq []
   
@@ -413,8 +413,8 @@ testIncListMerge = do
   let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
           
   let cq = do
-      op <- [Ge]
-      return $ Binary op (intVar "x") (intVar "y")
+        op <- [Ge]
+        return $ Binary op (intVar "x") (intVar "y")
 
   synthesizeAndPrint "merge" env typ cq []                                                          
   
