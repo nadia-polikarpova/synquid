@@ -7,7 +7,8 @@ import Synquid.Logic
 import Synquid.SMTSolver
 import Synquid.Util
 import Synquid.Pretty
-import Z3.Monad
+import Z3.Monad hiding (Z3Env, newEnv)
+import qualified Z3.Base as Z3
 
 import Data.Maybe
 import Data.List
@@ -40,6 +41,11 @@ data Z3Data = Z3Data {
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
   _boolSortAux :: Maybe Sort,                 -- ^ Boolean sort in the auxiliary solver  
   _controlLiteralsAux :: Bimap Formula AST    -- ^ Control literals for computing UNSAT cores in the auxiliary solver
+}
+
+data Z3Env = Z3Env {
+  envSolver  :: Z3.Solver,
+  envContext :: Z3.Context
 }
 
 makeLenses ''Z3Data
@@ -94,7 +100,16 @@ toSort b = do
 instance MonadZ3 Z3State where
   getSolver = gets (envSolver . _mainEnv)
   getContext = gets (envContext . _mainEnv)
-        
+
+-- | Create a new Z3 environment.
+newEnv :: Maybe Logic -> Opts -> IO Z3Env
+newEnv mbLogic opts =
+  Z3.withConfig $ \cfg -> do
+    setOpts cfg opts
+    ctx <- Z3.mkContext cfg
+    solver <- maybe (Z3.mkSolver ctx) (Z3.mkSolverForLogic ctx) mbLogic
+    return $ Z3Env solver ctx
+
 -- | Use auxiliary solver to execute a Z3 computation
 withAuxSolver :: Z3State a -> Z3State a
 withAuxSolver c = do
