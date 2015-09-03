@@ -245,6 +245,10 @@ type LeafConstraint = Map Id Constraint
 type LiquidProgram = Program LeafConstraint Formula Formula
 
 -- | Building types
+bool = ScalarT BoolT []  
+bool_ = bool ()
+boolAll = bool ftrue
+
 int = ScalarT IntT []
 int_ = int ()
 intAll = int ftrue
