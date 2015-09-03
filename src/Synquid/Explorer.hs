@@ -138,6 +138,8 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix env t
       Just metric -> Just $ (ScalarT (DatatypeT name) tArgs (fml |&| metric (Var dt valueVarName) |<| metric (Var dt argName)), 
         ScalarT (DatatypeT name) tArgs (fml |&| metric (Var dt valueVarName) |=| metric (Var dt argName)))
     recursiveTArg _ _ = Nothing
+    
+generateTopLevel env (Monotype t) = generateI env t    
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  

@@ -13,7 +13,7 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 1,
@@ -67,13 +67,13 @@ testApp = do
   
 testApp2 = do
   let env = addVariable "a" nat .
-            addConstant "1" (int (valInt |=| IntLit 1)) .
-            -- addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            -- addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
-            addConstant "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
-            addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
+            -- addConstant "1" (int (valInt |=| IntLit 1)) .
+            addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            -- addConstant "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
+            -- addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
             id $ emptyEnv
-  let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 5)
+  let typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 10)
   
   synthesizeAndPrint "app2" env typ [] []
   
@@ -123,38 +123,41 @@ testMax4 = do
   synthesizeAndPrint "max4" env typ cq []    
    
 testAbs = do
-  let env =             
-            addConstant "id" (FunctionT "x" intAll (int (valInt |=| intVar "x"))) .
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .            
+            -- addConstant "id" (FunctionT "x" intAll (int (valInt |=| intVar "x"))) .
             addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
             id $ emptyEnv
-  let typ = Monotype $ FunctionT "x" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0)  
+  let typ = Monotype $ FunctionT "x" intAll $ int ((valInt |=| intVar "x" ||| valInt |=| fneg (intVar "x")) |&| valInt |>=| IntLit 0)  
   
+  -- let cq = do
+        -- op <- [Ge, Le, Neq]
+        -- rhs <- [intVar "y", IntLit 0]
+        -- return $ Binary op (intVar "x") rhs  
   let cq = do
         op <- [Ge, Le, Neq]
-        rhs <- [intVar "y", IntLit 0]
-        return $ Binary op (intVar "x") rhs  
+        return $ Binary op (intVar "x") (intVar "y")
       
   synthesizeAndPrint "abs" env typ cq []
 
 testAddition = do
-  let env =
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .
             addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
             id $ emptyEnv
 
   let typ = Monotype $ FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
   
+  -- let cq = do
+        -- lhs <- [intVar "x", IntLit 0]
+        -- op <- [Ge, Le, Neq]
+        -- rhs <- [intVar "y", IntLit 0]
+        -- guard $ lhs /= rhs
+        -- return $ Binary op lhs rhs
   let cq = do
-        lhs <- [intVar "x", IntLit 0]
         op <- [Ge, Le, Neq]
-        rhs <- [intVar "y", IntLit 0]
-        guard $ lhs /= rhs
-        return $ Binary op lhs rhs
+        return $ Binary op (intVar "x") (intVar "y")        
       
   synthesizeAndPrint "add" env typ cq []
-  
-bool = ScalarT BoolT []  
-boolAll = bool ftrue  
   
 -- testEven = do
   -- let env =
@@ -176,9 +179,6 @@ boolAll = bool ftrue
   
     
 {- Polymorphic programs -}
-
-vartVar n = Var (TypeVarT n)
-valVart n = vartVar n valueVarName
 
 testId = do
   let env = emptyEnv
@@ -290,21 +290,16 @@ testStutter = do
   synthesizeAndPrint "stutter" env typ [] []
   
 testTake = do
-  let env = 
+  let env = addConstant "0" (int (valInt |=| IntLit 0)) .
             addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            -- addConstant "1" (int (valInt |=| IntLit 1)) .
-            -- addConstant "plus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |+| intVar "y")))) .
-            -- addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .
+            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             addList $ emptyEnv
 
   let typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| intVar "n"))
   
   let cq = do
-      lhs <- [intVar "x"]
-      op <- [Le, Ge, Neq]
-      rhs <- [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (intVar "y")
     
   synthesizeAndPrint "take" env typ cq []    
   
@@ -381,12 +376,12 @@ mIElems = Measure (SetT $ TypeVarT "a") "elems"
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
-                                                               |&| mElems valIncList  |=| SetLit (TypeVarT "a") []
+                                                               |&| mIElems valIncList  |=| SetLit (TypeVarT "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
                                                          (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"] ftrue) 
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1
-                                                                |&| mElems valIncList |=| mElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
+                                                                |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
                                                           )))
 
 testMakeIncList = do
@@ -413,16 +408,13 @@ testIncListInsert = do
   synthesizeAndPrint "insert" env typ cq []
   
 testIncListMerge = do
-  let env = addPolyConstant "insert" (Forall "a" $ Monotype $ (
-                                      FunctionT "xs" (incList ftrue) 
-                                      (FunctionT "x" (vartAll "a") 
-                                      (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))) .
+  let env = -- addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))) .
             addIncList $ emptyEnv
 
   let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
           
   let cq = do
-        op <- [Ge]
+        op <- [Ge, Le, Neq]
         return $ Binary op (intVar "x") (intVar "y")
 
   synthesizeAndPrint "merge" env typ cq []                                                          
@@ -501,8 +493,8 @@ testTreeSize = do
     
 main = do
   -- -- Integer programs
-  -- -- testApp
-  -- -- testApp2  
+  -- testApp
+  -- testApp2  
   -- -- testLambda
   -- testMax2  
   -- testMax3
@@ -528,8 +520,8 @@ main = do
   -- testUseMap
   -- testUseFold1
   -- testMakeIncList
-  testIncListInsert
-  -- testIncListMerge
+  -- testIncListInsert
+  testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

@@ -1,22 +1,5 @@
-- Earlier arguments should be usable inside polymorphic instantiations of later arguments
-
-- Propagate env out of generateI as well, and use generateI for arguments? Advantage: can generate lambdas as arguments
+- New benchmark: inc list merge that does not use insert (needs more complex termination criterion + pruning dead branches because of nested matches)
+- Incremental unification like in the paper
 - Fix symbol instantiations (in abstract symbols, should be one per leaf constraint)
-
 - E-guess caching
-
 - Abstract refinements
-
-
-- Make conditions programs
-
-- Figure out assumptions in aggressive prune
-
-- Disjunctive constraints vs. indexed/disjunctive types vs. abstracting leaf types with smart constraint manipulation (just not all at once!)
-- Block infeasible combinations of symbol qualifiers right away; can we achieve more with search space manipulation?
-- Do not treat neg assumptions as RHS (this enables vacuous branches!)
-
-- Evaluation of disjunctive constraints: keep track of valid/invalid for each conjunct
-
-- Parser for types and templates
-
