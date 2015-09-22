@@ -1,3 +1,4 @@
+- Check for false LHS when validating constraints?
 - New benchmark: inc list merge that does not use insert (needs more complex termination criterion + pruning dead branches because of nested matches)
 - Incremental unification like in the paper
 - Fix symbol instantiations (in abstract symbols, should be one per leaf constraint)
