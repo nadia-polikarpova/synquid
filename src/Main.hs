@@ -310,11 +310,11 @@ testDrop = do
   let typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| mLen (listVar "xs") |-| intVar "n"))
   
   let cq = do
-      lhs <- [intVar "x"]
-      op <- [Le, Ge, Neq]
-      rhs <- [IntLit 0]
-      guard $ lhs /= rhs
-      return $ Binary op lhs rhs  
+        lhs <- [intVar "x"]
+        op <- [Le, Ge, Neq]
+        rhs <- [IntLit 0]
+        guard $ lhs /= rhs
+        return $ Binary op lhs rhs  
     
   synthesizeAndPrint "drop" env typ cq []  
   
