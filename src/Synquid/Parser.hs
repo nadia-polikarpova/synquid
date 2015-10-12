@@ -44,16 +44,19 @@ parseScalarRefType = do
 parseBaseType :: Parser BaseType
 parseBaseType = BoolT <$ Parsec.string "Bool" <|> IntT <$ Parsec.string "Int"
 
+parseRefinement :: Parser Formula
 parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
   where
     exprTable = [
+      [unary '!' Not, unary '-' Neg],
       [bin "*" (|*|)],
       [bin "+" (|+|), bin "-" (|-|), bin "/+" (/+/), bin "/*" (/*/), bin "/-" (/-/)],
       [bin "=" (|=|), bin "/=" (|/=|), bin "<=" (|<=|), bin "<" (|<|), bin ">=" (|>=|), bin ">" (|>|),
         bin "/<=" (/<=/)],
       [bin "&" (|&|), bin "|" (|||)],
       [bin "=>" (|=>|), bin "<=>" (|<=>|)]]
-    bin opStr func =  Expr.Infix parseOpStr Expr.AssocLeft
+    unary opChar opType = Expr.Prefix (Parsec.char opChar <* Parsec.spaces >> (return $ Unary opType))
+    bin opStr func = Expr.Infix parseOpStr Expr.AssocLeft
       where
         parseOpStr = Parsec.try $ do
           Parsec.string opStr
@@ -75,7 +78,3 @@ parseUnaryOp = do
   op <- Neg <$ Parsec.char '-' <|> Not <$ Parsec.char '!'
   refinement <- parseRefinement
   return $ Unary op refinement
-
-parseBinaryOp :: Parser (Formula -> Formula -> Formula)
-parseBinaryOp = fmap Binary $ Parsec.choice [Times <$ Parsec.string "*", Plus <$ Parsec.string "+"]
-  where
