@@ -7,6 +7,7 @@ import Synquid.Program
 import Synquid.Pretty
 import Synquid.Explorer
 import Synquid.Synthesizer
+import Synquid.Parser
 
 import Data.List
 import Data.Maybe
@@ -20,7 +21,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [integerTests, listTests, incListTests]
+allTests = TestList [integerTests, listTests, incListTests, parserTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -53,6 +54,8 @@ incListTests = TestLabel "IncList" $ TestList [
   , TestCase testIncListMerge 
   ]  
   
+parserTests = TestLabel "Parser" $ TestList [testParseRefinement]
+
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
   _eGuessDepth = 3,
@@ -306,3 +309,17 @@ testIncListMerge = let
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
   
+testParseRefinement = TestList $ map (\ (str, parsed) -> TestCase $ assertEqual "" (Right parsed) $ applyParser parseRefinement str) testCases
+  where
+    int = IntLit -- for convenience
+    testCases = [
+      ("1 + 1", (int 1) |+| (int 1)),
+      ("!(-1)", fnot $ fneg $ int 1),
+      ("-(!(!1))", fneg $ fnot $ fnot $ int 1),
+      ("1 | 10", (int 1) ||| (int 10)),
+      ("false & (10)", (ffalse) |&| (int 10)),
+      ("(1 + 1) - (4 + 8)", (int 1 |+| int 1) |-| (int 4 |+| int 8)),
+      ("(1 + 4 * 3 - 2) * 3 - (2 * 4)", (int 1 |+| (int 4 |*| int 3) |-| int 2) |*| int 3 |-| (int 2 |*| int 4)),
+      ("(1 * 9 + 8 - 7 /* 3 <= 3 & 1)", ((((int 1 |*| int 9) |+| int 8 |-| int 7 /*/ int 3) |<=| int 3) |&| int 1)),
+      ("8 => 3", (int 8 |=>| int 3)),
+      ("true | false => (false & false <=> false)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
