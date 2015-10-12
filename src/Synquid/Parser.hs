@@ -2,11 +2,15 @@ module Synquid.Parser where
 
 import Synquid.Logic
 import Synquid.Program
-import Control.Applicative ((<$))
+import Control.Applicative ((<$), (*>), (<*))
 import qualified Text.Parsec as Parsec
+import qualified Text.Parsec.Token as Token
+import qualified Text.Parsec.Expr as Expr
 import Text.Parsec ((<|>), (<?>))
 
 type Parser = Parsec.Parsec String ()
+
+applyParser parser = Parsec.parse parser ""
 
 parse :: String -> TypeSkeleton Formula
 parse str = case Parsec.parse parseType "" str of
@@ -40,8 +44,19 @@ parseScalarRefType = do
 parseBaseType :: Parser BaseType
 parseBaseType = BoolT <$ Parsec.string "Bool" <|> IntT <$ Parsec.string "Int"
 
-parseRefinement :: Parser Formula
-parseRefinement = Parsec.choice [parseBoolLit, parseIntLit, parseUnaryOp{-, parseBinaryOp-}]
+parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
+	where
+		exprTable = [
+			[bin "*" (|*|)],
+			[bin "+" (|+|), bin "-" (|-|), bin "/+" (/+/), bin "/*" (/*/), bin "/-" (/-/)],
+			[bin "=" (|=|), bin "/=" (|/=|), bin "<=" (|<=|), bin "<" (|<|), bin ">=" (|>=|), bin ">" (|>|),
+				bin "/<=" (/<=/)],
+			[bin "&" (|&|), bin "|" (|||)],
+			[bin "=>" (|=>|), bin "<=>" (|<=>|)]]
+		bin opChar func = Expr.Infix (Parsec.try $ Parsec.string opChar <* Parsec.spaces >> return func) Expr.AssocLeft
+
+parseTerm :: Parser Formula
+parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseRefinement, parseBoolLit, parseIntLit]
 
 parseBoolLit :: Parser Formula
 parseBoolLit = fmap BoolLit $ False <$ Parsec.string "false" <|> True <$ Parsec.string "true"
@@ -54,3 +69,7 @@ parseUnaryOp = do
 	op <- Neg <$ Parsec.char '-' <|> Not <$ Parsec.char '!'
 	refinement <- parseRefinement
 	return $ Unary op refinement
+
+parseBinaryOp :: Parser (Formula -> Formula -> Formula)
+parseBinaryOp = fmap Binary $ Parsec.choice [Times <$ Parsec.string "*", Plus <$ Parsec.string "+"]
+	where
