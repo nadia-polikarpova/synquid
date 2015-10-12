@@ -53,7 +53,12 @@ parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spac
 				bin "/<=" (/<=/)],
 			[bin "&" (|&|), bin "|" (|||)],
 			[bin "=>" (|=>|), bin "<=>" (|<=>|)]]
-		bin opChar func = Expr.Infix (Parsec.try $ Parsec.string opChar <* Parsec.spaces >> return func) Expr.AssocLeft
+		bin opStr func =  Expr.Infix parseOpStr Expr.AssocLeft
+			where parseOpStr = Parsec.try $ do
+				Parsec.string opStr
+				Parsec.notFollowedBy $ Parsec.oneOf ">=" -- This is a dirty hack.
+				Parsec.spaces
+				return func
 
 parseTerm :: Parser Formula
 parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseRefinement, parseBoolLit, parseIntLit]
