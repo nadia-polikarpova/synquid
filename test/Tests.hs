@@ -21,7 +21,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [integerTests, listTests, incListTests, parserTests]
+allTests = TestList [{-integerTests, listTests, incListTests, -}parserTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -54,7 +54,7 @@ incListTests = TestLabel "IncList" $ TestList [
   , TestCase testIncListMerge 
   ]  
   
-parserTests = TestLabel "Parser" $ TestList [testParseRefinement]
+parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType]
 
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
@@ -309,9 +309,24 @@ testIncListMerge = let
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
   
-testParseRefinement = TestList $ map (\ (str, parsed) -> TestCase $ assertEqual "" (Right parsed) $ applyParser parseRefinement str) testCases
+-- | Create `Test`s from a parser function and test-cases consisting of an input string and the expected parsed AST.
+createParserTestList :: (Show a, Eq a) => Parser a -> [(String, a)] -> Test
+createParserTestList parser testCases = TestList $ map createTestCase testCases
+  where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ applyParser parser inputStr
+
+testParseFunctionType = createParserTestList parseFunctionType [
+  ("(  a : Int -> Int)", FunctionT "a" scalarInt scalarInt),
+  ("(___:Int-> (b:{ Bool|  10 > 0}->Int))",
+    FunctionT "___" scalarInt (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) scalarInt)),
+  ("(  abc0e93__3_0 : {Int | true} -> (  b:Bool->Int))",
+    FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" scalarBool scalarInt))]
   where
-    int = IntLit -- for convenience
+    scalarInt = ScalarT IntT [] $ BoolLit True
+    scalarBool = ScalarT BoolT [] $ BoolLit True
+
+testParseRefinement = createParserTestList parseRefinement testCases
+  where
+    int = IntLit
     testCases = [
       ("1 + 1", (int 1) |+| (int 1)),
       ("!(-1)", fnot $ fneg $ int 1),
