@@ -2,6 +2,7 @@ module Synquid.Parser where
 
 import Synquid.Logic
 import Synquid.Program
+import qualified Control.Applicative as Applicative
 import Control.Applicative ((<$), (*>), (<*))
 import qualified Text.Parsec as Parsec
 import qualified Text.Parsec.Token as Token
@@ -18,7 +19,24 @@ parse str = case Parsec.parse parseType "" str of
   Left err -> error "foobar!"
 
 parseType :: Parser (TypeSkeleton Formula)
-parseType = Parsec.choice [parseScalarType{-, parseFunctionType-}]
+parseType = Parsec.choice [parseScalarType, parseFunctionType]
+
+parseFunctionType :: Parser (TypeSkeleton Formula)
+parseFunctionType = do
+  Parsec.char '('
+  Parsec.spaces
+  argId <- parseIdentifier
+  Parsec.spaces
+  Parsec.char ':'
+  Parsec.spaces
+  argType <- parseType
+  Parsec.spaces
+  Parsec.string "->"
+  Parsec.spaces
+  returnType <- parseType
+  Parsec.spaces
+  Parsec.char ')'
+  return $ FunctionT argId argType returnType
 
 parseScalarType :: Parser (TypeSkeleton Formula)
 parseScalarType = Parsec.choice [parseScalarRefType, parseScalarUnrefType]
@@ -78,3 +96,9 @@ parseUnaryOp = do
   op <- Neg <$ Parsec.char '-' <|> Not <$ Parsec.char '!'
   refinement <- parseRefinement
   return $ Unary op refinement
+
+parseIdentifier :: Parser Id
+parseIdentifier = Applicative.liftA2 (:) firstChar otherChars
+  where
+    firstChar = Parsec.char '_' <|> Parsec.lower
+    otherChars = Parsec.many (Parsec.alphaNum <|> Parsec.char '_')
