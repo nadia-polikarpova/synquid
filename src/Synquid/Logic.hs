@@ -18,7 +18,7 @@ import Control.Monad
 type Id = String
 
 -- | Base types  
-data BaseType = BoolT | IntT | TypeVarT Id | DatatypeT Id | SetT BaseType
+data BaseType = BoolT | IntT | UnknownT | TypeVarT Id | DatatypeT Id | SetT BaseType
   deriving (Eq, Ord)
   
 isSetT (SetT _) = True

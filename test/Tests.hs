@@ -54,7 +54,7 @@ incListTests = TestLabel "IncList" $ TestList [
   , TestCase testIncListMerge 
   ]  
   
-parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType]
+parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm]
 
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
@@ -318,7 +318,7 @@ testParseFunctionType = createParserTestList parseFunctionType [
   ("(  a : Int -> Int)", FunctionT "a" scalarInt scalarInt),
   ("(___:Int-> (b:{ Bool|  10 > 0}->Int))",
     FunctionT "___" scalarInt (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) scalarInt)),
-  ("(  abc0e93__3_0 : {Int | true} -> (  b:Bool->Int))",
+  ("(  abc0e93__3_0 : {Int | True} -> (  b:Bool->Int))",
     FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" scalarBool scalarInt))]
   where
     scalarInt = ScalarT IntT [] $ BoolLit True
@@ -332,9 +332,18 @@ testParseRefinement = createParserTestList parseRefinement testCases
       ("!(-1)", fnot $ fneg $ int 1),
       ("-(!(!1))", fneg $ fnot $ fnot $ int 1),
       ("1 | 10", (int 1) ||| (int 10)),
-      ("false & (10)", (ffalse) |&| (int 10)),
+      ("False & (10)", (ffalse) |&| (int 10)),
       ("(1 + 1) - (4 + 8)", (int 1 |+| int 1) |-| (int 4 |+| int 8)),
       ("(1 + 4 * 3 - 2) * 3 - (2 * 4)", (int 1 |+| (int 4 |*| int 3) |-| int 2) |*| int 3 |-| (int 2 |*| int 4)),
       ("(1 * 9 + 8 - 7 /* 3 <= 3 & 1)", ((((int 1 |*| int 9) |+| int 8 |-| int 7 /*/ int 3) |<=| int 3) |&| int 1)),
       ("8 => 3", (int 8 |=>| int 3)),
-      ("true | false => (false & false <=> false)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
+      ("True | False => (False & False <=> False)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
+
+testParseTerm = createParserTestList parseTerm [
+  ("1", IntLit 1),
+  ("123005", IntLit 123005),
+  ("True", BoolLit True),
+  ("False", BoolLit False),
+  ("foobar", Var UnknownT "foobar"),
+  ("{    1,   a, 4 ,  True }", SetLit UnknownT [IntLit 1, Var UnknownT "a", IntLit 4, BoolLit True]),
+  ("{falseEE}", SetLit UnknownT [Var UnknownT "falseEE"])]
