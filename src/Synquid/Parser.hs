@@ -83,13 +83,25 @@ parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spac
           return func
 
 parseTerm :: Parser Formula
-parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseRefinement, parseBoolLit, parseIntLit]
+parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseRefinement, parseBoolLit, parseIntLit, parseVar, parseSetLit]
 
 parseBoolLit :: Parser Formula
-parseBoolLit = fmap BoolLit $ False <$ Parsec.string "false" <|> True <$ Parsec.string "true"
+parseBoolLit = Parsec.try $ fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True"
 
 parseIntLit :: Parser Formula
 parseIntLit = fmap (IntLit . read) $ Parsec.many1 Parsec.digit
+
+parseSetLit :: Parser Formula
+parseSetLit = do
+  Parsec.char '{'
+  Parsec.spaces
+  elements <- Parsec.sepBy parseRefinement $ Parsec.spaces *> Parsec.char ',' *> Parsec.spaces
+  Parsec.spaces
+  Parsec.char '}'
+  return $ SetLit UnknownT elements
+
+parseVar :: Parser Formula
+parseVar = fmap (Var UnknownT) parseIdentifier
 
 parseUnaryOp :: Parser Formula
 parseUnaryOp = do
