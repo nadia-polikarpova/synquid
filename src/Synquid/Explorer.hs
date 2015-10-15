@@ -33,10 +33,9 @@ emptyGen = const emptyQSpace
 
 -- | Incremental second-order constraint solver
 data ConstraintSolver s = ConstraintSolver {
-  csInit :: s Candidate,                                                          -- ^ Initial candidate solution
-  csRefine :: [Clause] -> QMap -> LiquidProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
-  csExtract :: LiquidProgram -> Candidate -> s SimpleProgram,                     -- ^ Extract a program from a valid solution
-  csPruneQuals :: QSpace -> s QSpace
+  csInit :: s Candidate,                                                      -- ^ Initial candidate solution
+  csRefine :: [Formula] -> QMap -> RProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
+  csPruneQuals :: QSpace -> s QSpace                                          -- ^ Prune redundant qualifiers
 }
 
 -- | Choices for the type of terminating fixpoint operator
@@ -51,7 +50,6 @@ data ExplorerParams s = ExplorerParams {
   _scrutineeDepth :: Int,             -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,                 -- ^ Maximum nesting level of matches
   _condDepth :: Int,                  -- ^ Maximum nesting level of conditionals
-  _abstractLeafs :: Bool,             -- ^ Use symbolic leaf search?
   _fixStrategy :: FixpointStrategy,   -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,             -- ^ Enable polymorphic recursion?
   _incrementalSolving :: Bool,        -- ^ Solve constraints as they appear (as opposed to all at once)?
@@ -80,25 +78,22 @@ type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams s) (m s))
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
-explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Environment -> RSchema -> m s SimpleProgram
+explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Environment -> RSchema -> m s RProgram
 explore params env sch = do
     initCand <- lift $ csInit (_solver params)
     runReaderT (evalStateT go (ExplorerState 0 [initCand] [] Map.empty)) params 
   where
-    go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m SimpleProgram
+    go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m RProgram
     go = do
       p <- generateTopLevel env sch
       ifM (asks _incrementalSolving) (return ()) (solveConstraints p)
-      solv <- asks _solver
-      cands <- use candidates
-      debug 1 ( nest 2 (text "Liquid Program" $+$ pretty p) $+$
-                nest 2 (text "Solution" $+$ pretty (solution $ head cands))) $ return ()
-      lift . lift . lift $ (csExtract solv) p (head cands)
+      sol <- uses candidates (solution . head)
+      return $ programApplySolution sol p
 
 {- AST exploration -}
     
 -- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@    
-generateTopLevel :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RSchema -> Explorer s m LiquidProgram
+generateTopLevel :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RSchema -> Explorer s m RProgram
 generateTopLevel env (Forall a sch) = generateTopLevel (addTypeVar a env) sch
 generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix env t
   where
@@ -143,7 +138,7 @@ generateTopLevel env (Monotype t) = generateI env t
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
-generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType -> Explorer s m LiquidProgram  
+generateI :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RType -> Explorer s m RProgram  
 
 generateI env t@(FunctionT x tArg tRes) = generateLambda
   where
@@ -214,38 +209,22 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
   
 -- | 'generateE' @env s@ : explore all elimination terms of type shape @s@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)  
-generateE :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> SType -> Explorer s m (Environment, LiquidProgram)
+generateE :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> SType -> Explorer s m (Environment, RProgram)
 generateE env s = generateVar `mplus` generateApp
   where
     -- | Explore all variables of shape @s@
     generateVar = do
       symbols <- symbolsUnifyingWith s env
-      abstract <- asks _abstractLeafs
-      if abstract && Map.size symbols > 1
-        then do
-          let sameShape (_, t1) (_, t2) = shape t1 == shape t2 
-          ts <- mapM instantiate (Map.toList symbols)
-          let symbolsByShape = map Map.fromList $ groupBy sameShape $ zip (Map.keys symbols) ts
-          msum $ map abstractVarOfShape symbolsByShape
-        else msum $ map genKnownSymbol $ Map.toList symbols
+      msum $ map genKnownSymbol $ Map.toList symbols
       
     instantiate (name, (typeSubst, sch)) = do
       let rhsSubst = Map.filterWithKey  (\a _ -> not $ Set.member a $ typeVarsOf s) typeSubst        
       rhsSubst' <- freshRefinementsSubst env rhsSubst
       return $ symbolType name $ rTypeSubstitute rhsSubst' (toMonotype sch)
-
-    abstractVarOfShape symbols = do
-      let s = shape $ head $ Map.elems symbols
-      t <- freshRefinements env $ refine s
-      let leafConstraint = Map.mapWithKey (constraintForSymbol t) symbols
-      let disjuncts = map (:[]) $ Map.elems $ Map.mapWithKey (constraintForSymbol t) symbols          
-      addConstraint $ WellFormedLeaf t (Map.elems $ Map.mapWithKey symbolType symbols)
-      addConstraint $ WellFormedFunction disjuncts
-      return (env, Program (PSymbol leafConstraint Map.empty) t)
                   
     genKnownSymbol (name, typeInfo) = do
       t <- instantiate (name, typeInfo)
-      return (env, Program (PSymbol (Map.singleton name Unconstrained) Map.empty) t)
+      return (env, Program (PSymbol name) t)
 
     constraintForSymbol t name t' = Subtype env t' t
     
@@ -271,7 +250,7 @@ generateE env s = generateVar `mplus` generateApp
               -- let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (shape $ typ arg)
               -- u' <- freshRefinementsSubst env' u
               -- let FunctionT x tArg' tRes' = rTypeSubstitute u' (typ fun)              
-              -- return (env', Program (PApp (instantiateSymbols u' fun) arg) tRes')
+              -- return (env', Program (PApp fun arg) tRes')
             -- else do
           (env'', arg) <- local (over eGuessDepth (-1 +)) $ generateE env' (shape tArg)
           let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (shape $ typ arg)
@@ -282,7 +261,7 @@ generateE env s = generateVar `mplus` generateApp
           
           y <- freshId "g" 
           let env''' = addGhost y (typ arg) env''      
-          return (env''', Program (PApp (instantiateSymbols u' fun) arg) (renameVar x y tArg tRes'))
+          return (env''', Program (PApp fun arg) (renameVar x y tArg tRes'))
       
     addGhost x t@(ScalarT baseT _ fml) env = -- addVariable x t env
       let subst = substitute (Map.singleton valueVarName (Var baseT x)) in addAssumption (subst fml) env
@@ -292,7 +271,7 @@ generateE env s = generateVar `mplus` generateApp
 
 -- | Solve all currently unsolved constraints
 -- (program @p@ is only used for debug information)
-solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) => LiquidProgram -> Explorer s m ()
+solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) => RProgram -> Explorer s m ()
 solveConstraints p = do
   solv <- asks _solver
 
@@ -305,8 +284,10 @@ solveConstraints p = do
   let (clauses, newQuals) = toFormulas cq tq cs'
   newQuals' <- T.mapM (lift . lift . lift . csPruneQuals solv) newQuals
   let qmap = Map.union oldQuals newQuals'
-  debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs) 
-    $+$ text "Liquid Program" $+$ programDoc pretty pretty (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) pretty p
+  debug 1 (
+    -- text "Liquid Program" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) p
+    text "Liquid Program" $+$ programDoc (const Synquid.Pretty.empty) p
+    $+$ text "Typing Constraints" $+$ (vsep $ map pretty cs)
     ) $ return ()
   
   -- Refine the current candidate solutions using the new constraints; fail if no solution
@@ -321,7 +302,6 @@ solveConstraints p = do
       
 -- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
 split :: Constraint -> [Constraint]
-split Unconstrained = []
 split (Subtype env (ScalarT baseT tArgs fml) (ScalarT baseT' tArgs' fml')) =
   (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) : concatMap split (zipWith (Subtype env) tArgs tArgs') -- assuming covariance
 split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) = -- TODO: rename type vars
@@ -330,66 +310,26 @@ split (WellFormed env (ScalarT baseT tArgs fml)) =
   (WellFormed env (ScalarT baseT tArgs fml)) : concatMap (split . WellFormed env) tArgs
 split (WellFormed env (FunctionT x tArg tRes)) = 
   split (WellFormed env tArg) ++ split (WellFormed (addVariable x tArg env) tRes)  
-split (WellFormedLeaf (ScalarT baseT tArgs fml) ts) =  
-  (WellFormedLeaf (ScalarT baseT [] fml) ts) : concatMap split (zipWith WellFormedLeaf tArgs (map typeArgs ts))
-split (WellFormedLeaf (FunctionT x tArg tRes) ts) =
-  split (WellFormedLeaf tArg (map argType ts)) ++ split (WellFormedLeaf tRes (map (\(FunctionT y tArg' tRes') -> renameVar y x tArg tRes') ts))
-split (WellFormedFunction disjuncts)
-  | length disjuncts == 1   = concatMap split (head disjuncts)
-  | otherwise               = [WellFormedFunction $ map (concatMap split) disjuncts]
 split c = [c]
 
-toFormulas :: QualsGen -> QualsGen -> [Constraint] -> ([Clause], QMap)
-toFormulas cq tq cs = let (leafCs, nodeCs) = partition isWFLeaf cs
-  in execState (mapM_ (toFormula cq tq) nodeCs >> mapM_ (toFormula cq tq) leafCs) ([], Map.empty)
+toFormulas :: QualsGen -> QualsGen -> [Constraint] -> ([Formula], QMap)
+toFormulas cq tq cs = execState (mapM_ (toFormula cq tq) cs) ([], Map.empty)
 
 -- | 'toFormula' @cq tq c@ : translate simple typing constraint @c@ into either a logical constraint or an element of the search space,
 -- given search space generators @cq@ and @tq@
-toFormula :: QualsGen -> QualsGen -> Constraint -> State ([Clause], QMap) ()
+toFormula :: QualsGen -> QualsGen -> Constraint -> State ([Formula], QMap) ()
 toFormula _ _ (Subtype env (ScalarT baseT [] _) (ScalarT baseT' [] (BoolLit True))) | baseT == baseT' 
   = return ()
 toFormula _ _ (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) | baseT == baseT' 
   = let (poss, negs) = embedding env 
-  in _1 %= ((Horn $ conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
+  in _1 %= ((conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
 toFormula _ tq (WellFormed env (ScalarT baseT _ (Unknown _ u))) = 
   _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
 toFormula _ tq (WellFormed env (ScalarT baseT _ _)) = 
   return ()
 toFormula cq _ (WellFormedCond env (Unknown _ u)) =
   _2 %= Map.insert u (cq $ allScalars env)
-toFormula _ _ (WellFormedFunction disjuncts) =
-  _1 %= ((Disjunctive $ map (map fromHorn . fst . toFormulas emptyGen emptyGen) disjuncts) :)
-toFormula _ _ (WellFormedLeaf (ScalarT baseT _ (Unknown _ u)) ts) = do
-  spaces <- mapM qualsFromType ts
-  let quals = Set.toList $ Set.unions $ spaces
-  let n = if null spaces then 0 else maximum $ map Set.size spaces
-  _2 %= Map.insert u (QSpace quals n)
-  where
-    qualsFromType (ScalarT baseT _ fml) = Set.unions <$> mapM spaceFromQual (Set.toList $ conjunctsOf fml)
-    spaceFromQual q@(Unknown _ _) = do
-      qmap <- gets snd
-      return $ Set.fromList $ lookupQualsSubst qmap q
-    spaceFromQual (BoolLit True) = return $ Set.empty
-    spaceFromQual q = return $ Set.singleton q  
 toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
-
--- | 'extractProgram' @sol prog@ : simple program encoded in @prog@ when all unknowns are instantiated according to @sol@
-extractProgram :: SMTSolver s => Solution -> LiquidProgram -> MaybeT s SimpleProgram
-extractProgram sol (Program prog sch) = let go = extractProgram sol in (flip Program (typeApplySolution sol sch)) <$> case prog of
-  PSymbol leafConstraint subst -> msum $ map (extractSymbol $ Map.map (typeApplySolution sol) subst) (Map.toList $ leafConstraint) -- TODO: different substitutions
-  PApp pFun pArg -> liftM2 PApp (go pFun) (go pArg)
-  PFun x pBody -> liftM (PFun x) (go pBody)
-  PIf cond pThen pElse -> liftM2 (PIf $ applySolution sol cond) (go pThen) (go pElse)
-  PMatch pScr pCases -> liftM2 PMatch (go pScr) (mapM extractCase pCases)
-  PFix fs pBody -> liftM (PFix fs) (go pBody)
-  where
-    extractSymbol subst (symb, c) = do   
-      let fml = conjunction $ Set.fromList $ map fromHorn $ fst $ toFormulas emptyGen emptyGen $ split c
-      let fml' = applySolution sol fml
-      res <- debug 1 (text "Check symbol" <+> pretty symb <+> parens (pretty fml) <+> pretty fml') $ lift $ isValid fml'
-      if res then debug 1 (text "OK") $ return (PSymbol symb subst) else debug 1 (text "MEH") $ mzero
-      
-    extractCase (Case consName argNames expr) = liftM (Case consName argNames) (extractProgram sol expr)
     
 {- Utility -}
 

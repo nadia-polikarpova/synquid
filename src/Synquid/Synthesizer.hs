@@ -28,7 +28,7 @@ import Control.Lens
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RSchema -> [Formula] -> [Formula] -> IO (Maybe SimpleProgram)
+synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RSchema -> [Formula] -> [Formula] -> IO (Maybe RProgram)
 synthesize explorerParams solverParams env sch cquals tquals = do
   ps <- evalZ3State $ observeManyT 1 $ programs
   case ps of
@@ -37,10 +37,10 @@ synthesize explorerParams solverParams env sch cquals tquals = do
     
   where
     -- | Stream of programs that satisfy the specification
-    programs :: LogicT Z3State SimpleProgram
+    programs :: LogicT Z3State RProgram
     programs = let
         -- Initialize missing explorer parameters
-        explorerParams' =  set solver (ConstraintSolver init refine extract prune) .
+        explorerParams' =  set solver (ConstraintSolver init refine prune) .
                            set condQualsGen condQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
@@ -49,11 +49,9 @@ synthesize explorerParams solverParams env sch cquals tquals = do
     init :: Z3State Candidate
     init = initialCandidate
       
-    refine :: [Clause] -> QMap -> LiquidProgram -> [Candidate] -> Z3State [Candidate]
-    refine clauses qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap clauses cands
-      
-    extract :: LiquidProgram -> Candidate -> Z3State SimpleProgram  
-    extract p cand = fromJust <$> (runMaybeT $ extractProgram (solution cand) p)
+    refine :: [Formula] -> QMap -> RProgram -> [Candidate] -> Z3State [Candidate]
+    -- refine fmls qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap fmls cands
+    refine fmls qmap p cands = refineCandidates (solverParams { candDoc = pretty . solution }) qmap fmls cands
     
     prune :: QSpace -> Z3State QSpace  
     prune = pruneQualifiers solverParams

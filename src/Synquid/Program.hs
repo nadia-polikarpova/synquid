@@ -16,7 +16,7 @@ import Control.Lens
 
 {- Type skeletons -}
   
--- | Type skeletons parametrized by refinements  
+-- | Type skeletons (parametrized by refinements)
 data TypeSkeleton r =
   ScalarT BaseType [TypeSkeleton r] r |
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r)  
@@ -31,6 +31,7 @@ typeArgs (ScalarT _ tArgs _) = tArgs
 arity (FunctionT _ _ t) = arity t + 1
 arity _ = 0
 
+-- | Polymorphic type skeletons (parametrized by refinements)
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   Forall Id (SchemaSkeleton r)
@@ -119,10 +120,13 @@ renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur i
 renameVar old new t@(ScalarT b _ _)  (ScalarT base tArgs fml) = ScalarT base (map (renameVar old new t) tArgs) (substitute (Map.singleton old (Var b new)) fml)
 renameVar old new t                (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
+-- | 'unknownsOfType' @t: all unknowns in @t@
+unknownsOfType :: RType -> Set Formula 
 unknownsOfType (ScalarT _ tArgs fml) = Set.unions $ unknownsOf fml : map unknownsOfType tArgs
 unknownsOfType (FunctionT _ tArg tRes) = unknownsOfType tArg `Set.union` unknownsOfType tRes
 
 -- | Instantiate unknowns in a type
+typeApplySolution :: Solution -> RType -> RType
 typeApplySolution sol (ScalarT base tArgs fml) = ScalarT base (map (typeApplySolution sol) tArgs) (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
@@ -205,44 +209,51 @@ embedding :: Environment -> (Set Formula, Set Formula)
 embedding env = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name t -> fmls `Set.union` embedBinding name t) Set.empty $ symbolsOfArity 0 env), env ^.negAssumptions)
   where
     embedBinding _ (Monotype (ScalarT _ _ (BoolLit True))) = Set.empty -- Ignore trivial types
-    embedBinding x (Monotype (ScalarT baseT _ fml)) = Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml    
-    -- embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
-      -- then Set.empty -- Ignore constants
-      -- else Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
+    embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
+      then Set.empty -- Ignore constants
+      else Set.singleton $ substitute (Map.singleton valueVarName (Var baseT x)) fml
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants
     
 {- Program terms -}    
     
 -- | One case inside a pattern match expression
-data Case s c t = Case {
+data Case r = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
-  expr :: Program s c t   -- ^ Result of the match in this case
+  expr :: Program r       -- ^ Result of the match in this case
 }    
     
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
-data BareProgram s c t =
-  PSymbol s (TypeSubstitution t) |          -- ^ Symbol (variable or constant)
-  PApp (Program s c t) (Program s c t) |    -- ^ Function application
-  PFun Id (Program s c t) |                 -- ^ Lambda abstraction
-  PIf c (Program s c t) (Program s c t) |   -- ^ Conditional
-  PMatch (Program s c t) [Case s c t] |     -- ^ Pattern match on datatypes
-  PFix [Id] (Program s c t)                 -- ^ Fixpoint  
+data BareProgram r =
+  PSymbol Id |                            -- ^ Symbol (variable or constant)
+  PApp (Program r) (Program r) |          -- ^ Function application
+  PFun Id (Program r) |                   -- ^ Lambda abstraction
+  PIf Formula (Program r) (Program r) |   -- ^ Conditional
+  PMatch (Program r) [Case r] |           -- ^ Pattern match on datatypes
+  PFix [Id] (Program r)                   -- ^ Fixpoint  
   
 -- | Programs annotated with types  
-data Program s c t = Program {
-  content :: BareProgram s c t,
-  typ :: TypeSkeleton t
+data Program r = Program {
+  content :: BareProgram r,
+  typ :: TypeSkeleton r
 }
 
 -- | Fully defined programs 
-type SimpleProgram = Program Id Formula Formula
+type RProgram = Program Formula
 
--- | For each symbol, a sufficient condition for the symbol to be a solution at a given leaf
-type LeafConstraint = Map Id Constraint
+-- | Instantiate unknowns in a type
+programApplySolution :: Solution -> RProgram -> RProgram
+programApplySolution sol (Program p t) = Program (programApplySolution' p) (typeApplySolution sol t)
+  where
+    pas = programApplySolution sol
+    
+    programApplySolution' (PSymbol name) = PSymbol name
+    programApplySolution' (PApp fun arg) = PApp (pas fun) (pas arg)
+    programApplySolution' (PFun name p) = PFun name (pas p)    
+    programApplySolution' (PIf fml p1 p2) = PIf (applySolution sol fml) (pas p1) (pas p2)
+    programApplySolution' (PMatch scr cases) = PMatch (pas scr) (map (\(Case ctr args p) -> Case ctr args (pas p)) cases)
+    programApplySolution' (PFix args p) = PFix args (pas p)
 
--- | Programs where conditions and symbols are represented by constraints with unknowns
-type LiquidProgram = Program LeafConstraint Formula Formula
 
 -- | Building types
 bool = ScalarT BoolT []  
@@ -263,28 +274,10 @@ vartAll n = vart n ftrue
 
 infixr 5 |->|
 
--- | 'instantiateSymbols' @subst p@ : apply @subst@ to polymorphic symbols
-instantiateSymbols :: TypeSubstitution Formula -> LiquidProgram -> LiquidProgram
-instantiateSymbols subst (Program body t) = (flip Program (rTypeSubstitute subst t)) $ case body of
-  PSymbol s subst' -> PSymbol s (Map.union subst' $ restrictDomain (typeVarsOf t) subst)
-  PApp f arg -> PApp (instantiateSymbols subst f) (instantiateSymbols subst arg)
-  PFun x body -> PFun x (instantiateSymbols subst body)
-  PIf c t e -> PIf c (instantiateSymbols subst t) (instantiateSymbols subst e)
-  PMatch scr cases -> PMatch (instantiateSymbols subst scr) (map instantiateCase cases)
-  PFix fs body -> PFix fs (instantiateSymbols subst body)
-  where
-    instantiateCase (Case cons args e) = Case cons args (instantiateSymbols subst e)  
-
 {- Typing constraints -}
           
 -- | Typing constraints
-data Constraint = Unconstrained
-  | Subtype Environment RType RType
+data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
-  | WellFormedLeaf RType [RType]
-  | WellFormedFunction [[Constraint]]  
-  
-isWFLeaf (WellFormedLeaf _ _) = True
-isWFLeaf _ = False
   

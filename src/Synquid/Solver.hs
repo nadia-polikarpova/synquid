@@ -30,7 +30,7 @@ initialCandidate = do
 
 -- | 'refineCandidates' @params quals constraints cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
-refineCandidates :: SMTSolver s => SolverParams -> QMap -> [Clause] -> [Candidate] -> s [Candidate]
+refineCandidates :: SMTSolver s => SolverParams -> QMap -> [Formula] -> [Candidate] -> s [Candidate]
 refineCandidates params quals constraints cands = evalFixPointSolver go params
   where
     go = do
@@ -42,7 +42,7 @@ refineCandidates params quals constraints cands = evalFixPointSolver go params
       
     addConstraints (Candidate sol valids invalids label) = do
       let sol' = merge (topSolution quals) sol  -- Add new unknowns
-      (valids', invalids') <- partitionM (isValidClause . clauseApplySolution sol') constraints -- Evaluate new constraints
+      (valids', invalids') <- partitionM (isValidFml . applySolution sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
       
 pruneQualifiers :: SMTSolver s => SolverParams -> QSpace -> s QSpace    
@@ -55,7 +55,7 @@ data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCan
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
 
 -- | MUS search strategies
-data OptimalValuationsStrategy = BFSValuations | UnsatCoreValuations | MarcoValuations
+data OptimalValuationsStrategy = BFSValuations | MarcoValuations
 
 -- | Parameters of the fix point algorithm
 data SolverParams = SolverParams {
@@ -80,49 +80,38 @@ greatestFixPoint :: SMTSolver s => QMap -> [Candidate] -> FixPointSolver s [Cand
 greatestFixPoint _ [] = return []
 greatestFixPoint quals candidates = do
     (cand@(Candidate sol _ _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
-    constraint <- asks constraintPickStrategy >>= pickConstraint cand
-    case constraint of
-      Disjunctive disjuncts -> do
-        debugOutputSplit candidates cand constraint
-        newCandidates <- mapM (updateWithDisjuct constraint cand) (zip disjuncts [0..])
-        greatestFixPoint quals (newCandidates ++ rest)
-      Horn fml -> do            
-        let modifiedConstraint = instantiateRhs sol fml 
-        debugOutput candidates cand fml modifiedConstraint
-        diffs <- strengthen quals modifiedConstraint sol                        
-        (newCandidates, rest') <- if length diffs == 1
-          then do -- Propagate the diff to all equivalent candidates
-            let unknowns = Set.map unknownName $ unknownsOf fml
-            let (equivs, nequivs) = partition (\(Candidate s valids invalids _) -> restrictDomain unknowns s == restrictDomain unknowns sol && Set.member constraint invalids) rest
-            nc <- mapM (\c -> updateCandidate constraint c diffs (head diffs)) (cand : equivs)
-            return (nc, nequivs)
-          else do -- Only update the current candidate
-            nc <- mapM (updateCandidate constraint cand diffs) diffs
-            return (nc, rest)
-        case find (Set.null . invalidConstraints) newCandidates of
-          Just cand' -> return $ cand' : (delete cand' newCandidates ++ rest')  -- Solution found
-          Nothing -> greatestFixPoint quals (newCandidates ++ rest')
+    fml <- asks constraintPickStrategy >>= pickConstraint cand
+    let modifiedConstraint = instantiateRhs sol fml 
+    debugOutput candidates cand fml modifiedConstraint
+    diffs <- strengthen quals modifiedConstraint sol                        
+    (newCandidates, rest') <- if length diffs == 1
+      then do -- Propagate the diff to all equivalent candidates
+        let unknowns = Set.map unknownName $ unknownsOf fml
+        let (equivs, nequivs) = partition (\(Candidate s valids invalids _) -> restrictDomain unknowns s == restrictDomain unknowns sol && Set.member fml invalids) rest
+        nc <- mapM (\c -> updateCandidate fml c diffs (head diffs)) (cand : equivs)
+        return (nc, nequivs)
+      else do -- Only update the current candidate
+        nc <- mapM (updateCandidate fml cand diffs) diffs
+        return (nc, rest)
+    case find (Set.null . invalidConstraints) newCandidates of
+      Just cand' -> return $ cand' : (delete cand' newCandidates ++ rest')  -- Solution found
+      Nothing -> greatestFixPoint quals (newCandidates ++ rest')
 
   where
     instantiateRhs sol fml = case fml of
       Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
-    -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @constraint@
-    updateCandidate constraint (Candidate sol valids invalids label) diffs diff = do
+    -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
+    updateCandidate fml (Candidate sol valids invalids label) diffs diff = do
       let sol' = merge sol diff
       let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) diff
-      let (unaffectedValids, affectedValids) = Set.partition (\c -> clausePosUnknowns c `disjoint` modifiedUnknowns) valids
-      let (unaffectedInvalids, affectedInvalids) = Set.partition (\c -> clauseNegUnknowns c `disjoint` modifiedUnknowns) (Set.delete constraint invalids)
-      (newValids, newInvalids) <- setPartitionM (isValidClause . clauseApplySolution sol') $ affectedValids `Set.union` affectedInvalids
+      let (unaffectedValids, affectedValids) = Set.partition (\fml -> posUnknowns fml `disjoint` modifiedUnknowns) valids
+      let (unaffectedInvalids, affectedInvalids) = Set.partition (\fml -> negUnknowns fml `disjoint` modifiedUnknowns) (Set.delete fml invalids)
+      (newValids, newInvalids) <- setPartitionM (isValidFml . applySolution sol') $ affectedValids `Set.union` affectedInvalids
       let newLabel = if length diffs == 1 then label else label ++ "." ++ show (fromJust $ elemIndex diff diffs)
-      return $ Candidate sol' (Set.insert constraint $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) newLabel
+      return $ Candidate sol' (Set.insert fml $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) newLabel
       
-    -- | Re-evaluate each of @conjuncts@, extracted from a disjunctive constraint during splitting
-    updateWithDisjuct constraint (Candidate sol valids invalids label) (conjuncts, index) = do
-      (newValids, newInvalids) <- both Set.fromList <$> partitionM (isValidClause . clauseApplySolution sol) (map Horn conjuncts)
-      return $ Candidate sol (valids `Set.union` newValids) (Set.delete constraint invalids `Set.union` newInvalids) (label ++ ".d" ++ show index)
-
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
     totalQCount = sum . map Set.size . Map.elems          -- total number of qualifiers in a solution
           
@@ -135,15 +124,11 @@ greatestFixPoint quals candidates = do
         res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the number of initialized unknowns and minimize strength
       in (res, delete res cands)
       
-    pickConstraint (Candidate sol valids invalids _) strategy = do
-      let (ds, hs) = Set.partition isDisjunctive invalids
-      if Set.null hs
-        then return $ Set.findMin ds
-        else case strategy of
-          FirstConstraint -> return $ Set.findMin hs
-          SmallSpaceConstraint -> do
-            let spaceSize (Horn fml) = maxValSize quals sol (unknownsOf (leftHandSide fml))
-            return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList hs)
+    pickConstraint (Candidate sol valids invalids _) strategy = case strategy of
+      FirstConstraint -> return $ Set.findMin invalids
+      SmallSpaceConstraint -> do
+        let spaceSize fml = maxValSize quals sol (unknownsOf (leftHandSide fml))
+        return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList invalids)
 
     debugOutput cands cand inv modified = do
       candidateDoc <- asks candDoc
@@ -152,14 +137,6 @@ greatestFixPoint quals candidates = do
         text "Chosen candidate:" <+> candidateDoc cand,
         text "Invalid Constraint:" <+> pretty inv,
         text "Strengthening:" <+> pretty modified]) $
-        return ()
-      
-    debugOutputSplit cands cand inv = do
-      candidateDoc <- asks candDoc 
-      debug 1 (vsep [
-        nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
-        text "Chosen candidate:" <+> candidateDoc cand, 
-        text "Splitting Invalid Constraint:" <+> pretty inv]) $
         return ()
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
@@ -221,7 +198,6 @@ optimalValuations maxSize quals lhs rhs = do
   strategy <- asks optimalValuationsStrategy
   case strategy of
     BFSValuations -> optimalValuationsBFS maxSize quals lhs rhs
-    UnsatCoreValuations -> optimalValuationsUnsatCore quals lhs rhs    
     MarcoValuations -> optimalValuationsMarco quals lhs rhs    
     
 -- | 'optimalValuations' @quals check@: all smallest subsets of @quals@ for which @check@ returns a solution.
@@ -236,31 +212,6 @@ optimalValuationsBFS maxSize quals lhs rhs = map qualsAt <$> filterSubsets (chec
       in if 1 <= n && n <= maxSize
           then isValidFml $ lhs' |=>| rhs
           else return False
-  
-optimalValuationsUnsatCore :: SMTSolver s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
-optimalValuationsUnsatCore quals lhs rhs = Set.toList <$> go Set.empty Set.empty [quals]
-  where
-    lhsList = Set.toList lhs
-    notRhs = fnot rhs
-    
-    go sols _ [] = return $ Set.map snd sols
-    go sols unsats (c : cs) = let
-        isSubsumed = any (c `Set.isSubsetOf`) cs -- is @c@ is represented by a candidate later in the queue?
-        isCovered = F.any (\(r, s) -> c `Set.isSubsetOf` s || (s `Set.isSubsetOf` c && c `Set.isSubsetOf` r)) (sols `Set.union` unsats) -- is @c@ on the path from a prior request to the corresponding solution?
-      in if isSubsumed || isCovered
-        then go sols unsats cs -- all solutions we could get from @c@ we either already got or are covered by remaining candidates: skip
-        else do
-          coreMb <- lift $ unsatCore lhsList [notRhs] (Set.toList c)
-          case coreMb of
-            UCSat -> debug 2 (pretty (conjunction c) <+> text "INVALID") $ go sols unsats cs -- @c@ is SAT
-            UCBad preds -> do
-              let core = Set.fromList preds
-              debug 2 (pretty (conjunction c) <+> text "UNSAT" <+> pretty (conjunction core)) $ go sols (Set.insert (c, core) unsats) (parents c preds ++ cs)              
-            UCGood preds -> do
-              let core = Set.fromList preds
-              debug 2 (pretty (conjunction c) <+> text "SOLUTION" <+> pretty (conjunction core)) $ go (Set.insert (c, core) sols) unsats (parents c preds ++ cs)
-              
-    parents candidate preds = map (flip Set.delete candidate) preds -- subsets of @candidate@ that together cover all potential remaining solutions    
     
 optimalValuationsMarco :: SMTSolver s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
 optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores fixedLhs fixedRhs qualsList)
@@ -314,8 +265,3 @@ prune isSubsumed (x:xs) = prune' [] x xs
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: SMTSolver s => Formula -> FixPointSolver s Bool
 isValidFml = lift . isValid
-
--- | 'isValidClause' @c@: is @c@ logically valid? 
-isValidClause :: SMTSolver s => Clause -> FixPointSolver s Bool
-isValidClause (Horn fml) = isValidFml fml
-isValidClause (Disjunctive disjuncts) = or <$> mapM (isValidFml . conjunction . Set.fromList) disjuncts
