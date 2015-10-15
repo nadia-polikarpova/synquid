@@ -30,10 +30,6 @@ import System.IO.Unsafe
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
-  -- _intSort :: Maybe Sort,                     -- ^ Int sort
-  -- _boolSort :: Maybe Sort,                    -- ^ Boolean sort  
-  -- _typeVarSorts :: Map Id Sort,
-  -- _datatypeSorts :: Map Id Sort,              -- ^ Sorts for user-defined datatypes
   _sorts :: Map BaseType Sort,                -- ^ Sort for integer sets
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
@@ -52,11 +48,6 @@ makeLenses ''Z3Data
 
 initZ3Data env env' = Z3Data {
   _mainEnv = env,
-  -- _intSort = Nothing,
-  -- _boolSort = Nothing,
-  -- _setSort = Nothing,
-  -- _typeVarSorts = Map.empty,
-  -- _datatypeSorts = Map.empty,
   _sorts = Map.empty,
   _vars = Map.empty,
   _measures = Map.empty,
@@ -216,44 +207,8 @@ instance SMTSolver Z3State where
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
         _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
         
-  unsatCore = getMinUnsatCore  
   allUnsatCores = getAllMUSs  
     
--- | 'getMinUnsatCore' @assumptions mustHaves fmls@ : Get minimal UNSAT core of @fmls@ assuming @assumptions@ and @mustHaves@,
--- such that at least one of @mustHaves@ is required for unsatisfiability.   
-getMinUnsatCore assumptions mustHaves fmls = do
-  push
-  mapM_ (toAST >=> assert) assumptions
-  
-  bool <- toSort BoolT
-  
-  controlLiterals <- mapM (\i -> mkStringSymbol ("ctrl" ++ show i) >>= flip mkConst bool) [1 .. length fmls] -- ToDo: unique ids
-  condAssumptions <- mapM toAST fmls >>= zipWithM mkImplies controlLiterals                      
-  mapM_ assert condAssumptions
-  
-  push
-  mapM_ (toAST >=> assert) mustHaves  
-  
-  res <- checkAssumptions controlLiterals
-  case res of
-    Sat -> pop 2 >> return UCSat
-    Unsat -> do
-      unsatLits <- getUnsatCore
-      unsatLitsMin <- minimize [] unsatLits
-      let unsatAssumptions = [a | (l, a) <- zip controlLiterals fmls, l `elem` unsatLitsMin]
-      pop 1 -- remove mustHaves
-      res <- local $ mapM_ assert unsatLitsMin >> check
-      pop 1
-      case res of
-        Sat -> return $ UCGood unsatAssumptions
-        Unsat -> return $ UCBad unsatAssumptions
-  where
-    minimize checked [] = return checked
-    minimize checked (lit:lits) = do
-      res <- local $ mapM_ assert (checked ++ lits) >> check
-      case res of
-        Sat -> minimize (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
-        Unsat -> minimize checked lits -- lit can be omitted
         
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)

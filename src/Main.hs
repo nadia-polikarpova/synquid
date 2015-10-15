@@ -17,10 +17,9 @@ explorerParams = ExplorerParams {
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 1,
-  _abstractLeafs = False,
   _fixStrategy = FirstArgument,
   _polyRecursion = True,
-  _incrementalSolving = True,
+  _incrementalSolving = False,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
   _solver = undefined
@@ -30,7 +29,6 @@ explorerParams = ExplorerParams {
 solverParams = SolverParams {
   pruneQuals = True,
   -- pruneQuals = False,
-  -- optimalValuationsStrategy = UnsatCoreValuations,
   optimalValuationsStrategy = MarcoValuations,    
   -- optimalValuationsStrategy = BFSValuations,    
   semanticPrune = True,
@@ -50,7 +48,7 @@ synthesizeAndPrint name env typ cquals tquals = do
   mProg <- synthesize explorerParams solverParams env typ cquals tquals
   case mProg of
     Nothing -> putStr "No Solution"
-    Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc pretty pretty (const empty) pretty prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
+    Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
   print empty
     
 {- Integer programs -}
@@ -258,6 +256,7 @@ testReplicate = do
 
   -- let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT listT [vart "a" $ valVart "a" |>| vartVar "a" "y"] $ mLen valList |=| intVar "n"))
   let typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT listT [vartAll "a"] $ mLen valList |=| intVar "n"))
+  -- let typ = Forall "a" $ Monotype $ FunctionT "y" (vartAll "a") (ScalarT listT [vartAll "a"] $ mLen valList |=| IntLit 1)
           
   let cq = do
         op <- [Ge, Le, Neq]
@@ -498,7 +497,7 @@ main = do
   -- -- testLambda
   -- testMax2  
   -- testMax3
-  -- -- testMax4
+  -- testMax4
   -- testAbs  
   -- testAddition
   -- -- testMult
@@ -509,7 +508,7 @@ main = do
   -- -- testPolymorphic
   -- -- List programs
   -- testHead
-  -- testReplicate
+  testReplicate
   -- testLength
   -- testAppend
   -- testStutter
@@ -521,7 +520,7 @@ main = do
   -- testUseFold1
   -- testMakeIncList
   -- testIncListInsert
-  testIncListMerge
+  -- testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

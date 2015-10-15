@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
 
 module Synquid.Pretty (   
   -- * Interface
@@ -39,7 +39,7 @@ module Synquid.Pretty (
   vMapDoc,
   -- * Other
   programDoc,
-  candidateDoc,
+  -- candidateDoc,
   -- * Counting
   typeNodeCount,
   programNodeCount
@@ -201,33 +201,26 @@ instance Pretty QSpace where
   
 instance Pretty QMap where
   pretty = vMapDoc text pretty  
-  
-prettyClause :: Clause -> Doc
-prettyClause (Horn fml) = pretty fml
-prettyClause (Disjunctive disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
+    
+caseDoc :: (TypeSkeleton r -> Doc) -> Case r -> Doc
+caseDoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc tdoc (expr cas) 
 
-instance Pretty Clause where
-  pretty = prettyClause
-  
-caseDoc :: (s -> Doc) -> (c -> Doc) -> (TypeSkeleton t -> Doc) -> (TypeSkeleton t -> Doc) -> Case s c t -> Doc
-caseDoc sdoc cdoc tdoc tdoc' cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc sdoc cdoc tdoc tdoc' (expr cas) 
-
-programDoc :: (s -> Doc) -> (c -> Doc) -> (TypeSkeleton t -> Doc) -> (TypeSkeleton t -> Doc) -> Program s c t -> Doc
-programDoc sdoc cdoc tdoc tdoc' (Program p typ) = let 
-    pDoc = programDoc sdoc cdoc tdoc tdoc'
+programDoc :: (TypeSkeleton r -> Doc) -> Program r -> Doc
+programDoc tdoc (Program p typ) = let 
+    pDoc = programDoc tdoc
     withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
   in case p of
-    PSymbol s subst -> withType $ (option (not $ Map.null subst) $ hMapDoc text tdoc' subst) <+> sdoc s
+    PSymbol s -> withType $ text s
     PApp f x -> parens (pDoc f <+> pDoc x)
     PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
-    PIf c t e -> nest 2 $ withType (text "if" <+> cdoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
-    PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc sdoc cdoc tdoc tdoc') cases)
+    PIf c t e -> nest 2 $ withType (text "if" <+> pretty c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
+    PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
     PFix fs e -> nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
 
-instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Pretty (Program s c t) where
-  pretty = programDoc pretty pretty pretty pretty
+instance (Pretty (TypeSkeleton r)) => Pretty (Program r) where
+  pretty = programDoc pretty
   
-instance (Pretty s, Pretty c, Pretty (TypeSkeleton t), Pretty (SchemaSkeleton t)) => Show (Program s c t) where
+instance (Pretty (TypeSkeleton r)) => Show (Program r) where
   show = show . pretty
   
 prettySType :: SType -> Doc
@@ -288,29 +281,21 @@ instance Pretty Environment where
   pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions))
   
 prettyConstraint :: Constraint -> Doc  
-prettyConstraint (Unconstrained) = text "TRUE"
 prettyConstraint (Subtype env t1 t2) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
-prettyConstraint (WellFormedFunction disjuncts) = nest 2 $ text "ONE OF" $+$ (vsep $ map (\d -> commaSep (map pretty d)) disjuncts)
-prettyConstraint (WellFormedLeaf t ts) = nest 2 $ pretty t <+> text "ONE OF" $+$ (vsep $ map pretty ts)
   
 instance Pretty Constraint where
   pretty = prettyConstraint
   
-instance Pretty LeafConstraint where
-  -- pretty c = hMapDoc pretty pretty c
-  pretty c = let syms = Map.keys c in if length syms == 1 then text (head syms) else braces (commaSep (map text syms))
-  -- pretty = const empty
-  
 instance Pretty Candidate where
   pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))  
     
-candidateDoc :: LiquidProgram -> Candidate -> Doc
-candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc (const empty) condDoc typeDoc typeDoc prog
-  where
-    condDoc fml = pretty $ applySolution sol fml
-    typeDoc t = pretty $ typeApplySolution sol t
+-- candidateDoc :: RProgram -> Candidate -> Doc
+-- candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc (const empty) condDoc typeDoc typeDoc prog
+  -- where
+    -- condDoc fml = pretty $ applySolution sol fml
+    -- typeDoc t = pretty $ typeApplySolution sol t
     
 {- AST node counting -}
 
@@ -328,9 +313,9 @@ typeNodeCount (ScalarT _ tArgs fml) = fmlNodeCount fml + sum (map typeNodeCount 
 typeNodeCount (FunctionT _ tArg tRes) = typeNodeCount tArg + typeNodeCount tRes 
 
 -- | 'programNodeCount' @p@ : size of @p@ (in AST nodes)
-programNodeCount :: SimpleProgram -> Int
+programNodeCount :: RProgram -> Int
 programNodeCount (Program p _) = case p of 
-  PSymbol _ _ -> 1
+  PSymbol _ -> 1
   PApp e1 e2 -> 1 + programNodeCount e1 + programNodeCount e2
   PFun _ e -> 1 + programNodeCount e 
   PIf c e1 e2 -> 1 + fmlNodeCount c + programNodeCount e1 + programNodeCount e2

@@ -250,39 +250,12 @@ applySolution sol fml = case fml of
 merge :: Solution -> Solution -> Solution      
 merge sol sol' = Map.unionWith Set.union sol sol'
 
-{- Clauses -}
-
--- | Top-level conjunct of the synthesis constraint
-data Clause = Horn Formula    -- ^ Simple horn clause of the form "/\ c_i && /\ u_i ==> fml"
-  | Disjunctive [[Formula]]   -- ^ Disjunction of conjunctions of horn clauses
-  deriving (Eq, Ord)
-
--- | Is a clause disjunctive?  
-isDisjunctive (Disjunctive _) = True
-isDisjunctive _ = False
-
--- | Formula inside a horn clause
-fromHorn (Horn fml) = fml
-
--- | 'clauseApplySolution' @sol clause@ : Substitute solutions from sol for all predicate variables in clause
-clauseApplySolution :: Solution -> Clause -> Clause
-clauseApplySolution sol (Horn fml) = Horn $ applySolution sol fml
-clauseApplySolution sol (Disjunctive disjuncts) = Disjunctive $ (map . map) (applySolution sol) disjuncts
-
--- | 'clausePosNegUnknowns' @c@: sets of positive and negative predicate unknowns in clause @c@
-clausePosNegUnknowns :: Clause -> (Set Id, Set Id)
-clausePosNegUnknowns (Horn fml) = posNegUnknowns fml
-clausePosNegUnknowns (Disjunctive disjuncts) = let flatten f = both Set.unions . unzip . map f in flatten (flatten posNegUnknowns) $ disjuncts
-
-clausePosUnknowns = fst . clausePosNegUnknowns
-clauseNegUnknowns = snd . clausePosNegUnknowns
-
 {- Solution Candidates -}
 
 -- | Solution candidate
 data Candidate = Candidate {
     solution :: Solution,
-    validConstraints :: Set Clause,
-    invalidConstraints :: Set Clause,
+    validConstraints :: Set Formula,
+    invalidConstraints :: Set Formula,
     label :: String
   } deriving (Eq, Ord)
