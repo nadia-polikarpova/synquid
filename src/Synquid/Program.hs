@@ -143,7 +143,7 @@ makeLenses ''Datatype
 
 -- | Typing environment
 data Environment = Environment {
-  _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types)
+  _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types), indexed by arity
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
