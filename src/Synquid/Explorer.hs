@@ -62,16 +62,20 @@ makeLenses ''ExplorerParams
 
 -- | State of program exploration
 data ExplorerState = ExplorerState {
-  _idCount :: Int,                      -- ^ Number of unique identifiers issued so far
-  _candidates :: [Candidate],           -- ^ Current set of candidate solutions to unknowns
-  _unsolvedConstraints :: [Constraint], -- ^ Typing constraints accumulated since the candidates have been last refined
-  _qualifierMap :: QMap                 -- ^ State spaces for all the unknowns
+  _idCount :: Int,                              -- ^ Number of unique identifiers issued so far
+  _typingConstraints :: [Constraint],           -- ^ Typing constraints yet to be converted to horn clauses
+  _qualifierMap :: QMap,                        -- ^ State spaces for all the unknowns generated from well-formedness constraints
+  _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints since the last liquid assignment refinement
+  -- _typeAssignment :: TypeSubstitution Formula,  -- ^ Current assignment to free type variables
+  _candidates :: [Candidate]                    -- ^ Current set of candidate liquid assignments to unknowns
 }
 
 makeLenses ''ExplorerState
 
 -- | Impose typing constraint @c@ on the programs
-addConstraint c = unsolvedConstraints %= (c :)
+addConstraint c = typingConstraints %= (c :)
+addQuals name quals = qualifierMap %= Map.insert name quals
+addHornClause lhs rhs = hornClauses %= ((lhs |=>| rhs) :)
 
 -- | Computations that explore programs, parametrized by the the constraint solver and the backtracking monad
 type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams s) (m s))
@@ -81,7 +85,7 @@ type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams s) (m s))
 explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Environment -> RSchema -> m s RProgram
 explore params env sch = do
     initCand <- lift $ csInit (_solver params)
-    runReaderT (evalStateT go (ExplorerState 0 [initCand] [] Map.empty)) params 
+    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] [initCand])) params 
   where
     go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m RProgram
     go = do
@@ -225,8 +229,6 @@ generateE env s = generateVar `mplus` generateApp
     genKnownSymbol (name, typeInfo) = do
       t <- instantiate (name, typeInfo)
       return (env, Program (PSymbol name) t)
-
-    constraintForSymbol t name t' = Subtype env t' t
     
     symbolType x t@(ScalarT b args _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
@@ -273,63 +275,68 @@ generateE env s = generateVar `mplus` generateApp
 -- (program @p@ is only used for debug information)
 solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) => RProgram -> Explorer s m ()
 solveConstraints p = do
-  solv <- asks _solver
-
-  -- Convert new constraints into formulas and augment the current qualifier map with new unknowns
-  cs <- use unsolvedConstraints
-  let cs' = concatMap split cs  
-  oldQuals <- use qualifierMap
-  cq <- asks _condQualsGen
-  tq <- asks _typeQualsGen
-  let (clauses, newQuals) = toFormulas cq tq cs'
-  newQuals' <- T.mapM (lift . lift . lift . csPruneQuals solv) newQuals
-  let qmap = Map.union oldQuals newQuals'
+  -- Process typing constraints to obtain new type assignments, search spaces, and horn clauses
+  cs <- use typingConstraints
+  typingConstraints .= []
+  mapM_ processConstraint cs 
+  
   debug 1 (
     -- text "Liquid Program" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) p
     text "Liquid Program" $+$ programDoc (const Synquid.Pretty.empty) p
     $+$ text "Typing Constraints" $+$ (vsep $ map pretty cs)
     ) $ return ()
   
-  -- Refine the current candidate solutions using the new constraints; fail if no solution
+  -- Refine the current liquid assignments using the horn clauses
+  solv <- asks _solver
+  qmap <- use qualifierMap
+  clauses <- use hornClauses
   cands <- use candidates        
-  cands' <- if null clauses then return cands else lift . lift .lift $ csRefine solv clauses qmap p cands
+  cands' <- lift . lift .lift $ csRefine solv clauses qmap p cands
   guard (not $ null cands')
-  
-  -- Update state
-  unsolvedConstraints .= []
   candidates .= cands'
-  qualifierMap .= qmap    
+  hornClauses .= []
+    
+processConstraint :: (Monad s, MonadTrans m, MonadPlus (m s)) => Constraint -> Explorer s m ()
+
+-- Compound types: decompose
+processConstraint (Subtype env (ScalarT baseT (tArg:tArgs) fml) (ScalarT baseT' (tArg':tArgs') fml')) 
+  = do
+      processConstraint (Subtype env tArg tArg') -- assuming covariance
+      processConstraint (Subtype env (ScalarT baseT tArgs fml) (ScalarT baseT' tArgs' fml')) 
+processConstraint (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) 
+  = do -- TODO: rename type vars
+      processConstraint (Subtype env tArg2 tArg1)
+      processConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2)
+processConstraint (WellFormed env (ScalarT baseT (tArg:tArgs) fml)) 
+  = do
+      processConstraint (WellFormed env tArg)
+      processConstraint (WellFormed env (ScalarT baseT tArgs fml))
+processConstraint (WellFormed env (FunctionT x tArg tRes)) 
+  = do
+      processConstraint (WellFormed env tArg)
+      processConstraint (WellFormed (addVariable x tArg env) tRes)
+  
+-- Concrete scalar types: convert to horn clauses and qualifiers maps
+processConstraint (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) | baseT == baseT' 
+  = case fml' of
+      BoolLit True -> return ()
+      _ -> do
+        let (poss, negs) = embedding env 
+        addHornClause (conjunction (Set.insert fml poss)) (disjunction (Set.insert fml' negs))
+processConstraint (WellFormed env (ScalarT baseT [] fml)) 
+  = case fml of
+      Unknown _ u -> do
+        tq <- asks _typeQualsGen
+        addQuals u (tq $ Var baseT valueVarName : allScalars env)
+      _ -> return ()
+processConstraint (WellFormedCond env (Unknown _ u)) 
+  = do
+      cq <- asks _condQualsGen
+      addQuals u (cq $ allScalars env)
       
--- | 'split' @c@ : split typing constraint @c@ that may contain function types into simple constraints (over only scalar types)
-split :: Constraint -> [Constraint]
-split (Subtype env (ScalarT baseT tArgs fml) (ScalarT baseT' tArgs' fml')) =
-  (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) : concatMap split (zipWith (Subtype env) tArgs tArgs') -- assuming covariance
-split (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2)) = -- TODO: rename type vars
-  split (Subtype env tArg2 tArg1) ++ split (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2)
-split (WellFormed env (ScalarT baseT tArgs fml)) = 
-  (WellFormed env (ScalarT baseT tArgs fml)) : concatMap (split . WellFormed env) tArgs
-split (WellFormed env (FunctionT x tArg tRes)) = 
-  split (WellFormed env tArg) ++ split (WellFormed (addVariable x tArg env) tRes)  
-split c = [c]
+-- Otherwise (shape mismatch): fail      
+processConstraint _ = mzero      
 
-toFormulas :: QualsGen -> QualsGen -> [Constraint] -> ([Formula], QMap)
-toFormulas cq tq cs = execState (mapM_ (toFormula cq tq) cs) ([], Map.empty)
-
--- | 'toFormula' @cq tq c@ : translate simple typing constraint @c@ into either a logical constraint or an element of the search space,
--- given search space generators @cq@ and @tq@
-toFormula :: QualsGen -> QualsGen -> Constraint -> State ([Formula], QMap) ()
-toFormula _ _ (Subtype env (ScalarT baseT [] _) (ScalarT baseT' [] (BoolLit True))) | baseT == baseT' 
-  = return ()
-toFormula _ _ (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) | baseT == baseT' 
-  = let (poss, negs) = embedding env 
-  in _1 %= ((conjunction (Set.insert fml poss) |=>| disjunction (Set.insert fml' negs)) :)
-toFormula _ tq (WellFormed env (ScalarT baseT _ (Unknown _ u))) = 
-  _2 %= Map.insert u (tq $ Var baseT valueVarName : allScalars env)
-toFormula _ tq (WellFormed env (ScalarT baseT _ _)) = 
-  return ()
-toFormula cq _ (WellFormedCond env (Unknown _ u)) =
-  _2 %= Map.insert u (cq $ allScalars env)
-toFormula _ _ c = error $ show $ text "Not a simple constraint:" $+$ pretty c
     
 {- Utility -}
 
