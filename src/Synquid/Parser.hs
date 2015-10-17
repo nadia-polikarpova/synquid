@@ -1,3 +1,7 @@
+{- 
+ - The parser for Synquid's program specification DSL.
+ -}
+
 module Synquid.Parser where
 
 import Synquid.Logic
@@ -68,6 +72,11 @@ parseBaseType = Parsec.choice [
   where
     parseCustomType = Applicative.liftA2 (:) Parsec.upper $ Parsec.many (Parsec.alphaNum <|> Parsec.char '_')
 
+{-
+ - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
+ - for parsing binary and unary expressions that consist of other @Formula@s, while @parseTerm@ parses everything else
+ - (ie literals).
+ -}
 parseFormula :: Parser Formula
 parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
   where
@@ -84,7 +93,15 @@ parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
       where
         parseOpStr = Parsec.try $ do
           Parsec.string opStr
-          Parsec.notFollowedBy $ Parsec.oneOf ">=" -- This is a dirty hack.
+
+          -- | The parser runs into a problem with operators that have the same leading characters but different
+          -- precedences, like @<=@ and @<=>@ (the former having higher precedence than the latter). Parsec will try to
+          -- parse the higher-precedence operator first and thus will /never/ match @<=>@, since it'll consume @<=@ and
+          -- leave @>@ in the string. If the actual operator was @<=>@, Parsec will then try to parse the leftover @>@
+          -- as a term (the second argument to the @<=@ operator) and obviously error. If the parser used a token-based
+          -- approach this would be easy to avoid, but since it operates directly on the string we'll use the
+          -- quick-and-dirty fix of just making sure than no operator-like characters follow the parsed operator.
+          Parsec.notFollowedBy $ Parsec.oneOf ">="
           Parsec.spaces
           return func
 
@@ -92,7 +109,7 @@ parseTerm :: Parser Formula
 parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseFormula, parseBoolLit, parseIntLit, Parsec.try $ parseMeasure, parseVar, parseSetLit]
 
 parseBoolLit :: Parser Formula
-parseBoolLit = Parsec.try $ fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True"
+parseBoolLit = fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True"
 
 parseIntLit :: Parser Formula
 parseIntLit = fmap (IntLit . read) $ Parsec.many1 Parsec.digit
