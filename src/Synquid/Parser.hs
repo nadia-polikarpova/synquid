@@ -89,7 +89,7 @@ parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
           return func
 
 parseTerm :: Parser Formula
-parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseFormula, parseBoolLit, parseIntLit, parseVar, parseSetLit]
+parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseFormula, parseBoolLit, parseIntLit, Parsec.try $ parseMeasure, parseVar, parseSetLit]
 
 parseBoolLit :: Parser Formula
 parseBoolLit = Parsec.try $ fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True"
@@ -109,11 +109,12 @@ parseSetLit = do
 parseVar :: Parser Formula
 parseVar = fmap (Var UnknownT) parseIdentifier
 
-parseUnaryOp :: Parser Formula
-parseUnaryOp = do
-  op <- Neg <$ Parsec.char '-' <|> Not <$ Parsec.char '!'
-  refinement <- parseFormula
-  return $ Unary op refinement
+parseMeasure :: Parser Formula
+parseMeasure = do
+  measureName <- parseIdentifier
+  Parsec.spaces
+  arg <- parseFormula
+  return $ Measure UnknownT measureName arg
 
 parseIdentifier :: Parser Id
 parseIdentifier = Applicative.liftA2 (:) firstChar otherChars
