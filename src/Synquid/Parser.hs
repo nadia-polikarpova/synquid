@@ -40,27 +40,33 @@ parseFunctionType = do
 
 parseScalarType :: Parser (TypeSkeleton Formula)
 parseScalarType = Parsec.choice [parseScalarRefType, parseScalarUnrefType]
+  where
+    parseScalarUnrefType = do
+      baseType <- parseBaseType
+      Parsec.spaces
+      typeVarRefinements <- Parsec.many $
+        Parsec.between (Parsec.char '(') (Parsec.char ')') parseType <* Parsec.spaces
+      return $ ScalarT baseType typeVarRefinements ftrue
 
-parseScalarUnrefType :: Parser (TypeSkeleton Formula)
-parseScalarUnrefType = do
-  baseType <- parseBaseType
-  return $ ScalarT baseType [] $ BoolLit True
-
-parseScalarRefType :: Parser (TypeSkeleton Formula)
-parseScalarRefType = do
-  Parsec.char '{'
-  Parsec.spaces
-  baseType <- parseBaseType
-  Parsec.spaces
-  Parsec.char '|'
-  Parsec.spaces
-  refinement <- parseRefinement
-  Parsec.spaces
-  Parsec.char '}'
-  return $ ScalarT baseType [] refinement
+    parseScalarRefType = do
+      Parsec.char '{'
+      Parsec.spaces
+      ScalarT baseType typeVarRefinements _ <- parseScalarUnrefType
+      Parsec.char '|'
+      Parsec.spaces
+      refinement <- parseRefinement
+      Parsec.spaces
+      Parsec.char '}'
+      return $ ScalarT baseType typeVarRefinements refinement
 
 parseBaseType :: Parser BaseType
-parseBaseType = BoolT <$ Parsec.string "Bool" <|> IntT <$ Parsec.string "Int"
+parseBaseType = Parsec.choice [
+    BoolT <$ Parsec.string "Bool",
+    IntT <$ Parsec.string "Int",
+    fmap DatatypeT parseCustomType,
+    fmap TypeVarT parseIdentifier]
+  where
+    parseCustomType = Applicative.liftA2 (:) Parsec.upper $ Parsec.many (Parsec.alphaNum <|> Parsec.char '_')
 
 parseRefinement :: Parser Formula
 parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)

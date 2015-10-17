@@ -54,7 +54,7 @@ incListTests = TestLabel "IncList" $ TestList [
   , TestCase testIncListMerge 
   ]  
   
-parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm]
+parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType]
 
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
@@ -313,6 +313,13 @@ testIncListMerge = let
 createParserTestList :: (Show a, Eq a) => Parser a -> [(String, a)] -> Test
 createParserTestList parser testCases = TestList $ map createTestCase testCases
   where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ applyParser parser inputStr
+
+testParseScalarType = createParserTestList parseScalarType [
+  ("Int", ScalarT IntT [] $ ftrue),
+  ("List", ScalarT (DatatypeT "List") [] $ ftrue),
+  ("DaT_aType9 (a) ({b | 10 > 1})",
+    ScalarT (DatatypeT "DaT_aType9") [ScalarT (TypeVarT "a") [] ftrue, ScalarT (TypeVarT "b") [] $ IntLit 10 |>| IntLit 1] ftrue),
+  ("{List | True}", ScalarT (DatatypeT "List") [] $ ftrue)]
 
 testParseFunctionType = createParserTestList parseFunctionType [
   ("(  a : Int -> Int)", FunctionT "a" scalarInt scalarInt),
