@@ -23,7 +23,7 @@ parse str = case Parsec.parse parseType "" str of
   Left err -> error "foobar!"
 
 parseType :: Parser (TypeSkeleton Formula)
-parseType = Parsec.choice [parseScalarType, parseFunctionType]
+parseType = Parsec.choice [parseScalarType, parseFunctionType] <?> "type definition"
 
 parseFunctionType :: Parser (TypeSkeleton Formula)
 parseFunctionType = do
@@ -41,9 +41,10 @@ parseFunctionType = do
   Parsec.spaces
   Parsec.char ')'
   return $ FunctionT argId argType returnType
+  <?> "function type"
 
 parseScalarType :: Parser (TypeSkeleton Formula)
-parseScalarType = Parsec.choice [parseScalarRefType, parseScalarUnrefType]
+parseScalarType = Parsec.choice [parseScalarRefType, parseScalarUnrefType] <?> "scalar type"
   where
     parseScalarUnrefType = do
       baseType <- parseBaseType
@@ -78,7 +79,7 @@ parseBaseType = Parsec.choice [
  - (ie literals).
  -}
 parseFormula :: Parser Formula
-parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
+parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces) <?> "refinement formula"
   where
     exprTable = [
       [unary '!' Not, unary '-' Neg],
@@ -106,13 +107,15 @@ parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
           return func
 
 parseTerm :: Parser Formula
-parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseFormula, parseBoolLit, parseIntLit, Parsec.try $ parseMeasure, parseVar, parseSetLit]
+parseTerm = Parsec.choice [
+  Parsec.between (Parsec.char '(') (Parsec.char ')') parseFormula,
+  parseBoolLit, parseIntLit, Parsec.try $ parseMeasure, parseVar, parseSetLit]
 
 parseBoolLit :: Parser Formula
-parseBoolLit = fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True"
+parseBoolLit = (fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True") <?> "boolean"
 
 parseIntLit :: Parser Formula
-parseIntLit = fmap (IntLit . read) $ Parsec.many1 Parsec.digit
+parseIntLit = (fmap (IntLit . read) $ Parsec.many1 Parsec.digit) <?> "number"
 
 parseSetLit :: Parser Formula
 parseSetLit = do
@@ -122,9 +125,10 @@ parseSetLit = do
   Parsec.spaces
   Parsec.char '}'
   return $ SetLit UnknownT elements
+  <?> "set"
 
 parseVar :: Parser Formula
-parseVar = fmap (Var UnknownT) parseIdentifier
+parseVar = fmap (Var UnknownT) parseIdentifier <?> "variable"
 
 parseMeasure :: Parser Formula
 parseMeasure = do
@@ -132,9 +136,10 @@ parseMeasure = do
   Parsec.spaces
   arg <- parseFormula
   return $ Measure UnknownT measureName arg
+  <?> "measure"
 
 parseIdentifier :: Parser Id
-parseIdentifier = Applicative.liftA2 (:) firstChar otherChars
+parseIdentifier = Applicative.liftA2 (:) firstChar otherChars <?> "identifier"
   where
     firstChar = Parsec.char '_' <|> Parsec.lower
     otherChars = Parsec.many (Parsec.alphaNum <|> Parsec.char '_')
