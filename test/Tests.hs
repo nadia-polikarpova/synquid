@@ -331,7 +331,7 @@ testParseFunctionType = createParserTestList parseFunctionType [
     scalarInt = ScalarT IntT [] $ BoolLit True
     scalarBool = ScalarT BoolT [] $ BoolLit True
 
-testParseRefinement = createParserTestList parseRefinement testCases
+testParseRefinement = createParserTestList parseFormula testCases
   where
     int = IntLit
     testCases = [

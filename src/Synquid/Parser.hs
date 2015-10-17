@@ -54,7 +54,7 @@ parseScalarType = Parsec.choice [parseScalarRefType, parseScalarUnrefType]
       ScalarT baseType typeVarRefinements _ <- parseScalarUnrefType
       Parsec.char '|'
       Parsec.spaces
-      refinement <- parseRefinement
+      refinement <- parseFormula
       Parsec.spaces
       Parsec.char '}'
       return $ ScalarT baseType typeVarRefinements refinement
@@ -68,8 +68,8 @@ parseBaseType = Parsec.choice [
   where
     parseCustomType = Applicative.liftA2 (:) Parsec.upper $ Parsec.many (Parsec.alphaNum <|> Parsec.char '_')
 
-parseRefinement :: Parser Formula
-parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
+parseFormula :: Parser Formula
+parseFormula = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spaces)
   where
     exprTable = [
       [unary '!' Not, unary '-' Neg],
@@ -89,7 +89,7 @@ parseRefinement = Expr.buildExpressionParser exprTable (parseTerm <* Parsec.spac
           return func
 
 parseTerm :: Parser Formula
-parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseRefinement, parseBoolLit, parseIntLit, parseVar, parseSetLit]
+parseTerm = Parsec.choice [Parsec.between (Parsec.char '(') (Parsec.char ')') parseFormula, parseBoolLit, parseIntLit, parseVar, parseSetLit]
 
 parseBoolLit :: Parser Formula
 parseBoolLit = Parsec.try $ fmap BoolLit $ False <$ Parsec.string "False" <|> True <$ Parsec.string "True"
@@ -101,7 +101,7 @@ parseSetLit :: Parser Formula
 parseSetLit = do
   Parsec.char '{'
   Parsec.spaces
-  elements <- Parsec.sepBy parseRefinement $ Parsec.spaces *> Parsec.char ',' *> Parsec.spaces
+  elements <- Parsec.sepBy parseFormula $ Parsec.spaces *> Parsec.char ',' *> Parsec.spaces
   Parsec.spaces
   Parsec.char '}'
   return $ SetLit UnknownT elements
@@ -112,7 +112,7 @@ parseVar = fmap (Var UnknownT) parseIdentifier
 parseUnaryOp :: Parser Formula
 parseUnaryOp = do
   op <- Neg <$ Parsec.char '-' <|> Not <$ Parsec.char '!'
-  refinement <- parseRefinement
+  refinement <- parseFormula
   return $ Unary op refinement
 
 parseIdentifier :: Parser Id
