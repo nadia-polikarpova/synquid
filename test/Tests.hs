@@ -148,24 +148,24 @@ testAddition = let
 listT = DatatypeT "List"
 list = ScalarT listT [vartAll "a"]
 listAll = list ftrue
-listVar = Var listT
+listVar = Var (toSort listT)
 valList = listVar valueVarName
 
 intlist = ScalarT listT [intAll]
 natlist = ScalarT listT [nat]
 poslist = ScalarT listT [pos]
 
-mLen = Measure IntT "len"
-mElems = Measure (SetT (TypeVarT "a")) "elems"
+mLen = Measure IntS "len"
+mElems = Measure (SetS (UninterpretedS "a")) "elems"
 
 -- | Add list datatype to the environment
 addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
-                                                            |&| mElems valList  |=| SetLit (TypeVarT "a") []
+                                                            |&| mElems valList  |=| SetLit (UninterpretedS "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| IntLit 1
                                                                                                                      |&| mLen valList |>| IntLit 0
-                                                                                                                     |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
+                                                                                                                     |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
                                                                                    )))
                                                                                    
 polyEq = [vartVar "a" "x" |=| vartVar "a" "y"]
@@ -226,7 +226,7 @@ testDrop = let
   
 testDelete = let
   env = addList $ emptyEnv
-  typ = Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mElems valList |=| mElems (listVar "xs") /-/ SetLit (TypeVarT "a") [vartVar "a" "x"]))
+  typ = Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mElems valList |=| mElems (listVar "xs") /-/ SetLit (UninterpretedS "a") [vartVar "a" "x"]))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ polyEq []      
   
 testMap = let
@@ -262,14 +262,14 @@ testUseFold1 = let
 
 incListT = DatatypeT "IncList"
 incList = ScalarT incListT [vartAll "a"]
-incListVar = Var incListT
+incListVar = Var (toSort incListT)
 valIncList = incListVar valueVarName
 
 intInclist = ScalarT incListT [intAll]
 natInclist = ScalarT incListT [nat]
 
-mILen = Measure IntT "len"
-mIElems = Measure (SetT $ TypeVarT "a") "elems"
+mILen = Measure IntS "len"
+mIElems = Measure (SetS $ UninterpretedS "a") "elems"
 
 polyInequalities = do
         op <- [Ge, Le, Neq]
@@ -278,12 +278,12 @@ polyInequalities = do
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
-                                                               |&| mIElems valIncList  |=| SetLit (TypeVarT "a") []
+                                                               |&| mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
                                                          (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"] ftrue) 
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1
-                                                                |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
+                                                                |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
                                                           )))
 
 testMakeIncList = let
@@ -291,16 +291,16 @@ testMakeIncList = let
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
         addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
         addIncList $ emptyEnv
-  typ = Monotype $ natInclist $ mIElems valIncList |=| SetLit IntT [IntLit 0, IntLit 1]
+  typ = Monotype $ natInclist $ mIElems valIncList |=| SetLit IntS [IntLit 0, IntLit 1]
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []          
   
 testIncListInsert = let
   env = addIncList $ emptyEnv
-  typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))
+  typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
   
 testIncListMerge = let
-  env = addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))) .
+  env = addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))) .
         addIncList $ emptyEnv
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          

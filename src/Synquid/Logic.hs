@@ -17,14 +17,12 @@ import Control.Monad
 -- | Identifiers
 type Id = String
 
--- | Base types  
-data BaseType = BoolT | IntT | TypeVarT Id | DatatypeT Id | SetT BaseType
+-- | Sorts
+data Sort = BoolS | IntS | UninterpretedS Id | SetS Sort
   deriving (Eq, Ord)
   
-isSetT (SetT _) = True
-isSetT _ = False
-elemT (SetT b) = b
-dtName (DatatypeT name) = name  
+isSetS (SetS _) = True
+isSetS _ = False
 
 {- Formulas of the refinement logic -}
 
@@ -53,27 +51,26 @@ inverse s = Map.fromList [(y, Var b x) | (x, Var b y) <- Map.toList s]
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
   IntLit Integer |                    -- ^ Integer literal
-  SetLit BaseType [Formula] |         -- ^ Set literal
-  Var BaseType Id |                   -- ^ Input variable (universally quantified first-order variable)
+  SetLit Sort [Formula] |             -- ^ Set literal
+  Var Sort Id |                       -- ^ Input variable (universally quantified first-order variable)
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
-  Measure BaseType Id Formula         -- ^ Measure application
+  Measure Sort Id Formula             -- ^ Measure application
   deriving (Eq, Ord)
   
 valueVarName = "_v"
-dontCare = "_"
 unknownName (Unknown _ name) = name
 varName (Var _ name) = name
 varType (Var t _) = t
   
 ftrue = BoolLit True
 ffalse = BoolLit False
-boolVar = Var BoolT
+boolVar = Var BoolS
 valBool = boolVar valueVarName
-intVar = Var IntT
+intVar = Var IntS
 valInt = intVar valueVarName
-vartVar n = Var (TypeVarT n)
+vartVar n = Var (UninterpretedS n)
 valVart n = vartVar n valueVarName
 fneg = Unary Neg
 fnot = Unary Not
@@ -146,25 +143,25 @@ conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
 conjunctsOf f = Set.singleton f
 
 -- | Base type of a term in the refinement logic
-baseTypeOf :: Formula -> Maybe BaseType
-baseTypeOf (BoolLit _)                        = Just $ BoolT
-baseTypeOf (IntLit _)                         = Just $ IntT
-baseTypeOf (SetLit b es)                      = mapM_ (\e -> baseTypeOf e >>= guard . (== b)) es >> return (SetT b)  
-baseTypeOf (Var b _ )                         = Just $ b
-baseTypeOf (Unknown _ _)                      = Just $ BoolT
-baseTypeOf (Unary op e)
-  | op == Neg                                 = (baseTypeOf e >>= guard . (== IntT)) >> return IntT
-  | otherwise                                 = (baseTypeOf e >>= guard . (== BoolT)) >> return BoolT
-baseTypeOf (Binary op e1 e2)
-  | op == Times || op == Plus || op == Minus            = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return IntT
-  | op == Eq  || op == Neq                              = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (l == r); return BoolT
-  -- | op == Lt || op == Le || op == Gt || op == Ge        = do l <- baseTypeOf e1; guard (l == IntT); r <- baseTypeOf e2; guard (r == IntT); return BoolT
-  | op == Lt || op == Le || op == Gt || op == Ge        = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (l == r); return BoolT -- make comparisons generic
-  | op == And || op == Or || op == Implies || op == Iff = do l <- baseTypeOf e1; guard (l == BoolT); r <- baseTypeOf e2; guard (r == BoolT); return BoolT
-  | op == Union || op == Intersect || op == Diff        = do l <- baseTypeOf e1; guard (isSetT l); r <- baseTypeOf e2; guard (r == l); return l
-  | op == Member                                        = do l <- baseTypeOf e1; r <- baseTypeOf e2; guard (r == SetT l); return BoolT 
-  | op == Subset                                        = do l <- baseTypeOf e1; guard (isSetT l); r <- baseTypeOf e2; guard (r == l); return BoolT
-baseTypeOf (Measure b _ _)                    = Just $ b
+sortOf :: Formula -> Maybe Sort
+sortOf (BoolLit _)                            = Just BoolS
+sortOf (IntLit _)                             = Just IntS
+sortOf (SetLit b es)                          = mapM_ (\e -> sortOf e >>= guard . (== b)) es >> return (SetS b)  
+sortOf (Var s _ )                             = Just s
+sortOf (Unknown _ _)                          = Just BoolS
+sortOf (Unary op e)
+  | op == Neg                                 = (sortOf e >>= guard . (== IntS)) >> return IntS
+  | otherwise                                 = (sortOf e >>= guard . (== BoolS)) >> return BoolS
+sortOf (Binary op e1 e2)
+  | op == Times || op == Plus || op == Minus            = do l <- sortOf e1; guard (l == IntS); r <- sortOf e2; guard (r == IntS); return IntS
+  | op == Eq  || op == Neq                              = do l <- sortOf e1; r <- sortOf e2; guard (l == r); return BoolS
+  -- | op == Lt || op == Le || op == Gt || op == Ge        = do l <- sortOf e1; guard (l == IntS); r <- sortOf e2; guard (r == IntS); return BoolS
+  | op == Lt || op == Le || op == Gt || op == Ge        = do l <- sortOf e1; r <- sortOf e2; guard (l == r); return BoolS -- make comparisons generic
+  | op == And || op == Or || op == Implies || op == Iff = do l <- sortOf e1; guard (l == BoolS); r <- sortOf e2; guard (r == BoolS); return BoolS
+  | op == Union || op == Intersect || op == Diff        = do l <- sortOf e1; guard (isSetS l); r <- sortOf e2; guard (r == l); return l
+  | op == Member                                        = do l <- sortOf e1; r <- sortOf e2; guard (r == SetS l); return BoolS 
+  | op == Subset                                        = do l <- sortOf e1; guard (isSetS l); r <- sortOf e2; guard (r == l); return BoolS
+sortOf (Measure s _ _)                    = Just $ s
   
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
@@ -189,6 +186,11 @@ substitute subst fml = case fml of
                 Just (Var b' v) -> if b == b' 
                   then Map.insert x (Var b v) $ compose old' (Map.delete y new)
                   else error "Base type mismatch when composing pending substitutions"
+                  
+extractPrimitiveConst v@(Var IntS name) = case reads name of
+  [] -> v
+  (i, _):_ -> IntLit i
+extractPrimitiveConst v = v                    
                   
 {- Qualifiers -}
 

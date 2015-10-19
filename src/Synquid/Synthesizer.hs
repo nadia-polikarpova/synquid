@@ -51,7 +51,7 @@ synthesize explorerParams solverParams env sch cquals tquals = do
       
     refine :: [Formula] -> QMap -> RProgram -> [Candidate] -> Z3State [Candidate]
     -- refine fmls qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap fmls cands
-    refine fmls qmap p cands = refineCandidates (solverParams { candDoc = pretty . solution }) qmap fmls cands
+    refine fmls qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap fmls cands
     
     prune :: QSpace -> Z3State QSpace  
     prune = pruneQualifiers solverParams
@@ -83,7 +83,7 @@ extractCondQGen qual syms = allSubstitutions qual (Set.toList $ varsOf qual) sym
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
 extractQGenFromType :: RType -> [Formula] -> [Formula]
-extractQGenFromType (ScalarT _ tArgs fml) syms = let fs = if isJust (baseTypeOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
+extractQGenFromType (ScalarT _ tArgs fml) syms = let fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
   in concatMap (flip extractTypeQGen syms) fs ++ concatMap (flip extractQGenFromType syms) tArgs
 extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms ++ extractQGenFromType tRes syms    
 
@@ -91,12 +91,8 @@ extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms
 allSubstitutions (BoolLit True) _ _ = []
 allSubstitutions qual vars syms = do
   let syms' = map extractPrimitiveConst syms
-  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms', baseTypeOf v == baseTypeOf var]
+  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms', sortOf v == sortOf var]
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
   return $ substitute subst qual
   
-extractPrimitiveConst v@(Var IntT name) = case reads name of
-  [] -> v
-  (i, _):_ -> IntLit i
-extractPrimitiveConst v = v  
