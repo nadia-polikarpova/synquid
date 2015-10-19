@@ -7,7 +7,7 @@ import Synquid.Logic
 import Synquid.SMTSolver
 import Synquid.Util
 import Synquid.Pretty
-import Z3.Monad hiding (Z3Env, newEnv)
+import Z3.Monad hiding (Z3Env, newEnv, Sort)
 import qualified Z3.Base as Z3
 
 import Data.Maybe
@@ -30,12 +30,12 @@ import System.IO.Unsafe
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
-  _sorts :: Map BaseType Sort,                -- ^ Sort for integer sets
+  _sorts :: Map Sort Z3.Sort,                 -- ^ Sort for integer sets
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
-  _boolSortAux :: Maybe Sort,                 -- ^ Boolean sort in the auxiliary solver  
+  _boolSortAux :: Maybe Z3.Sort,              -- ^ Boolean sort in the auxiliary solver  
   _controlLiteralsAux :: Bimap Formula AST    -- ^ Control literals for computing UNSAT cores in the auxiliary solver
 }
 
@@ -71,22 +71,21 @@ litFromAux lit = do
   fml <- uses controlLiteralsAux (Bimap.!> lit)
   uses controlLiterals (Bimap.! fml)
   
--- | Lookup Z3 sort for a base type  
-toSort :: BaseType -> Z3State Sort
-toSort b = do
-  resMb <- uses sorts (Map.lookup b)
+-- | Lookup Z3 sort for a Synquid sort
+toZ3Sort :: Sort -> Z3State Z3.Sort
+toZ3Sort s = do
+  resMb <- uses sorts (Map.lookup s)
   case resMb of
     Just s -> return s
     Nothing -> do
-      s <- case b of
-        BoolT -> mkBoolSort
-        IntT -> mkIntSort
+      z3s <- case s of
+        BoolS -> mkBoolSort
+        IntS -> mkIntSort
         -- TypeVarT name -> mkStringSymbol name >>= mkUninterpretedSort
-        TypeVarT name -> mkIntSort
-        DatatypeT name -> mkStringSymbol name >>= mkUninterpretedSort
-        SetT b -> toSort b >>= mkSetSort          
-      sorts %= Map.insert b s
-      return s  
+        UninterpretedS name -> mkIntSort
+        SetS el -> toZ3Sort el >>= mkSetSort          
+      sorts %= Map.insert s z3s
+      return z3s  
   
 instance MonadZ3 Z3State where
   getSolver = gets (envSolver . _mainEnv)
@@ -124,20 +123,20 @@ toAST :: Formula -> Z3State AST
 toAST expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
-  SetLit b xs -> setLiteral b xs
+  SetLit el xs -> setLiteral el xs
   IntLit i -> mkIntNum i  
-  Var b ident -> var b ident
+  Var s ident -> var s ident
   Unknown _ ident -> error $ unwords ["toAST: encountered a second-order unknown", ident]
   Unary op e -> toAST e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toAST e1 <*> toAST e2)  
-  Measure b ident arg -> do
-    let tArg = fromJust $ baseTypeOf arg
+  Measure s ident arg -> do
+    let tArg = fromJust $ sortOf arg
     -- decl <- measure b (ident ++ show tArg ++ show b) tArg
-    decl <- measure b ident tArg
+    decl <- measure s ident tArg
     mapM toAST [arg] >>= mkApp decl
   where
-    setLiteral b xs = do
-      emp <- toSort b >>= mkEmptySet
+    setLiteral el xs = do
+      emp <- toZ3Sort el >>= mkEmptySet
       elems <- mapM toAST xs
       foldM mkSetAdd emp elems
   
@@ -168,29 +167,29 @@ toAST expr = case expr of
         Subset -> mkSetSubset
     list2 o x y = o [x, y]
       
-    -- | Lookup or create a variable with name `ident' and type `baseT' 
-    var baseT ident = do
-      s <- toSort baseT
-      let ident' = ident ++ show baseT
+    -- | Lookup or create a variable with name `ident' and sort `s' 
+    var s ident = do
+      z3s <- toZ3Sort s
+      let ident' = ident ++ show s
       varMb <- uses vars (Map.lookup ident')
             
       case varMb of
         Just v -> return v
         Nothing -> do
           symb <- mkStringSymbol ident
-          v <- mkConst symb s
+          v <- mkConst symb z3s
           vars %= Map.insert ident v
           return v 
       
     -- | Lookup or create a measure declaration with name `ident', type `baseT', and argument type `argType'
-    measure baseT ident argType = do
+    measure s ident argType = do
       declMb <- uses measures (Map.lookup ident)
       case declMb of
         Just d -> return d
         Nothing -> do
           symb <- mkStringSymbol ident
-          argSort <- toSort argType
-          decl <- toSort baseT >>= mkFuncDecl symb [argSort]
+          argSort <- toZ3Sort argType
+          decl <- toZ3Sort s >>= mkFuncDecl symb [argSort]
           measures %= Map.insert ident decl
           return decl      
           
@@ -238,7 +237,7 @@ getAllMUSs assumption mustHave fmls = do
           litAux <- uses controlLiteralsAux (Bimap.! fml)
           return (lit, litAux)
         Nothing -> do
-          bool <- toSort BoolT
+          bool <- toZ3Sort BoolS
           boolAux <- fromJust <$> use boolSortAux
           name <- ((++ "lit") . show . Bimap.size) <$> use controlLiterals
           lit <- mkStringSymbol name >>= flip mkConst bool

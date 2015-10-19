@@ -39,7 +39,7 @@ module Synquid.Pretty (
   vMapDoc,
   -- * Other
   programDoc,
-  -- candidateDoc,
+  candidateDoc,
   -- * Counting
   typeNodeCount,
   programNodeCount
@@ -113,15 +113,14 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 
 {- Formulas -}
 
-instance Pretty BaseType where
-  pretty IntT = text "Int"
-  pretty BoolT = text "Bool"    
-  pretty (SetT b) = text "Set" <+> pretty b
-  pretty (TypeVarT name) = text name
-  pretty (DatatypeT name) = text name
-  
-instance Show BaseType where
-  show = show . pretty  
+instance Pretty Sort where
+  pretty IntS = text "int"
+  pretty BoolS = text "bool"    
+  pretty (SetS el) = text "bet" <+> pretty el
+  pretty (UninterpretedS name) = text name
+
+instance Show Sort where
+  show = show . pretty    
 
 instance Pretty UnOp where
   pretty Neg = text "-"
@@ -174,13 +173,13 @@ fmlDocAt :: Int -> Formula -> Doc
 fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
-    IntLit i -> pretty i
+    IntLit i -> squotes $ pretty i
     SetLit _ elems -> braces $ commaSep $ map pretty elems
-    Var b ident -> text ident -- <> text ":" <> pretty  b
-    Unknown s ident -> if Map.null s then text ident else hMapDoc pretty pretty s <> text ident
+    Var s name -> text name -- <> text ":" <> pretty  s
+    Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    Measure b ident arg -> text ident <+> pretty arg -- text ident <> text ":" <> pretty  b <+> pretty arg
+    Measure b name arg -> text name <+> pretty arg -- text name <> text ":" <> pretty  b <+> pretty arg
   )
   where
     n' = power fml
@@ -188,7 +187,7 @@ fmlDocAt n fml = condParens (n' <= n) (
 instance Pretty Formula where pretty e = fmlDoc e
 
 instance Show Formula where
-  show = show . pretty
+  show = show . pretty  
     
 instance Pretty Valuation where
   pretty val = braces $ commaSep $ map pretty $ Set.toList val
@@ -201,6 +200,15 @@ instance Pretty QSpace where
   
 instance Pretty QMap where
   pretty = vMapDoc text pretty  
+  
+instance Pretty BaseType where
+  pretty IntT = text "Int"
+  pretty BoolT = text "Bool"    
+  pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
+  pretty (DatatypeT name) = text name
+  
+instance Show BaseType where
+  show = show . pretty
     
 caseDoc :: (TypeSkeleton r -> Doc) -> Case r -> Doc
 caseDoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc tdoc (expr cas) 
@@ -264,10 +272,7 @@ instance Pretty RSchema where
 instance Show RSchema where
   show = show . pretty       
  
-instance Pretty (TypeSubstitution ()) where
-  pretty = hMapDoc text pretty
-  
-instance Pretty (TypeSubstitution Formula) where
+instance Pretty TypeSubstitution where
   pretty = hMapDoc text pretty  
     
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
@@ -289,13 +294,10 @@ instance Pretty Constraint where
   pretty = prettyConstraint
   
 instance Pretty Candidate where
-  pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))  
+  pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))    
     
--- candidateDoc :: RProgram -> Candidate -> Doc
--- candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc (const empty) condDoc typeDoc typeDoc prog
-  -- where
-    -- condDoc fml = pretty $ applySolution sol fml
-    -- typeDoc t = pretty $ typeApplySolution sol t
+candidateDoc :: RProgram -> Candidate -> Doc
+candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
     
 {- AST node counting -}
 
