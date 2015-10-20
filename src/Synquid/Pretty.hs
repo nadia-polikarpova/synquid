@@ -173,7 +173,7 @@ fmlDocAt :: Int -> Formula -> Doc
 fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
-    IntLit i -> squotes $ pretty i
+    IntLit i -> pretty i
     SetLit _ elems -> braces $ commaSep $ map pretty elems
     Var s name -> text name -- <> text ":" <> pretty  s
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name

@@ -64,7 +64,8 @@ defaultExplorerParams = ExplorerParams {
   _incrementalSolving = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
-  _solver = undefined
+  _solver = undefined,
+  _context = id
 }
 
 -- | Parameters for constraint solving

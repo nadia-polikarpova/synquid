@@ -13,16 +13,18 @@ import Control.Monad.Trans.List
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
+  _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 1,
+  _matchDepth = 2,
   _condDepth = 1,
+  -- _fixStrategy = AllArguments,
   _fixStrategy = FirstArgument,
   _polyRecursion = True,
   _incrementalSolving = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
-  _solver = undefined
+  _solver = undefined,
+  _context = id
 }
 
 -- | Parameters for constraint solving
@@ -509,12 +511,12 @@ main = do
   -- -- List programs
   -- testHead
   -- testReplicate
-  -- testLength
+  testLength
   -- testAppend
   -- testStutter
   -- testTake
   -- testDrop
-  testDelete
+  -- testDelete
   -- testMap
   -- testUseMap
   -- testUseFold1

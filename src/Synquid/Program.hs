@@ -150,6 +150,21 @@ data Datatype = Datatype {
 
 makeLenses ''Datatype
 
+-- | Building types
+bool = ScalarT BoolT []  
+bool_ = bool ()
+boolAll = bool ftrue
+
+int = ScalarT IntT []
+int_ = int ()
+intAll = int ftrue
+nat = int (valInt |>=| IntLit 0)
+pos = int (valInt |>| IntLit 0)
+
+vart n = ScalarT (TypeVarT n) []
+vart_ n = vart n ()
+vartAll n = vart n ftrue
+
 {- Evaluation environment -}
 
 -- | Typing environment
@@ -160,14 +175,15 @@ data Environment = Environment {
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
+  _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
+  _shapeConstraints :: Map Id SType        -- ^ For polymorphic recursive calls, the shape their types must have
 }
 
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
 emptyEnv :: Environment
-emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Set.empty Set.empty
+emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Set.empty Set.empty Map.empty
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
@@ -260,6 +276,8 @@ data Program r = Program {
 -- | Fully defined programs 
 type RProgram = Program Formula
 
+hole t = Program (PSymbol "??") t
+
 -- | Instantiate unknowns in a type
 programSubstituteTypes :: TypeSubstitution -> RProgram -> RProgram
 programSubstituteTypes subst (Program p t) = Program (programSubstituteTypes' p) (typeSubstitute subst t)
@@ -284,22 +302,7 @@ programApplySolution sol (Program p t) = Program (programApplySolution' p) (type
     programApplySolution' (PFun name p) = PFun name (pas p)    
     programApplySolution' (PIf fml p1 p2) = PIf (applySolution sol fml) (pas p1) (pas p2)
     programApplySolution' (PMatch scr cases) = PMatch (pas scr) (map (\(Case ctr args p) -> Case ctr args (pas p)) cases)
-    programApplySolution' (PFix args p) = PFix args (pas p)
-
--- | Building types
-bool = ScalarT BoolT []  
-bool_ = bool ()
-boolAll = bool ftrue
-
-int = ScalarT IntT []
-int_ = int ()
-intAll = int ftrue
-nat = int (valInt |>=| IntLit 0)
-pos = int (valInt |>| IntLit 0)
-
-vart n = ScalarT (TypeVarT n) []
-vart_ n = vart n ()
-vartAll n = vart n ftrue
+    programApplySolution' (PFix args p) = PFix args (pas p)    
 
 {- Typing constraints -}
           
