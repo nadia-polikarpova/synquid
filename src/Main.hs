@@ -15,10 +15,11 @@ import Control.Monad.Trans.List
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 2,
+  _matchDepth = 1,
   _condDepth = 1,
   -- _fixStrategy = AllArguments,
-  _fixStrategy = FirstArgument,
+  -- _fixStrategy = FirstArgument,
+  _fixStrategy = DisableFixpoint,
   _polyRecursion = True,
   _incrementalSolving = True,
   _condQualsGen = undefined,
@@ -336,9 +337,10 @@ testMap = do
   synthesizeAndPrint "map" env typ [] []  
   
 testUseMap = do
-  let env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $ 
+  let env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $                                     
                                     FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
-                                    (FunctionT "xs" (ScalarT listT [vartAll "a"] ftrue) (ScalarT listT [vartAll "b"] $ mLen valList |=| mLen (listVar "xs")))) .
+                                    (FunctionT "xs" (ScalarT listT [vartAll "a"] ftrue) 
+                                    (ScalarT listT [vartAll "b"] $ mLen valList |=| mLen (listVar "xs")))) .
             addConstant "abs" (FunctionT "x" intAll (int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0))) .
             addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
             addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .                                      
@@ -511,14 +513,14 @@ main = do
   -- -- List programs
   -- testHead
   -- testReplicate
-  testLength
+  -- testLength
   -- testAppend
   -- testStutter
   -- testTake
   -- testDrop
   -- testDelete
   -- testMap
-  -- testUseMap
+  testUseMap
   -- testUseFold1
   -- testMakeIncList
   -- testIncListInsert

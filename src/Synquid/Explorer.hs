@@ -252,7 +252,7 @@ generateE env s = generateVar `mplus` generateApp
 
     symbolType x t@(ScalarT b args _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
-      | otherwise                       = ScalarT b args (Var (toSort b) valueVarName |=| Var (toSort b) x) -- x is a scalar variable, use _v = x
+      | otherwise                       = ScalarT b args (varRefinement x b) -- x is a scalar variable, use _v = x
     symbolType _ t = t    
     
     -- | Explore all applications of shape @s@ of an e-term to an i-term
@@ -269,25 +269,17 @@ generateE env s = generateVar `mplus` generateApp
                               $ generateE env (FunctionT y (vart_ a) s) -- Find all functions that unify with (? -> s)
           let FunctionT x tArg tRes = typ fun
           
-          -- if isFunctionType tArg
-            -- then do
-              -- arg <- generateI env' tArg
-              -- let u = fromJust $ unifier (env ^. boundTypeVars) (shape tArg) (shape $ typ arg)
-              -- u' <- freshRefinementsSubst env' u
-              -- let FunctionT x tArg' tRes' = rTypeSubstitute u' (typ fun)              
-              -- return (env', Program (PApp fun arg) tRes')
-            -- else do
-          
-          (env'', arg) <- local (
-                                  over eGuessDepth (-1 +)
-                                . over context (. \p -> Program (PApp fun p) tRes)) 
-                                $ generateArg env' tArg
-          
-          if isFunctionType (typ arg)
-            then return (env'', Program (PApp fun arg) tRes)
-            else do
+          if isFunctionType tArg
+            then do
+              arg <- local (over context (. \p -> Program (PApp fun p) tRes)) $ generateI env' tArg
+              return (env', Program (PApp fun arg) tRes)
+            else do          
+              (env'', arg) <- local (
+                                      over eGuessDepth (-1 +)
+                                    . over context (. \p -> Program (PApp fun p) tRes)) 
+                                    $ generateArg env' tArg
               (env''', y) <- addGhost env'' arg
-              return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
+              return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))          
               
     generateArg env tArg = do
       (env', arg) <- generateE env (shape tArg)

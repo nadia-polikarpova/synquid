@@ -41,6 +41,10 @@ arity _ = 0
 lastType t@(ScalarT _ _ _) = t
 lastType (FunctionT _ _ tRes) = lastType tRes
 
+varRefinement x b = let s = toSort b in (Var s valueVarName |=| Var s x)
+isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName
+isVarRefinemnt _ = False
+
 -- | Polymorphic type skeletons (parametrized by refinements)
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
@@ -59,7 +63,9 @@ typeSubstitute subst t@(ScalarT (TypeVarT a) [] r) = case Map.lookup a subst of
   Just t' -> addRefinement (typeSubstitute subst t') (typeSubstituteFML subst r) -- In {v: a | r}, we might have to substitute sorts inside r
   Nothing -> t
   where
-    addRefinement (ScalarT base tArgs fml) fml' = ScalarT base tArgs (fml `andClean` fml')
+    addRefinement (ScalarT base tArgs fml) fml' = if isVarRefinemnt fml'
+      then ScalarT base tArgs fml' -- the type of a polymorphic variable does not require any other refinements
+      else ScalarT base tArgs (fml `andClean` fml')
     addRefinement t (BoolLit True) = t
     addRefinement t _ = error $ "addRefinement: applied to function type"
     
