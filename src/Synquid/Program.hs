@@ -160,15 +160,14 @@ data Environment = Environment {
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
-  _shapeConstraints :: Map Id SType        -- ^ For polymorphic recursive calls, the shape their types must have
+  _negAssumptions :: Set Formula           -- ^ Negative unknown assumptions
 }
 
 makeLenses ''Environment  
 
 -- | Environment with no symbols or assumptions
 emptyEnv :: Environment
-emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Set.empty Set.empty Map.empty
+emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Set.empty Set.empty
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
