@@ -110,10 +110,9 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix env t
     generateFix env t = do
       recCalls <- recursiveCalls t
       polymorphic <- asks _polyRecursion
-      -- TODO: add unification constraint
       let env' = if polymorphic
                     then let tvs = env ^. boundTypeVars in 
-                      foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
+                      foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs)) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
                     else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
       p <- generateI env' t
       return $ if null recCalls then p else Program (PFix (map fst recCalls) p) t
