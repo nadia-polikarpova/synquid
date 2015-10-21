@@ -7,6 +7,7 @@ import Synquid.Program
 import Synquid.Pretty
 import Synquid.Explorer
 import Synquid.Synthesizer
+import Synquid.Parser
 
 import Data.List
 import Data.Maybe
@@ -20,7 +21,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [integerTests, listTests, incListTests]
+allTests = TestList [{-integerTests, listTests, incListTests, -}parserTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -53,6 +54,8 @@ incListTests = TestLabel "IncList" $ TestList [
   , TestCase testIncListMerge 
   ]  
   
+parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType]
+
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
   _eGuessDepth = 3,
@@ -307,3 +310,50 @@ testIncListMerge = let
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
   
+-- | Create `Test`s from a parser function and test-cases consisting of an input string and the expected parsed AST.
+createParserTestList :: (Show a, Eq a) => Parser a -> [(String, a)] -> Test
+createParserTestList parser testCases = TestList $ map createTestCase testCases
+  where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ applyParser parser inputStr
+
+testParseScalarType = createParserTestList parseScalarType [
+  ("Int", ScalarT IntT [] $ ftrue),
+  ("List", ScalarT (DatatypeT "List") [] $ ftrue),
+  ("DaT_aType9 (a) ({b | 10 > 1})",
+    ScalarT (DatatypeT "DaT_aType9") [ScalarT (TypeVarT "a") [] ftrue, ScalarT (TypeVarT "b") [] $ IntLit 10 |>| IntLit 1] ftrue),
+  ("{List | True}", ScalarT (DatatypeT "List") [] $ ftrue)]
+
+testParseFunctionType = createParserTestList parseFunctionType [
+  ("(  a : Int -> Int)", FunctionT "a" scalarInt scalarInt),
+  ("(___:Int-> (b:{ Bool|  10 > 0}->Int))",
+    FunctionT "___" scalarInt (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) scalarInt)),
+  ("(  abc0e93__3_0 : {Int | True} -> (  b:Bool->Int))",
+    FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" scalarBool scalarInt))]
+  where
+    scalarInt = ScalarT IntT [] $ BoolLit True
+    scalarBool = ScalarT BoolT [] $ BoolLit True
+
+testParseRefinement = createParserTestList parseFormula testCases
+  where
+    int = IntLit
+    testCases = [
+      ("1 + 1", (int 1) |+| (int 1)),
+      ("!(-1)", fnot $ fneg $ int 1),
+      ("-(!(!1))", fneg $ fnot $ fnot $ int 1),
+      ("1 | 10", (int 1) ||| (int 10)),
+      ("False & (10)", (ffalse) |&| (int 10)),
+      ("(1 + 1) - (4 + 8)", (int 1 |+| int 1) |-| (int 4 |+| int 8)),
+      ("(1 + 4 * 3 - 2) * 3 - (2 * 4)", (int 1 |+| (int 4 |*| int 3) |-| int 2) |*| int 3 |-| (int 2 |*| int 4)),
+      ("(1 * 9 + 8 - 7 /* 3 <= 3 & 1)", ((((int 1 |*| int 9) |+| int 8 |-| int 7 /*/ int 3) |<=| int 3) |&| int 1)),
+      ("8 => 3", (int 8 |=>| int 3)),
+      ("True | False => (False & False <=> False)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
+
+testParseTerm = createParserTestList parseTerm [
+  ("1", IntLit 1),
+  ("123005", IntLit 123005),
+  ("True", BoolLit True),
+  ("False", BoolLit False),
+  ("foobar", Var UnknownT "foobar"),
+  ("{    1,   a, 4 ,  True }", SetLit UnknownT [IntLit 1, Var UnknownT "a", IntLit 4, BoolLit True]),
+  ("{falseEE}", SetLit UnknownT [Var UnknownT "falseEE"]),
+  ("len tail list", Measure UnknownT "len" $ Measure UnknownT "tail" $ Var UnknownT "list"),
+  ("foo 1 + 3", Measure UnknownT "foo" $ IntLit 1 |+| IntLit 3)]
