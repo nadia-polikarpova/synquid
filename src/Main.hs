@@ -18,8 +18,8 @@ explorerParams = ExplorerParams {
   _matchDepth = 1,
   _condDepth = 1,
   -- _fixStrategy = AllArguments,
-  -- _fixStrategy = FirstArgument,
-  _fixStrategy = DisableFixpoint,
+  _fixStrategy = FirstArgument,
+  -- _fixStrategy = DisableFixpoint,
   _polyRecursion = True,
   _incrementalSolving = True,
   _condQualsGen = undefined,
@@ -45,10 +45,10 @@ solverParams = SolverParams {
   }
   
 synthesizeAndPrint name env typ cquals tquals = do
-  print $ text "===" <> text name <> text "==="
-  print $ nest 2 $ text "Spec" $+$ pretty typ -- $+$ parens (text "Size:" <+> pretty (typeNodeCount $ toMonotype typ) <+> text "Quals" <+> pretty (length cquals + length tquals))
+  let goal = Goal name env typ
+  print $ pretty goal
   print empty
-  mProg <- synthesize explorerParams solverParams env typ cquals tquals
+  mProg <- synthesize explorerParams solverParams goal cquals tquals
   case mProg of
     Nothing -> putStr "No Solution"
     Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
@@ -337,19 +337,20 @@ testMap = do
   synthesizeAndPrint "map" env typ [] []  
   
 testUseMap = do
-  let env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $                                     
+  let env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $
                                     FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
                                     (FunctionT "xs" (ScalarT listT [vartAll "a"] ftrue) 
                                     (ScalarT listT [vartAll "b"] $ mLen valList |=| mLen (listVar "xs")))) .
-            addConstant "abs" (FunctionT "x" intAll (int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0))) .
-            addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .                                      
             addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .            
             addList $ emptyEnv
 
-  let typ = Monotype $ FunctionT "xs" (natlist ftrue) (poslist $ mLen valList |=| mLen (listVar "xs"))
+  let typ = Monotype $ FunctionT "xs" (intlist ftrue) (natlist $ mLen valList |=| mLen (listVar "xs"))
+  
+  let cq = do
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (IntLit 0)
     
-  synthesizeAndPrint "useMap" env typ [] []
+  synthesizeAndPrint "useMap" env typ cq []
   
 testUseFold1 = do
   let env = addPolyConstant "fold1" (Forall "a" $ Monotype $ 

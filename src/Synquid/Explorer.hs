@@ -68,7 +68,8 @@ data ExplorerState = ExplorerState {
   _qualifierMap :: QMap,                        -- ^ State spaces for all the unknowns generated from well-formedness constraints
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints since the last liquid assignment refinement
   _typeAssignment :: TypeSubstitution,          -- ^ Current assignment to free type variables
-  _candidates :: [Candidate]                    -- ^ Current set of candidate liquid assignments to unknowns
+  _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
+  _auxGoals :: [Goal]                           -- ^ Subterms to be synthesized independently
 }
 
 makeLenses ''ExplorerState
@@ -88,27 +89,37 @@ type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams s) (m s))
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
-explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Environment -> RSchema -> m s RProgram
-explore params env sch = do
+explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Goal -> m s RProgram
+explore params goal = do
     initCand <- lift $ csInit (_solver params)
-    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] Map.empty [initCand])) params 
+    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] Map.empty [initCand] [])) params 
   where
     go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m RProgram
     go = do
-      p <- generateTopLevel env sch
+      pMain <- generateTopLevel goal
+      p <- generateAuxGoals pMain
       ifM (asks _incrementalSolving) (return ()) (solveConstraints p)
       tass <- use typeAssignment
       sol <- uses candidates (solution . head)
       return $ programApplySolution sol $ programSubstituteTypes tass p
+      
+    generateAuxGoals p = do
+      goals <- use auxGoals
+      case goals of
+        [] -> return p
+        (Goal name env (Monotype spec)) : gs -> do
+          auxGoals .= gs
+          subterm <- generateI env spec
+          generateAuxGoals $ programSubstituteSymbol name subterm p
 
 {- AST exploration -}
     
 -- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@    
-generateTopLevel :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RSchema -> Explorer s m RProgram
-generateTopLevel env (Forall a sch) = generateTopLevel (addTypeVar a env) sch
-generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix env t
+generateTopLevel :: (Monad s, MonadTrans m, MonadPlus (m s)) => Goal -> Explorer s m RProgram
+generateTopLevel (Goal name env (Forall a sch)) = generateTopLevel $ Goal name (addTypeVar a env) sch
+generateTopLevel (Goal name env (Monotype t@(FunctionT _ _ _))) = generateFix
   where
-    generateFix env t = do
+    generateFix = do
       recCalls <- recursiveCalls t
       polymorphic <- asks _polyRecursion
       let env' = if polymorphic
@@ -146,7 +157,7 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix env t
           ScalarT (DatatypeT name) tArgs (fml |&| metric (Var ds valueVarName) |=| metric (Var ds argName)))
     recursiveTArg _ _ = Nothing
     
-generateTopLevel env (Monotype t) = generateI env t    
+generateTopLevel (Goal _ env (Monotype t)) = generateI env t    
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
@@ -270,10 +281,12 @@ generateE env s = generateVar `mplus` generateApp
           let FunctionT x tArg tRes = typ fun
           
           if isFunctionType tArg
-            then do
-              arg <- local (over context (. \p -> Program (PApp fun p) tRes)) $ generateI env' tArg
+            then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
+              f <- freshId "f"
+              let arg = Program (PSymbol f) tArg
+              auxGoals %= ((Goal f env' (Monotype tArg)) :)
               return (env', Program (PApp fun arg) tRes)
-            else do          
+            else do -- First-order argument: generate now         
               (env'', arg) <- local (
                                       over eGuessDepth (-1 +)
                                     . over context (. \p -> Program (PApp fun p) tRes)) 

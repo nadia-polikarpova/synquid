@@ -28,8 +28,8 @@ import Control.Lens
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams Z3State -> SolverParams -> Environment -> RSchema -> [Formula] -> [Formula] -> IO (Maybe RProgram)
-synthesize explorerParams solverParams env sch cquals tquals = do
+synthesize :: ExplorerParams Z3State -> SolverParams -> Goal -> [Formula] -> [Formula] -> IO (Maybe RProgram)
+synthesize explorerParams solverParams goal cquals tquals = do
   ps <- evalZ3State $ observeManyT 1 $ programs
   case ps of
     [] -> return Nothing
@@ -44,7 +44,7 @@ synthesize explorerParams solverParams env sch cquals tquals = do
                            set condQualsGen condQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
-      in explore explorerParams' env sch
+      in explore explorerParams' goal
       
     init :: Z3State Candidate
     init = initialCandidate
@@ -61,9 +61,9 @@ synthesize explorerParams solverParams env sch cquals tquals = do
     
     -- | Qualifier generator for types
     typeQuals = toSpace . foldl (|++|) 
-      (extractQGenFromType (toMonotype sch)) -- extract from spec
+      (extractQGenFromType (toMonotype $ gSpec goal)) -- extract from spec
       (map extractTypeQGen tquals ++ -- extract from given qualifiers
-      map (extractQGenFromType . toMonotype) (Map.elems $ allSymbols env)) -- extract from components
+      map (extractQGenFromType . toMonotype) (Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
     
 {- Qualifier Generators -}
 
