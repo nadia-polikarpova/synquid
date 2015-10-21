@@ -284,7 +284,7 @@ type RProgram = Program Formula
 
 hole t = Program (PSymbol "??") t
 
--- | Instantiate unknowns in a type
+-- | Instantiate type variables in a program
 programSubstituteTypes :: TypeSubstitution -> RProgram -> RProgram
 programSubstituteTypes subst (Program p t) = Program (programSubstituteTypes' p) (typeSubstitute subst t)
   where
@@ -297,7 +297,7 @@ programSubstituteTypes subst (Program p t) = Program (programSubstituteTypes' p)
     programSubstituteTypes' (PMatch scr cases) = PMatch (pst scr) (map (\(Case ctr args p) -> Case ctr args (pst p)) cases)
     programSubstituteTypes' (PFix args p) = PFix args (pst p)
 
--- | Instantiate unknowns in a type
+-- | Instantiate unknowns in a program
 programApplySolution :: Solution -> RProgram -> RProgram
 programApplySolution sol (Program p t) = Program (programApplySolution' p) (typeApplySolution sol t)
   where
@@ -308,12 +308,32 @@ programApplySolution sol (Program p t) = Program (programApplySolution' p) (type
     programApplySolution' (PFun name p) = PFun name (pas p)    
     programApplySolution' (PIf fml p1 p2) = PIf (applySolution sol fml) (pas p1) (pas p2)
     programApplySolution' (PMatch scr cases) = PMatch (pas scr) (map (\(Case ctr args p) -> Case ctr args (pas p)) cases)
-    programApplySolution' (PFix args p) = PFix args (pas p)    
+    programApplySolution' (PFix args p) = PFix args (pas p)
+    
+-- | Substitute a symbol for a subterm in a program    
+programSubstituteSymbol :: Id -> RProgram -> RProgram -> RProgram
+programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteSymbol' p) t
+  where
+    pss = programSubstituteSymbol name subterm
+    
+    programSubstituteSymbol' (PSymbol x) = if x == name then content subterm else p
+    programSubstituteSymbol' (PApp fun arg) = PApp (pss fun) (pss arg)
+    programSubstituteSymbol' (PFun name pBody) = PFun name (pss pBody)    
+    programSubstituteSymbol' (PIf fml p1 p2) = PIf fml (pss p1) (pss p2)
+    programSubstituteSymbol' (PMatch scr cases) = PMatch (pss scr) (map (\(Case ctr args pBody) -> Case ctr args (pss pBody)) cases)
+    programSubstituteSymbol' (PFix args pBody) = PFix args (pss pBody)    
 
-{- Typing constraints -}
+{- Misc -}
           
 -- | Typing constraints
 data Constraint = Subtype Environment RType RType
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
+  
+-- | Synthesis goal
+data Goal = Goal {
+  gName :: Id, 
+  gEnvironment :: Environment, 
+  gSpec :: RSchema
+}
   

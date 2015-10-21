@@ -80,7 +80,7 @@ defaultSolverParams = SolverParams {
   }
 
 testSynthesizeSuccess explorerParams solverParams env typ cquals tquals = do
-  mProg <- synthesize explorerParams solverParams env typ cquals tquals
+  mProg <- synthesize explorerParams solverParams (Goal "test" env typ) cquals tquals
   assertBool "Synthesis failed" $ isJust mProg  
   
 {- Testing Synthesis of Integer Programs -}
@@ -88,6 +88,10 @@ testSynthesizeSuccess explorerParams solverParams env typ cquals tquals = do
 inequalities = do
   op <- [Ge, Le, Neq]
   return $ Binary op (intVar "x") (intVar "y")
+  
+inequalities0 = do
+  op <- [Ge, Le, Neq]
+  return $ Binary op (intVar "x") (IntLit 0)
 
 -- | Single application  
 testApp = let 
@@ -241,13 +245,10 @@ testUseMap = let
   env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $ 
                                     FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
                                     (FunctionT "xs" (ScalarT listT [vartAll "a"] ftrue) (ScalarT listT [vartAll "b"] $ mLen valList |=| mLen (listVar "xs")))) .
-        addConstant "abs" (FunctionT "x" intAll (int (valInt |>=| intVar "x" |&| valInt |>=| IntLit 0))) .
-        addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .                                      
         addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .            
         addList $ emptyEnv
-  typ = Monotype $ FunctionT "xs" (natlist ftrue) (poslist $ mLen valList |=| mLen (listVar "xs"))
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []  
+  typ = Monotype $ FunctionT "xs" (intlist ftrue) (natlist $ mLen valList |=| mLen (listVar "xs"))
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities0 []  
   
 testUseFold1 = let
   env = addPolyConstant "fold1" (Forall "a" $ Monotype $ 
