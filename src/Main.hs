@@ -15,7 +15,7 @@ import Control.Monad.Trans.List
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 1,
+  _matchDepth = 2,
   _condDepth = 1,
   -- _fixStrategy = AllArguments,
   _fixStrategy = FirstArgument,
@@ -24,7 +24,6 @@ explorerParams = ExplorerParams {
   _incrementalSolving = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
-  _solver = undefined,
   _context = id
 }
 
@@ -45,10 +44,12 @@ solverParams = SolverParams {
   }
   
 synthesizeAndPrint name env typ cquals tquals = do
-  let goal = Goal name env typ
-  print $ pretty goal
+  print $ text "===" <> text name <> text "===" $+$ nest 2 (text "Spec" $+$ pretty typ) 
+  -- $+$ parens (text "Size:" <+> pretty (typeNodeCount $ toMonotype typ) <+> text "Quals" <+> pretty (length cquals + length tquals))
   print empty
-  mProg <- synthesize explorerParams solverParams goal cquals tquals
+  
+  let goal = Goal name env typ explorerParams 
+  mProg <- synthesize goal solverParams cquals tquals
   case mProg of
     Nothing -> putStr "No Solution"
     Just prog -> print $ nest 2 $ text "Solution" $+$ programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
@@ -378,11 +379,11 @@ mILen = Measure IntS "len"
 mIElems = Measure (SetS $ UninterpretedS "a") "elems"
 
 -- | Add list datatype to the environment
-addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
-          addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0 |&| 
+addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just $ mLen)) .
+          addPolyConstant "INil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0 |&| 
                                                                mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
-          addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
+          addPolyConstant "ICons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
                                                          (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"] ftrue) 
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1 |&| 
                                                                 mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
@@ -402,7 +403,6 @@ testMakeIncList = do
 testIncListInsert = do
   let env = addIncList $ emptyEnv
 
-  -- let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "x" (vartAll "a") (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))
   let typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))
           
   let cq = do
@@ -411,6 +411,20 @@ testIncListInsert = do
 
   synthesizeAndPrint "insert" env typ cq []
   
+testInsertionSort = do
+  let env = 
+        addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))) .
+        addList .
+        addIncList $ emptyEnv
+
+  let typ = Forall "a" $ Monotype $ (FunctionT "xs" listAll ((incList $ mIElems valIncList |=| mElems (listVar "xs"))))
+          
+  let cq = do
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (intVar "y")
+
+  synthesizeAndPrint "insertSort" env typ cq []  
+  
 testIncListMerge = do
   let env = -- addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))) .
             addIncList $ emptyEnv
@@ -418,10 +432,10 @@ testIncListMerge = do
   let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
           
   let cq = do
-        op <- [Ge, Le, Neq]
-        return $ Binary op (intVar "x") (intVar "y")
+        op <- [Lt]
+        return $ Binary op (vartVar "a" "x") (vartVar "a" "y")
 
-  synthesizeAndPrint "merge" env typ cq []                                                          
+  synthesizeAndPrint "merge" env typ cq []
   
     
 {- Tree programs -}
@@ -521,11 +535,12 @@ main = do
   -- testDrop
   -- testDelete
   -- testMap
-  testUseMap
+  -- testUseMap
   -- testUseFold1
   -- testMakeIncList
   -- testIncListInsert
-  -- testIncListMerge
+  -- testInsertionSort
+  testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

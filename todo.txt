@@ -1,5 +1,4 @@
 - Pruning dead branches in nested matches (Check for false LHS when validating constraints?)
-- Infer conditional qualifiers from types
 - E-guess caching; even more general: anything with the same or weaker type we don't need
 - Pass the spec down to eGen, when generating app, check if fun ==> !spec, in that case no argument exists
 
