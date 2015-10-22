@@ -45,7 +45,7 @@ data FixpointStrategy =
   | AllArguments      -- ^ Fixpoint decreases the lexicographical tuple of all well-founded argument in declaration order 
 
 -- | Parameters of program exploration
-data ExplorerParams s = ExplorerParams {
+data ExplorerParams = ExplorerParams {
   _eGuessDepth :: Int,                -- ^ Maximum depth of application trees
   _scrutineeDepth :: Int,             -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,                 -- ^ Maximum nesting level of matches
@@ -55,11 +55,18 @@ data ExplorerParams s = ExplorerParams {
   _incrementalSolving :: Bool,        -- ^ Solve constraints as they appear (as opposed to all at once)?
   _condQualsGen :: QualsGen,          -- ^ Qualifier generator for conditionals
   _typeQualsGen :: QualsGen,          -- ^ Qualifier generator for types
-  _solver :: ConstraintSolver s,      -- ^ Constraint solver
   _context :: RProgram -> RProgram    -- ^ Context in which subterm is currently being generated (used only for logging)
 }
 
 makeLenses ''ExplorerParams
+
+-- | Synthesis goal
+data Goal = Goal {
+  gName :: Id, 
+  gEnvironment :: Environment, 
+  gSpec :: RSchema,
+  gParams :: ExplorerParams
+}
 
 -- | State of program exploration
 data ExplorerState = ExplorerState {
@@ -79,26 +86,21 @@ addConstraint c = typingConstraints %= (c :)
 addTypeAssignment tv t = typeAssignment %= Map.insert tv t
 addHornClause lhs rhs = hornClauses %= ((lhs |=>| rhs) :)
 
-addQuals name quals = do
-  solv <- asks _solver
-  quals' <- lift . lift . lift . csPruneQuals solv $ quals
-  qualifierMap %= Map.insert name quals'
-
 -- | Computations that explore programs, parametrized by the the constraint solver and the backtracking monad
-type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams s) (m s))
+type Explorer s m = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolver s) (m s))
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
-explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => ExplorerParams s -> Goal -> m s RProgram
-explore params goal = do
-    initCand <- lift $ csInit (_solver params)
-    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] Map.empty [initCand] [])) params 
+explore :: (Monad s, MonadTrans m, MonadPlus (m s)) => Goal -> ConstraintSolver s -> m s RProgram
+explore goal solver = do
+    initCand <- lift $ csInit solver
+    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] Map.empty [initCand] [])) (gParams goal, solver) 
   where
     go :: (Monad s, MonadTrans m, MonadPlus (m s)) => Explorer s m RProgram
     go = do
-      pMain <- generateTopLevel goal
+      pMain <- generateTopLevel (gEnvironment goal) (gSpec goal)
       p <- generateAuxGoals pMain
-      ifM (asks _incrementalSolving) (return ()) (solveConstraints p)
+      ifM (asks $ _incrementalSolving . fst) (return ()) (solveConstraints p)
       tass <- use typeAssignment
       sol <- uses candidates (solution . head)
       return $ programApplySolution sol $ programSubstituteTypes tass p
@@ -107,7 +109,7 @@ explore params goal = do
       goals <- use auxGoals
       case goals of
         [] -> return p
-        (Goal name env (Monotype spec)) : gs -> do
+        (Goal name env (Monotype spec) params) : gs -> local (set _1 params) $ do
           auxGoals .= gs
           subterm <- generateI env spec
           generateAuxGoals $ programSubstituteSymbol name subterm p
@@ -115,23 +117,34 @@ explore params goal = do
 {- AST exploration -}
     
 -- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@    
-generateTopLevel :: (Monad s, MonadTrans m, MonadPlus (m s)) => Goal -> Explorer s m RProgram
-generateTopLevel (Goal name env (Forall a sch)) = generateTopLevel $ Goal name (addTypeVar a env) sch
-generateTopLevel (Goal name env (Monotype t@(FunctionT _ _ _))) = generateFix
+generateTopLevel :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RSchema -> Explorer s m RProgram
+generateTopLevel env (Forall a sch) = generateTopLevel (addTypeVar a env) sch
+generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
   where
     generateFix = do
       recCalls <- recursiveCalls t
-      polymorphic <- asks _polyRecursion
+      polymorphic <- asks $ _polyRecursion . fst
       let env' = if polymorphic
                     then let tvs = env ^. boundTypeVars in 
                       foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
                     else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
       let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
-      p <- local (over context (. ctx)) $ generateI env' t
+      p <- local (over (_1 . context) (. ctx)) $ generateI env' t
       return $ ctx p
 
     -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@;
     -- (when using lexicographic termination metrics, different calls differ in the component they decrease; otherwise at most one call). 
+    -- recursiveCalls (FunctionT x1 tArg1 (FunctionT x2 tArg2 tRes)) = do      
+      -- y1 <- freshId "x"
+      -- y2 <- freshId "x"
+      -- f <- freshId "f"
+      -- let (ScalarT dt@(DatatypeT d) tArgs _) = tArg1
+      -- let (Just metric) = env ^. datatypes . to (Map.! d) . wfMetric
+      -- let ds = toSort dt
+      -- let tArg1' = ScalarT dt tArgs (metric (Var ds valueVarName) |<=| metric (Var ds x1))
+      -- let tArg2' = ScalarT dt tArgs (metric (Var ds y1) |<| metric (Var ds x1) ||| metric (Var ds valueVarName) |<| metric (Var ds x2))
+      -- return $ [(f, FunctionT y1 tArg1' (FunctionT y2 tArg2' (renameVar x1 y1 tArg1 (renameVar x2 y2 tArg2 tRes))))]      
+      
     recursiveCalls (FunctionT x tArg tRes) = do
       y <- freshId "x"
       calls' <- recursiveCalls tRes
@@ -139,7 +152,7 @@ generateTopLevel (Goal name env (Monotype t@(FunctionT _ _ _))) = generateFix
         Nothing -> return $ map (\(f, tRes') -> (f, FunctionT y tArg (renameVar x y tArg tRes'))) calls'
         Just (tArgLt, tArgEq) -> do
           f <- freshId "f"
-          fixStrategy <- asks _fixStrategy
+          fixStrategy <- asks $ _fixStrategy . fst
           case fixStrategy of
             AllArguments -> return $ (f, FunctionT y tArgLt (renameVar x y tArg tRes)) : map (\(f, tRes') -> (f, FunctionT y tArgEq (renameVar x y tArg tRes'))) calls'
             FirstArgument -> return [(f, FunctionT y tArgLt (renameVar x y tArg tRes))]
@@ -157,7 +170,7 @@ generateTopLevel (Goal name env (Monotype t@(FunctionT _ _ _))) = generateFix
           ScalarT (DatatypeT name) tArgs (fml |&| metric (Var ds valueVarName) |=| metric (Var ds argName)))
     recursiveTArg _ _ = Nothing
     
-generateTopLevel (Goal _ env (Monotype t)) = generateI env t    
+generateTopLevel env (Monotype t) = generateI env t    
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
@@ -167,7 +180,7 @@ generateI env t@(FunctionT x tArg tRes) = generateLambda
   where
     generateLambda = do
       let ctx = \p -> Program (PFun x p) t    
-      pBody <- local (over context (. ctx)) $ generateI (addVariable x tArg $ env) tRes
+      pBody <- local (over (_1 . context) (. ctx)) $ generateI (addVariable x tArg $ env) tRes
       return $ ctx pBody
             
 generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateIf
@@ -176,27 +189,30 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
     guessE = do
       (env', res) <- generateE env (shape t)
       addConstraint $ Subtype env' (typ res) t
-      ifM (asks _incrementalSolving) (solveConstraints res) (return ())
+      ifM (asks $ _incrementalSolving . fst) (solveConstraints res) (return ())
       return res
       
     -- | Generate a match term of type @t@
     generateMatch = do
-      d <- asks _matchDepth
+      d <- asks $ _matchDepth . fst
       if d == 0
         then mzero
         else do
           scrDT <- msum (map return $ Map.keys (env ^. datatypes))                                         -- Pick a datatype to match on
+          let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
           tArgs <- map vart_ `liftM` replicateM (((env ^. datatypes) Map.! scrDT) ^. typeArgCount) (freshId "_a")
           (env', pScrutinee) <- local (
-                                        (\params -> set eGuessDepth (view scrutineeDepth params) params)
-                                      . over context (. \p -> Program (PMatch p []) t)) 
+                                        over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params)
+                                      . over (_1 . context) (. \p -> Program (PMatch p []) t)) 
                                       $ generateE env (ScalarT (DatatypeT scrDT) tArgs ())   -- Guess a scrutinee of the chosen shape
-          guard (Set.null $ typeVarsOf (typ pScrutinee) `Set.difference` Set.fromList (env ^. boundTypeVars)) -- Reject scrutinees with free type variables
+          let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) && -- Has not been used before
+                                (not $ headSymbol pScrutinee `elem` ctors)           -- Is not a value
+          guard isGoodScrutinee
           
-          (env'', x) <- addGhost env' pScrutinee
-          pCases <- mapM (generateCase env'' x pScrutinee) $ ((env ^. datatypes) Map.! scrDT) ^. constructors                -- Generate a case for each constructor of the datatype
+          (env'', x) <- addGhost (over usedScrutinees (pScrutinee :) env') pScrutinee
+          pCases <- mapM (generateCase env'' x pScrutinee) ctors                 -- Generate a case for each constructor of the datatype
           return $ Program (PMatch pScrutinee pCases) t
-      
+          
     -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
     generateCase env scrName pScrutinee consName = do
       case Map.lookup consName (allSymbols env) of
@@ -207,9 +223,9 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
           let ScalarT baseT _ _ = (typ pScrutinee)          
           (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
           pCaseExpr <- local (
-                               over matchDepth (-1 +)
-                             . over context (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
-                             $ generateI caseEnv t          
+                               over (_1 . matchDepth) (-1 +)
+                             . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
+                            $ generateI caseEnv t
           return $ Case consName args pCaseExpr
           
     matchConsType (ScalarT (DatatypeT _) vars _) (ScalarT (DatatypeT _) args _) = zipWithM_ (\(ScalarT (TypeVarT a) [] (BoolLit True)) t -> addTypeAssignment a t) vars args 
@@ -219,25 +235,25 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
       return $ ([], addNegAssumption (fnot $ subst fml) $ env) -- here vacuous cases are allowed
       -- return $ ([], addAssumption (subst fml) . addAssumption (subst fml') $ env) -- here disallowed unless no other choice
     addCaseSymbols env x (FunctionT y tArg tRes) = do
-      argName <- freshId "y"
+      argName <- freshId "z"
       (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
       return (argName : args, env')          
     
     -- | Generate a conditional term of type @t@
     generateIf = do
-      d <- asks _condDepth
+      d <- asks $ _condDepth . fst
       if d == 0
         then mzero
         else do    
           cond <- Unknown Map.empty `liftM` freshId "c"
           addConstraint $ WellFormedCond env cond
           pThen <- local (
-                      over condDepth (-1 +) 
-                    . over context (. \p -> Program (PIf cond p (hole t)) t)) 
+                      over (_1 . condDepth) (-1 +) 
+                    . over (_1 . context) (. \p -> Program (PIf cond p (hole t)) t)) 
                     $ generateI (addAssumption cond env) t
           pElse <- local (
-                      over condDepth (-1 +)
-                    . over context (. \p -> Program (PIf cond pThen p) t)) 
+                      over (_1 . condDepth) (-1 +)
+                    . over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) 
                     $ generateI (addNegAssumption cond env) t          
           return $ Program (PIf cond pThen pElse) t
 
@@ -258,7 +274,7 @@ generateE env s = generateVar `mplus` generateApp
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sh -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh)
-      ifM (asks _incrementalSolving) (solveConstraints p) (return ())      
+      ifM (asks $ _incrementalSolving . fst) (solveConstraints p) (return ())      
       return (env, p)
 
     symbolType x t@(ScalarT b args _)
@@ -268,7 +284,7 @@ generateE env s = generateVar `mplus` generateApp
     
     -- | Explore all applications of shape @s@ of an e-term to an i-term
     generateApp = do
-      d <- asks _eGuessDepth
+      d <- asks $ _eGuessDepth . fst
       let maxArity = fst $ Map.findMax (env ^. symbols)
       if d == 0 || arity s == maxArity
         then mzero 
@@ -276,20 +292,18 @@ generateE env s = generateVar `mplus` generateApp
           a <- freshId "_a"
           y <- freshId "x"
           (env', fun) <- local (
-                                over context (. \p -> Program (PApp p (hole (refineTop $ vart_ a))) (refineTop s))) 
+                                over (_1 . context) (. \p -> Program (PApp p (hole (refineTop $ vart_ a))) (refineTop s))) 
                               $ generateE env (FunctionT y (vart_ a) s) -- Find all functions that unify with (? -> s)
           let FunctionT x tArg tRes = typ fun
           
           if isFunctionType tArg
             then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-              f <- freshId "f"
-              let arg = Program (PSymbol f) tArg
-              auxGoals %= ((Goal f env' (Monotype tArg)) :)
+              arg <- enqueueGoal env' tArg
               return (env', Program (PApp fun arg) tRes)
             else do -- First-order argument: generate now         
               (env'', arg) <- local (
-                                      over eGuessDepth (-1 +)
-                                    . over context (. \p -> Program (PApp fun p) tRes)) 
+                                      over (_1 . eGuessDepth) (-1 +)
+                                    . over (_1 . context) (. \p -> Program (PApp fun p) tRes)) 
                                     $ generateArg env' tArg
               (env''', y) <- addGhost env'' arg
               return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))          
@@ -297,8 +311,14 @@ generateE env s = generateVar `mplus` generateApp
     generateArg env tArg = do
       (env', arg) <- generateE env (shape tArg)
       addConstraint $ Subtype env' (typ arg) tArg
-      ifM (asks _incrementalSolving) (solveConstraints arg) (return ())
+      ifM (asks $ _incrementalSolving . fst) (solveConstraints arg) (return ())
       return (env', arg)
+      
+enqueueGoal env typ = do
+  g <- freshId "g"
+  params <- asks fst
+  auxGoals %= ((Goal g env (Monotype typ) params) :)
+  return $ Program (PSymbol g) typ      
    
 addGhost :: (Monad s, MonadTrans m, MonadPlus (m s)) => Environment -> RProgram -> Explorer s m (Environment, Id)   
 addGhost env (Program (PSymbol name) _) | not (Set.member name (env ^. constants)) = return (env, name)
@@ -312,7 +332,7 @@ addGhost env p = do
 -- (program @p@ is only used for debug information)
 solveConstraints :: (Monad s, MonadTrans m, MonadPlus (m s)) => RProgram -> Explorer s m ()
 solveConstraints p = do
-  ctx <- asks _context
+  ctx <- asks $ _context . fst
   debug 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p)) $ return ()
 
   simplifyAllConstraints
@@ -342,7 +362,7 @@ solveConstraints p = do
       
     -- | Refine the current liquid assignments using the horn clauses      
     solveHornClauses = do
-      solv <- asks _solver
+      solv <- asks snd
       tass <- use typeAssignment
       qmap <- use qualifierMap
       clauses <- use hornClauses
@@ -426,17 +446,23 @@ processConstraint (WellFormed env (ScalarT baseT [] fml))
   = case fml of
       Unknown _ u -> do
         tass <- use typeAssignment
-        tq <- asks _typeQualsGen
+        tq <- asks $ _typeQualsGen . fst
         addQuals u (tq $ Var (toSort baseT) valueVarName : allScalars env tass)
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
-      cq <- asks _condQualsGen
+      cq <- asks $ _condQualsGen . fst
       addQuals u (cq $ allScalars env tass)
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
           
 {- Utility -}
+
+addQuals :: (Monad s, MonadTrans m, MonadPlus (m s)) => Id -> QSpace -> Explorer s m ()
+addQuals name quals = do
+  solv <- asks snd
+  quals' <- lift . lift . lift . csPruneQuals solv $ quals
+  qualifierMap %= Map.insert name quals'
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: (Monad s, MonadTrans m, MonadPlus (m s)) => String -> Explorer s m String

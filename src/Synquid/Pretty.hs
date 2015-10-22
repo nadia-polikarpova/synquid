@@ -298,10 +298,6 @@ instance Pretty Candidate where
     
 candidateDoc :: RProgram -> Candidate -> Doc
 candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
-
-instance Pretty Goal where
-  pretty (Goal name env spec) =  text "===" <> text name <> text "===" $+$ nest 2 (text "Spec" $+$ pretty spec) 
-  -- $+$ parens (text "Size:" <+> pretty (typeNodeCount $ toMonotype typ) <+> text "Quals" <+> pretty (length cquals + length tquals))
     
 {- AST node counting -}
 
