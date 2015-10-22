@@ -15,7 +15,7 @@ import Control.Monad.Trans.List
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 2,
+  _matchDepth = 1,
   _condDepth = 1,
   -- _fixStrategy = AllArguments,
   _fixStrategy = FirstArgument,
@@ -538,9 +538,9 @@ main = do
   -- testUseMap
   -- testUseFold1
   -- testMakeIncList
-  -- testIncListInsert
+  testIncListInsert
   -- testInsertionSort
-  testIncListMerge
+  -- testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
