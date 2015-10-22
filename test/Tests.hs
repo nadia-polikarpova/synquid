@@ -79,7 +79,7 @@ defaultSolverParams = SolverParams {
   }
 
 testSynthesizeSuccess explorerParams solverParams env typ cquals tquals = do
-  mProg <- synthesize (Goal "test" env typ undefined explorerParams) solverParams cquals tquals
+  mProg <- synthesize (Goal "test" env typ explorerParams) solverParams cquals tquals
   assertBool "Synthesis failed" $ isJust mProg  
   
 {- Testing Synthesis of Integer Programs -}

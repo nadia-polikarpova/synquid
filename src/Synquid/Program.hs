@@ -293,6 +293,13 @@ addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert n
 addDatatype :: Id -> Datatype -> Environment -> Environment
 addDatatype name dt = over datatypes (Map.insert name dt)
 
+-- | 'lookupConstructor' @ctor env@ : the name of the datatype for which @ctor@ is regisered as a constructor in @env@, if any
+lookupConstructor :: Id -> Environment -> Maybe Id
+lookupConstructor ctor env = let m = Map.filter (\dt -> ctor `elem` dt ^. constructors) (env ^. datatypes)
+  in if Map.null m
+      then Nothing
+      else Just $ fst $ Map.findMin m
+
 -- | 'addTypeVar' @a@ : Add bound type variable @a@ to the environment
 addTypeVar :: Id -> Environment -> Environment
 addTypeVar a = over boundTypeVars (a :)
@@ -312,6 +319,10 @@ addAssumption f = assumptions %~ Set.insert f
 -- | 'addNegAssumption' @f env@ : @env@ with extra assumption not @f@
 addNegAssumption :: Formula -> Environment -> Environment
 addNegAssumption f = negAssumptions %~ Set.insert f
+
+-- | 'addScrutinee' @p env@ : @env@ with @p@ marked as having been scrutinized already
+addScrutinee :: RProgram -> Environment -> Environment
+addScrutinee p = usedScrutinees %~ (p :)
 
 -- | Positive and negative formulas encoded in an environment    
 embedding :: Environment -> TypeSubstitution -> (Set Formula, Set Formula)    
