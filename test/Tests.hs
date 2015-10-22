@@ -352,8 +352,8 @@ testParseTerm = createParserTestList parseTerm [
   ("123005", IntLit 123005),
   ("True", BoolLit True),
   ("False", BoolLit False),
-  ("foobar", Var UnknownT "foobar"),
-  ("{    1,   a, 4 ,  True }", SetLit UnknownT [IntLit 1, Var UnknownT "a", IntLit 4, BoolLit True]),
-  ("{falseEE}", SetLit UnknownT [Var UnknownT "falseEE"]),
-  ("len tail list", Measure UnknownT "len" $ Measure UnknownT "tail" $ Var UnknownT "list"),
-  ("foo 1 + 3", Measure UnknownT "foo" $ IntLit 1 |+| IntLit 3)]
+  ("foobar", Var UnknownS "foobar"),
+  ("{    1,   a, 4 ,  True }", SetLit UnknownS [IntLit 1, Var UnknownS "a", IntLit 4, BoolLit True]),
+  ("{falseEE}", SetLit UnknownS [Var UnknownS "falseEE"]),
+  ("len tail list", Measure UnknownS "len" $ Measure UnknownS "tail" $ Var UnknownS "list"),
+  ("foo 1 + 3", Measure UnknownS "foo" $ IntLit 1 |+| IntLit 3)]

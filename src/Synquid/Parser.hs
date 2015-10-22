@@ -124,18 +124,18 @@ parseSetLit = do
   elements <- Parsec.sepBy parseFormula $ Parsec.spaces *> Parsec.char ',' *> Parsec.spaces
   Parsec.spaces
   Parsec.char '}'
-  return $ SetLit UnknownT elements
+  return $ SetLit UnknownS elements
   <?> "set"
 
 parseVar :: Parser Formula
-parseVar = fmap (Var UnknownT) parseIdentifier <?> "variable"
+parseVar = fmap (Var UnknownS) parseIdentifier <?> "variable"
 
 parseMeasure :: Parser Formula
 parseMeasure = do
   measureName <- parseIdentifier
   Parsec.spaces
   arg <- parseFormula
-  return $ Measure UnknownT measureName arg
+  return $ Measure UnknownS measureName arg
   <?> "measure"
 
 parseIdentifier :: Parser Id
