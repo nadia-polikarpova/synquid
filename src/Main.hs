@@ -15,10 +15,10 @@ import Control.Monad.Trans.List
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 1,
+  _matchDepth = 2,
   _condDepth = 1,
-  -- _fixStrategy = AllArguments,
-  _fixStrategy = FirstArgument,
+  _fixStrategy = AllArguments,
+  -- _fixStrategy = FirstArgument,
   -- _fixStrategy = DisableFixpoint,
   _polyRecursion = True,
   _incrementalSolving = True,
@@ -535,10 +535,10 @@ main = do
   -- testDrop
   -- testDelete
   -- testMap
-  -- testUseMap
+  testUseMap
   -- testUseFold1
   -- testMakeIncList
-  testIncListInsert
+  -- testIncListInsert
   -- testInsertionSort
   -- testIncListMerge
   -- -- Tree programs
