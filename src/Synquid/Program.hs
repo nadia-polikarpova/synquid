@@ -193,7 +193,7 @@ data BareProgram r =
 -- | Programs annotated with types  
 data Program r = Program {
   content :: BareProgram r,
-  typ :: TypeSkeleton r
+  typeOf :: TypeSkeleton r
 } deriving Eq
 
 -- | Fully defined programs 

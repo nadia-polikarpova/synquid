@@ -188,7 +188,7 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
     -- | Guess and check
     guessE = do
       (env', res) <- generateE env t
-      addConstraint $ Subtype env' (typ res) t
+      addConstraint $ Subtype env' (typeOf res) t
       ifM (asks $ _incrementalSolving . fst) (solveConstraints res) (return ())
       return res
       
@@ -219,8 +219,8 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
         Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
         Just consSch -> do
           consT <- freshTypeVars consSch
-          matchConsType (lastType consT) (typ pScrutinee)
-          let ScalarT baseT _ _ = (typ pScrutinee)          
+          matchConsType (lastType consT) (typeOf pScrutinee)
+          let ScalarT baseT _ _ = (typeOf pScrutinee)          
           (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
           pCaseExpr <- local (
                                over (_1 . matchDepth) (-1 +)
@@ -254,24 +254,34 @@ generateI env t@(ScalarT _ _ _) = guessE `mplus` generateMatch `mplus` generateI
                     . over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) 
                     $ generateI (addNegAssumption cond env) t          
           return $ Program (PIf cond pThen pElse) t
-
-  
--- | 'generateE' @env s@ : explore all elimination terms of type shape @s@ in environment @env@
--- (bottom-up phase of bidirectional typechecking)  
+          
+-- | 'generateE' @env typ@ : explore all elimination terms of type shape @shape typ@ in environment @env@
+-- (bottom-up phase of bidirectional typechecking)
 generateE :: (Monad s, MonadTrans m, MonadLogic (m s)) => Environment -> RType -> Explorer s m (Environment, RProgram)
-generateE env s = generateVar `mplus` generateApp
+generateE env typ = do
+  d <- asks $ _eGuessDepth . fst
+  generateEUpTo env typ d    
+
+-- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
+generateEUpTo :: (Monad s, MonadTrans m, MonadLogic (m s)) => Environment -> RType -> Int -> Explorer s m (Environment, RProgram)
+generateEUpTo env typ d = msum $ map (generateEAt env typ) [0..d]  
+
+-- | 'generateEAt' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth exactly to @d@
+generateEAt :: (Monad s, MonadTrans m, MonadLogic (m s)) => Environment -> RType -> Int -> Explorer s m (Environment, RProgram)
+generateEAt _ _ d | d < 0 = mzero
+
+generateEAt env typ 0 = do
+  symbols <- T.mapM freshTypeVars $ symbolsOfArity (arity typ) env
+  msum $ map pickSymbol $ Map.toList symbols
+  -- foldl interleave mzero $ map pickSymbol $ Map.toList symbols
+  
   where
-    -- | Explore all variables of shape @s@
-    generateVar = do
-      symbols <- T.mapM freshTypeVars $ symbolsOfArity (arity s) env
-      msum $ map pickSymbol $ Map.toList symbols
-      
     pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
       do
         case lookupConstructor name env of
-          Just d -> matchConsType (lastType t) (lastType s) -- It's datatype constructor: its result type has a special form, so just distribute type parameters
+          Just d -> matchConsType (lastType t) (lastType typ) -- It's datatype constructor: its result type has a special form, so just distribute type parameters
           Nothing -> do -- It's a function:
-            addConstraint $ Subtype env (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType s) -- Add unification constraint (i.e. subtyping constraint on the shapes)
+            addConstraint $ Subtype env (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType typ) -- Add unification constraint (i.e. subtyping constraint on the shapes)
             case Map.lookup name (env ^. shapeConstraints) of
               Nothing -> return ()
               Just sh -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) -- It's a plymorphic recursive call and has additional shape constraints
@@ -282,36 +292,35 @@ generateE env s = generateVar `mplus` generateApp
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
       | otherwise                       = ScalarT b args (varRefinement x b) -- x is a scalar variable, use _v = x
     symbolType _ t = t    
-    
-    -- | Explore all applications of shape @s@ of an e-term to an i-term
-    generateApp = do
-      d <- asks $ _eGuessDepth . fst
-      let maxArity = fst $ Map.findMax (env ^. symbols)
-      if d == 0 || arity s == maxArity
-        then mzero 
-        else do          
-          a <- freshId "_a"
-          y <- freshId "x"
-          (env', fun) <- local (
-                                over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll a)) s)) 
-                              $ generateE env (FunctionT y (vartAll a) s) -- Find all functions that unify with (? -> s)
-          let FunctionT x tArg tRes = typ fun
-          
-          if isFunctionType tArg
-            then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-              arg <- enqueueGoal env' tArg
-              return (env', Program (PApp fun arg) tRes)
-            else do -- First-order argument: generate now         
-              (env'', arg) <- local (
-                                      over (_1 . eGuessDepth) (-1 +)
-                                    . over (_1 . context) (. \p -> Program (PApp fun p) tRes)) 
-                                    $ generateArg env' tArg
-              (env''', y) <- addGhost arg env''
-              return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))          
+        
+generateEAt env typ d = do    
+  let maxArity = fst $ Map.findMax (env ^. symbols)
+  guard $ arity typ < maxArity
+  generateApp (\e t -> generateEUpTo e t d) (\e t -> generateEAt e t (d - 1)) `mplus`
+    generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) 
+  where
+    generateApp genFun genArg = do
+      a <- freshId "_a"
+      x <- freshId "x"    
+      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll a)) typ)) 
+                            $ genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
+      let FunctionT x tArg tRes = typeOf fun
               
-    generateArg env tArg = do
-      (env', arg) <- generateE env tArg
-      addConstraint $ Subtype env' (typ arg) tArg
+      if isFunctionType tArg
+        then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
+          arg <- enqueueGoal env' tArg
+          return (env', Program (PApp fun arg) tRes)
+        else do -- First-order argument: generate now         
+          (env'', arg) <- local (
+                                  over (_1 . eGuessDepth) (-1 +)
+                                . over (_1 . context) (. \p -> Program (PApp fun p) tRes)) 
+                                $ generateArg genArg env' tArg
+          (env''', y) <- addGhost arg env''
+          return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))          
+          
+    generateArg genArg env tArg = do
+      (env', arg) <- genArg env tArg
+      addConstraint $ Subtype env' (typeOf arg) tArg
       ifM (asks $ _incrementalSolving . fst) (solveConstraints arg) (return ())
       return (env', arg)
       
@@ -325,7 +334,7 @@ addGhost :: (Monad s, MonadTrans m, MonadLogic (m s)) => RProgram -> Environment
 addGhost (Program (PSymbol name) _) env | not (Set.member name (env ^. constants)) = return (env, name)
 addGhost p env = do
   g <- freshId "g" 
-  return (over ghosts (Map.insert g (typ p)) env, g)          
+  return (over ghosts (Map.insert g (typeOf p)) env, g)          
     
 {- Constraint solving -}
 
