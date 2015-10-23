@@ -8,8 +8,7 @@ import Synquid.Explorer
 import Synquid.Synthesizer
 
 import Control.Monad
-import Control.Monad.Stream
-import Control.Monad.Trans.List
+import Control.Monad.Logic
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
@@ -17,6 +16,8 @@ explorerParams = ExplorerParams {
   _scrutineeDepth = 0,
   _matchDepth = 2,
   _condDepth = 1,
+  _combineSymbols = PickDepthFirst,
+  -- _combineSymbols = PickInterleave,
   _fixStrategy = AllArguments,
   -- _fixStrategy = FirstArgument,
   -- _fixStrategy = DisableFixpoint,
@@ -535,12 +536,12 @@ main = do
   -- testDrop
   -- testDelete
   -- testMap
-  testUseMap
+  -- testUseMap
   -- testUseFold1
   -- testMakeIncList
   -- testIncListInsert
   -- testInsertionSort
-  -- testIncListMerge
+  testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

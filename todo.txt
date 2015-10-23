@@ -1,4 +1,4 @@
-- Pruning dead branches in nested matches (Check for false LHS when validating constraints?)
+- Change recursive calls with lexicographical tuple
 - Should we stop backtracking out of conditionals and matches (just leave them there?)
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 - E-guess caching; even more general: anything with the same or weaker type we don't need
