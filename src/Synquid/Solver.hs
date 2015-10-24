@@ -151,8 +151,8 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
         (do 
-          -- valuations' <- pruneValuations usedLhsQuals (Map.keys splitting)
-          valuations' <- pruneValuations Set.empty (Map.keys splitting)
+          valuations' <- pruneValuations usedLhsQuals (Map.keys splitting) -- TODO: is this dangeorous??? the result might not cover the pruned alternatives in a different context!
+          -- valuations' <- pruneValuations Set.empty (Map.keys splitting)
           debug 1 (text "Pruned valuations:" $+$ vsep (map pretty valuations')) $ return ()
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
