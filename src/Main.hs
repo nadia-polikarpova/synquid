@@ -123,7 +123,22 @@ testMax4 = do
         op <- [Ge, Le, Neq]
         return $ Binary op (intVar "x") (intVar "y")  
       
-  synthesizeAndPrint "max4" env typ cq []    
+  synthesizeAndPrint "max4" env typ cq []
+  
+testMax5 = do
+  let env =
+            -- addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
+            -- addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
+            id $ emptyEnv
+  let typ = Monotype $ FunctionT "v" intAll $ FunctionT "w" intAll $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ 
+                int (valInt |>=| intVar "v" |&| valInt |>=| intVar "w" |&| valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
+  
+  let cq = do
+        op <- [Ge, Le, Neq]
+        return $ Binary op (intVar "x") (intVar "y")  
+      
+  synthesizeAndPrint "max5" env typ cq []    
+  
    
 testAbs = do
   let env = addConstant "0" (int (valInt |=| IntLit 0)) .            
@@ -518,6 +533,7 @@ main = do
   -- testMax2  
   -- testMax3
   -- testMax4
+  testMax5
   -- testAbs  
   -- testAddition
   -- -- testMult
@@ -541,7 +557,7 @@ main = do
   -- testMakeIncList
   -- testIncListInsert
   -- testInsertionSort
-  testIncListMerge
+  -- testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
