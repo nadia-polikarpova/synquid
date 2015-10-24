@@ -8,6 +8,7 @@ import Synquid.Pretty
 import Synquid.Explorer
 import Synquid.Synthesizer
 import Synquid.Parser
+import Synquid.Resolver
 
 import Data.List
 import Data.Maybe
@@ -21,7 +22,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [{-integerTests, listTests, incListTests, -}parserTests]
+allTests = TestList [integerTests, listTests, incListTests, parserTests, resolverTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -55,6 +56,7 @@ incListTests = TestLabel "IncList" $ TestList [
   ]  
   
 parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType]
+resolverTests = TestLabel "Resolver" $ TestList [testResolveTypeSkeleton]
 
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
@@ -323,14 +325,11 @@ testParseScalarType = createParserTestList parseScalarType [
   ("{List | True}", ScalarT (DatatypeT "List") [] $ ftrue)]
 
 testParseFunctionType = createParserTestList parseFunctionType [
-  ("(  a : Int -> Int)", FunctionT "a" scalarInt scalarInt),
+  ("(  a : Int -> Int)", FunctionT "a" intAll intAll),
   ("(___:Int-> (b:{ Bool|  10 > 0}->Int))",
-    FunctionT "___" scalarInt (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) scalarInt)),
+    FunctionT "___" intAll (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) intAll)),
   ("(  abc0e93__3_0 : {Int | True} -> (  b:Bool->Int))",
-    FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" scalarBool scalarInt))]
-  where
-    scalarInt = ScalarT IntT [] $ BoolLit True
-    scalarBool = ScalarT BoolT [] $ BoolLit True
+    FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" boolAll intAll))]
 
 testParseRefinement = createParserTestList parseFormula testCases
   where
@@ -357,3 +356,14 @@ testParseTerm = createParserTestList parseTerm [
   ("{falseEE}", SetLit UnknownS [Var UnknownS "falseEE"]),
   ("len tail list", Measure UnknownS "len" $ Measure UnknownS "tail" $ Var UnknownS "list"),
   ("foo 1 + 3", Measure UnknownS "foo" $ IntLit 1 |+| IntLit 3)]
+
+testResolveTypeSkeleton = TestList $ map createTestCase [
+  ("(e:Int -> {Int | _v > e})", FunctionT "e" intAll $ ScalarT IntT [] $ intVar "_v" |>| intVar "e"),
+  ("{Int | {_v} /<= {1, 2, 3}}",
+    ScalarT IntT [] $ SetLit IntS [intVar "_v"] /<=/ SetLit IntS [IntLit 1, IntLit 2, IntLit 3]),
+  ("(num1:Int -> (num2:Int -> {Int | _v = num1 + num2}))",
+    FunctionT "num1" intAll $ FunctionT "num2" intAll $
+      ScalarT IntT [] $ intVar "_v" |=| intVar "num1" |+| intVar "num2")]
+  where
+    createTestCase (inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
+      parse inputStr >>= resolveTypeSkeleton emptyEnv
