@@ -22,7 +22,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [integerTests, listTests, incListTests, parserTests, resolverTests]
+allTests = TestList [{-integerTests, listTests, incListTests,-} parserTests, resolverTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -315,7 +315,7 @@ testIncListMerge = let
 -- | Create `Test`s from a parser function and test-cases consisting of an input string and the expected parsed AST.
 createParserTestList :: (Show a, Eq a) => Parser a -> [(String, a)] -> Test
 createParserTestList parser testCases = TestList $ map createTestCase testCases
-  where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ applyParser parser inputStr
+  where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ parse parser inputStr
 
 testParseScalarType = createParserTestList parseScalarType [
   ("Int", ScalarT IntT [] $ ftrue),
@@ -325,10 +325,10 @@ testParseScalarType = createParserTestList parseScalarType [
   ("{List | True}", ScalarT (DatatypeT "List") [] $ ftrue)]
 
 testParseFunctionType = createParserTestList parseFunctionType [
-  ("(  a : Int -> Int)", FunctionT "a" intAll intAll),
-  ("(___:Int-> (b:{ Bool|  10 > 0}->Int))",
+  ("  a : Int -> Int", FunctionT "a" intAll intAll),
+  ("___:Int-> (b:{ Bool|  10 > 0}->Int)",
     FunctionT "___" intAll (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) intAll)),
-  ("(  abc0e93__3_0 : {Int | True} -> (  b:Bool->Int))",
+  ("  abc0e93__3_0 : {Int | True} -> (  b:Bool->Int)",
     FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" boolAll intAll))]
 
 testParseRefinement = createParserTestList parseFormula testCases
@@ -338,13 +338,13 @@ testParseRefinement = createParserTestList parseFormula testCases
       ("1 + 1", (int 1) |+| (int 1)),
       ("!(-1)", fnot $ fneg $ int 1),
       ("-(!(!1))", fneg $ fnot $ fnot $ int 1),
-      ("1 | 10", (int 1) ||| (int 10)),
-      ("False & (10)", (ffalse) |&| (int 10)),
+      ("1 || 10", (int 1) ||| (int 10)),
+      ("False && (10)", (ffalse) |&| (int 10)),
       ("(1 + 1) - (4 + 8)", (int 1 |+| int 1) |-| (int 4 |+| int 8)),
       ("(1 + 4 * 3 - 2) * 3 - (2 * 4)", (int 1 |+| (int 4 |*| int 3) |-| int 2) |*| int 3 |-| (int 2 |*| int 4)),
-      ("(1 * 9 + 8 - 7 /* 3 <= 3 & 1)", ((((int 1 |*| int 9) |+| int 8 |-| int 7 /*/ int 3) |<=| int 3) |&| int 1)),
+      ("(1 * 9 + 8 - 7 /* 3 <= 3 && 1)", ((((int 1 |*| int 9) |+| int 8 |-| int 7 /*/ int 3) |<=| int 3) |&| int 1)),
       ("8 => 3", (int 8 |=>| int 3)),
-      ("True | False => (False & False <=> False)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
+      ("True || False => (False && False <=> False)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
 
 testParseTerm = createParserTestList parseTerm [
   ("1", IntLit 1),
@@ -352,18 +352,18 @@ testParseTerm = createParserTestList parseTerm [
   ("True", BoolLit True),
   ("False", BoolLit False),
   ("foobar", Var UnknownS "foobar"),
-  ("{    1,   a, 4 ,  True }", SetLit UnknownS [IntLit 1, Var UnknownS "a", IntLit 4, BoolLit True]),
-  ("{falseEE}", SetLit UnknownS [Var UnknownS "falseEE"]),
+  ("[    1,   a, 4 ,  True ]", SetLit UnknownS [IntLit 1, Var UnknownS "a", IntLit 4, BoolLit True]),
+  ("[falseEE]", SetLit UnknownS [Var UnknownS "falseEE"]),
   ("len tail list", Measure UnknownS "len" $ Measure UnknownS "tail" $ Var UnknownS "list"),
   ("foo 1 + 3", Measure UnknownS "foo" $ IntLit 1 |+| IntLit 3)]
 
 testResolveTypeSkeleton = TestList $ map createTestCase [
   ("(e:Int -> {Int | _v > e})", FunctionT "e" intAll $ ScalarT IntT [] $ intVar "_v" |>| intVar "e"),
-  ("{Int | {_v} /<= {1, 2, 3}}",
+  ("{Int | [_v] /<= [1, 2, 3]}",
     ScalarT IntT [] $ SetLit IntS [intVar "_v"] /<=/ SetLit IntS [IntLit 1, IntLit 2, IntLit 3]),
-  ("(num1:Int -> (num2:Int -> {Int | _v = num1 + num2}))",
+  ("(num1:Int -> (num2:Int -> {Int | _v == num1 + num2}))",
     FunctionT "num1" intAll $ FunctionT "num2" intAll $
       ScalarT IntT [] $ intVar "_v" |=| intVar "num1" |+| intVar "num2")]
   where
     createTestCase (inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
-      parse inputStr >>= resolveTypeSkeleton emptyEnv
+      parse parseType inputStr >>= resolveTypeSkeleton emptyEnv

@@ -42,8 +42,6 @@ instance Show Declaration where
 instance Show ConstructorDef where
   show (ConstructorDef id' schema) = printf "ctor %s = %s" id' $ show schema
 
-applyParser parser = Parsec.parse parser ""
-
 parse parser str = case Parsec.parse parser "" str of
   Left err -> Left $ show err
   Right parsed -> Right parsed
@@ -260,7 +258,7 @@ parseMeasure :: Parser Formula
 parseMeasure = do
   measureName <- parseIdentifier
   Parsec.spaces
-  arg <- parseVar
+  arg <- parseFormula
   return $ Measure UnknownS measureName arg
   <?> "measure"
 
