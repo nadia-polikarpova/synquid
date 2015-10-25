@@ -80,7 +80,8 @@ data ExplorerState = ExplorerState {
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints since the last liquid assignment refinement
   _typeAssignment :: TypeSubstitution,          -- ^ Current assignment to free type variables
   _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
-  _auxGoals :: [Goal]                           -- ^ Subterms to be synthesized independently
+  _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
+  _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
 }
 
 makeLenses ''ExplorerState
@@ -98,7 +99,7 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolve
 explore :: Monad s => Goal -> ConstraintSolver s -> LogicT s RProgram
 explore goal solver = do
     initCand <- lift $ csInit solver
-    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] Map.empty [initCand] [])) (gParams goal, solver) 
+    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] Map.empty [initCand] [] Map.empty)) (gParams goal, solver) 
   where
     go :: Monad s => Explorer s RProgram
     go = do
@@ -288,15 +289,19 @@ generateEAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment
 generateEAt _ _ d | d < 0 = mzero
 
 generateEAt env typ 0 = do
-  symbols <- T.mapM freshTypeVars $ symbolsOfArity (arity typ) env
+  symbols <- Map.toList <$> T.mapM freshTypeVars (symbolsOfArity (arity typ) env)
+  useCounts <- use symbolUseCount
+  let symbols' = sortBy (mappedCompare (\(x, _) -> Map.findWithDefault 0 x useCounts)) symbols
+  
   combine <- asks $ _combineSymbols . fst
   case combine of
-    PickDepthFirst -> msum $ map pickSymbol $ Map.toList symbols
-    PickInterleave -> foldl interleave mzero $ map pickSymbol $ Map.toList symbols
+    PickDepthFirst -> msum $ map pickSymbol symbols'
+    PickInterleave -> foldl interleave mzero $ map pickSymbol symbols'
   
   where
     pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
       do
+        symbolUseCount %= Map.insertWith (+) name 1
         case lookupConstructor name env of
           Just d -> matchConsType (lastType t) (lastType typ) -- It's datatype constructor: its result type has a special form, so just distribute type parameters
           Nothing -> do -- It's a function:
