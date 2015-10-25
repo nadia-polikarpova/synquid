@@ -28,16 +28,16 @@ data Declaration =
   TypeDef Id RType | -- | Type name and definition.
   FuncDef Id RSchema | -- | Function name and signature.
   DataDef Id [Id] [ConstructorDef] | -- | Datatype name, type parameters, and constructor definitions.
-  MeasureDef Id Id [Sort] Sort | -- | Measure name, input type name, input type parameters, output sort
-  SynthesisGoal Id
+  MeasureDef Id Sort Sort | -- | Measure name, input sort, output sort.
+  SynthesisGoal Id -- Name of the function to synthesize.
 
 -- Quick and dirty Show instances to aid in debugging.
 instance Show Declaration where
   show (TypeDef id' type') = printf "type %s = %s" id' $ show type'
   show (FuncDef id' schema) = printf "func %s = %s" id' $ show schema
   show (DataDef id' typeParams ctors) = printf "data %s %s\n%s" id' (show typeParams) $ unlines $ map ((++) "  " . show) ctors
-  show (MeasureDef id' inType typeParams outSort) = printf "msre %s = %s (%s) -> %s" id' inType (show typeParams) $ show outSort
-  show (SynthesisGoal id') = printf "%s = ??" id'
+  show (MeasureDef id' inSort outSort) = printf "msre %s = %s -> %s" id' (show inSort) $ show outSort
+  show (SynthesisGoal id') = printf "goal %s = ??" id'
 
 instance Show ConstructorDef where
   show (ConstructorDef id' schema) = printf "ctor %s = %s" id' $ show schema
@@ -102,14 +102,12 @@ parseMeasureDef = do
   Parsec.spaces
   Parsec.string "::"
   Parsec.spaces
-  inTypeName <- parseTypeName
-  Parsec.spaces
-  inTypeParams <- Parsec.many $ parseSort <* Parsec.spaces
+  inSort <- parseSort
   Parsec.spaces
   Parsec.string "->"
   Parsec.spaces
   outSort <- parseSort
-  return $ MeasureDef measureName inTypeName inTypeParams outSort
+  return $ MeasureDef measureName inSort outSort
   <?> "measure definition"
 
 parseFuncDef :: Parser Declaration
@@ -192,7 +190,14 @@ parseSort :: Parser Sort
 parseSort = Parsec.choice [
   BoolS <$ Parsec.string "Bool",
   IntS <$ Parsec.string "Int",
-  fmap SetS $ Parsec.string "Set" >> Parsec.spaces >> parseSort]
+  fmap SetS $ Parsec.string "Set" >> Parsec.spaces >> parseSort,
+  parseCustomSort]
+  where
+    parseCustomSort = do
+      typeName <- parseTypeName
+      Parsec.spaces
+      typeParams <- Parsec.many $ parseIdentifier <* Parsec.spaces
+      return $ UninterpretedS typeName -- Discard `typeParams` because `Sort` doesn't currently support type params.
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
