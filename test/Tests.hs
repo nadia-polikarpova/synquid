@@ -20,7 +20,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [integerTests, listTests, incListTests]
+allTests = TestList [integerTests, listTests, incListTests, treeTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -51,6 +51,12 @@ incListTests = TestLabel "IncList" $ TestList [
     TestCase testMakeIncList
   , TestCase testIncListInsert 
   , TestCase testIncListMerge 
+  ]
+  
+treeTests = TestLabel "Tree" $ TestList [
+    TestCase testTreeRoot
+  , TestCase testTreeSize
+  , TestCase testTreeFlatten
   ]  
   
 -- | Parameters for AST exploration
@@ -294,7 +300,7 @@ testMakeIncList = let
         addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
         addIncList $ emptyEnv
   typ = Monotype $ natInclist $ mIElems valIncList |=| SetLit IntS [IntLit 0, IntLit 1]
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []          
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
   
 testIncListInsert = let
   env = addIncList $ emptyEnv
@@ -305,5 +311,48 @@ testIncListMerge = let
   env = addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))) .
         addIncList $ emptyEnv
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
-  in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
+  in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []
+  
+{- Testing Synthesis of Tree Programs -}
+
+treeT = DatatypeT "tree"
+tree = ScalarT treeT [vartAll "a"]
+treeAll = tree ftrue
+treeVar = Var (toSort treeT)
+valTree = treeVar valueVarName
+
+mSize = Measure IntS "size"
+mTElems = Measure (SetS (UninterpretedS "a")) "telems"
+
+-- | Add tree datatype to the environment
+addTree = addDatatype "tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
+          addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
+            mSize valTree  |=| IntLit 0
+            -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])
+            ) .
+          addPolyConstant "Node" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "l" treeAll (FunctionT "r" treeAll (tree $  
+            mSize valTree |=| mSize (treeVar "l") |+| mSize (treeVar "r") |+| IntLit 1
+            |&| mSize (treeVar "l") |>=| IntLit 0 |&| mSize (treeVar "r") |>=| IntLit 0
+            -- |&| mTElems valTree |=| mTElems (treeVar "l") /+/ mTElems (treeVar "r") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
+            ))))            
+  
+testTreeRoot = let
+  env = addTree $ emptyEnv
+  typ = Forall "a" $ Monotype $ FunctionT "t" (tree $ mSize valTree |>| IntLit 0) (vartAll "a") -- $ valVart "a" `fin` mTElems (treeVar "t"))  
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []          
+            
+              
+testTreeSize = let
+  env = addConstant "0" (int (valInt |=| IntLit 0)) .
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+        addConstant "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
+        addTree $ emptyEnv
+  typ = Forall "a" $ Monotype $ FunctionT "t" treeAll (int $ valInt |=| mSize (treeVar "t"))
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
+            
+testTreeFlatten = let
+  env = addPolyConstant "append" (Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "ys" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| mLen (listVar "ys")))) .
+        addList $ addTree $ emptyEnv
+  typ = Forall "a" $ Monotype $ FunctionT "t" treeAll (list $ mLen valList |=| mSize (treeVar "t"))
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []  
   

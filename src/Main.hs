@@ -473,6 +473,7 @@ addTree = addDatatype "tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
             ) .
           addPolyConstant "Node" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "l" treeAll (FunctionT "r" treeAll (tree $  
             mSize valTree |=| mSize (treeVar "l") |+| mSize (treeVar "r") |+| IntLit 1
+            |&| mSize (treeVar "l") |>=| IntLit 0 |&| mSize (treeVar "r") |>=| IntLit 0
             -- |&| mTElems valTree |=| mTElems (treeVar "l") /+/ mTElems (treeVar "r") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
             ))))            
             
@@ -499,9 +500,9 @@ testRoot = do
   
 testTreeSize = do
   let env = addConstant "0" (int (valInt |=| IntLit 0)) .
-            addConstant "1" (int (valInt |=| IntLit 0)) .
+            -- addConstant "1" (int (valInt |=| IntLit 1)) .
             -- addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            -- addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             addConstant "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
             -- addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .            
             addTree $ emptyEnv
@@ -510,18 +511,13 @@ testTreeSize = do
 
   synthesizeAndPrint "size" env typ [] []
             
--- testFlatten = do
-  -- -- let env = addConstant "append" (FunctionT "xs" listAll (FunctionT "ys" listAll (list $ mElems valList |=| mElems (listVar "xs") /+/ mElems (listVar "ys")))) .
-            -- -- addList $ addTree $ emptyEnv
+testFlatten = do
+  let env = addPolyConstant "append" (Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "ys" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| mLen (listVar "ys")))) .
+            addList $ addTree $ emptyEnv
 
-  -- -- let typ = Monotype $ FunctionT "t" treeAll (list $ mElems valList |=| Measure SetS "telems" (treeVar "t"))
-  
-  -- let env = addConstant "append" (FunctionT "xs" listAll (FunctionT "ys" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| mLen (listVar "ys")))) .
-            -- addList $ addTree $ emptyEnv
-
-  -- let typ = Monotype $ FunctionT "t" treeAll (list $ mLen valList |=| Measure IntT "size" (treeVar "t"))
+  let typ = Forall "a" $ Monotype $ FunctionT "t" treeAll (list $ mLen valList |=| mSize (treeVar "t"))
     
-  -- synthesizeAndPrint env typ [] []
+  synthesizeAndPrint "flatten" env typ [] []
             
   
     
@@ -557,9 +553,9 @@ main = do
   -- testMakeIncList
   -- testIncListInsert
   -- testInsertionSort
-  testIncListMerge
+  -- testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
   -- testTreeSize
-  -- testFlatten
+  testFlatten
