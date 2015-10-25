@@ -533,7 +533,7 @@ main = do
   -- testMax2  
   -- testMax3
   -- testMax4
-  testMax5
+  -- testMax5
   -- testAbs  
   -- testAddition
   -- -- testMult
@@ -557,7 +557,7 @@ main = do
   -- testMakeIncList
   -- testIncListInsert
   -- testInsertionSort
-  -- testIncListMerge
+  testIncListMerge
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

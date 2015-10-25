@@ -27,7 +27,7 @@ integerTests = TestLabel "Integer" $ TestList [
   , TestCase testAppMany
   , TestCase testMax2
   , TestCase testMax3
-  --, TestCase testMax4
+  , TestCase testMax4
   , TestCase testAbs
   , TestCase testAddition
   ]
