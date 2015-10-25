@@ -1,8 +1,8 @@
 - Change recursive calls with lexicographical tuple
-- Should we stop backtracking out of conditionals and matches (just leave them there?)
-- When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
-- E-guess caching; even more general: anything with the same or weaker type we don't need
+- Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
+- Recast measures are decomposing to arguments?
+- When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails	
 - Pass the spec down to eGen, when generating app, check if fun ==> !spec, in that case no argument exists
 
 - Abstract refinements
