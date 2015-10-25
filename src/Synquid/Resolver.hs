@@ -57,4 +57,15 @@ resolveFormula valueType env (Var UnknownS varName) =
 resolveFormula valueType env (Unary op fml) = fmap (Unary op) $ resolveFormula valueType env fml
 resolveFormula valueType env (Binary op fml1 fml2) = liftA2 (Binary op)
   (resolveFormula valueType env fml1) (resolveFormula valueType env fml2)
+resolveFormula valueType env (Measure UnknownS name argFml) = do
+  argFml' <- resolveFormula valueType env argFml
+  case env ^. measures ^. at name of
+    Just (inSort, outSort) ->
+      case sortOf argFml' of
+        Just argSort ->
+          if argSort /= inSort
+            then throwError "Measure applied to argument of wrong sort"
+            else return $ Measure outSort name argFml'
+        Nothing -> throwError $ "Couldn't resolve sort of " ++ show argFml'
+    Nothing -> throwError $ name ++ " is undefined"
 resolveFormula _ _ fml = return fml
