@@ -49,6 +49,7 @@ isVarRefinemnt _ = False
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   Forall Id (SchemaSkeleton r)
+  deriving Eq
   
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
@@ -180,6 +181,7 @@ data Environment = Environment {
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
+  _measures :: Map Id (Sort, Sort),        -- ^ A map of the names of the `Measure`s for the types in `_datatypes` to their input and output `Sort`s
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
   _shapeConstraints :: Map Id SType        -- ^ For polymorphic recursive calls, the shape their types must have
@@ -189,7 +191,7 @@ makeLenses ''Environment
 
 -- | Environment with no symbols or assumptions
 emptyEnv :: Environment
-emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Set.empty Set.empty Map.empty
+emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Map.empty Set.empty Set.empty Map.empty
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
@@ -218,7 +220,15 @@ addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert n
 
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment
 addDatatype :: Id -> Datatype -> Environment -> Environment
-addDatatype name dt = over datatypes (Map.insert name dt)
+addDatatype name dt env =
+  let env' = over datatypes (Map.insert name dt) env in
+  case dt ^. wfMetric of
+    Just measureFunc ->
+      let
+        (Measure returnSort measureName _) = measureFunc $ BoolLit True
+        inputSort = toSort $ DatatypeT name
+      in over measures (Map.insert measureName (inputSort, returnSort)) env'
+    Nothing -> env'
 
 -- | 'addTypeVar' @a@ : Add bound type variable @a@ to the environment
 addTypeVar :: Id -> Environment -> Environment
