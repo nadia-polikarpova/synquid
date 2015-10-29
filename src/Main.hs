@@ -12,9 +12,9 @@ import Control.Monad.Logic
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 2,
-  _scrutineeDepth = 1,
-  _matchDepth = 3,
+  _eGuessDepth = 3,
+  _scrutineeDepth = 0,
+  _matchDepth = 2,
   _condDepth = 1,
   _combineSymbols = PickDepthFirst,
   -- _combineSymbols = PickInterleave,
@@ -396,12 +396,13 @@ mIElems = Measure (SetS $ UninterpretedS "a") "elems"
 
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just $ mLen)) .
-          addPolyConstant "INil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0 |&| 
+          addPolyConstant "INil" (Forall "a" $ Monotype $ incList $ mILen valIncList |=| IntLit 0 |&| 
                                                                mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
           addPolyConstant "ICons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
                                                          (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"] ftrue) 
-                                                         (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1 |&| 
+                                                         (incList $ mILen valIncList |=| mILen (incListVar "xs") |+| IntLit 1 |&|
+                                                                mILen valIncList |>| IntLit 0 |&| 
                                                                 mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
                                                           )))
 
@@ -444,7 +445,14 @@ testInsertionSort = do
 testIncListMerge = do
   let env = addIncList $ emptyEnv
 
-  let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
+  let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) 
+                                    (FunctionT "ys" (incList ftrue) 
+                                    (incList $ 
+                                      -- mILen valIncList |=| mILen (incListVar "xs") |+| mILen (incListVar "ys") 
+                                      -- |&|
+                                      mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys")
+                                      )))
+                                    
           
   let cq = do
         op <- [Lt]
@@ -606,10 +614,10 @@ main = do
   -- testMakeIncList
   -- testIncListInsert
   -- testInsertionSort
-  -- testIncListMerge
+  testIncListMerge
   -- testFst
   -- testSplit
-  testMergeSort
+  -- testMergeSort
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
