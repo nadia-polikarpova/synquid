@@ -142,6 +142,9 @@ toAST expr = case expr of
   
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
+    unOp Abs = \arg -> do
+      cond <- toZ3Sort IntS >>= mkInt 0 >>= mkGe arg
+      mkUnaryMinus arg >>= mkIte cond arg
     unOp Not = mkNot
 
     binOp :: BinOp -> AST -> AST -> Z3State AST
@@ -183,14 +186,15 @@ toAST expr = case expr of
       
     -- | Lookup or create a measure declaration with name `ident', type `baseT', and argument type `argType'
     measure s ident argType = do
-      declMb <- uses measures (Map.lookup ident)
+      let ident' = ident ++ show argType
+      declMb <- uses measures (Map.lookup ident')
       case declMb of
         Just d -> return d
         Nothing -> do
-          symb <- mkStringSymbol ident
+          symb <- mkStringSymbol ident'
           argSort <- toZ3Sort argType
           decl <- toZ3Sort s >>= mkFuncDecl symb [argSort]
-          measures %= Map.insert ident decl
+          measures %= Map.insert ident' decl
           return decl      
           
 instance SMTSolver Z3State where
@@ -199,7 +203,7 @@ instance SMTSolver Z3State where
     boolSortAux .= Just boolAux
 
   isValid fml = do
-      res <- local $ (toAST >=> assert) (fnot fml) >> check      
+      res <- local $ (toAST >=> assert) (fnot fml) >> check
       
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True

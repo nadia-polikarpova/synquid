@@ -35,12 +35,15 @@ refineCandidates params quals constraints cands = evalFixPointSolver go params
   where
     go = do
       debug 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals]) $ return ()
-      cands' <- mapM addConstraints cands
+      let constraints' = filter isNew constraints
+      cands' <- mapM (addConstraints constraints') cands
       case find (Set.null . invalidConstraints) cands' of
         Just c -> return $ c : delete c cands'
         Nothing -> greatestFixPoint quals cands'
+        
+    isNew c = not (c `Set.member` validConstraints (head cands)) && not (c `Set.member` invalidConstraints (head cands))
       
-    addConstraints (Candidate sol valids invalids label) = do
+    addConstraints constraints (Candidate sol valids invalids label) = do
       let sol' = merge (topSolution quals) sol  -- Add new unknowns
       (valids', invalids') <- partitionM (isValidFml . applySolution sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
@@ -208,7 +211,7 @@ optimalValuationsBFS maxSize quals lhs rhs = map qualsAt <$> filterSubsets (chec
     qualsAt = Set.map (qualsList !!)
     check val = let 
                   n = Set.size val 
-                  lhs' = conjunction lhs |&| conjunction val                  
+                  lhs' = conjunction lhs `andClean` conjunction val                  
       in if 1 <= n && n <= maxSize
           then isValidFml $ lhs' |=>| rhs
           else return False
