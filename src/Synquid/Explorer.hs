@@ -214,22 +214,29 @@ generateMatch env t = do
   if d == 0
     then mzero
     else do
-      scrDT <- msum (map return $ Map.keys (env ^. datatypes))                                         -- Pick a datatype to match on
-      let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
-      tArgs <- map vartAll `liftM` replicateM (((env ^. datatypes) Map.! scrDT) ^. typeArgCount) (freshId "_a")
+      a <- freshId "_a"
       (env', pScrutinee) <- local (
                                     over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params)
                                   . over (_1 . context) (. \p -> Program (PMatch p []) t)) 
-                                  $ generateE env (ScalarT (DatatypeT scrDT) tArgs ftrue)   -- Guess a scrutinee of the chosen shape
-      let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) && -- Has not been used before
-                            (not $ headSymbol pScrutinee `elem` ctors)           -- Is not a value
-      guard isGoodScrutinee
-      
-      (env'', x) <- (addGhost pScrutinee) . (addScrutinee pScrutinee) $ env'
-      backtrackCase <- ifM (asks $ _incrementalSolving . fst) (return once) (return id)   -- When incremental solving is enabled, once a solution for a case is found, it's final and we don't need to backtrack past it
-      pCases <- mapM (backtrackCase . generateCase env'' x pScrutinee) ctors              -- Generate a case for each constructor of the datatype
-      return $ Program (PMatch pScrutinee pCases) t
-      
+                                  $ generateE env (vartAll a) -- Generate a scrutinee of an arbitrary type
+                                  
+      case typeOf pScrutinee of
+        (ScalarT (DatatypeT scrDT) _ _) -> do -- Type of the scrutinee is a datatype
+          let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
+          
+          let scrutineeSymbols = symbolList pScrutinee
+          let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- Has not been used before
+                                (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
+                                (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
+          guard isGoodScrutinee
+          
+          (env'', x) <- (addGhost pScrutinee) . (addScrutinee pScrutinee) $ env'
+          backtrackCase <- ifM (asks $ _incrementalSolving . fst) (return once) (return id)   -- When incremental solving is enabled, once a solution for a case is found, it's final and we don't need to backtrack past it
+          pCases <- mapM (backtrackCase . generateCase env'' x pScrutinee) ctors              -- Generate a case for each constructor of the datatype
+          return $ Program (PMatch pScrutinee pCases) t
+                    
+        _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
+                                        
   where      
     -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
     generateCase env scrName pScrutinee consName = do
