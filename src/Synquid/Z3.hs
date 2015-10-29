@@ -209,6 +209,18 @@ instance SMTSolver Z3State where
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
         _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
+
+  -- isValid fml = do
+      -- ast <- toAST $ fnot fml
+      -- (res, modelMb) <- local $ assert ast >> getModel
+      
+      -- case res of
+        -- Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
+        -- Sat -> do
+          -- modelStr <- modelToString (fromJust modelMb)
+          -- astStr <- astToString ast
+          -- debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID" $+$ text "AST:" $+$ text astStr $+$ text "MODEL:" $+$ text modelStr) $ return False    
+        -- _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
         
   allUnsatCores = getAllMUSs  
     
@@ -326,6 +338,4 @@ getAllMUSs' controlLitsAux mustHave cores = do
           maximize' (checked ++ setRest) unsetRest
           
     debugOutput label fmls = debug 2 (text label <+> pretty fmls) $ return ()
-          
-      
         

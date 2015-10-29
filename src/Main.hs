@@ -12,7 +12,7 @@ import Control.Monad.Logic
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 3,
+  _eGuessDepth = 2,
   _scrutineeDepth = 1,
   _matchDepth = 3,
   _condDepth = 1,
@@ -482,12 +482,30 @@ testSplit = do
   let typ = Forall "a" $ Monotype $ (FunctionT "xs" (list ftrue) (ScalarT pairT 
                                                                             [list $ fabs (mLen (listVar "xs") |-| mLen valList |*| IntLit 2) |<=| IntLit 1, 
                                                                              list $ fabs (mLen (listVar "xs") |-| mLen valList |*| IntLit 2) |<=| IntLit 1] $ 
-                                                                            (mLen (listVar "xs") |=| (mLen l |+| mLen r))
+                                                                            (mLen (listVar "xs") |=| mLen l |+| mLen r)  |&|  (mElems (listVar "xs") |=| mElems l /+/ mElems r)
                                       ))                                      
           
   synthesizeAndPrint "split" env typ [] []
   
-  
+testMergeSort = do
+  let l = Measure (UninterpretedS "List") "_1" valPair
+  let r = Measure (UninterpretedS "List") "_2" valPair
+  let env = addPolyConstant "split" (Forall "a" $ Monotype $ (FunctionT "xs" (list ftrue) (ScalarT pairT 
+                                                                            [list $ fabs (mLen (listVar "xs") |-| mLen valList |*| IntLit 2) |<=| IntLit 1, 
+                                                                             list $ fabs (mLen (listVar "xs") |-| mLen valList |*| IntLit 2) |<=| IntLit 1] $ 
+                                                                            (mLen (listVar "xs") |=| mLen l |+| mLen r)  |&|  (mElems (listVar "xs") |=| mElems l /+/ mElems r)
+                                      ))) .
+            addPolyConstant "merge" (Forall "a" $ Monotype $ (
+                                                    FunctionT "xs" (incList ftrue) (
+                                                    FunctionT "ys" (incList $ fabs (mILen (incListVar "xs") |-| mILen valIncList) |<=| IntLit 1) (
+                                                    incList $ 
+                                                      mILen valIncList |=| mILen (incListVar "xs") |+| mILen (incListVar "ys") |&|
+                                                      mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys")))
+                                                    )) .
+            addList . addIncList . addPair $ emptyEnv
+            
+  let typ = Forall "a" $ Monotype $ (FunctionT "xs" listAll ((incList $ mILen valIncList |=| mLen (listVar "xs")  |&|  mIElems valIncList |=| mElems (listVar "xs"))))
+  synthesizeAndPrint "mergeSort" env typ [] []
     
 {- Tree programs -}
 
@@ -590,7 +608,8 @@ main = do
   -- testInsertionSort
   -- testIncListMerge
   -- testFst
-  testSplit
+  -- testSplit
+  testMergeSort
   -- -- Tree programs
   -- testRoot
   -- testTreeGen

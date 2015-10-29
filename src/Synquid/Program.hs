@@ -205,8 +205,8 @@ type RProgram = Program Formula
 
 hole t = Program (PSymbol "??") t
 
-headSymbol (Program (PSymbol name) _) = name
-headSymbol (Program (PApp fun _) _) = headSymbol fun
+symbolList (Program (PSymbol name) _) = [name]
+symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
 
 -- | Instantiate type variables in a program
 programSubstituteTypes :: TypeSubstitution -> RProgram -> RProgram
