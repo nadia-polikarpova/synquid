@@ -17,13 +17,13 @@ import Control.Lens
 {- Type skeletons -}
 
 data BaseType = BoolT | IntT | DatatypeT Id | TypeVarT Id
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
   
 -- | Type skeletons (parametrized by refinements)
 data TypeSkeleton r =
   ScalarT BaseType [TypeSkeleton r]  r |
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r)  
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
   
 toSort BoolT = BoolS
 toSort IntT = IntS
@@ -49,7 +49,7 @@ isVarRefinemnt _ = False
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   Forall Id (SchemaSkeleton r)
-  deriving Eq
+  deriving (Show, Eq)
   
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
@@ -356,7 +356,7 @@ data Goal = Goal {
   
 type ProgramAst = [Declaration]
 data ConstructorDef = ConstructorDef Id RSchema-- deriving Show
-  deriving (Show, Eq)
+  deriving (Eq)
 data Declaration =
   TypeDef Id RType | -- | Type name and definition.
   FuncDef Id RSchema | -- | Function name and signature.

@@ -160,6 +160,8 @@ parseScalarType = Parsec.choice [parseScalarRefType, parseScalarUnrefType] <?> "
     parseScalarRefType = do
       Parsec.char '{'
       Parsec.spaces
+      customValueVarName <- Parsec.optionMaybe $ Parsec.try $
+        parseIdentifier <* Parsec.spaces <* Parsec.char ':' <* Parsec.spaces
       ScalarT baseType typeVarRefinements _ <- parseScalarUnrefType
       Parsec.char '|'
       Parsec.spaces

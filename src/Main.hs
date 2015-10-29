@@ -6,7 +6,12 @@ import Synquid.Program
 import Synquid.Pretty
 import Synquid.Explorer
 import Synquid.Synthesizer
+import Synquid.Parser
+import Synquid.Resolver
+import System.IO
+import qualified Text.PrettyPrint.GenericPretty as Pr
 
+import qualified Data.Map as Map
 import Control.Monad
 import Control.Monad.Stream
 import Control.Monad.Trans.List
@@ -494,7 +499,16 @@ testTreeSize = do
   -- synthesizeAndPrint env typ [] []
             
   
-    
+repl :: IO ()
+repl = do
+  putStr "> "
+  hFlush stdout
+  input <- getLine
+  case parse parseFormula input of
+    Right ast -> putStrLn "Successfully parsed:" >> print ast
+    Left errMsg -> putStrLn "Error!:" >> putStrLn errMsg
+  repl
+
 main = do
   -- -- Integer programs
   -- testApp
@@ -521,7 +535,28 @@ main = do
   -- testDrop
   -- testDelete
   -- testMap
-  testUseMap
+  {- repl -}
+  {- testUseMap -}
+  {- let -}
+    {- str = unlines [ -}
+      {- "", -}
+      {- " type SmallPosNum = {Int | 0 < _v & _v <= 10}   ", -}
+      {- "   type NegNum = {Int | _v < 10}  ", -}
+      {- " foo :: (a:SmallPosNum -> NegNum)  ", -}
+      {- "  ", -}
+      {- "data List a " -}
+      {- ] -}
+  {- putStrLn str -}
+  str <- readFile "sample1.hs"
+  print $ parse parseProgram str
+  {- putStrLn $ either id show $ parse parseProgram str -}
+  {- repl -}
+  {- let env = emptyEnv {_measures = Map.fromList [("foo", (IntS, BoolS)), ("len", (BoolS, SetS IntS))]} -}
+  {- print $ parse parseFormula "len foo 1" >>=resolveFormula UnknownS env -}
+  {- putStrLn $ either id show $ parse parseType "{List a | len v == 0  &&  v > 1}" -}
+  {- putStrLn $ case parseProg $  of -}
+    {- Left err -> err -}
+    {- Right parsed -> show parsed -}
   -- testUseFold1
   -- testMakeIncList
   -- testIncListInsert

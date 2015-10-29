@@ -3,7 +3,7 @@
  - formulas evaluate to a boolean, etc.)
  -}
 
-{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE TupleSections #-}
 
 module Synquid.Resolver where
 
@@ -14,10 +14,50 @@ import Control.Monad.Except
 import Text.Printf
 import Control.Lens
 import Control.Monad
+import Data.List
 
-type ResolverError = Either String
+type ErrMsg = String
+type ResolverError = Either ErrMsg
 
-resolveTypeSkeleton :: Environment -> TypeSkeleton Formula -> ResolverError (TypeSkeleton Formula)
+-- | A convenience function that allows us to use Maybes with error messages in the @ResolverError@ monad.
+maybeErr :: Maybe a -> ErrMsg -> ResolverError a
+maybeErr (Just a) _ = return a
+maybeErr Nothing errMsg = throwError errMsg
+
+resolveProgramAst :: ProgramAst -> ResolverError Goal
+resolveProgramAst declarations = do
+  env <- foldM (resolveDeclaration) emptyEnv declarations
+  (SynthesisGoal goalName) <- maybeErr (find isSynthesisGoal declarations) "No synthesis goal specified"
+  goalType <- maybeErr (allSymbols env ^. at goalName) "No type signature for synthesis goal"
+  return $ Goal goalName env goalType
+  where
+    isSynthesisGoal (SynthesisGoal _) = True
+    isSynthesisGoal _ = False
+
+resolveDeclaration :: Environment -> Declaration -> ResolverError Environment
+resolveDeclaration env (TypeDef typeName typeBody) = do
+  typeBody' <- resolveTypeSkeleton env typeBody
+  return $ addTypeSynonym typeName typeBody' env
+resolveDeclaration env (FuncDef funcName typeSchema) = do
+  typeSchema' <- resolveSchemaSkeleton env typeSchema
+  return $ addPolyConstant funcName typeSchema env
+resolveDeclaration env (DataDef dataName typeParams constructors) = do
+  let
+    datatype = Datatype {
+      _typeArgCount = length typeParams,
+      _constructors = map constructorName constructors,
+      _wfMetric = Nothing
+    }
+  constructors' <- mapM (\ (ConstructorDef name schema) -> fmap (name,) $ resolveSchemaSkeleton env schema) constructors
+  return $ foldl (\ env (id', schema) -> addPolyVariable id' schema env) (addDatatype dataName datatype env) constructors'
+resolveDeclaration env (MeasureDef measureName inSort outSort) = return $ addMeasure measureName (inSort, outSort) env
+resolveDeclaration env (SynthesisGoal _) = return env
+
+resolveSchemaSkeleton :: Environment -> RSchema -> ResolverError RSchema
+resolveSchemaSkeleton env (Monotype typeSkel) = fmap Monotype $ resolveTypeSkeleton env typeSkel
+resolveSchemaSkeleton env (Forall id' schemaSkel) = fmap (Forall id') $ resolveSchemaSkeleton env schemaSkel
+
+resolveTypeSkeleton :: Environment -> RType -> ResolverError RType
 resolveTypeSkeleton env (ScalarT baseType typeParamRefs typeFml) = do
   typeFml' <- resolveFormula (toSort baseType) env typeFml
   case sortOf typeFml' of

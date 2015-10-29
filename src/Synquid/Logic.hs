@@ -19,7 +19,7 @@ type Id = String
 
 -- | Sorts
 data Sort = BoolS | IntS | UninterpretedS Id | UnknownS | SetS Sort
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
   
 isSetS (SetS _) = True
 isSetS _ = False
@@ -28,7 +28,7 @@ isSetS _ = False
 
 -- | Unary operators
 data UnOp = Neg | Not
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 -- | Binary operators  
 data BinOp = 
@@ -38,7 +38,7 @@ data BinOp =
     And | Or | Implies | Iff |      -- ^ Bool -> Bool -> Bool
     Union | Intersect | Diff |      -- ^ Set -> Set -> Set
     Member | Subset                 -- ^ Int/Set -> Set -> Bool
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
   
 -- | Variable substitution  
 type Substitution = Map Id Formula
@@ -57,7 +57,7 @@ data Formula =
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
   Measure Sort Id Formula             -- ^ Measure application
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
   
 valueVarName = "_v"
 unknownName (Unknown _ name) = name

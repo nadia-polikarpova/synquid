@@ -119,15 +119,15 @@ instance Pretty Sort where
   pretty (SetS el) = text "bet" <+> pretty el
   pretty (UninterpretedS name) = text name
 
-instance Show Sort where
-  show = show . pretty    
+{- instance Show Sort where -}
+  {- show = show . pretty     -}
 
 instance Pretty UnOp where
   pretty Neg = text "-"
   pretty Not = text "!"
 
-instance Show UnOp where
-  show = show . pretty
+{- instance Show UnOp where -}
+  {- show = show . pretty -}
   
 instance Pretty BinOp where
   pretty Times = text "*"
@@ -149,8 +149,8 @@ instance Pretty BinOp where
   pretty Member = text "in"
   pretty Subset = text "<="
   
-instance Show BinOp where
-  show = show . pretty  
+{- instance Show BinOp where -}
+  {- show = show . pretty   -}
 
 -- | Binding power of a formula
 power :: Formula -> Int
@@ -186,8 +186,8 @@ fmlDocAt n fml = condParens (n' <= n) (
     
 instance Pretty Formula where pretty e = fmlDoc e
 
-instance Show Formula where
-  show = show . pretty  
+{- instance Show Formula where -}
+  {- show = show . pretty   -}
     
 instance Pretty Valuation where
   pretty val = braces $ commaSep $ map pretty $ Set.toList val
@@ -207,8 +207,8 @@ instance Pretty BaseType where
   pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
   pretty (DatatypeT name) = text name
   
-instance Show BaseType where
-  show = show . pretty
+{- instance Show BaseType where -}
+  {- show = show . pretty -}
     
 caseDoc :: (TypeSkeleton r -> Doc) -> Case r -> Doc
 caseDoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc tdoc (expr cas) 
@@ -249,8 +249,8 @@ prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> tex
 instance Pretty RType where
   pretty = prettyType
   
-instance Show RType where
- show = show . pretty  
+{- instance Show RType where -}
+ {- show = show . pretty   -}
  
 prettySSchema :: SSchema -> Doc
 prettySSchema (Monotype t) = pretty t
@@ -261,8 +261,8 @@ instance Pretty SSchema where
     Monotype t -> pretty t
     Forall a sch' -> angles (text a) <+> pretty sch'
     
-instance Show SSchema where
- show = show . pretty      
+{- instance Show SSchema where -}
+ {- show = show . pretty       -}
  
 instance Pretty RSchema where
   pretty sch = case sch of
