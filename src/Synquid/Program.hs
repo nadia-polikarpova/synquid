@@ -30,6 +30,7 @@ toSort IntT = IntS
 toSort (DatatypeT name) = UninterpretedS name
 toSort (TypeVarT name) = UninterpretedS name
   
+baseTypeOf (ScalarT baseT _ _) = baseT
 isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
@@ -67,12 +68,6 @@ typeSubstitute :: TypeSubstitution -> RType -> RType
 typeSubstitute subst t@(ScalarT (TypeVarT a) [] r) = case Map.lookup a subst of
   Just t' -> addRefinement (typeSubstitute subst t') (typeSubstituteFML subst r) -- In {v: a | r}, we might have to substitute sorts inside r
   Nothing -> t
-  where
-    addRefinement (ScalarT base tArgs fml) fml' = if isVarRefinemnt fml'
-      then ScalarT base tArgs fml' -- the type of a polymorphic variable does not require any other refinements
-      else ScalarT base tArgs (fml `andClean` fml')
-    addRefinement t (BoolLit True) = t
-    addRefinement t _ = error $ "addRefinement: applied to function type"
 typeSubstitute subst (ScalarT baseT tArgs r) = let tArgs' = map (typeSubstitute subst) tArgs 
   in ScalarT baseT tArgs' (typeSubstituteFML subst r)
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
@@ -133,6 +128,13 @@ refineTop (FunctionT x tArg tFun) = FunctionT x (refineBot tArg) (refineTop tFun
 refineBot :: SType -> RType
 refineBot (ScalarT base tArgs _) = ScalarT base (map refineBot tArgs) ffalse
 refineBot (FunctionT x tArg tFun) = FunctionT x (refineTop tArg) (refineBot tFun)
+
+addRefinement (ScalarT base tArgs fml) fml' = if isVarRefinemnt fml'
+  then ScalarT base tArgs fml' -- the type of a polymorphic variable does not require any other refinements
+  else ScalarT base tArgs (fml `andClean` fml')
+addRefinement t (BoolLit True) = t
+addRefinement t _ = error $ "addRefinement: applied to function type"
+
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType -> RType

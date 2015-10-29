@@ -137,43 +137,53 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
       p <- local (over (_1 . context) (. ctx)) $ generateI env' t
       return $ ctx p
 
-    -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@;
-    -- (when using lexicographic termination metrics, different calls differ in the component they decrease; otherwise at most one call). 
-    -- recursiveCalls (FunctionT x1 tArg1 (FunctionT x2 tArg2 tRes)) = do      
-      -- y1 <- freshId "x"
-      -- y2 <- freshId "x"
-      -- f <- freshId "f"
-      -- let (ScalarT dt@(DatatypeT d) tArgs _) = tArg1
-      -- let (Just metric) = env ^. datatypes . to (Map.! d) . wfMetric
-      -- let ds = toSort dt
-      -- let tArg1' = ScalarT dt tArgs (metric (Var ds valueVarName) |<=| metric (Var ds x1))
-      -- let tArg2' = ScalarT dt tArgs (metric (Var ds y1) |<| metric (Var ds x1) ||| metric (Var ds valueVarName) |<| metric (Var ds x2))
-      -- return $ [(f, FunctionT y1 tArg1' (FunctionT y2 tArg2' (renameVar x1 y1 tArg1 (renameVar x2 y2 tArg2 tRes))))]      
-      
-    recursiveCalls (FunctionT x tArg tRes) = do
-      y <- freshId "x"
-      calls' <- recursiveCalls tRes
-      case recursiveTArg x tArg of
-        Nothing -> return $ map (\(f, tRes') -> (f, FunctionT y tArg (renameVar x y tArg tRes'))) calls'
-        Just (tArgLt, tArgEq) -> do
+    -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
+    recursiveCalls t = do
+      fixStrategy <- asks $ _fixStrategy . fst
+      recType <- case fixStrategy of
+        AllArguments -> fst <$> recursiveTypeTuple t ffalse
+        FirstArgument -> recursiveTypeFirst t
+        DisableFixpoint -> return t
+      if recType == t 
+        then return [] 
+        else do
           f <- freshId "f"
-          fixStrategy <- asks $ _fixStrategy . fst
-          case fixStrategy of
-            AllArguments -> return $ (f, FunctionT y tArgLt (renameVar x y tArg tRes)) : map (\(f, tRes') -> (f, FunctionT y tArgEq (renameVar x y tArg tRes'))) calls'
-            FirstArgument -> return [(f, FunctionT y tArgLt (renameVar x y tArg tRes))]
-            DisableFixpoint -> return []
-    recursiveCalls _ = return []
-        
-    -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
-    -- inside the body of the recursive function where its argument has name @argName@ and type @t@
-    -- (@t@ strengthened with a termination condition)    
-    recursiveTArg argName (ScalarT IntT _ fml) = Just $ (int (fml  `andClean`  (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)), int (fml  `andClean`  (valInt |=| intVar argName)))
-    recursiveTArg argName (ScalarT dt@(DatatypeT name) tArgs fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
+          return $ [(f, recType)]
+      
+    -- | 'recursiveTypeTuple' @t fml@: type of the recursive call to a function of type @t@ when a lexicographic tuple of all recursible arguments decreases;
+    -- @fml@ denotes the disjunction @x1' < x1 || ... || xk' < xk@ of strict termination conditions on all previously seen recursible arguments to be added to the type of the last recursible argument;
+    -- the function returns a tuple of the weakend type @t@ and a flag that indicates if the last recursible argument has already been encountered and modified
+    recursiveTypeTuple (FunctionT x tArg tRes) fml = do
+      case terminationRefinement x tArg of
+        Nothing -> do
+          (tRes', seenLast) <- recursiveTypeTuple tRes fml
+          return (FunctionT x tArg tRes', seenLast)
+        Just (argLt, argLe) -> do
+          y <- freshId "x"
+          let yForVal = Map.singleton valueVarName (Var (toSort $ baseTypeOf tArg) y)
+          (tRes', seenLast) <- recursiveTypeTuple (renameVar x y tArg tRes) (fml `orClean` substitute yForVal argLt)
+          if seenLast
+            then return (FunctionT y (addRefinement tArg argLe) tRes', True) -- already encountered the last recursible argument: add a nonstrict termination refinement to the current one
+            else return (FunctionT y (addRefinement tArg (fml `orClean` argLt)) tRes', True) -- this is the last recursible argument: add the disjunction of strict termination refinements
+    recursiveTypeTuple t _ = return (t, False)
+    
+    -- | 'recursiveTypeFirst' @t fml@: type of the recursive call to a function of type @t@ when only the first recursible argument decreases
+    recursiveTypeFirst (FunctionT x tArg tRes) = do
+      case terminationRefinement x tArg of
+        Nothing -> FunctionT x tArg <$> recursiveTypeFirst tRes
+        Just (argLt, _) -> do
+          y <- freshId "x"
+          return $ FunctionT y (addRefinement tArg argLt) (renameVar x y tArg tRes)
+    recursiveTypeFirst t = return t
+
+    -- | If argument is recursible, return its strict and non-strict termination refinements, otherwise @Nothing@
+    terminationRefinement argName (ScalarT IntT _ fml) = Just (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName, valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
+    terminationRefinement argName (ScalarT dt@(DatatypeT name) tArgs fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just metric -> let ds = toSort dt in 
-        Just $ (ScalarT (DatatypeT name) tArgs (fml `andClean` (metric (Var ds valueVarName) |<| metric (Var ds argName))), 
-          ScalarT (DatatypeT name) tArgs (fml `andClean` (metric (Var ds valueVarName) |=| metric (Var ds argName))))      
-    recursiveTArg _ _ = Nothing
+        Just (metric (Var ds valueVarName) |<| metric (Var ds argName), metric (Var ds valueVarName) |<=| metric (Var ds argName)) 
+    terminationRefinement _ _ = Nothing
+    
     
 generateTopLevel env (Monotype t) = generateI env t    
 
