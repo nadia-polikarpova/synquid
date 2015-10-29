@@ -27,7 +27,7 @@ isSetS _ = False
 {- Formulas of the refinement logic -}
 
 -- | Unary operators
-data UnOp = Neg | Not
+data UnOp = Neg | Abs | Not
   deriving (Eq, Ord)
 
 -- | Binary operators  
@@ -73,6 +73,7 @@ valInt = intVar valueVarName
 vartVar n = Var (UninterpretedS n)
 valVart n = vartVar n valueVarName
 fneg = Unary Neg
+fabs = Unary Abs
 fnot = Unary Not
 (|*|) = Binary Times
 (|+|) = Binary Plus
@@ -88,8 +89,8 @@ fnot = Unary Not
 (|=>|) = Binary Implies
 (|<=>|) = Binary Iff
 
-andClean l r = if l == ftrue then r else (if r == ftrue then l else l |&| r)    
-orClean l r = if l == ffalse then r else (if r == ffalse then l else l ||| r)    
+andClean l r = if l == ftrue then r else (if r == ftrue then l else (if l == ffalse || r == ffalse then ffalse else l |&| r))    
+orClean l r = if l == ffalse then r else (if r == ffalse then l else (if l == ftrue || r == ftrue then ftrue else l ||| r))    
 conjunction fmls = foldr andClean ftrue (Set.toList fmls)
 disjunction fmls = foldr orClean ffalse (Set.toList fmls)
 
@@ -150,7 +151,7 @@ sortOf (SetLit b es)                          = mapM_ (\e -> sortOf e >>= guard 
 sortOf (Var s _ )                             = Just s
 sortOf (Unknown _ _)                          = Just BoolS
 sortOf (Unary op e)
-  | op == Neg                                 = (sortOf e >>= guard . (== IntS)) >> return IntS
+  | op == Neg || op == Abs                    = (sortOf e >>= guard . (== IntS)) >> return IntS
   | otherwise                                 = (sortOf e >>= guard . (== BoolS)) >> return BoolS
 sortOf (Binary op e1 e2)
   | op == Times || op == Plus || op == Minus            = do l <- sortOf e1; guard (l == IntS); r <- sortOf e2; guard (r == IntS); return IntS

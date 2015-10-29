@@ -114,9 +114,9 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 {- Formulas -}
 
 instance Pretty Sort where
-  pretty IntS = text "int"
-  pretty BoolS = text "bool"    
-  pretty (SetS el) = text "bet" <+> pretty el
+  pretty IntS = text "Int"
+  pretty BoolS = text "Bool"    
+  pretty (SetS el) = text "Set" <+> pretty el
   pretty (UninterpretedS name) = text name
 
 instance Show Sort where
@@ -124,6 +124,7 @@ instance Show Sort where
 
 instance Pretty UnOp where
   pretty Neg = text "-"
+  pretty Abs = text "abs"
   pretty Not = text "!"
 
 instance Show UnOp where

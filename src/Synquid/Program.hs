@@ -41,6 +41,11 @@ arity _ = 0
 lastType t@(ScalarT _ _ _) = t
 lastType (FunctionT _ _ tRes) = lastType tRes
 
+allArgs (ScalarT _ _ _) = Set.empty
+allArgs (FunctionT x tArg tRes) = case tArg of
+  ScalarT baseT _ _ -> Set.insert (Var (toSort baseT) x) $ allArgs tRes 
+  _ -> allArgs tRes
+  
 varRefinement x b = let s = toSort b in (Var s valueVarName |=| Var s x)
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName
 isVarRefinemnt _ = False
@@ -68,26 +73,25 @@ typeSubstitute subst t@(ScalarT (TypeVarT a) [] r) = case Map.lookup a subst of
       else ScalarT base tArgs (fml `andClean` fml')
     addRefinement t (BoolLit True) = t
     addRefinement t _ = error $ "addRefinement: applied to function type"
-    
-    typeSubstituteFML subst fml = case fml of 
-      SetLit el es -> SetLit (substSort el) (map (typeSubstituteFML subst) es)
-      Var s name -> Var (substSort s) name
-      Unknown s name -> Unknown (Map.map (typeSubstituteFML subst) s) name
-      Unary op e -> Unary op (typeSubstituteFML subst e)
-      Binary op l r -> Binary op (typeSubstituteFML subst l) (typeSubstituteFML subst r)
-      Measure s name e -> Measure (substSort s) name (typeSubstituteFML subst e)
-      _ -> fml
-      where
-        substSort s@(UninterpretedS name) = case Map.lookup name subst of
-          Just (ScalarT b _ _) -> toSort b
-          Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
-          Nothing -> s
-        substSort (SetS el) = SetS (substSort el)
-        substSort s = s    
-  
 typeSubstitute subst (ScalarT baseT tArgs r) = let tArgs' = map (typeSubstitute subst) tArgs 
-  in ScalarT baseT tArgs' r -- Here no need to substitute sorts inside r, since type arguments do not get reflected in the sort
+  in ScalarT baseT tArgs' (typeSubstituteFML subst r)
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
+
+typeSubstituteFML subst fml = case fml of 
+  SetLit el es -> SetLit (substSort el) (map (typeSubstituteFML subst) es)
+  Var s name -> Var (substSort s) name
+  Unknown s name -> Unknown (Map.map (typeSubstituteFML subst) s) name
+  Unary op e -> Unary op (typeSubstituteFML subst e)
+  Binary op l r -> Binary op (typeSubstituteFML subst l) (typeSubstituteFML subst r)
+  Measure s name e -> Measure (substSort s) name (typeSubstituteFML subst e)
+  _ -> fml
+  where
+    substSort s@(UninterpretedS name) = case Map.lookup name subst of
+      Just (ScalarT b _ _) -> toSort b
+      Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
+      Nothing -> s
+    substSort (SetS el) = SetS (substSort el)
+    substSort s = s
 
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id

@@ -13,8 +13,8 @@ import Control.Monad.Logic
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
-  _scrutineeDepth = 0,
-  _matchDepth = 2,
+  _scrutineeDepth = 1,
+  _matchDepth = 3,
   _condDepth = 1,
   _combineSymbols = PickDepthFirst,
   -- _combineSymbols = PickInterleave,
@@ -442,8 +442,7 @@ testInsertionSort = do
   synthesizeAndPrint "insertSort" env typ cq []  
   
 testIncListMerge = do
-  let env = -- addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"])))) .
-            addIncList $ emptyEnv
+  let env = addIncList $ emptyEnv
 
   let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
           
@@ -453,10 +452,46 @@ testIncListMerge = do
 
   synthesizeAndPrint "merge" env typ cq []
   
+{- Pairs -}  
+  
+pairT = DatatypeT "Pair"
+pair = ScalarT pairT [vartAll "a", vartAll "b"]
+pairAll = pair ftrue
+pairVar = Var (toSort pairT)
+valPair = pairVar valueVarName
+
+-- | Add pair datatype to the environment
+addPair = addDatatype "Pair" (Datatype 2 ["Pair"] Nothing) .
+          addPolyConstant "Pair" (Forall "a" $ Forall "b" $ Monotype 
+            (FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "b") 
+              (pair $ (Measure (UninterpretedS "a") "_1" valPair |=| vartVar "a" "x")
+                      |&| (Measure (UninterpretedS "b") "_2" valPair |=| vartVar "b" "y")))))
+                      
+testFst = do
+  let env = addPair $ emptyEnv
+
+  let typ = Forall "a" $ Forall "b" $ Monotype $ (FunctionT "p" (pair ftrue) (vart "a" $ Measure (UninterpretedS "a") "_1" (pairVar "p") |=| valVart "a"))
+          
+  synthesizeAndPrint "fst" env typ [] []
+                      
+
+testSplit = do
+  let env = addList $ addPair $ emptyEnv
+  let l = Measure (UninterpretedS "List") "_1" valPair
+  let r = Measure (UninterpretedS "List") "_2" valPair
+  let typ = Forall "a" $ Monotype $ (FunctionT "xs" (list ftrue) (ScalarT pairT 
+                                                                            [list $ fabs (mLen (listVar "xs") |-| mLen valList |*| IntLit 2) |<=| IntLit 1, 
+                                                                             list $ fabs (mLen (listVar "xs") |-| mLen valList |*| IntLit 2) |<=| IntLit 1] $ 
+                                                                            (mLen (listVar "xs") |=| (mLen l |+| mLen r))
+                                      ))                                      
+          
+  synthesizeAndPrint "split" env typ [] []
+  
+  
     
 {- Tree programs -}
 
-treeT = DatatypeT "tree"
+treeT = DatatypeT "Tree"
 tree = ScalarT treeT [vartAll "a"]
 treeAll = tree ftrue
 treeVar = Var (toSort treeT)
@@ -466,7 +501,7 @@ mSize = Measure IntS "size"
 mTElems = Measure (SetS (UninterpretedS "a")) "telems"
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
+addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])
@@ -554,8 +589,10 @@ main = do
   -- testIncListInsert
   -- testInsertionSort
   -- testIncListMerge
+  -- testFst
+  testSplit
   -- -- Tree programs
   -- testRoot
   -- testTreeGen
   -- testTreeSize
-  testFlatten
+  -- testFlatten

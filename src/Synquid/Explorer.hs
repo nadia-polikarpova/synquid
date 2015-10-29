@@ -167,12 +167,12 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
     -- | 'recursiveTArg' @argName t@ : type of the argument of a recursive call,
     -- inside the body of the recursive function where its argument has name @argName@ and type @t@
     -- (@t@ strengthened with a termination condition)    
-    recursiveTArg argName (ScalarT IntT _ fml) = Just $ (int (fml  |&|  valInt |>=| IntLit 0  |&|  valInt |<| intVar argName), int (fml  |&|  valInt |=| intVar argName))
+    recursiveTArg argName (ScalarT IntT _ fml) = Just $ (int (fml  `andClean`  (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName)), int (fml  `andClean`  (valInt |=| intVar argName)))
     recursiveTArg argName (ScalarT dt@(DatatypeT name) tArgs fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just metric -> let ds = toSort dt in 
-        Just $ (ScalarT (DatatypeT name) tArgs (fml |&| metric (Var ds valueVarName) |<| metric (Var ds argName)), 
-          ScalarT (DatatypeT name) tArgs (fml |&| metric (Var ds valueVarName) |=| metric (Var ds argName)))
+        Just $ (ScalarT (DatatypeT name) tArgs (fml `andClean` (metric (Var ds valueVarName) |<| metric (Var ds argName))), 
+          ScalarT (DatatypeT name) tArgs (fml `andClean` (metric (Var ds valueVarName) |=| metric (Var ds argName))))      
     recursiveTArg _ _ = Nothing
     
 generateTopLevel env (Monotype t) = generateI env t    
@@ -248,8 +248,8 @@ generateMatch env t = do
       
     -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
     addCaseSymbols env x (ScalarT _ _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
-      return $ ([], addNegAssumption (fnot $ subst fml) $ env) -- here vacuous cases are allowed
-      -- return $ ([], addAssumption (subst fml) . addAssumption (subst fml') $ env) -- here disallowed unless no other choice
+      -- return $ ([], addNegAssumption (fnot $ subst fml) env) -- here vacuous cases are allowed
+      return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
     addCaseSymbols env x (FunctionT y tArg tRes) = do
       argName <- freshId "z"
       (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
@@ -302,20 +302,17 @@ generateEAt env typ 0 = do
     pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
       do
         symbolUseCount %= Map.insertWith (+) name 1
-        case lookupConstructor name env of
-          Just d -> matchConsType (lastType t) (lastType typ) -- It's datatype constructor: its result type has a special form, so just distribute type parameters
-          Nothing -> do -- It's a function:
-            addConstraint $ Subtype env (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType typ) -- Add unification constraint (i.e. subtyping constraint on the shapes)
-            case Map.lookup name (env ^. shapeConstraints) of
-              Nothing -> return ()
-              Just sh -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) -- It's a plymorphic recursive call and has additional shape constraints
+        case Map.lookup name (env ^. shapeConstraints) of
+          Nothing -> return ()
+          Just sh -> do
+            addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) -- It's a plymorphic recursive call and has additional shape constraints
             ifM (asks $ _incrementalSolving . fst) (solveConstraints p) (return ())
         return (env, p)
 
     symbolType x t@(ScalarT b args _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
       | otherwise                       = ScalarT b args (varRefinement x b) -- x is a scalar variable, use _v = x
-    symbolType _ t = t    
+    symbolType _ t = t
         
 generateEAt env typ d = do    
   let maxArity = fst $ Map.findMax (env ^. symbols)
@@ -327,7 +324,7 @@ generateEAt env typ d = do
       a <- freshId "_a"
       x <- freshId "x"    
       (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll a)) typ)) 
-                            $ genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
+                            $ generateFun genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
               
       if isFunctionType tArg
@@ -340,7 +337,19 @@ generateEAt env typ d = do
                                 . over (_1 . context) (. \p -> Program (PApp fun p) tRes)) 
                                 $ generateArg genArg env' tArg
           (env''', y) <- addGhost arg env''
-          return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))          
+          return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
+          
+    generateFun genFun env tFun = do
+      (env', fun) <- genFun env tFun
+      let t = typeOf fun
+      -- The following performs early filtering of incomplete application terms
+      -- by comparing their result type with the spec's result type, 
+      -- after replacing all refinements that depend on yet undefined variables with false.
+      addConstraint $ Subtype env' (removeDependentRefinements (allArgs t) (lastType t)) (lastType tFun)
+      ifM (asks $ _incrementalSolving . fst) (solveConstraints fun) (return ())
+      return (env', fun)
+      
+    removeDependentRefinements argNames (ScalarT baseT typeArgs fml) = ScalarT baseT (map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
           
     generateArg genArg env tArg = do
       (env', arg) <- genArg env tArg
@@ -470,12 +479,12 @@ processConstraint :: Monad s => Constraint -> Explorer s ()
 processConstraint c@(Subtype env (ScalarT (TypeVarT a) [] _) (ScalarT (TypeVarT b) [] _)) 
   | not (isBound a env) && not (isBound b env) = addConstraint c
 processConstraint (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml')) | baseT == baseT' 
-  = case fml' of
-      BoolLit True -> return ()
-      _ -> do
+  = if fml == ffalse || fml' == ftrue
+      then return ()
+      else do
         tass <- use typeAssignment
         let (poss, negs) = embedding env tass
-        addHornClause (conjunction (Set.insert fml poss)) (disjunction (Set.insert fml' negs))
+        addHornClause (conjunction (Set.insert (typeSubstituteFML tass fml) poss)) (disjunction (Set.insert (typeSubstituteFML tass fml') negs))
 processConstraint (WellFormed env (ScalarT baseT [] fml))
   = case fml of
       Unknown _ u -> do

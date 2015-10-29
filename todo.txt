@@ -1,7 +1,9 @@
 - Change recursive calls with lexicographical tuple
+- Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry
+- When a measure is not mentioned in the goal spec, remove it from the componenets?
+- If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 - Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
-- Recast measures are decomposing to arguments?
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails	
 - Pass the spec down to eGen, when generating app, check if fun ==> !spec, in that case no argument exists
 
