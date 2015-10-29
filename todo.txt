@@ -1,4 +1,3 @@
-- Change recursive calls with lexicographical tuple
 - Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry
 - When a measure is not mentioned in the goal spec, remove it from the componenets?
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments

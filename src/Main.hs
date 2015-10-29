@@ -242,15 +242,17 @@ poslist = ScalarT listT [pos]
 
 mLen = Measure IntS "len"
 mElems = Measure (SetS (UninterpretedS "a")) "elems"
+mRank = Measure IntS "rank"
 
 -- | Add list datatype to the environment
-addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
+addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just mRank)) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
                                                             |&| mElems valList  |=| SetLit (UninterpretedS "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| IntLit 1
                                                                                                                      |&| mLen valList |>| IntLit 0
                                                                                                                      |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
+                                                                                                                     |&| mRank valList |=| mRank (listVar "xs") |+| IntLit 1
                                                                                    )))
                                                                                                                                                                       
 testHead = do
@@ -393,9 +395,10 @@ natInclist = ScalarT incListT [nat]
 
 mILen = Measure IntS "len"
 mIElems = Measure (SetS $ UninterpretedS "a") "elems"
+mIRank = Measure IntS "rank"
 
 -- | Add list datatype to the environment
-addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just $ mLen)) .
+addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just mIRank)) .
           addPolyConstant "INil" (Forall "a" $ Monotype $ incList $ mILen valIncList |=| IntLit 0 |&| 
                                                                mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
@@ -403,7 +406,9 @@ addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just $ mLen)) 
                                                          (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"] ftrue) 
                                                          (incList $ mILen valIncList |=| mILen (incListVar "xs") |+| IntLit 1 |&|
                                                                 mILen valIncList |>| IntLit 0 |&| 
-                                                                mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
+                                                                mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"] |&|
+                                                                mIRank valIncList |=| mIRank (incListVar "xs") |+| IntLit 1 |&| 
+                                                                mIRank (incListVar "xs") |>=| IntLit 0
                                                           )))
 
 testMakeIncList = do
@@ -448,8 +453,7 @@ testIncListMerge = do
   let typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) 
                                     (FunctionT "ys" (incList ftrue) 
                                     (incList $ 
-                                      -- mILen valIncList |=| mILen (incListVar "xs") |+| mILen (incListVar "ys") 
-                                      -- |&|
+                                      mILen valIncList |=| mILen (incListVar "xs") |+| mILen (incListVar "ys") |&|
                                       mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys")
                                       )))
                                     
@@ -525,9 +529,10 @@ valTree = treeVar valueVarName
 
 mSize = Measure IntS "size"
 mTElems = Measure (SetS (UninterpretedS "a")) "telems"
+mTRank = Measure IntS "rank"
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
+addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mTRank)) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])
@@ -536,6 +541,8 @@ addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
             mSize valTree |=| mSize (treeVar "l") |+| mSize (treeVar "r") |+| IntLit 1
             |&| mSize (treeVar "l") |>=| IntLit 0 |&| mSize (treeVar "r") |>=| IntLit 0
             -- |&| mTElems valTree |=| mTElems (treeVar "l") /+/ mTElems (treeVar "r") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
+            |&| mTRank valTree |=| mTRank (treeVar "l") |+| mTRank (treeVar "r") |+| IntLit 1
+            |&| mTRank (treeVar "l") |>=| IntLit 0 |&| mTRank (treeVar "r") |>=| IntLit 0
             ))))            
             
 testRoot = do
