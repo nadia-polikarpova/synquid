@@ -55,7 +55,7 @@ incListTests = TestLabel "IncList" $ TestList [
   , TestCase testIncListMerge 
   ]  
   
-parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType]
+parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType, testParseProgram]
 resolverTests = TestLabel "Resolver" $ TestList [testResolveTypeSkeleton]
 
 -- | Parameters for AST exploration
@@ -358,12 +358,49 @@ testParseTerm = createParserTestList parseTerm [
   ("foo 1 + 3", Measure UnknownS "foo" $ IntLit 1 |+| IntLit 3)]
 
 testResolveTypeSkeleton = TestList $ map createTestCase [
-  ("(e:Int -> {Int | _v > e})", FunctionT "e" intAll $ ScalarT IntT [] $ intVar "_v" |>| intVar "e"),
-  ("{Int | [_v] /<= [1, 2, 3]}",
+  (emptyEnv, "(e:Int -> {Int | _v > e})", FunctionT "e" intAll $ ScalarT IntT [] $ intVar "_v" |>| intVar "e"),
+  (emptyEnv, "{Int | [_v] /<= [1, 2, 3]}",
     ScalarT IntT [] $ SetLit IntS [intVar "_v"] /<=/ SetLit IntS [IntLit 1, IntLit 2, IntLit 3]),
-  ("(num1:Int -> (num2:Int -> {Int | _v == num1 + num2}))",
+  (emptyEnv, "(num1:Int -> (num2:Int -> {Int | _v == num1 + num2}))",
     FunctionT "num1" intAll $ FunctionT "num2" intAll $
-      ScalarT IntT [] $ intVar "_v" |=| intVar "num1" |+| intVar "num2")]
+      ScalarT IntT [] $ intVar "_v" |=| intVar "num1" |+| intVar "num2"),
+  (emptyEnv {_measures = Map.fromList [("bar", (IntS, SetS IntS)), ("foo", (SetS IntS, BoolS))]},
+    "{Int | foo bar 1}",
+    ScalarT IntT [] $ Measure BoolS "foo" $ Measure (SetS IntS) "bar" $ IntLit 1)]
   where
-    createTestCase (inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
-      parse parseType inputStr >>= resolveTypeSkeleton emptyEnv
+    createTestCase (env, inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
+      parse parseType inputStr >>= resolveTypeSkeleton env
+
+testParseProgram = TestCase $ assertEqual "full program" (Right outputAst) $ parse parseProgram inputStr
+  where
+    inputStr = "-- Type synonym declaration;\n\
+      \-- in line with LiquidHaskell, we use an explicit binder 'v', which could be any name, as opposed to always using '_v' to denote the value \n\
+      \type Nat = {Int | v >= 0}\n\
+      \\n\
+      \-- Some function signatures (name :: type) to be used as components;\n\
+      \-- note that braces around a type are mandatory when it has a refinement, but optional otherwise\n\
+      \tero :: {Int | v == 0}\n\
+      \inc :: x:Int -> {Int | v == x + 1}\n\
+      \dec :: (x: Int -> {Int | v == x - 1})\n\
+      \-- if dec only worked on positive arguments, we'd have write the signature as follows:\n\
+      \-- dec :: x: {v: Int | v > 0} -> {v: Int | v == x - 1}\n\
+      \-- note that the argument binder 'x' can only be used in later refinements, it's not in scope within the argument type\n\
+      \\n\
+      \-- Datatype declaration (decreases declaration is optional, lists a single measure name, body lists constructor signatures), \n\
+      \-- square brackets is the syntax for set literals\n\
+      \data List a decreases len where\n\
+        \Nil :: {List a | len v == 0  &&  elems v == []}\n\
+        \Cons :: x: a -> xs: List a -> {List a | len v == len xs + 1  &&  elems v == elems xs + [x]}\n\
+       \ \n\
+      \-- Measures (keyword measure + name :: shape, no refinements allowed here), Set is a built-in type in Synquid\n\
+      \measure len :: List a -> Int\n\
+      \measure elems :: List a -> Set Int\n\
+       \ \n\
+      \-- The synthesis goal is defined by a function signature followed by 'name = ??'\n\
+      \-- In principle, there can be multiple goals in a file, each gives rise to an independent synthesis problem,\n\
+      \-- which can use all the other goals as components.\n\
+      \-- For now it's enough to implement a single goal per file if that's easier.\n\
+      \replicate :: n: Nat -> x: a -> {List a | len v == n}\n\
+      \replicate = ??\n"
+
+    outputAst = [TypeDef "Nat" (ScalarT IntT [] (Binary Ge (Var UnknownS "v") (IntLit 0))),FuncDef "tero" (Monotype (ScalarT IntT [] (Binary Eq (Var UnknownS "v") (IntLit 0)))),FuncDef "inc" (Monotype (FunctionT "x" (ScalarT IntT [] (BoolLit True)) (ScalarT IntT [] (Binary Eq (Var UnknownS "v") (Binary Plus (Var UnknownS "x") (IntLit 1)))))),FuncDef "dec" (Monotype (FunctionT "x" (ScalarT IntT [] (BoolLit True)) (ScalarT IntT [] (Binary Eq (Var UnknownS "v") (Measure UnknownS "x" (Unary Neg (IntLit 1))))))),DataDef "List" ["a","decreases","len"] [ConstructorDef "Nil" (Monotype (ScalarT (DatatypeT "List") [ScalarT (TypeVarT "a") [] (BoolLit True)] (Measure UnknownS "len" (Binary And (Binary Eq (Var UnknownS "v") (IntLit 0)) (Measure UnknownS "elems" (Binary Eq (Var UnknownS "v") (SetLit UnknownS []))))))),ConstructorDef "Cons" (Monotype (FunctionT "x" (ScalarT (TypeVarT "a") [] (BoolLit True)) (FunctionT "xs" (ScalarT (DatatypeT "List") [ScalarT (TypeVarT "a") [] (BoolLit True)] (BoolLit True)) (ScalarT (DatatypeT "List") [ScalarT (TypeVarT "a") [] (BoolLit True)] (Measure UnknownS "len" (Binary Eq (Var UnknownS "v") (Measure UnknownS "len" (Binary And (Binary Plus (Var UnknownS "xs") (IntLit 1)) (Measure UnknownS "elems" (Binary Eq (Var UnknownS "v") (Measure UnknownS "elems" (Binary Plus (Var UnknownS "xs") (SetLit UnknownS [Var UnknownS "x"])))))))))))))],MeasureDef "len" (UninterpretedS "List") IntS,MeasureDef "elems" (UninterpretedS "List") (SetS IntS),FuncDef "replicate" (Monotype (FunctionT "n" (ScalarT (DatatypeT "Nat") [] (BoolLit True)) (FunctionT "x" (ScalarT (TypeVarT "a") [] (BoolLit True)) (ScalarT (DatatypeT "List") [ScalarT (TypeVarT "a") [] (BoolLit True)] (Measure UnknownS "len" (Binary Eq (Var UnknownS "v") (Var UnknownS "n"))))))),SynthesisGoal "replicate"]
