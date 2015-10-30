@@ -48,8 +48,16 @@ refineCandidates params quals constraints cands = evalFixPointSolver go params
       (valids', invalids') <- partitionM (isValidFml . applySolution sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
       
+-- | 'pruneQualifiers' @params quals@ : remove logically equivalent qualifiers from @quals@
 pruneQualifiers :: SMTSolver s => SolverParams -> QSpace -> s QSpace    
 pruneQualifiers params quals = evalFixPointSolver (ifM (asks pruneQuals) (pruneQSpace quals) (return quals)) params
+
+-- | 'checkConsistency' @fmls cands@ : return those candidates from @cands@ under which all @fmls@ are satisfiable
+checkConsistency :: SMTSolver s => [Formula] -> [Candidate] -> s [Candidate]
+checkConsistency fmls cands = filterM checkCand cands
+  where
+    checkCand (Candidate sol valids invalids label) = let fmls' = map (applySolution sol) fmls 
+      in debug 1 (text "Consistency Check" <+> pretty fmls') $ not <$> anyM isValid (map fnot fmls')      
 
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate

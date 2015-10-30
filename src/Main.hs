@@ -14,15 +14,16 @@ import Control.Monad.Logic
 explorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 2,
+  _matchDepth = 1,
   _condDepth = 1,
   _combineSymbols = PickDepthFirst,
   -- _combineSymbols = PickInterleave,
-  _fixStrategy = AllArguments,
-  -- _fixStrategy = FirstArgument,
+  -- _fixStrategy = AllArguments,
+  _fixStrategy = FirstArgument,
   -- _fixStrategy = DisableFixpoint,
   _polyRecursion = True,
   _incrementalSolving = True,
+  _consistencyChecking = True,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
   _context = id
@@ -532,7 +533,7 @@ mTElems = Measure (SetS (UninterpretedS "a")) "telems"
 mTRank = Measure IntS "rank"
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mTRank)) .
+addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])
@@ -541,8 +542,8 @@ addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mTRank)) .
             mSize valTree |=| mSize (treeVar "l") |+| mSize (treeVar "r") |+| IntLit 1
             |&| mSize (treeVar "l") |>=| IntLit 0 |&| mSize (treeVar "r") |>=| IntLit 0
             -- |&| mTElems valTree |=| mTElems (treeVar "l") /+/ mTElems (treeVar "r") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
-            |&| mTRank valTree |=| mTRank (treeVar "l") |+| mTRank (treeVar "r") |+| IntLit 1
-            |&| mTRank (treeVar "l") |>=| IntLit 0 |&| mTRank (treeVar "r") |>=| IntLit 0
+            -- |&| mTRank valTree |=| mTRank (treeVar "l") |+| mTRank (treeVar "r") |+| IntLit 1
+            -- |&| mTRank (treeVar "l") |>=| IntLit 0 |&| mTRank (treeVar "r") |>=| IntLit 0
             ))))            
             
 testRoot = do
@@ -568,9 +569,9 @@ testRoot = do
   
 testTreeSize = do
   let env = addConstant "0" (int (valInt |=| IntLit 0)) .
-            -- addConstant "1" (int (valInt |=| IntLit 1)) .
+            addConstant "1" (int (valInt |=| IntLit 1)) .
             -- addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-            addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+            -- addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
             addConstant "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
             -- addConstant "minus" (FunctionT "x" nat (FunctionT "y" nat (int (valInt |=| intVar "x" |-| intVar "y")))) .            
             addTree $ emptyEnv
@@ -607,7 +608,7 @@ main = do
   -- -- testCompose  
   -- -- testPolymorphic
   -- -- List programs
-  -- testHead
+  testHead
   -- testReplicate
   -- testLength
   -- testAppend
@@ -621,7 +622,7 @@ main = do
   -- testMakeIncList
   -- testIncListInsert
   -- testInsertionSort
-  testIncListMerge
+  -- testIncListMerge
   -- testFst
   -- testSplit
   -- testMergeSort

@@ -348,6 +348,6 @@ embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls
 {- Misc -}
           
 -- | Typing constraints
-data Constraint = Subtype Environment RType RType
+data Constraint = Subtype Environment RType RType Bool
   | WellFormed Environment RType
   | WellFormedCond Environment Formula

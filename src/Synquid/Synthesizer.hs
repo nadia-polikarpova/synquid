@@ -43,18 +43,17 @@ synthesize goal solverParams cquals tquals = do
         explorerParams' =  set condQualsGen condQuals .
                            set typeQualsGen typeQuals
                            $ gParams goal
-      in explore goal { gParams = explorerParams' } (ConstraintSolver init refine prune)
+      in explore goal { gParams = explorerParams' } (ConstraintSolver init refine prune checkConsistency)
       
     init :: Z3State Candidate
     init = initialCandidate
       
     refine :: [Formula] -> QMap -> RProgram -> [Candidate] -> Z3State [Candidate]
-    -- refine fmls qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap fmls cands
     refine fmls qmap p cands = refineCandidates (solverParams { candDoc = candidateDoc p }) qmap fmls cands
     
     prune :: QSpace -> Z3State QSpace  
     prune = pruneQualifiers solverParams
-  
+    
     -- | Qualifier generator for conditionals
     condQuals = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
     
