@@ -69,6 +69,7 @@ defaultExplorerParams = ExplorerParams {
   _fixStrategy = FirstArgument,
   _polyRecursion = True,
   _incrementalSolving = True,
+  _consistencyChecking = False,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
   _context = id
