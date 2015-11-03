@@ -12,18 +12,18 @@ import Control.Monad.Logic
 
 -- | Parameters for template exploration
 explorerParams = ExplorerParams {
-  _eGuessDepth = 3,
-  _scrutineeDepth = 0,
-  _matchDepth = 1,
+  _eGuessDepth = 2,
+  _scrutineeDepth = 1,
+  _matchDepth = 3,
   _condDepth = 1,
   _combineSymbols = PickDepthFirst,
   -- _combineSymbols = PickInterleave,
-  -- _fixStrategy = AllArguments,
-  _fixStrategy = FirstArgument,
+  _fixStrategy = AllArguments,
+  -- _fixStrategy = FirstArgument,
   -- _fixStrategy = DisableFixpoint,
   _polyRecursion = True,
   _incrementalSolving = True,
-  _consistencyChecking = True,
+  _consistencyChecking = False,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
   _context = id
@@ -246,14 +246,14 @@ mElems = Measure (SetS (UninterpretedS "a")) "elems"
 mRank = Measure IntS "rank"
 
 -- | Add list datatype to the environment
-addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just mRank)) .
+addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just mLen)) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
                                                             |&| mElems valList  |=| SetLit (UninterpretedS "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| IntLit 1
                                                                                                                      |&| mLen valList |>| IntLit 0
                                                                                                                      |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
-                                                                                                                     |&| mRank valList |=| mRank (listVar "xs") |+| IntLit 1
+                                                                                                                     -- |&| mRank valList |=| mRank (listVar "xs") |+| IntLit 1
                                                                                    )))
                                                                                                                                                                       
 testHead = do
@@ -608,7 +608,7 @@ main = do
   -- -- testCompose  
   -- -- testPolymorphic
   -- -- List programs
-  testHead
+  -- testHead
   -- testReplicate
   -- testLength
   -- testAppend
@@ -624,7 +624,7 @@ main = do
   -- testInsertionSort
   -- testIncListMerge
   -- testFst
-  -- testSplit
+  testSplit
   -- testMergeSort
   -- -- Tree programs
   -- testRoot
