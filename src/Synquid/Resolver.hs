@@ -13,7 +13,6 @@ import Control.Applicative
 import Control.Monad.Except
 import Text.Printf
 import Control.Lens
-import Control.Monad
 import Data.List
 
 type ErrMsg = String
@@ -34,13 +33,21 @@ resolveProgramAst declarations = do
     isSynthesisGoal (SynthesisGoal _) = True
     isSynthesisGoal _ = False
 
+substituteTypeSynonym :: TypeSubstitution -> RType -> RType
+substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName) typeArgs refinement) =
+  case synonyms ^. at typeName of
+    Just typeSubstitute -> typeSubstitute -- what if `refinement` isn't just BoolLit True?
+    Nothing -> rtype
+substituteTypeSynonym synonyms (FunctionT argId argRef returnRef) = FunctionT argId (substituteTypeSynonym synonyms argRef) (substituteTypeSynonym synonyms returnRef)
+substituteTypeSynonym synonyms rtype = rtype
+
 resolveDeclaration :: Environment -> Declaration -> ResolverError Environment
 resolveDeclaration env (TypeDef typeName typeBody) = do
   typeBody' <- resolveTypeSkeleton env typeBody
   return $ addTypeSynonym typeName typeBody' env
 resolveDeclaration env (FuncDef funcName typeSchema) = do
   typeSchema' <- resolveSchemaSkeleton env typeSchema
-  return $ addPolyConstant funcName typeSchema env
+  return $ addPolyConstant funcName typeSchema' env
 resolveDeclaration env (DataDef dataName typeParams constructors) = do
   let
     datatype = Datatype {
@@ -63,7 +70,7 @@ resolveTypeSkeleton env (ScalarT baseType typeParamRefs typeFml) = do
   case sortOf typeFml' of
     Just BoolS -> do
       typeParamRefs' <- mapM (resolveTypeSkeleton env) typeParamRefs
-      return $ ScalarT baseType typeParamRefs' typeFml'
+      return $ substituteTypeSynonym (env ^. typeSynonyms) $ ScalarT baseType typeParamRefs' typeFml'
     Just _ -> throwError "Refinement formula doesn't evaluate to a boolean"
     Nothing -> throwError "Failed to determine type of formula"
 resolveTypeSkeleton env (FunctionT argId argRef returnRef) = do
