@@ -251,7 +251,11 @@ parseMeasure :: Parser Formula
 parseMeasure = do
   measureName <- parseIdentifier
   Parsec.spaces
+  Parsec.char '('
+  Parsec.spaces
   arg <- parseFormula
+  Parsec.spaces
+  Parsec.char ')'
   return $ Measure UnknownS measureName arg
   <?> "measure"
 
