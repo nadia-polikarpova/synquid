@@ -55,6 +55,7 @@ isVarRefinemnt _ = False
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   Forall Id (SchemaSkeleton r)
+  deriving (Eq)
   
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
@@ -258,9 +259,11 @@ data Environment = Environment {
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
+  _measures :: Map Id (Sort, Sort),        -- ^ A map of the names of the `Measure`s for the types in `_datatypes` to their input and output `Sort`s
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
+  _typeSynonyms :: TypeSubstitution,
   _usedScrutinees :: [RProgram]            -- ^ Program terms that has already been scrutinized
 }
 
@@ -268,7 +271,7 @@ makeLenses ''Environment
 
 -- | Environment with no symbols or assumptions
 emptyEnv :: Environment
-emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Set.empty Set.empty Map.empty []
+emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Map.empty Set.empty Set.empty Map.empty Map.empty []
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
@@ -291,13 +294,27 @@ addPolyVariable name sch = let n = arity (toMonotype sch) in (symbols %~ Map.ins
 addConstant :: Id -> RType -> Environment -> Environment
 addConstant name t = addPolyConstant name (Monotype t)
 
+addMeasure :: Id -> (Sort, Sort) -> Environment -> Environment
+addMeasure measureName sorts = over measures (Map.insert measureName sorts)
+
 -- | 'addPolyConstant' @name sch env@ : add type binding @name@ :: @sch@ to @env@
 addPolyConstant :: Id -> RSchema -> Environment -> Environment
 addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert name)
 
+addTypeSynonym :: Id -> RType -> Environment -> Environment
+addTypeSynonym name type' = over typeSynonyms (Map.insert name type')
+
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment
 addDatatype :: Id -> Datatype -> Environment -> Environment
-addDatatype name dt = over datatypes (Map.insert name dt)
+addDatatype name dt env =
+  let env' = over datatypes (Map.insert name dt) env in
+  case dt ^. wfMetric of
+    Just measureFunc ->
+      let
+        (Measure returnSort measureName _) = measureFunc $ BoolLit True
+        inputSort = toSort $ DatatypeT name
+      in addMeasure measureName (inputSort, returnSort) env'
+    Nothing -> env'
 
 -- | 'lookupConstructor' @ctor env@ : the name of the datatype for which @ctor@ is regisered as a constructor in @env@, if any
 lookupConstructor :: Id -> Environment -> Maybe Id
@@ -351,3 +368,16 @@ embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls
 data Constraint = Subtype Environment RType RType Bool
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
+  
+type ProgramAst = [Declaration]
+data ConstructorDef = ConstructorDef Id RSchema
+  deriving (Eq)
+data Declaration =
+  TypeDef Id RType | -- | Type name and definition.
+  FuncDef Id RSchema | -- | Function name and signature.
+  DataDef Id [Id] (Maybe Id) [ConstructorDef] | -- | Datatype name, type parameters, and constructor definitions.
+  MeasureDef Id Sort Sort | -- | Measure name, input sort, output sort.
+  SynthesisGoal Id -- Name of the function to synthesize.
+  deriving (Eq)
+
+constructorName (ConstructorDef name _) = name
