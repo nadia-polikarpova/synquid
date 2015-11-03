@@ -91,11 +91,14 @@ parseMeasureDef = do
   Parsec.spaces
   Parsec.string "::"
   Parsec.spaces
+  Parsec.char '('
+  Parsec.spaces
   inSort <- parseSort
   Parsec.spaces
   Parsec.string "->"
   Parsec.spaces
   outSort <- parseSort
+  Parsec.char ')'
   return $ MeasureDef measureName inSort outSort
   <?> "measure definition"
 
@@ -185,7 +188,7 @@ parseSort = Parsec.choice [
   parseCustomSort]
   where
     parseCustomSort = do
-      typeName <- parseTypeName
+      typeName <- parseTypeName <|> parseIdentifier
       Parsec.spaces
       typeParams <- Parsec.many $ parseIdentifier <* Parsec.spaces
       return $ UninterpretedS typeName -- Discard `typeParams` because `Sort` doesn't currently support type params.
