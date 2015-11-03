@@ -331,7 +331,7 @@ generateEAt env typ 0 = do
         case Map.lookup name (env ^. shapeConstraints) of
           Nothing -> return ()
           Just sh -> do
-            addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a plymorphic recursive call and has additional shape constraints
+            addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
             ifM (asks $ _incrementalSolving . fst) (solveConstraints p) (return ())
         return (env, p)
 
@@ -344,7 +344,7 @@ generateEAt env typ d = do
   let maxArity = fst $ Map.findMax (env ^. symbols)
   guard $ arity typ < maxArity
   generateApp (\e t -> generateEUpTo e t d) (\e t -> generateEAt e t (d - 1)) `mplus`
-    generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) 
+    if d > 1 then generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) else mzero
   where
     generateApp genFun genArg = do
       a <- freshId "_a"
@@ -372,7 +372,7 @@ generateEAt env typ d = do
       -- by comparing their result type with the spec's result type, 
       -- after replacing all refinements that depend on yet undefined variables with false.
       addConstraint $ Subtype env' (removeDependentRefinements (allArgs t) (lastType t)) (lastType tFun) False
-      addConstraint $ Subtype env' t tFun True -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+      ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env' t tFun True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
       ifM (asks $ _incrementalSolving . fst) (solveConstraints fun) (return ())
       return (env', fun)
       
@@ -497,7 +497,7 @@ simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 
   = do -- TODO: rename type vars
       -- simplifyConstraint (Subtype env tArg2 tArg1 False)
       -- debug 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1) $ return ()
-      simplifyConstraint (Subtype (addVariable y tArg1 env) (renameVar x y tArg2 tRes1) tRes2 True)
+      simplifyConstraint (Subtype (over ghosts (Map.insert y tArg1) env) (renameVar x y tArg2 tRes1) tRes2 True)
 simplifyConstraint' _ (WellFormed env (ScalarT baseT (tArg:tArgs) fml))
   = do
       simplifyConstraint (WellFormed env tArg)

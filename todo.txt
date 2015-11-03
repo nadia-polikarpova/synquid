@@ -5,8 +5,9 @@
 
 - Multisets and sequences
 - Abstract refinements
+- LFP solver for when CA is not required?
 
-
+- BUG: well-formedness constraints should be added in the environement where a type variable is created, rather when it gets unified, since the latter may have more variables after decomposing sybtyping over function types
 - When a measure is not mentioned in the goal spec, remove it from the componenets?
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails	
