@@ -21,17 +21,6 @@ import Text.Parsec ((<|>), (<?>))
 import Text.Printf
 
 type Parser = Parsec.Parsec String ()
--- Rschema or skeleton?
--- Quick and dirty Show instances to aid in debugging.
-instance Show Declaration where
-  show (TypeDef id' type') = printf "type %s = %s" id' $ show type'
-  show (FuncDef id' schema) = printf "func %s = %s" id' $ show schema
-  show (DataDef id' typeParams ctors) = printf "data %s %s\n%s" id' (show typeParams) $ unlines $ map ((++) "  " . show) ctors
-  show (MeasureDef id' inSort outSort) = printf "msre %s = %s -> %s" id' (show inSort) $ show outSort
-  show (SynthesisGoal id') = printf "goal %s = ??" id'
-
-instance Show ConstructorDef where
-  show (ConstructorDef id' schema) = printf "ctor %s = %s" id' $ show schema
 
 parse parser str = case Parsec.parse parser "" str of
   Left err -> Left $ show err
@@ -67,10 +56,14 @@ parseDataDef = do
   Parsec.spaces
   typeName <- parseTypeName
   Parsec.spaces
-  typeParams <- Parsec.manyTill (parseIdentifier <* Parsec.spaces) $ Parsec.string "where"
+  typeParams <- Parsec.manyTill (parseIdentifier <* Parsec.spaces) $
+    Parsec.lookAhead $ Parsec.string "decreases" <|> Parsec.string "where"
+  wfMetricName <- Parsec.optionMaybe $ ((Parsec.try $ Parsec.string "decreases") >> Parsec.spaces >> parseIdentifier)
+  Parsec.spaces
+  Parsec.string "where"
   Parsec.spaces
   constructors <- (Parsec.many1 $ parseConstructorDef <* Parsec.spaces)
-  return $ DataDef typeName typeParams constructors
+  return $ DataDef typeName typeParams wfMetricName constructors
   <?> "data definition"
 
 parseConstructorDef :: Parser ConstructorDef

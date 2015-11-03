@@ -360,7 +360,7 @@ data ConstructorDef = ConstructorDef Id RSchema-- deriving Show
 data Declaration =
   TypeDef Id RType | -- | Type name and definition.
   FuncDef Id RSchema | -- | Function name and signature.
-  DataDef Id [Id] [ConstructorDef] | -- | Datatype name, type parameters, and constructor definitions.
+  DataDef Id [Id] (Maybe Id) [ConstructorDef] | -- | Datatype name, type parameters, and constructor definitions.
   MeasureDef Id Sort Sort | -- | Measure name, input sort, output sort.
   SynthesisGoal Id -- Name of the function to synthesize.
   deriving (Eq)
