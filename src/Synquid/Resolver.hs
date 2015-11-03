@@ -14,6 +14,7 @@ import Control.Monad.Except
 import Text.Printf
 import Control.Lens
 import Data.List
+import qualified Data.Foldable as Foldable
 
 type ErrMsg = String
 type ResolverError = Either ErrMsg
@@ -62,7 +63,9 @@ resolveDeclaration env (MeasureDef measureName inSort outSort) = return $ addMea
 resolveDeclaration env (SynthesisGoal _) = return env
 
 resolveSchemaSkeleton :: Environment -> RSchema -> ResolverError RSchema
-resolveSchemaSkeleton env (Monotype typeSkel) = fmap Monotype $ resolveTypeSkeleton env typeSkel
+resolveSchemaSkeleton env (Monotype typeSkel) = do
+  typeSkel' <- resolveTypeSkeleton env typeSkel
+  return $ Foldable.foldl (flip Forall) (Monotype typeSkel') $ typeVarsOf typeSkel'
 resolveSchemaSkeleton env (Forall id' schemaSkel) = fmap (Forall id') $ resolveSchemaSkeleton env schemaSkel
 
 resolveTypeSkeleton :: Environment -> RType -> ResolverError RType
