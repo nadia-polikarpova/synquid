@@ -23,6 +23,7 @@ maybeErr :: Maybe a -> ErrMsg -> ResolverError a
 maybeErr (Just a) _ = return a
 maybeErr Nothing errMsg = throwError errMsg
 
+-- | Convert a parsed program AST into a synthesizable @Goal@ object.
 resolveProgramAst :: ProgramAst -> ResolverError Goal
 resolveProgramAst declarations = do
   env <- foldM (resolveDeclaration) emptyEnv declarations
@@ -48,7 +49,7 @@ resolveDeclaration env (TypeDef typeName typeBody) = do
 resolveDeclaration env (FuncDef funcName typeSchema) = do
   typeSchema' <- resolveSchemaSkeleton env typeSchema
   return $ addPolyConstant funcName typeSchema' env
-resolveDeclaration env (DataDef dataName typeParams constructors) = do
+resolveDeclaration env (DataDef dataName typeParams metricName constructors) = do
   let
     datatype = Datatype {
       _typeArgCount = length typeParams,
