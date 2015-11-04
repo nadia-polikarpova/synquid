@@ -56,8 +56,6 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
-import qualified Data.Bimap as BMap
-import Data.Bimap (Bimap)
 
 import Control.Lens
 
@@ -175,7 +173,7 @@ fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> pretty i
-    SetLit _ elems -> braces $ commaSep $ map pretty elems
+    SetLit _ elems -> brackets $ commaSep $ map pretty elems
     Var s name -> text name -- <> text ":" <> pretty  s
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
@@ -300,6 +298,20 @@ instance Pretty Candidate where
     
 candidateDoc :: RProgram -> Candidate -> Doc
 candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
+
+{- Input language -}
+
+instance Pretty ConstructorDef where
+  pretty (ConstructorDef name t) = text name <+> text "::" <+> pretty t
+  
+instance Pretty Declaration where
+  pretty (TypeDef name t) = text "type" <+> text name <+> text "=" <+> pretty t
+  pretty (FuncDef name t) = text name <+> text "::" <+> pretty t
+  pretty (DataDef name typeVars wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>
+                                                            optionMaybe wfMetricMb (\m -> text "decreases" <+> text m) <+> text "where") $+$
+                                                            vsep (map pretty ctors) 
+  pretty (MeasureDef name inSort outSort) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->" <+> pretty outSort
+  pretty (SynthesisGoal name) = text name <+> text "= ??"
     
 {- AST node counting -}
 

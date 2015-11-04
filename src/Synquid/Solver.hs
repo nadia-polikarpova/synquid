@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 -- | Solver for second-order constraints
 module Synquid.Solver where
 

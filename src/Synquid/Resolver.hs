@@ -1,10 +1,6 @@
-{-
- - Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement
- - formulas evaluate to a boolean, etc.)
- -}
-
 {-# LANGUAGE TupleSections #-}
 
+-- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
 module Synquid.Resolver where
 
 import Synquid.Program
