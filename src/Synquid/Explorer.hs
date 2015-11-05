@@ -22,6 +22,7 @@ import Control.Monad.Reader
 import Control.Applicative
 import Control.Lens
 import Control.Monad.Trans.Maybe
+import Debug.Trace
 
 {- Interface -}
 
@@ -61,18 +62,11 @@ data ExplorerParams = ExplorerParams {
   _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
   _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
-  _context :: RProgram -> RProgram        -- ^ Context in which subterm is currently being generated (used only for logging)
+  _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
+  _explorerLogLevel :: Int                -- ^ How verbose logging is
 }
 
 makeLenses ''ExplorerParams
-
--- | Synthesis goal
-data Goal = Goal {
-  gName :: Id, 
-  gEnvironment :: Environment, 
-  gSpec :: RSchema,
-  gParams :: ExplorerParams
-}
 
 -- | State of program exploration
 data ExplorerState = ExplorerState {
@@ -100,10 +94,10 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolve
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
-explore :: Monad s => Goal -> ConstraintSolver s -> LogicT s RProgram
-explore goal solver = do
+explore :: Monad s => ExplorerParams -> ConstraintSolver s -> Goal -> LogicT s RProgram
+explore params solver goal = do
     initCand <- lift $ csInit solver
-    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] [] Map.empty [initCand] [] Map.empty)) (gParams goal, solver) 
+    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] [] Map.empty [initCand] [] Map.empty)) (params, solver) 
   where
     go :: Monad s => Explorer s RProgram
     go = do
@@ -118,7 +112,7 @@ explore goal solver = do
       goals <- use auxGoals
       case goals of
         [] -> return p
-        (Goal name env (Monotype spec) params) : gs -> local (set _1 params) $ do
+        (Goal name env (Monotype spec)) : gs -> do
           auxGoals .= gs
           subterm <- generateI env spec
           generateAuxGoals $ programSubstituteSymbol name subterm p
@@ -388,8 +382,7 @@ generateEAt env typ d = do
       
 enqueueGoal env typ = do
   g <- freshId "g"
-  params <- asks fst
-  auxGoals %= ((Goal g env (Monotype typ) params) :)
+  auxGoals %= ((Goal g env $ Monotype typ) :)
   return $ Program (PSymbol g) typ      
    
 addGhost :: Monad s => RProgram -> Environment -> Explorer s (Environment, Id)   
@@ -401,11 +394,11 @@ addGhost p env = do
 {- Constraint solving -}
 
 -- | Solve all currently unsolved constraints
--- (program @p@ is only used for debug information)
+-- (program @p@ is only used for logging)
 solveConstraints :: Monad s => RProgram -> Explorer s ()
 solveConstraints p = do
   ctx <- asks $ _context . fst
-  debug 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p)) $ return ()
+  writeLog 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p))
 
   simplifyAllConstraints
   processAllConstraints
@@ -416,16 +409,16 @@ solveConstraints p = do
     simplifyAllConstraints = do
       cs <- use typingConstraints
       tass <- use typeAssignment      
-      debug 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs)) $ return ()
+      writeLog 1 (text "Typing Constraints" $+$ (vsep $ map pretty cs))
       
       typingConstraints .= []
       mapM_ simplifyConstraint cs
       tass' <- use typeAssignment
-      debug 1 (text "Type assignment" $+$ vMapDoc text pretty tass') $ return ()
+      writeLog 1 (text "Type assignment" $+$ vMapDoc text pretty tass')
       -- if type assignment has changed, we might be able to process more constraints:
       if Map.size tass' > Map.size tass
         then simplifyAllConstraints
-        else debug 1 (text "With Shapes" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) (programSubstituteTypes tass p)) $ return ()
+        else writeLog 1 (text "With Shapes" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) (programSubstituteTypes tass p))
         
     -- | Convert simple typing constraints into horn clauses and qualifier maps
     processAllConstraints = do
@@ -441,7 +434,7 @@ solveConstraints p = do
       clauses <- use hornClauses
       cands <- use candidates        
       cands' <- lift . lift . lift $ csRefine solv clauses qmap (programSubstituteTypes tass p) cands
-      when (null cands') $ debug 1 (text "FAIL: horn clauses have no solutions") mzero
+      when (null cands') $ writeLog 1 (text "FAIL: horn clauses have no solutions") >> mzero
       candidates .= cands'
       hornClauses .= []
       
@@ -450,7 +443,7 @@ solveConstraints p = do
       fmls <- use consistencyChecks
       cands <- use candidates
       cands' <- lift . lift . lift $ csCheckConsistency solv fmls cands
-      when (null cands') $ debug 1 (text "FAIL: inconsistent types") mzero
+      when (null cands') $ writeLog 1 (text "FAIL: inconsistent types") >> mzero
       candidates .= cands'
       consistencyChecks .= []
       
@@ -477,7 +470,7 @@ simplifyConstraint' tass (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) 
 simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) 
   | not (isBound a env) && not (isBound b env)
   = if a == b
-      then debug 1 "simplifyConstraint: equal type variables on both sides" $ return ()
+      then writeLog 1 "simplifyConstraint: equal type variables on both sides"
       else addConstraint c
 -- Unknown free variable and a type: extend type assignment      
 simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) _) t _) 
@@ -493,12 +486,12 @@ simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs)) fml) (
 simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False)
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
-      -- debug 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1) $ return ()
+      -- writeLog 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1)
       simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2 False)
 simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True) -- This is a hack: we assume that arg in t2 is a free tv with no refinements
   = do -- TODO: rename type vars
       -- simplifyConstraint (Subtype env tArg2 tArg1 False)
-      -- debug 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1) $ return ()
+      -- writeLog 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1)
       simplifyConstraint (Subtype (over ghosts (Map.insert y tArg1) env) (renameVar x y tArg2 tRes1) tRes2 True)
 simplifyConstraint' _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs)) fml))
   = do
@@ -514,13 +507,13 @@ simplifyConstraint' _ c@(Subtype env (ScalarT baseT _) (ScalarT baseT' _) _) | b
 simplifyConstraint' _ c@(WellFormed env (ScalarT baseT _)) = addConstraint c
 simplifyConstraint' _ c@(WellFormedCond env _) = addConstraint c      
 -- Otherwise (shape mismatch): fail      
-simplifyConstraint' _ _ = debug 1 (text "FAIL: shape mismatch") mzero
+simplifyConstraint' _ _ = writeLog 1 (text "FAIL: shape mismatch") >> mzero
 
 unify c env a t = if a `Set.member` typeVarsOf t
-  then debug 1 (text "simplifyConstraint: type variable occurs in the other type") mzero
+  then writeLog 1 (text "simplifyConstraint: type variable occurs in the other type") >> mzero
   else do    
     t' <- fresh env t
-    debug 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t') $ return ()
+    writeLog 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
     addConstraint $ WellFormed env t'
     addTypeAssignment a t'
     simplifyConstraint c
@@ -601,3 +594,7 @@ fresh env (FunctionT x tArg tFun) = do
   
 matchConsType (ScalarT (DatatypeT d vars) _) (ScalarT (DatatypeT d' args) _) | d == d' = zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
 matchConsType _ _ = mzero
+
+writeLog level msg = do
+  maxLevel <- asks $ _explorerLogLevel . fst
+  if level <= maxLevel then traceShow msg $ return () else return ()

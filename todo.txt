@@ -13,7 +13,6 @@
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 
 Front-end
-	- Move explorer params out of goal
 	- Parse qualifiers
 	- Command line args for params
 	

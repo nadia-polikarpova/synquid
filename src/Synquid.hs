@@ -54,7 +54,8 @@ defaultExplorerParams = ExplorerParams {
   _consistencyChecking = False,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
-  _context = id
+  _context = id,
+  _explorerLogLevel = 1
 }
 
 -- | Parameters for constraint solving
@@ -70,7 +71,8 @@ defaultSolverParams = SolverParams {
   candidatePickStrategy = InitializedWeakCandidate,
   -- candidatePickStrategy = WeakCandidate,
   constraintPickStrategy = SmallSpaceConstraint,
-  candDoc = const empty
+  candDoc = const empty,
+  solverLogLevel = 1
   }
   
 inequalities = do
@@ -90,7 +92,7 @@ runOnFile explorerParams solverParams file = do
         print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
         print empty
         -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
-        mProg <- synthesize goal { gParams = explorerParams } solverParams inequalities []
+        mProg <- synthesize explorerParams solverParams goal inequalities []
         case mProg of
           Nothing -> putStr "No Solution"
           Just prog -> print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))

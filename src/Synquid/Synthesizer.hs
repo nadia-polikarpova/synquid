@@ -28,8 +28,8 @@ import Control.Lens
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: Goal -> SolverParams -> [Formula] -> [Formula] -> IO (Maybe RProgram)
-synthesize goal solverParams cquals tquals = do
+synthesize :: ExplorerParams -> SolverParams -> Goal -> [Formula] -> [Formula] -> IO (Maybe RProgram)
+synthesize explorerParams solverParams goal cquals tquals = do
   ps <- evalZ3State $ observeManyT 1 $ programs
   case ps of
     [] -> return Nothing
@@ -42,8 +42,8 @@ synthesize goal solverParams cquals tquals = do
         -- Initialize missing explorer parameters
         explorerParams' =  set condQualsGen condQuals .
                            set typeQualsGen typeQuals
-                           $ gParams goal
-      in explore goal { gParams = explorerParams' } (ConstraintSolver init refine prune checkConsistency)
+                           $ explorerParams
+      in explore explorerParams' (ConstraintSolver init refine prune checkConsistency) goal
       
     init :: Z3State Candidate
     init = initialCandidate

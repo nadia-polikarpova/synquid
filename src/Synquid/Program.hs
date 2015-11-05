@@ -396,6 +396,13 @@ data Constraint = Subtype Environment RType RType Bool
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
   
+-- | Synthesis goal
+data Goal = Goal {
+  gName :: Id, 
+  gEnvironment :: Environment, 
+  gSpec :: RSchema
+}  
+  
 type ProgramAst = [Declaration]
 data ConstructorDef = ConstructorDef Id RSchema
   deriving (Eq)

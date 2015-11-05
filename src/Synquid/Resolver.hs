@@ -30,7 +30,7 @@ resolveProgramAst declarations = do
   env <- foldM (resolveDeclaration) emptyEnv declarations
   (SynthesisGoal goalName) <- maybeErr (find isSynthesisGoal declarations) "No synthesis goal specified"
   goalType <- maybeErr (allSymbols env ^. at goalName) "No type signature for synthesis goal"
-  return $ Goal goalName (removeVariable goalName env) goalType undefined
+  return $ Goal goalName (removeVariable goalName env) goalType
   where
     isSynthesisGoal (SynthesisGoal _) = True
     isSynthesisGoal _ = False
