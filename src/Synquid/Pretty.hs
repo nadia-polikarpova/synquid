@@ -116,6 +116,7 @@ instance Pretty Sort where
   pretty BoolS = text "Bool"    
   pretty (SetS el) = text "Set" <+> pretty el
   pretty (UninterpretedS name) = text name
+  pretty UnknownS = text "?"
 
 instance Show Sort where
   show = show . pretty    

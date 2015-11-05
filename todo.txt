@@ -2,6 +2,7 @@
 - Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
 - Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry
+- Match through CA
 
 - Multisets and sequences
 - Abstract refinements
@@ -13,11 +14,11 @@
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 
 Front-end
-	- Move expolorer params out of goal
+	- Move explorer params out of goal
 	- Parse qualifiers
 	- Add type args to sorts
-	- Fix empty set resolution
 	- Command line args for params
 	- Move tokens into a separate file and reuse in pretty pritner
-	- Operator overloading for set operations
-	- Attach positions to AST nodes
+	- Make resolver multi-pass so that order of declarations doesn't matter
+	- Check if wf-metric is defined
+	- Attach positions to AST nodes?

@@ -32,7 +32,7 @@ parseProgram = whiteSpace *> many parseDeclaration <* eof
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "decreases", "else", "False", "if", "in", "Int", "match", "measure", "then", "True", "type", "where", "with"]
+keywords = ["Bool", "data", "decreases", "else", "False", "if", "in", "Int", "match", "measure", "Set", "then", "True", "type", "where", "with"]
 
 -- | Names of unary operators    
 unOpTokens :: Map UnOp String
@@ -55,11 +55,7 @@ binOpTokens = fromList [(Times,     "*")
                        ,(Or,        "||")
                        ,(Implies,   "==>")
                        ,(Iff,       "<==>")
-                       ,(Union,     "/+/")                       
-                       ,(Intersect, "/*/")
-                       ,(Diff,      "/-/")
                        ,(Member,    "in")
-                       ,(Subset,    "/<=/")
                       ]
                         
 -- | Other operators         
@@ -211,7 +207,7 @@ parseScalarRefType = braces $ do
 
 parseFunctionType :: Parser RType
 parseFunctionType = do
-  argId <- option "_" parseArgName
+  argId <- option "_" (try parseArgName)
   argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
   reservedOp "->"
   returnType <- parseType
@@ -221,16 +217,22 @@ parseFunctionType = do
     parseArgName = parseIdentifier <* reservedOp ":"
 
 parseSort :: Parser Sort
-parseSort = choice [
-  BoolS <$ reserved "Bool",
-  IntS <$ reserved "Int",
-  fmap SetS $ reserved "Set" >> parseSort,
-  parseCustomSort]
+parseSort = parseSortWithArgs <|> parseSortAtom 
   where
-    parseCustomSort = do
-      typeName <- parseTypeName <|> parseIdentifier
-      typeParams <- many parseSort
-      return $ UninterpretedS typeName -- Discard `typeParams` because `Sort` doesn't currently support type params.
+    parseSortAtom = choice [
+      parens parseSort,
+      BoolS <$ reserved "Bool",
+      IntS <$ reserved "Int",      
+      UninterpretedS <$> (parseIdentifier <|> parseTypeName)
+      ]
+      
+    parseSortWithArgs = choice [
+      SetS <$> (reserved "Set" >> parseSortAtom),
+      do
+        typeName <- parseTypeName
+        typeParams <- many parseSortAtom
+        return $ UninterpretedS typeName -- Discard `typeParams` because `Sort` doesn't currently support type params.
+      ]
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
@@ -243,8 +245,8 @@ parseFormula = buildExpressionParser exprTable parseTerm <?> "refinement formula
     exprTable = [
       [unary Not, unary Neg, unary Abs],
       [binary Times AssocLeft],
-      [binary Plus AssocLeft, binary Minus AssocLeft, binary Union AssocLeft, binary Intersect AssocLeft, binary Diff AssocLeft],
-      [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binary Member AssocNone, binary Subset AssocNone],
+      [binary Plus AssocLeft, binary Minus AssocLeft],
+      [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binary Member AssocNone],
       [binary And AssocLeft, binary Or AssocLeft],
       [binary Implies AssocRight, binary Iff AssocRight]]
     unary op = Prefix (reservedOp (unOpTokens ! op) >> return (Unary op))

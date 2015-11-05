@@ -246,7 +246,7 @@ mElems = Measure (SetS (UninterpretedS "a")) "elems"
 mRank = Measure IntS "rank"
 
 -- | Add list datatype to the environment
-addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just mLen)) .
+addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
                                                             |&| mElems valList  |=| SetLit (UninterpretedS "a") []
                                 ) .
@@ -399,7 +399,7 @@ mIElems = Measure (SetS $ UninterpretedS "a") "elems"
 mIRank = Measure IntS "rank"
 
 -- | Add list datatype to the environment
-addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just mIRank)) .
+addIncList = addDatatype "IncList" (Datatype 1 ["INil", "ICons"] (Just "rank")) .
           addPolyConstant "INil" (Forall "a" $ Monotype $ incList $ mILen valIncList |=| IntLit 0 |&| 
                                                                mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
@@ -533,7 +533,7 @@ mTElems = Measure (SetS (UninterpretedS "a")) "telems"
 mTRank = Measure IntS "rank"
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
+addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just "size")) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])

@@ -185,8 +185,9 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
     terminationRefinement argName (ScalarT IntT _ fml) = Just (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName, valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
     terminationRefinement argName (ScalarT dt@(DatatypeT name) tArgs fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
-      Just metric -> let ds = toSort dt in 
-        Just (metric (Var ds valueVarName) |<| metric (Var ds argName), metric (Var ds valueVarName) |<=| metric (Var ds argName)) 
+      Just mName -> let (inSort, outSort) = (env ^. measures) Map.! mName
+                        metric = Measure outSort mName           
+                    in Just (metric (Var inSort valueVarName) |<| metric (Var inSort argName), metric (Var inSort valueVarName) |<=| metric (Var inSort argName)) 
     terminationRefinement _ _ = Nothing
     
     
