@@ -82,7 +82,7 @@ toZ3Sort s = do
         BoolS -> mkBoolSort
         IntS -> mkIntSort
         -- TypeVarT name -> mkStringSymbol name >>= mkUninterpretedSort
-        UninterpretedS name -> mkIntSort
+        UninterpretedS name args -> mkIntSort
         SetS el -> toZ3Sort el >>= mkSetSort          
       sorts %= Map.insert s z3s
       return z3s  
@@ -186,7 +186,7 @@ toAST expr = case expr of
       
     -- | Lookup or create a measure declaration with name `ident', type `baseT', and argument type `argType'
     measure s ident argType = do
-      let ident' = ident ++ show argType
+      let ident' = ident -- ++ show argType
       declMb <- uses measures (Map.lookup ident')
       case declMb of
         Just d -> return d

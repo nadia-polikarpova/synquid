@@ -222,7 +222,7 @@ parseSort = parseSortWithArgs <|> parseSortAtom
       parens parseSort,
       BoolS <$ reserved "Bool",
       IntS <$ reserved "Int",      
-      UninterpretedS <$> (parseIdentifier <|> parseTypeName)
+      flip UninterpretedS [] <$> (parseIdentifier <|> parseTypeName)
       ]
       
     parseSortWithArgs = choice [
@@ -230,7 +230,7 @@ parseSort = parseSortWithArgs <|> parseSortAtom
       do
         typeName <- parseTypeName
         typeParams <- many parseSortAtom
-        return $ UninterpretedS typeName -- Discard `typeParams` because `Sort` doesn't currently support type params.
+        return $ UninterpretedS typeName typeParams
       ]
 
 {-

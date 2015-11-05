@@ -18,7 +18,7 @@ import Control.Monad
 type Id = String
 
 -- | Sorts
-data Sort = BoolS | IntS | UninterpretedS Id | UnknownS | SetS Sort
+data Sort = BoolS | IntS | UninterpretedS Id [Sort] | SetS Sort | UnknownS
   deriving (Eq, Ord)
   
 isSetS (SetS _) = True
@@ -70,7 +70,7 @@ boolVar = Var BoolS
 valBool = boolVar valueVarName
 intVar = Var IntS
 valInt = intVar valueVarName
-vartVar n = Var (UninterpretedS n)
+vartVar n = Var (UninterpretedS n [])
 valVart n = vartVar n valueVarName
 fneg = Unary Neg
 fabs = Unary Abs

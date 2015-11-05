@@ -173,18 +173,18 @@ natlist = ScalarT (listT [nat])
 poslist = ScalarT (listT [pos])
 
 mLen = Measure IntS "len"
-mElems = Measure (SetS (UninterpretedS "a")) "elems"
+mElems = Measure (SetS (UninterpretedS "a" [])) "elems"
 
 -- | Add list datatype to the environment
 addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
-          addMeasure "len" (UninterpretedS "List", IntS) .
-          addMeasure "elems" (UninterpretedS "List", SetS (UninterpretedS "a")) .
+          addMeasure "len" (UninterpretedS "List" [UninterpretedS "a" []], IntS) .
+          addMeasure "elems" (UninterpretedS "List" [UninterpretedS "a" []], SetS (UninterpretedS "a" [])) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
-                                                            |&| mElems valList  |=| SetLit (UninterpretedS "a") []
+                                                            |&| mElems valList  |=| SetLit (UninterpretedS "a" []) []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| IntLit 1
                                                                                                                      |&| mLen valList |>| IntLit 0
-                                                                                                                     |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
+                                                                                                                     |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (UninterpretedS "a" []) [vartVar "a" "x"]
                                                                                    )))
                                                                                    
 polyEq = [vartVar "a" "x" |=| vartVar "a" "y"]
@@ -245,7 +245,7 @@ testDrop = let
   
 testDelete = let
   env = addList $ emptyEnv
-  typ = Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mElems valList |=| mElems (listVar "xs") /-/ SetLit (UninterpretedS "a") [vartVar "a" "x"]))
+  typ = Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mElems valList |=| mElems (listVar "xs") /-/ SetLit (UninterpretedS "a" []) [vartVar "a" "x"]))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ polyEq []      
   
 testMap = let
@@ -285,7 +285,7 @@ intInclist = ScalarT (incListT [intAll])
 natInclist = ScalarT (incListT [nat])
 
 mILen = Measure IntS "len"
-mIElems = Measure (SetS $ UninterpretedS "a") "elems"
+mIElems = Measure (SetS $ UninterpretedS "a" []) "elems"
 
 polyInequalities = do
         op <- [Ge, Le, Neq]
@@ -293,15 +293,15 @@ polyInequalities = do
 
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
-          addMeasure "len" (UninterpretedS "IncList", IntS) .
-          addMeasure "elems" (UninterpretedS "IncList", SetS (UninterpretedS "a")) .
+          addMeasure "len" (UninterpretedS "IncList" [UninterpretedS "a" []], IntS) .
+          addMeasure "elems" (UninterpretedS "IncList" [UninterpretedS "a" []], SetS (UninterpretedS "a" [])) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
-                                                               |&| mIElems valIncList  |=| SetLit (UninterpretedS "a") []
+                                                               |&| mIElems valIncList  |=| SetLit (UninterpretedS "a" []) []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
                                                          (FunctionT "xs" (ScalarT (incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"]) ftrue) 
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1
-                                                                |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
+                                                                |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a" []) [vartVar "a" "x"]
                                                           )))
 
 testMakeIncList = let
@@ -314,11 +314,11 @@ testMakeIncList = let
   
 testIncListInsert = let
   env = addIncList $ emptyEnv
-  typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))
+  typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a" []) [vartVar "a" "x"])))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
   
 testIncListMerge = let
-  env = addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"])))) .
+  env = addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a" []) [vartVar "a" "x"])))) .
         addIncList $ emptyEnv
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
   in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
@@ -375,9 +375,9 @@ testResolveType = TestList $ map createTestCase [
   (emptyEnv, "(num1:Int -> (num2:Int -> {Int | _v == num1 + num2}))",
     FunctionT "num1" intAll $ FunctionT "num2" intAll $
       ScalarT IntT $ intVar "_v" |=| intVar "num1" |+| intVar "num2"),
-  (emptyEnv {_measures = Map.fromList [("bar", (IntS, SetS IntS)), ("foo", (SetS IntS, BoolS))]},
-    "{Int | foo(bar(1))}",
-    ScalarT IntT $ Measure BoolS "foo" $ Measure (SetS IntS) "bar" $ IntLit 1)]
+  (emptyEnv {_measures = Map.fromList [("bar", (UninterpretedS "List" [UninterpretedS "a" []], UninterpretedS "a" []))]},
+    "{List Int | bar(_v) == 0}",
+    ScalarT (DatatypeT "List" [ScalarT IntT ftrue]) $ Measure IntS "bar" (Var (UninterpretedS "List" [IntS]) valueVarName) |=| IntLit 0)]
   where
     createTestCase (env, inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
       testParse parseType inputStr >>= resolveType env
@@ -391,12 +391,12 @@ treeVar = Var (toSort $ treeT [vartAll "a"])
 valTree = treeVar valueVarName
 
 mSize = Measure IntS "size"
-mTElems = Measure (SetS (UninterpretedS "a")) "telems"
+mTElems = Measure (SetS (UninterpretedS "a" [])) "telems"
 
 -- | Add tree datatype to the environment
 addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just "size")) .
-          addMeasure "size" (UninterpretedS "Tree", IntS) .
-          addMeasure "elems" (UninterpretedS "Tree", SetS (UninterpretedS "a")) .
+          addMeasure "size" (UninterpretedS "Tree" [UninterpretedS "a" []], IntS) .
+          addMeasure "elems" (UninterpretedS "Tree" [UninterpretedS "a" []], SetS (UninterpretedS "a" [])) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])

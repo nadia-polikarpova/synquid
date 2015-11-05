@@ -11,6 +11,7 @@ import Control.Applicative
 import Control.Monad.Except
 import Text.Printf
 import Control.Lens
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.List
 import qualified Data.Foldable as Foldable
@@ -88,6 +89,7 @@ complies :: Sort -> Sort -> Bool
 complies UnknownS s = True  
 complies s UnknownS = True
 complies (SetS s) (SetS s') = complies s s'
+complies (UninterpretedS name sArgs) (UninterpretedS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
 complies s s' = s == s'
 
 resolveFormula :: Sort -> Sort -> Environment -> Formula -> ResolverError Formula
@@ -174,10 +176,17 @@ resolveFormula targetSort valueSort env (Binary op l r) = do
 resolveFormula targetSort valueSort env (Measure UnknownS name argFml) = do
   case env ^. measures ^. at name of
     Nothing -> throwError $ name ++ " is undefined"
-    Just (inSort, outSort) -> do
-      argFml' <- resolveFormula inSort valueSort env argFml
-      if complies outSort targetSort  -- TODO: type parameter substitution
-        then return $ Measure outSort name argFml'
+    Just (UninterpretedS dtName tVars, outSort) -> do
+      argFml' <- resolveFormula (UninterpretedS dtName $ replicate (length tVars) UnknownS) valueSort env argFml
+      let (UninterpretedS _ tArgs) = fromJust $ sortOf argFml'
+      let outSort' = sortSubstitute (Map.fromList $ zip (map (\(UninterpretedS a _) -> a) tVars) (map fromSort tArgs)) outSort
+      if complies outSort' targetSort
+        then return $ Measure outSort' name argFml'
         else throwError $ unwords ["Enountered measure", name, "where", show targetSort, "was expected"]
+  where
+    fromSort BoolS = ScalarT BoolT ftrue
+    fromSort IntS = ScalarT IntT ftrue
+    fromSort (UninterpretedS name []) = ScalarT (TypeVarT name) ftrue
+    fromSort (UninterpretedS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs)) ftrue
     
 resolveFormula _ _ _ fml = return fml
