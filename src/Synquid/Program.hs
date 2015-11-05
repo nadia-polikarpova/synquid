@@ -16,21 +16,21 @@ import Control.Lens
 
 {- Type skeletons -}
 
-data BaseType = BoolT | IntT | DatatypeT Id | TypeVarT Id
+data BaseType r = BoolT | IntT | DatatypeT Id [TypeSkeleton r] | TypeVarT Id
   deriving (Eq, Ord)
   
 -- | Type skeletons (parametrized by refinements)
 data TypeSkeleton r =
-  ScalarT BaseType [TypeSkeleton r]  r |
+  ScalarT (BaseType r) r |
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r)  
   deriving (Eq, Ord)
   
 toSort BoolT = BoolS
 toSort IntT = IntS
-toSort (DatatypeT name) = UninterpretedS name
+toSort (DatatypeT name _) = UninterpretedS name
 toSort (TypeVarT name) = UninterpretedS name
   
-baseTypeOf (ScalarT baseT _ _) = baseT
+baseTypeOf (ScalarT baseT _) = baseT
 isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
@@ -39,12 +39,12 @@ resType (FunctionT _ _ t) = t
 arity (FunctionT _ _ t) = arity t + 1
 arity _ = 0
 
-lastType t@(ScalarT _ _ _) = t
+lastType t@(ScalarT _ _) = t
 lastType (FunctionT _ _ tRes) = lastType tRes
 
-allArgs (ScalarT _ _ _) = Set.empty
+allArgs (ScalarT _ _) = Set.empty
 allArgs (FunctionT x tArg tRes) = case tArg of
-  ScalarT baseT _ _ -> Set.insert (Var (toSort baseT) x) $ allArgs tRes 
+  ScalarT baseT _ -> Set.insert (Var (toSort baseT) x) $ allArgs tRes 
   _ -> allArgs tRes
   
 varRefinement x b = let s = toSort b in (Var s valueVarName |=| Var s x)
@@ -66,11 +66,15 @@ type TypeSubstitution = Map Id RType
 
 -- | 'typeSubstitute' @t@ : substitute all free type variables in @t@
 typeSubstitute :: TypeSubstitution -> RType -> RType
-typeSubstitute subst t@(ScalarT (TypeVarT a) [] r) = case Map.lookup a subst of
-  Just t' -> addRefinement (typeSubstitute subst t') (typeSubstituteFML subst r) -- In {v: a | r}, we might have to substitute sorts inside r
-  Nothing -> t
-typeSubstitute subst (ScalarT baseT tArgs r) = let tArgs' = map (typeSubstitute subst) tArgs 
-  in ScalarT baseT tArgs' (typeSubstituteFML subst r)
+typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (typeSubstituteFML subst r)
+  where
+    substituteBase = case baseT of
+      TypeVarT a -> case Map.lookup a subst of
+        Just t -> typeSubstitute subst t
+        Nothing -> ScalarT (TypeVarT a) ftrue
+      DatatypeT name tArgs -> let tArgs' = map (typeSubstitute subst) tArgs 
+        in ScalarT (DatatypeT name tArgs') ftrue
+      _ -> ScalarT baseT ftrue
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
 
 typeSubstituteFML subst fml = case fml of 
@@ -83,7 +87,7 @@ typeSubstituteFML subst fml = case fml of
   _ -> fml
   where
     substSort s@(UninterpretedS name) = case Map.lookup name subst of
-      Just (ScalarT b _ _) -> toSort b
+      Just (ScalarT b _) -> toSort b
       Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
       Nothing -> s
     substSort (SetS el) = SetS (substSort el)
@@ -91,28 +95,38 @@ typeSubstituteFML subst fml = case fml of
 
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
-typeVarsOf t@(ScalarT baseT tArgs r) = case baseT of
+typeVarsOf t@(ScalarT baseT r) = case baseT of
   TypeVarT name -> Set.singleton name  
-  _ -> Set.unions (map typeVarsOf tArgs)
+  DatatypeT _ tArgs -> Set.unions (map typeVarsOf tArgs)
+  _ -> Set.empty
 typeVarsOf (FunctionT _ tArg tRes) = typeVarsOf tArg `Set.union` typeVarsOf tRes
 
 {- Refinement types -}
 
+-- | Unrefined base
+type SBaseType = BaseType ()
+
+-- | Refined base
+type RBaseType = BaseType Formula
+
 -- | Unrefined typed
 type SType = TypeSkeleton ()
 
--- | Refinement types  
+-- | Refined types  
 type RType = TypeSkeleton Formula
 
 -- | Unrefined schemas
 type SSchema = SchemaSkeleton ()
 
--- | Refinement schemas  
+-- | Refined schemas  
 type RSchema = SchemaSkeleton Formula
 
 -- | Forget refinements of a type
 shape :: RType -> SType  
-shape (ScalarT base tArgs _) = ScalarT base (map shape tArgs) ()
+shape (ScalarT (DatatypeT name tArgs) _) = ScalarT (DatatypeT name (map shape tArgs)) ()
+shape (ScalarT IntT _) = ScalarT IntT ()
+shape (ScalarT BoolT _) = ScalarT BoolT ()
+shape (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ()
 shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
 
 -- | Forget refinements of a schema
@@ -122,17 +136,23 @@ polyShape (Forall a sch) = Forall a (polyShape sch)
 
 -- | Insert weakest refinement
 refineTop :: SType -> RType
-refineTop (ScalarT base tArgs _) = ScalarT base (map refineTop tArgs) ftrue
+refineTop (ScalarT (DatatypeT name tArgs) _) = ScalarT (DatatypeT name (map refineTop tArgs)) ftrue
+refineTop (ScalarT IntT _) = ScalarT IntT ftrue
+refineTop (ScalarT BoolT _) = ScalarT BoolT ftrue
+refineTop (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ftrue
 refineTop (FunctionT x tArg tFun) = FunctionT x (refineBot tArg) (refineTop tFun)
 
 -- | Insert strongest refinement
 refineBot :: SType -> RType
-refineBot (ScalarT base tArgs _) = ScalarT base (map refineBot tArgs) ffalse
+refineBot (ScalarT (DatatypeT name tArgs) _) = ScalarT (DatatypeT name (map refineBot tArgs)) ffalse
+refineBot (ScalarT IntT _) = ScalarT IntT ffalse
+refineBot (ScalarT BoolT _) = ScalarT BoolT ffalse
+refineBot (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ffalse
 refineBot (FunctionT x tArg tFun) = FunctionT x (refineTop tArg) (refineBot tFun)
 
-addRefinement (ScalarT base tArgs fml) fml' = if isVarRefinemnt fml'
-  then ScalarT base tArgs fml' -- the type of a polymorphic variable does not require any other refinements
-  else ScalarT base tArgs (fml `andClean` fml')
+addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
+  then ScalarT base fml' -- the type of a polymorphic variable does not require any other refinements
+  else ScalarT base (fml `andClean` fml')
 addRefinement t (BoolLit True) = t
 addRefinement t _ = error $ "addRefinement: applied to function type"
 
@@ -140,18 +160,23 @@ addRefinement t _ = error $ "addRefinement: applied to function type"
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType -> RType
 renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
-renameVar old new t@(ScalarT b _ _)  (ScalarT base tArgs fml) = let newFml = extractPrimitiveConst (Var (toSort b) new)
-  in ScalarT base (map (renameVar old new t) tArgs) (substitute (Map.singleton old newFml) fml)
+renameVar old new t@(ScalarT b _)  (ScalarT baseT fml) = 
+  let newRefinement = substitute (Map.singleton old $ extractPrimitiveConst (Var (toSort b) new)) fml
+  in case baseT of
+        DatatypeT name tArgs -> ScalarT (DatatypeT name $ map (renameVar old new t) tArgs) newRefinement
+        _ -> ScalarT baseT newRefinement
 renameVar old new t                  (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
 -- | 'unknownsOfType' @t: all unknowns in @t@
 unknownsOfType :: RType -> Set Formula 
-unknownsOfType (ScalarT _ tArgs fml) = Set.unions $ unknownsOf fml : map unknownsOfType tArgs
+unknownsOfType (ScalarT (DatatypeT _ tArgs) fml) = Set.unions $ unknownsOf fml : map unknownsOfType tArgs
+unknownsOfType (ScalarT _ fml) = unknownsOf fml
 unknownsOfType (FunctionT _ tArg tRes) = unknownsOfType tArg `Set.union` unknownsOfType tRes
 
 -- | Instantiate unknowns in a type
 typeApplySolution :: Solution -> RType -> RType
-typeApplySolution sol (ScalarT base tArgs fml) = ScalarT base (map (typeApplySolution sol) tArgs) (applySolution sol fml)
+typeApplySolution sol (ScalarT (DatatypeT name tArgs) fml) = ScalarT (DatatypeT name $ map (typeApplySolution sol) tArgs) (applySolution sol fml)
+typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
 -- | User-defined datatype representation
@@ -164,17 +189,17 @@ data Datatype = Datatype {
 makeLenses ''Datatype
 
 -- | Building types
-bool = ScalarT BoolT []  
+bool = ScalarT BoolT  
 bool_ = bool ()
 boolAll = bool ftrue
 
-int = ScalarT IntT []
+int = ScalarT IntT
 int_ = int ()
 intAll = int ftrue
 nat = int (valInt |>=| IntLit 0)
 pos = int (valInt |>| IntLit 0)
 
-vart n = ScalarT (TypeVarT n) []
+vart n = ScalarT (TypeVarT n)
 vart_ n = vart n ()
 vartAll n = vart n ftrue
 
@@ -305,7 +330,6 @@ removeVariable :: Id -> Environment -> Environment
 removeVariable name env = case Map.lookup name (allSymbols env) of
   Nothing -> env
   Just sch -> over symbols (Map.insertWith (flip Map.difference) (arity $ toMonotype sch) (Map.singleton name sch)) . over constants (Set.delete name) $ env
-  
 
 addTypeSynonym :: Id -> RType -> Environment -> Environment
 addTypeSynonym name type' = over typeSynonyms (Map.insert name type')
@@ -330,8 +354,8 @@ allScalars :: Environment -> TypeSubstitution -> [Formula]
 allScalars env subst = map (uncurry $ flip Var) $ Map.toList $ Map.mapMaybe sort (symbolsOfArity 0 env)
   where
     sort (Forall _ _) = Nothing
-    sort (Monotype t@(ScalarT (TypeVarT a) [] _)) | a `Map.member` subst = sort (Monotype $ typeSubstitute subst t)
-    sort (Monotype (ScalarT b _ _)) = Just $ toSort b
+    sort (Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = sort (Monotype $ typeSubstitute subst t)
+    sort (Monotype (ScalarT b _)) = Just $ toSort b
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
@@ -350,13 +374,13 @@ embedding :: Environment -> TypeSubstitution -> (Set Formula, Set Formula)
 embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols), env ^.negAssumptions)
   where
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
-    embedBinding x (Monotype t@(ScalarT (TypeVarT a) [] _)) | not (isBound a env) = if a `Map.member` subst 
+    embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
       then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
       else Set.empty
       -- else error $ unwords ["embedding: encountered free type variable", a, "in", show $ Map.keys subst]
       -- else error $ unwords ["embedding: encountered free type variable", a, "in", show $ Map.keys subst]
-    embedBinding _ (Monotype (ScalarT _ _ (BoolLit True))) = Set.empty -- Ignore trivial types
-    embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
+    embedBinding _ (Monotype (ScalarT _ (BoolLit True))) = Set.empty -- Ignore trivial types
+    embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
       else Set.singleton $ substitute (Map.singleton valueVarName (Var (toSort baseT) x)) fml
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants

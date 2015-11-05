@@ -35,9 +35,9 @@ resolveProgramAst declarations = do
     isSynthesisGoal _ = False
 
 substituteTypeSynonym :: TypeSubstitution -> RType -> RType
-substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName) typeArgs refinement) =
+substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName typeArgs) refinement) =
   case synonyms ^. at typeName of
-    Just typeSubstitute -> addRefinement typeSubstitute refinement
+    Just val -> addRefinement val refinement -- TODO: add polymorphic synonyms 
     Nothing -> rtype
 substituteTypeSynonym synonyms (FunctionT argId argRef returnRef) = FunctionT argId (substituteTypeSynonym synonyms argRef) (substituteTypeSynonym synonyms returnRef)
 substituteTypeSynonym synonyms rtype = rtype
@@ -68,10 +68,13 @@ resolveSchema env (Monotype typeSkel) = do
 -- resolveSchema env (Forall id' schemaSkel) = fmap (Forall id') $ resolveSchema env schemaSkel
 
 resolveType :: Environment -> RType -> ResolverError RType
-resolveType env (ScalarT baseType typeParamRefs typeFml) = do
-  typeParamRefs' <- mapM (resolveType env) typeParamRefs
+resolveType env (ScalarT baseType typeFml) = do
+  baseType' <- resolveBase baseType
   typeFml' <- resolveFormula BoolS (toSort baseType) env typeFml
-  return $ substituteTypeSynonym (env ^. typeSynonyms) $ ScalarT baseType typeParamRefs' typeFml'
+  return $ substituteTypeSynonym (env ^. typeSynonyms) $ ScalarT baseType' typeFml'
+  where
+    resolveBase (DatatypeT name tArgs) = DatatypeT name <$> mapM (resolveType env) tArgs
+    resolveBase baseT = return baseT
 resolveType env (FunctionT x tArg tRes) = do
   when (x == valueVarName) $ throwError $
     valueVarName ++ " is a reserved variable name, so you can't bind function arguments to it"
@@ -110,7 +113,7 @@ resolveFormula targetSort valueSort env (Var UnknownS varName) =
     else case env ^. symbols ^. at 0 >>= view (at varName) of
       Just varType ->
         case toMonotype varType of
-          ScalarT baseType _ _ -> let s = toSort baseType in 
+          ScalarT baseType _ -> let s = toSort baseType in 
             if complies targetSort s  
               then return $ Var s varName
               else throwError $ unwords ["Enountered variable of sort", show s, "where", show targetSort, "was expected"]

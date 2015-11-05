@@ -22,7 +22,7 @@ import Test.HUnit
 
 main = runTestTT allTests
 
-allTests = TestList [integerTests, listTests, incListTests, treeTests, parserTests, resolverTests]
+allTests = TestList [parserTests, resolverTests, integerTests, listTests, incListTests, treeTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -62,7 +62,7 @@ treeTests = TestLabel "Tree" $ TestList [
   ]  
   
 parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType]
-resolverTests = TestLabel "Resolver" $ TestList [testResolveTypeSkeleton]
+resolverTests = TestLabel "Resolver" $ TestList [testResolveType]
 
 -- | Parameters for AST exploration
 defaultExplorerParams = ExplorerParams {
@@ -163,20 +163,22 @@ testAddition = let
 {- Testing Synthesis of List Programs -}
 
 listT = DatatypeT "List"
-list = ScalarT listT [vartAll "a"]
+list = ScalarT (listT [vartAll "a"])
 listAll = list ftrue
-listVar = Var (toSort listT)
+listVar = Var (toSort $ listT [vartAll "a"])
 valList = listVar valueVarName
 
-intlist = ScalarT listT [intAll]
-natlist = ScalarT listT [nat]
-poslist = ScalarT listT [pos]
+intlist = ScalarT (listT [intAll])
+natlist = ScalarT (listT [nat])
+poslist = ScalarT (listT [pos])
 
 mLen = Measure IntS "len"
 mElems = Measure (SetS (UninterpretedS "a")) "elems"
 
 -- | Add list datatype to the environment
 addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
+          addMeasure "len" (UninterpretedS "List", IntS) .
+          addMeasure "elems" (UninterpretedS "List", SetS (UninterpretedS "a")) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
                                                             |&| mElems valList  |=| SetLit (UninterpretedS "a") []
                                 ) .
@@ -204,7 +206,7 @@ testReplicate = let
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
         addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .            
         addList $ emptyEnv
-  typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT listT [vartAll "a"] $ mLen valList |=| intVar "n"))          
+  typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT (listT [vartAll "a"]) $ mLen valList |=| intVar "n"))          
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []    
   
 testLength = let
@@ -250,13 +252,13 @@ testMap = let
   env = addList $ emptyEnv
   typ = (Forall "a" $ Forall "b" $ Monotype $ 
                                     FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
-                                    (FunctionT "xs" (ScalarT listT [vartAll "a"] ftrue) (ScalarT listT [vartAll "b"] $ mLen valList |=| mLen (listVar "xs"))))
+                                    (FunctionT "xs" (ScalarT (listT [vartAll "a"]) ftrue) (ScalarT (listT [vartAll "b"]) $ mLen valList |=| mLen (listVar "xs"))))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
   
 testUseMap = let
   env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $ 
                                     FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
-                                    (FunctionT "xs" (ScalarT listT [vartAll "a"] ftrue) (ScalarT listT [vartAll "b"] $ mLen valList |=| mLen (listVar "xs")))) .
+                                    (FunctionT "xs" (ScalarT (listT [vartAll "a"]) ftrue) (ScalarT (listT [vartAll "b"]) $ mLen valList |=| mLen (listVar "xs")))) .
         addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .            
         addList $ emptyEnv
   typ = Monotype $ FunctionT "xs" (intlist ftrue) (natlist $ mLen valList |=| mLen (listVar "xs"))
@@ -265,7 +267,7 @@ testUseMap = let
 testUseFold1 = let
   env = addPolyConstant "fold1" (Forall "a" $ Monotype $ 
                                     FunctionT "f" (FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (vartAll "a"))) 
-                                    (FunctionT "xs" (ScalarT listT [vartAll "a"] $ mLen valList |>| IntLit 0) (vartAll "a"))) .
+                                    (FunctionT "xs" (ScalarT (listT [vartAll "a"]) $ mLen valList |>| IntLit 0) (vartAll "a"))) .
         addConstant "gcd" (FunctionT "x" pos (FunctionT "y" pos pos)) .
         addList $ emptyEnv
   typ = Monotype $ FunctionT "xs" (poslist $ mLen valList |>| IntLit 0) nat    
@@ -275,12 +277,12 @@ testUseFold1 = let
 {- Testing Synthesis of Sorted List Programs -}
 
 incListT = DatatypeT "IncList"
-incList = ScalarT incListT [vartAll "a"]
-incListVar = Var (toSort incListT)
+incList = ScalarT (incListT [vartAll "a"])
+incListVar = Var (toSort $ incListT [vartAll "a"])
 valIncList = incListVar valueVarName
 
-intInclist = ScalarT incListT [intAll]
-natInclist = ScalarT incListT [nat]
+intInclist = ScalarT (incListT [intAll])
+natInclist = ScalarT (incListT [nat])
 
 mILen = Measure IntS "len"
 mIElems = Measure (SetS $ UninterpretedS "a") "elems"
@@ -291,11 +293,13 @@ polyInequalities = do
 
 -- | Add list datatype to the environment
 addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
+          addMeasure "len" (UninterpretedS "IncList", IntS) .
+          addMeasure "elems" (UninterpretedS "IncList", SetS (UninterpretedS "a")) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
                                                                |&| mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
           addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
-                                                         (FunctionT "xs" (ScalarT incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"] ftrue) 
+                                                         (FunctionT "xs" (ScalarT (incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"]) ftrue) 
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1
                                                                 |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (UninterpretedS "a") [vartVar "a" "x"]
                                                           )))
@@ -322,21 +326,21 @@ testIncListMerge = let
 -- | Create `Test`s from a parser function and test-cases consisting of an input string and the expected parsed AST.
 createParserTestList :: (Show a, Eq a) => Parser a -> [(String, a)] -> Test
 createParserTestList parser testCases = TestList $ map createTestCase testCases
-  where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ parse parser inputStr
+  where createTestCase (inputStr, parsedAst) = TestCase $ assertEqual inputStr (Right parsedAst) $ testParse parser inputStr
 
-testParseScalarType = createParserTestList parseScalarType [
-  ("Int", ScalarT IntT [] $ ftrue),
-  ("List", ScalarT (DatatypeT "List") [] $ ftrue),
+testParseScalarType = createParserTestList parseType [
+  ("Int", ScalarT IntT $ ftrue),
+  ("List", ScalarT (DatatypeT "List" []) $ ftrue),
   ("DaT_aType9 (a) ({b | 10 > 1})",
-    ScalarT (DatatypeT "DaT_aType9") [ScalarT (TypeVarT "a") [] ftrue, ScalarT (TypeVarT "b") [] $ IntLit 10 |>| IntLit 1] ftrue),
-  ("{List | True}", ScalarT (DatatypeT "List") [] $ ftrue)]
+    ScalarT (DatatypeT "DaT_aType9" [ScalarT (TypeVarT "a") ftrue, ScalarT (TypeVarT "b") $ IntLit 10 |>| IntLit 1]) ftrue),
+  ("{List | True}", ScalarT (DatatypeT "List" []) $ ftrue)]
 
-testParseFunctionType = createParserTestList parseFunctionType [
-  ("  a : Int -> Int", FunctionT "a" intAll intAll),
+testParseFunctionType = createParserTestList parseType [
+  ("a : Int -> Int", FunctionT "a" intAll intAll),
   ("___:Int-> (b:{ Bool|  10 > 0}->Int)",
-    FunctionT "___" intAll (FunctionT "b" (ScalarT BoolT [] $ IntLit 10 |>| IntLit 0) intAll)),
-  ("  abc0e93__3_0 : {Int | True} -> (  b:Bool->Int)",
-    FunctionT "abc0e93__3_0" (ScalarT IntT [] $ BoolLit True) (FunctionT "b" boolAll intAll))]
+    FunctionT "___" intAll (FunctionT "b" (ScalarT BoolT $ IntLit 10 |>| IntLit 0) intAll)),
+  ("abc0e93__3_0 : {Int | True} -> (  b:Bool->Int)",
+    FunctionT "abc0e93__3_0" (ScalarT IntT $ BoolLit True) (FunctionT "b" boolAll intAll))]
 
 testParseRefinement = createParserTestList parseFormula testCases
   where
@@ -349,9 +353,9 @@ testParseRefinement = createParserTestList parseFormula testCases
       ("False && (10)", (ffalse) |&| (int 10)),
       ("(1 + 1) - (4 + 8)", (int 1 |+| int 1) |-| (int 4 |+| int 8)),
       ("(1 + 4 * 3 - 2) * 3 - (2 * 4)", (int 1 |+| (int 4 |*| int 3) |-| int 2) |*| int 3 |-| (int 2 |*| int 4)),
-      ("(1 * 9 + 8 - 7 /* 3 <= 3 && 1)", ((((int 1 |*| int 9) |+| int 8 |-| int 7 /*/ int 3) |<=| int 3) |&| int 1)),
-      ("8 => 3", (int 8 |=>| int 3)),
-      ("True || False => (False && False <=> False)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
+      ("(1 * 9 + 8 - 7 * 3 <= 3 && True)", ((((int 1 |*| int 9) |+| int 8 |-| (int 7 |*| int 3)) |<=| int 3) |&| ftrue)),
+      ("8 ==> 3", (int 8 |=>| int 3)),
+      ("True || False ==> (False && False <==> False)", (ftrue ||| ffalse |=>| ((ffalse |&| ffalse) |<=>| ffalse)))]
 
 testParseTerm = createParserTestList parseTerm [
   ("1", IntLit 1),
@@ -361,36 +365,38 @@ testParseTerm = createParserTestList parseTerm [
   ("foobar", Var UnknownS "foobar"),
   ("[    1,   a, 4 ,  True ]", SetLit UnknownS [IntLit 1, Var UnknownS "a", IntLit 4, BoolLit True]),
   ("[falseEE]", SetLit UnknownS [Var UnknownS "falseEE"]),
-  ("len(tail(list))", Measure UnknownS "len" $ Measure UnknownS "tail" $ Var UnknownS "list"),
+  ("len (tail list)", Measure UnknownS "len" $ Measure UnknownS "tail" $ Var UnknownS "list"),
   ("foo (1 + 3)", Measure UnknownS "foo" $ IntLit 1 |+| IntLit 3)]
 
-testResolveTypeSkeleton = TestList $ map createTestCase [
-  (emptyEnv, "(e:Int -> {Int | _v > e})", FunctionT "e" intAll $ ScalarT IntT [] $ intVar "_v" |>| intVar "e"),
-  (emptyEnv, "{Int | [_v] /<= [1, 2, 3]}",
-    ScalarT IntT [] $ SetLit IntS [intVar "_v"] /<=/ SetLit IntS [IntLit 1, IntLit 2, IntLit 3]),
+testResolveType = TestList $ map createTestCase [
+  (emptyEnv, "(e:Int -> {Int | _v > e})", FunctionT "e" intAll $ ScalarT IntT $ intVar "_v" |>| intVar "e"),
+  (emptyEnv, "{Int | [_v] <= [1, 2, 3]}",
+    ScalarT IntT $ SetLit IntS [intVar "_v"] /<=/ SetLit IntS [IntLit 1, IntLit 2, IntLit 3]),
   (emptyEnv, "(num1:Int -> (num2:Int -> {Int | _v == num1 + num2}))",
     FunctionT "num1" intAll $ FunctionT "num2" intAll $
-      ScalarT IntT [] $ intVar "_v" |=| intVar "num1" |+| intVar "num2"),
+      ScalarT IntT $ intVar "_v" |=| intVar "num1" |+| intVar "num2"),
   (emptyEnv {_measures = Map.fromList [("bar", (IntS, SetS IntS)), ("foo", (SetS IntS, BoolS))]},
     "{Int | foo(bar(1))}",
-    ScalarT IntT [] $ Measure BoolS "foo" $ Measure (SetS IntS) "bar" $ IntLit 1)]
+    ScalarT IntT $ Measure BoolS "foo" $ Measure (SetS IntS) "bar" $ IntLit 1)]
   where
     createTestCase (env, inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
-      parse parseType inputStr >>= resolveTypeSkeleton env
+      testParse parseType inputStr >>= resolveType env
   
 {- Testing Synthesis of Tree Programs -}
 
-treeT = DatatypeT "tree"
-tree = ScalarT treeT [vartAll "a"]
+treeT = DatatypeT "Tree"
+tree = ScalarT (treeT [vartAll "a"])
 treeAll = tree ftrue
-treeVar = Var (toSort treeT)
+treeVar = Var (toSort $ treeT [vartAll "a"])
 valTree = treeVar valueVarName
 
 mSize = Measure IntS "size"
 mTElems = Measure (SetS (UninterpretedS "a")) "telems"
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "tree" (Datatype 1 ["Empty", "Node"] (Just "size")) .
+addTree = addDatatype "Tree" (Datatype 1 ["Empty", "Node"] (Just "size")) .
+          addMeasure "size" (UninterpretedS "Tree", IntS) .
+          addMeasure "elems" (UninterpretedS "Tree", SetS (UninterpretedS "a")) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])

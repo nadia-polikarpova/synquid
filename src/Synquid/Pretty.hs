@@ -201,13 +201,19 @@ instance Pretty QSpace where
 instance Pretty QMap where
   pretty = vMapDoc text pretty  
   
-instance Pretty BaseType where
+instance Pretty SBaseType where
   pretty IntT = text "Int"
   pretty BoolT = text "Bool"    
   pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
-  pretty (DatatypeT name) = text name
+  pretty (DatatypeT name tArgs) = text name <+> hsep (map (parens . pretty) tArgs)
   
-instance Show BaseType where
+instance Pretty RBaseType where
+  pretty IntT = text "Int"
+  pretty BoolT = text "Bool"    
+  pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
+  pretty (DatatypeT name tArgs) = text name <+> hsep (map (parens . pretty) tArgs)
+  
+instance Show RBaseType where
   show = show . pretty
     
 caseDoc :: (TypeSkeleton r -> Doc) -> Case r -> Doc
@@ -232,7 +238,7 @@ instance (Pretty (TypeSkeleton r)) => Show (Program r) where
   show = show . pretty
   
 prettySType :: SType -> Doc
-prettySType (ScalarT base args _) = pretty base <+> hsep (map (parens . pretty) args)
+prettySType (ScalarT base _) = pretty base
 prettySType (FunctionT _ t1 t2) = parens (pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty SType where
@@ -242,8 +248,8 @@ instance Show SType where
  show = show . pretty
   
 prettyType :: RType -> Doc
-prettyType (ScalarT base args (BoolLit True)) = pretty base <+> hsep (map (parens . pretty) args)
-prettyType (ScalarT base args fml) = braces (pretty base <+> hsep (map (parens . pretty) args) <> text "|" <> pretty fml)
+prettyType (ScalarT base (BoolLit True)) = pretty base
+prettyType (ScalarT base fml) = braces (pretty base <> text "|" <> pretty fml)
 prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2)
 
 instance Pretty RType where
@@ -326,7 +332,8 @@ fmlNodeCount _ = 1
 
 -- | 'typeNodeCount' @t@ : cumulative size of all refinements in @t@
 typeNodeCount :: RType -> Int 
-typeNodeCount (ScalarT _ tArgs fml) = fmlNodeCount fml + sum (map typeNodeCount tArgs)
+typeNodeCount (ScalarT (DatatypeT _ tArgs) fml) = fmlNodeCount fml + sum (map typeNodeCount tArgs)
+typeNodeCount (ScalarT _ fml) = fmlNodeCount fml
 typeNodeCount (FunctionT _ tArg tRes) = typeNodeCount tArg + typeNodeCount tRes 
 
 -- | 'programNodeCount' @p@ : size of @p@ (in AST nodes)

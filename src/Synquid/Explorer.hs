@@ -182,8 +182,8 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
     recursiveTypeFirst t = return t
 
     -- | If argument is recursible, return its strict and non-strict termination refinements, otherwise @Nothing@
-    terminationRefinement argName (ScalarT IntT _ fml) = Just (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName, valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
-    terminationRefinement argName (ScalarT dt@(DatatypeT name) tArgs fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
+    terminationRefinement argName (ScalarT IntT fml) = Just (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName, valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
+    terminationRefinement argName (ScalarT dt@(DatatypeT name tArgs) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just mName -> let (inSort, outSort) = (env ^. measures) Map.! mName
                         metric = Measure outSort mName           
@@ -200,7 +200,7 @@ generateI env t@(FunctionT x tArg tRes) = do
   let ctx = \p -> Program (PFun x p) t    
   pBody <- local (over (_1 . context) (. ctx)) $ generateI (addVariable x tArg $ env) tRes
   return $ ctx pBody            
-generateI env t@(ScalarT _ _ _) = do
+generateI env t@(ScalarT _ _) = do
   deadBranch <- isEnvironmentInconsistent env
   if deadBranch
     then return $ Program (PSymbol "error") t
@@ -241,7 +241,7 @@ generateMatch env t = do
                                   $ generateE env (vartAll a) -- Generate a scrutinee of an arbitrary type
                                   
       case typeOf pScrutinee of
-        (ScalarT (DatatypeT scrDT) _ _) -> do -- Type of the scrutinee is a datatype
+        (ScalarT (DatatypeT scrDT _) _) -> do -- Type of the scrutinee is a datatype
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
           
           let scrutineeSymbols = symbolList pScrutinee
@@ -265,7 +265,7 @@ generateMatch env t = do
         Just consSch -> do
           consT <- freshTypeVars consSch
           matchConsType (lastType consT) (typeOf pScrutinee)
-          let ScalarT baseT _ _ = (typeOf pScrutinee)          
+          let ScalarT baseT _ = (typeOf pScrutinee)          
           (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
           pCaseExpr <- local (
                                over (_1 . matchDepth) (-1 +)
@@ -274,7 +274,7 @@ generateMatch env t = do
           return $ Case consName args pCaseExpr
       
     -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
-    addCaseSymbols env x (ScalarT _ _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
+    addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
       -- return $ ([], addNegAssumption (fnot $ subst fml) env) -- here vacuous cases are allowed
       return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
     addCaseSymbols env x (FunctionT y tArg tRes) = do
@@ -336,9 +336,9 @@ generateEAt env typ 0 = do
             ifM (asks $ _incrementalSolving . fst) (solveConstraints p) (return ())
         return (env, p)
 
-    symbolType x t@(ScalarT b args _)
+    symbolType x t@(ScalarT b _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
-      | otherwise                       = ScalarT b args (varRefinement x b) -- x is a scalar variable, use _v = x
+      | otherwise                       = ScalarT b (varRefinement x b) -- x is a scalar variable, use _v = x
     symbolType _ t = t
         
 generateEAt env typ d = do    
@@ -376,8 +376,9 @@ generateEAt env typ d = do
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env' t tFun True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
       ifM (asks $ _incrementalSolving . fst) (solveConstraints fun) (return ())
       return (env', fun)
-      
-    removeDependentRefinements argNames (ScalarT baseT typeArgs fml) = ScalarT baseT (map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
+    
+    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
+    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)
           
     generateArg genArg env tArg = do
       (env', arg) <- genArg env tArg
@@ -468,27 +469,27 @@ simplifyConstraint c = do
   simplifyConstraint' tass c
 
 -- -- Type variable with known assignment: substitute
-simplifyConstraint' tass (Subtype env tv@(ScalarT (TypeVarT a) [] _) t consistent) | a `Map.member` tass
+simplifyConstraint' tass (Subtype env tv@(ScalarT (TypeVarT a) _) t consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env (typeSubstitute tass tv) t consistent)
-simplifyConstraint' tass (Subtype env t tv@(ScalarT (TypeVarT a) [] _) consistent) | a `Map.member` tass
+simplifyConstraint' tass (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env t (typeSubstitute tass tv) consistent)
 -- Two unknown free variables: nothing can be done for now
-simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) [] _) (ScalarT (TypeVarT b) [] _) _) 
+simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) 
   | not (isBound a env) && not (isBound b env)
   = if a == b
       then debug 1 "simplifyConstraint: equal type variables on both sides" $ return ()
       else addConstraint c
 -- Unknown free variable and a type: extend type assignment      
-simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) [] _) t _) 
+simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) _) t _) 
   | not (isBound a env) = unify c env a t
-simplifyConstraint' _ c@(Subtype env t (ScalarT (TypeVarT a) [] _) _) 
+simplifyConstraint' _ c@(Subtype env t (ScalarT (TypeVarT a) _) _) 
   | not (isBound a env) = unify c env a t        
 
 -- Compound types: decompose
-simplifyConstraint' _ (Subtype env (ScalarT baseT (tArg:tArgs) fml) (ScalarT baseT' (tArg':tArgs') fml') consistent) 
+simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs)) fml) (ScalarT (DatatypeT name' (tArg':tArgs')) fml') consistent) 
   = do
-      simplifyConstraint (Subtype env tArg tArg' consistent) -- assuming covariance
-      simplifyConstraint (Subtype env (ScalarT baseT tArgs fml) (ScalarT baseT' tArgs' fml') consistent) 
+      simplifyConstraint (Subtype env tArg tArg' consistent)
+      simplifyConstraint (Subtype env (ScalarT (DatatypeT name tArgs) fml) (ScalarT (DatatypeT name' tArgs') fml') consistent) 
 simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False)
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
@@ -499,18 +500,18 @@ simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 
       -- simplifyConstraint (Subtype env tArg2 tArg1 False)
       -- debug 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1) $ return ()
       simplifyConstraint (Subtype (over ghosts (Map.insert y tArg1) env) (renameVar x y tArg2 tRes1) tRes2 True)
-simplifyConstraint' _ (WellFormed env (ScalarT baseT (tArg:tArgs) fml))
+simplifyConstraint' _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs)) fml))
   = do
       simplifyConstraint (WellFormed env tArg)
-      simplifyConstraint (WellFormed env (ScalarT baseT tArgs fml))
+      simplifyConstraint (WellFormed env (ScalarT (DatatypeT name tArgs) fml))
 simplifyConstraint' _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)
       simplifyConstraint (WellFormed (addVariable x tArg env) tRes)
       
 -- Simple constraint: add back      
-simplifyConstraint' _ c@(Subtype env (ScalarT baseT [] _) (ScalarT baseT' [] _) _) | baseT == baseT' = addConstraint c
-simplifyConstraint' _ c@(WellFormed env (ScalarT baseT [] _)) = addConstraint c
+simplifyConstraint' _ c@(Subtype env (ScalarT baseT _) (ScalarT baseT' _) _) | baseT == baseT' = addConstraint c
+simplifyConstraint' _ c@(WellFormed env (ScalarT baseT _)) = addConstraint c
 simplifyConstraint' _ c@(WellFormedCond env _) = addConstraint c      
 -- Otherwise (shape mismatch): fail      
 simplifyConstraint' _ _ = debug 1 (text "FAIL: shape mismatch") mzero
@@ -527,16 +528,16 @@ unify c env a t = if a `Set.member` typeVarsOf t
   
 -- | Convert simple constraint to horn clauses and qualifier maps
 processConstraint :: Monad s => Constraint -> Explorer s ()
-processConstraint c@(Subtype env (ScalarT (TypeVarT a) [] _) (ScalarT (TypeVarT b) [] _) _) 
+processConstraint c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) 
   | not (isBound a env) && not (isBound b env) = addConstraint c
-processConstraint (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml') False) | baseT == baseT' 
+processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') False) | baseT == baseT' 
   = if fml == ffalse || fml' == ftrue
       then return ()
       else do
         tass <- use typeAssignment
         let (poss, negs) = embedding env tass
         addHornClause (conjunction (Set.insert (typeSubstituteFML tass fml) poss)) (disjunction (Set.insert (typeSubstituteFML tass fml') negs))
-processConstraint (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml') True) | baseT == baseT' 
+processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT' 
   = do
       tass <- use typeAssignment
       let (poss, negs) = embedding env tass
@@ -544,7 +545,7 @@ processConstraint (Subtype env (ScalarT baseT [] fml) (ScalarT baseT' [] fml') T
                             Set.insert (typeSubstituteFML tass fml) $
                             Set.insert (typeSubstituteFML tass fml') $
                             poss `Set.union` (Set.map fnot negs)))        
-processConstraint (WellFormed env (ScalarT baseT [] fml))
+processConstraint (WellFormed env (ScalarT baseT fml))
   = case fml of
       Unknown _ u -> do
         tass <- use typeAssignment
@@ -584,16 +585,19 @@ freshTypeVars sch = freshTypeVars' Map.empty sch
 
 -- | 'fresh @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> Explorer s RType
-fresh env (ScalarT (TypeVarT a) [] _)
+fresh env (ScalarT (TypeVarT a) _)
   | not (isBound a env) = do
   a' <- freshId "a"
-  return $ ScalarT (TypeVarT a') [] ftrue
-fresh env (ScalarT base args _) = do
+  return $ ScalarT (TypeVarT a') ftrue
+fresh env (ScalarT (DatatypeT name tArgs) _) = do
   k <- freshId "u"
-  args' <- mapM (fresh env) args
-  return $ ScalarT base args' (Unknown Map.empty k)
+  tArgs' <- mapM (fresh env) tArgs
+  return $ ScalarT (DatatypeT name tArgs') (Unknown Map.empty k)
+fresh env (ScalarT baseT _) = do
+  k <- freshId "u"
+  return $ ScalarT baseT (Unknown Map.empty k)
 fresh env (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
   
-matchConsType (ScalarT (DatatypeT d) vars _) (ScalarT (DatatypeT d') args _) | d == d' = zipWithM_ (\(ScalarT (TypeVarT a) [] (BoolLit True)) t -> addTypeAssignment a t) vars args
+matchConsType (ScalarT (DatatypeT d vars) _) (ScalarT (DatatypeT d' args) _) | d == d' = zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
 matchConsType _ _ = mzero

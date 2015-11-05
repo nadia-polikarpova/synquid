@@ -1,4 +1,3 @@
-- Integrate with the parser
 - Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
 - Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry
@@ -14,10 +13,11 @@
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 
 Front-end
+	- Add type args to sorts
 	- Move explorer params out of goal
 	- Parse qualifiers
-	- Add type args to sorts
 	- Command line args for params
+	
 	- Move tokens into a separate file and reuse in pretty pritner
 	- Make resolver multi-pass so that order of declarations doesn't matter
 	- Check if wf-metric is defined
