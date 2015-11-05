@@ -27,6 +27,11 @@ type Parser = Parsec String ()
 
 parseProgram :: Parser ProgramAst
 parseProgram = whiteSpace *> many parseDeclaration <* eof
+
+testParse :: Parser a -> String -> Either String a
+testParse parser str = case parse parser "" str of
+  Left err -> Left $ show err
+  Right parsed -> Right parsed
       
 {- Tokens -}
 
@@ -126,7 +131,6 @@ parseTypeDef = do
   reservedOp "="
   typeDef <- parseType
   return $ TypeDef typeName typeDef
-  <?> "type definition"
 
 parseDataDef :: Parser Declaration
 parseDataDef = do
@@ -137,7 +141,6 @@ parseDataDef = do
   reserved "where"
   constructors <- many1 parseConstructorDef
   return $ DataDef typeName typeParams wfMetricName constructors
-  <?> "data definition"
 
 parseConstructorDef :: Parser ConstructorDef
 parseConstructorDef = do
@@ -145,7 +148,6 @@ parseConstructorDef = do
   reservedOp "::"
   ctorType <- Monotype <$> parseType
   return $ ConstructorDef ctorName ctorType
-  <?> "constructor definition"
 
 parseMeasureDef :: Parser Declaration
 parseMeasureDef = do
@@ -156,14 +158,12 @@ parseMeasureDef = do
   reservedOp "->"
   outSort <- parseSort
   return $ MeasureDef measureName inSort outSort
-  <?> "measure definition"
 
 parseFuncDef :: Parser Declaration
 parseFuncDef = do
   funcName <- parseIdentifier
   reservedOp "::"
   FuncDef funcName . Monotype <$> parseType
-  <?> "function definition"
 
 parseSynthesisGoal :: Parser Declaration
 parseSynthesisGoal = do
@@ -173,7 +173,7 @@ parseSynthesisGoal = do
   return $ SynthesisGoal goalId
 
 parseType :: Parser RType
-parseType = choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type definition"
+parseType = choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type"
 
 parseTypeAtom :: Parser RType
 parseTypeAtom = choice [
@@ -184,26 +184,26 @@ parseTypeAtom = choice [
   
 parseUnrefTypeNoArgs = do
   baseType <- parseBaseType
-  return $ ScalarT baseType [] ftrue  
+  return $ ScalarT baseType ftrue  
   where
     parseBaseType = choice [
       BoolT <$ reserved "Bool",
       IntT <$ reserved "Int",
-      DatatypeT <$> parseTypeName,
+      flip DatatypeT [] <$> parseTypeName,
       TypeVarT <$> parseIdentifier]
   
 parseUnrefTypeWithArgs = do
-  baseType <- DatatypeT <$> parseTypeName
+  name <- parseTypeName
   typeArgs <- many parseTypeAtom
-  return $ ScalarT baseType typeArgs ftrue    
+  return $ ScalarT (DatatypeT name typeArgs) ftrue    
   
 parseScalarUnrefType = parseUnrefTypeWithArgs <|> parseUnrefTypeNoArgs
   
 parseScalarRefType = braces $ do
-  ScalarT baseType typeArgs _ <- parseScalarUnrefType
+  ScalarT baseType _ <- parseScalarUnrefType
   reservedOp "|"
   refinement <- parseFormula
-  return $ ScalarT baseType typeArgs refinement  
+  return $ ScalarT baseType refinement  
 
 parseFunctionType :: Parser RType
 parseFunctionType = do
@@ -212,7 +212,6 @@ parseFunctionType = do
   reservedOp "->"
   returnType <- parseType
   return $ FunctionT argId argType returnType
-  <?> "function type"
   where
     parseArgName = parseIdentifier <* reservedOp ":"
 
@@ -240,7 +239,7 @@ parseSort = parseSortWithArgs <|> parseSortAtom
  - (ie literals).
  -}
 parseFormula :: Parser Formula
-parseFormula = buildExpressionParser exprTable parseTerm <?> "refinement formula"
+parseFormula = buildExpressionParser exprTable parseTerm <?> "refinement term"
   where
     exprTable = [
       [unary Not, unary Neg, unary Abs],
@@ -260,7 +259,7 @@ parseTerm = choice [
   , parseSetLit
   , varOrApp ]
   where
-    parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue) <?> "boolean"
+    parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
     parseSetLit = SetLit UnknownS <$> brackets (commaSep parseFormula)
     varOrApp = do
