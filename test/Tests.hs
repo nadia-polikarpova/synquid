@@ -176,7 +176,7 @@ mLen = Measure IntS "len"
 mElems = Measure (SetS (UninterpretedS "a")) "elems"
 
 -- | Add list datatype to the environment
-addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
+addList = addDatatype "List" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ list $ mLen valList |=| IntLit 0
                                                             |&| mElems valList  |=| SetLit (UninterpretedS "a") []
                                 ) .
@@ -290,7 +290,7 @@ polyInequalities = do
         return $ Binary op (vartVar "a" "x") (vartVar "a" "y")
 
 -- | Add list datatype to the environment
-addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just $ mLen)) .
+addIncList = addDatatype "IncList" (Datatype 1 ["Nil", "Cons"] (Just "len")) .
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
                                                                |&| mIElems valIncList  |=| SetLit (UninterpretedS "a") []
                                 ) .
@@ -390,7 +390,7 @@ mSize = Measure IntS "size"
 mTElems = Measure (SetS (UninterpretedS "a")) "telems"
 
 -- | Add tree datatype to the environment
-addTree = addDatatype "tree" (Datatype 1 ["Empty", "Node"] (Just mSize)) .
+addTree = addDatatype "tree" (Datatype 1 ["Empty", "Node"] (Just "size")) .
           addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])

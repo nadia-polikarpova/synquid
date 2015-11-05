@@ -157,8 +157,8 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 -- | User-defined datatype representation
 data Datatype = Datatype {
   _typeArgCount :: Int,
-  _constructors :: [Id],                    -- ^ Constructor names
-  _wfMetric :: Maybe (Formula -> Formula)   -- ^ Given a datatype term, returns an integer term that can serve as a well-founded metric for recursion
+  _constructors :: [Id],  -- ^ Constructor names
+  _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
 }
 
 makeLenses ''Datatype
@@ -301,20 +301,18 @@ addMeasure measureName sorts = over measures (Map.insert measureName sorts)
 addPolyConstant :: Id -> RSchema -> Environment -> Environment
 addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert name)
 
+removeVariable :: Id -> Environment -> Environment
+removeVariable name env = case Map.lookup name (allSymbols env) of
+  Nothing -> env
+  Just sch -> over symbols (Map.insertWith (flip Map.difference) (arity $ toMonotype sch) (Map.singleton name sch)) . over constants (Set.delete name) $ env
+  
+
 addTypeSynonym :: Id -> RType -> Environment -> Environment
 addTypeSynonym name type' = over typeSynonyms (Map.insert name type')
 
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment
 addDatatype :: Id -> Datatype -> Environment -> Environment
-addDatatype name dt env =
-  let env' = over datatypes (Map.insert name dt) env in
-  case dt ^. wfMetric of
-    Just measureFunc ->
-      let
-        (Measure returnSort measureName _) = measureFunc $ BoolLit True
-        inputSort = toSort $ DatatypeT name
-      in addMeasure measureName (inputSort, returnSort) env'
-    Nothing -> env'
+addDatatype name dt = over datatypes (Map.insert name dt)
 
 -- | 'lookupConstructor' @ctor env@ : the name of the datatype for which @ctor@ is regisered as a constructor in @env@, if any
 lookupConstructor :: Id -> Environment -> Maybe Id
@@ -355,6 +353,7 @@ embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) [] _)) | not (isBound a env) = if a `Map.member` subst 
       then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
       else Set.empty
+      -- else error $ unwords ["embedding: encountered free type variable", a, "in", show $ Map.keys subst]
       -- else error $ unwords ["embedding: encountered free type variable", a, "in", show $ Map.keys subst]
     embedBinding _ (Monotype (ScalarT _ _ (BoolLit True))) = Set.empty -- Ignore trivial types
     embedBinding x (Monotype (ScalarT baseT _ fml)) = if Set.member x (env ^. constants) 
