@@ -1,7 +1,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 -- | Solver for second-order constraints
-module Synquid.Solver where
+module Synquid.Solver (
+    initialCandidate
+  , refineCandidates
+  , pruneQualifiers
+  , checkConsistency
+  , CandidatePickStrategy (..)
+  , ConstraintPickStrategy (..)
+  , OptimalValuationsStrategy (..)
+  , SolverParams (..)
+  ) where
 
 import Synquid.Logic
 import Synquid.SMTSolver
@@ -22,6 +31,8 @@ import Control.Monad.Trans.Maybe
 import Control.Applicative
 import Control.Lens hiding (both)
 
+import Debug.Trace
+
 {- Interface -}
 
 -- | 'initialCandidate' : initial candidate solution
@@ -36,7 +47,7 @@ refineCandidates :: SMTSolver s => SolverParams -> QMap -> [Formula] -> [Candida
 refineCandidates params quals constraints cands = evalFixPointSolver go params
   where
     go = do
-      debug 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals]) $ return ()
+      writeLog 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
       let constraints' = filter isNew constraints
       cands' <- mapM (addConstraints constraints') cands
       case find (Set.null . invalidConstraints) cands' of
@@ -59,7 +70,7 @@ checkConsistency :: SMTSolver s => [Formula] -> [Candidate] -> s [Candidate]
 checkConsistency fmls cands = filterM checkCand cands
   where
     checkCand (Candidate sol valids invalids label) = let fmls' = map (applySolution sol) fmls 
-      in debug 1 (text "Consistency Check" <+> pretty fmls') $ not <$> anyM isValid (map fnot fmls')      
+      in not <$> anyM isValid (map fnot fmls')      
 
 -- | Strategies for picking the next candidate solution to strengthen
 data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate
@@ -78,7 +89,8 @@ data SolverParams = SolverParams {
   agressivePrune :: Bool,                                 -- ^ Perform pruning on the LHS-pValuation of as opposed to per-variable valuations
   candidatePickStrategy :: CandidatePickStrategy,         -- ^ How should the next candidate solution to strengthen be picked?
   constraintPickStrategy :: ConstraintPickStrategy,       -- ^ How should the next constraint to solve be picked?
-  candDoc :: Candidate -> Doc                             -- ^ How should candidate solutions be printed in debug output?
+  candDoc :: Candidate -> Doc,                            -- ^ How should candidate solutions be printed in debug output?
+  solverLogLevel :: Int                                   -- ^ How verbose logging is
 }
  
 {- Implementation -}
@@ -145,12 +157,11 @@ greatestFixPoint quals candidates = do
 
     debugOutput cands cand inv modified = do
       candidateDoc <- asks candDoc
-      debug 1 (vsep [
+      writeLog 1 (vsep [
         nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map candidateDoc cands), 
         text "Chosen candidate:" <+> candidateDoc cand,
         text "Invalid Constraint:" <+> pretty inv,
-        text "Strengthening:" <+> pretty modified]) $
-        return ()
+        text "Strengthening:" <+> pretty modified])
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
@@ -158,7 +169,7 @@ strengthen :: SMTSolver s => QMap -> Formula -> Solution -> FixPointSolver s [So
 strengthen quals fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize quals sol unknowns
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) usedLhsQuals rhs -- all minimal valid valuations of the whole antecedent
-    debug 1 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations)) $ return ()
+    writeLog 1 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -166,11 +177,11 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
         (do 
           valuations' <- pruneValuations usedLhsQuals (Map.keys splitting) -- TODO: is this dangeorous??? the result might not cover the pruned alternatives in a different context!
           -- valuations' <- pruneValuations Set.empty (Map.keys splitting)
-          debug 1 (text "Pruned valuations:" $+$ vsep (map pretty valuations')) $ return ()
+          writeLog 1 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
       (return allSolutions)
-    debug 1 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned)) $ return ()
+    writeLog 1 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned))
     return pruned
   where
     unknowns = unknownsOf lhs
@@ -278,3 +289,8 @@ prune isSubsumed (x:xs) = prune' [] x xs
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: SMTSolver s => Formula -> FixPointSolver s Bool
 isValidFml = lift . isValid
+
+writeLog level msg = do
+  maxLevel <- asks solverLogLevel
+  if level <= maxLevel then traceShow msg $ return () else return ()
+

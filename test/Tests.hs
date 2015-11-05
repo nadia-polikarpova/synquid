@@ -77,7 +77,8 @@ defaultExplorerParams = ExplorerParams {
   _consistencyChecking = False,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
-  _context = id
+  _context = id,
+  _explorerLogLevel = 0
 }
 
 -- | Parameters for constraint solving
@@ -88,11 +89,12 @@ defaultSolverParams = SolverParams {
   agressivePrune = True,
   candidatePickStrategy = InitializedWeakCandidate,
   constraintPickStrategy = SmallSpaceConstraint,
-  candDoc = const empty
+  candDoc = const empty,
+  solverLogLevel = 0
   }
 
 testSynthesizeSuccess explorerParams solverParams env typ cquals tquals = do
-  mProg <- synthesize (Goal "test" env typ explorerParams) solverParams cquals tquals
+  mProg <- synthesize explorerParams solverParams (Goal "test" env typ) cquals tquals
   assertBool "Synthesis failed" $ isJust mProg  
   
 {- Testing Synthesis of Integer Programs -}
