@@ -88,11 +88,13 @@ runOnFile explorerParams solverParams file = do
     -- Right ast -> print $ vsep $ map pretty ast
     Right ast -> case Resolver.resolveProgramAst ast of
       Left resolutionError -> (putStr resolutionError) >> exitFailure
-      Right goal -> do   
-        print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
-        print empty
-        -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
-        mProg <- synthesize explorerParams solverParams goal inequalities []
-        case mProg of
-          Nothing -> putStr "No Solution"
-          Just prog -> print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
+      Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
+  where
+    synthesizeGoal cquals tquals goal = do
+      print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
+      print empty
+      -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
+      mProg <- synthesize explorerParams solverParams goal cquals tquals
+      case mProg of
+        Nothing -> putStr "No Solution"
+        Just prog -> print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))

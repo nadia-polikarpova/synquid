@@ -11,6 +11,7 @@ import Synquid.SMTSolver
 import Synquid.Z3
 import Synquid.Program
 import Synquid.Pretty
+import Synquid.Resolver
 import Synquid.Explorer
 
 import Data.Maybe
@@ -71,13 +72,16 @@ infixr 5  |++|
 toSpace quals = QSpace quals (length quals)
 
 -- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
-extractTypeQGen qual (val : syms) = let vars = varsOf qual in
-    if Set.member val vars
-      then allSubstitutions qual (Set.toList $ Set.delete val (varsOf qual)) syms -- val has correct base type
-      else []                                                                     -- val has wrong base type
+extractTypeQGen (BoolLit True) _ = []
+extractTypeQGen qual ((Var s _) : syms) = let 
+    (vals, other) = Set.partition (\v -> varName v == valueVarName) (varsOf qual)
+    (Var s' _) = if Set.null vals then error ("No _v in " ++ show qual) else Set.findMin vals
+  in if complies s s'
+      then allSubstitutions qual s (Set.toList other) syms
+      else []
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
-extractCondQGen qual syms = allSubstitutions qual (Set.toList $ varsOf qual) syms
+extractCondQGen qual syms = allSubstitutions qual UnknownS (Set.toList $ varsOf qual) syms
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
 extractQGenFromType :: RType -> [Formula] -> [Formula]
@@ -90,12 +94,14 @@ extractQGenFromType (ScalarT baseT fml) syms =
   
 extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms ++ extractQGenFromType tRes syms    
 
--- | 'allSubstitutions' @qual vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@
-allSubstitutions (BoolLit True) _ _ = []
-allSubstitutions qual vars syms = do
-  let syms' = map extractPrimitiveConst syms
-  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms', sortOf v == sortOf var]
+-- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
+-- allSubstitutions (BoolLit True) _ _ _ = []
+allSubstitutions qual valueSort vars syms = do
+  -- let syms' = map extractPrimitiveConst syms
+  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (fromJust $ sortOf v) (fromJust $ sortOf var)]
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
-  return $ substitute subst qual
+  case resolveRefinement valueSort (substitute subst qual) of
+    Nothing -> [] -- Variable sort mismatch
+    Just qual' -> return qual'
   

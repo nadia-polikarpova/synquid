@@ -187,12 +187,7 @@ substitute subst fml = case fml of
                 Just (Var b' v) -> if b == b' 
                   then Map.insert x (Var b v) $ compose old' (Map.delete y new)
                   else error "Base type mismatch when composing pending substitutions"
-                  
-extractPrimitiveConst v@(Var IntS name) = case reads name of
-  [] -> v
-  (i, _):_ -> IntLit i
-extractPrimitiveConst v = v                    
-                  
+
 {- Qualifiers -}
 
 -- | Search space for valuations of a single unknown
