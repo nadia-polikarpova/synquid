@@ -111,7 +111,7 @@ pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 {- Debug output -}
 
 -- | 'debugOutLevel' : Level above which debug output is ignored
-debugOutLevel = 0
+debugOutLevel = 1
 
 -- | 'debug' @level msg@ : output @msg@ at level @level@ 
 debug level msg = if level <= debugOutLevel then traceShow msg else id

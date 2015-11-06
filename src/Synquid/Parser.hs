@@ -37,7 +37,7 @@ testParse parser str = case parse parser "" str of
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "decreases", "else", "False", "if", "in", "Int", "match", "measure", "Set", "then", "True", "type", "where", "with"]
+keywords = ["Bool", "data", "decreases", "else", "False", "if", "in", "Int", "match", "measure", "qualifier", "Set", "then", "True", "type", "where", "with"]
 
 -- | Names of unary operators    
 unOpTokens :: Map UnOp String
@@ -65,7 +65,7 @@ binOpTokens = fromList [(Times,     "*")
                         
 -- | Other operators         
 otherOps :: [String]
-otherOps = ["::", ":", "->", "|", "=", "??"] 
+otherOps = ["::", ":", "->", "|", "=", "??", ","] 
 
 -- | Characters allowed in identifiers (in addition to letters and digits)
 identifierChars = "_"
@@ -119,10 +119,10 @@ commaSep = Token.commaSep lexer
 commaSep1 = Token.commaSep1 lexer
 
       
-{- Parsing -}      
+{- Declarations -}      
 
 parseDeclaration :: Parser Declaration
-parseDeclaration = choice [parseTypeDef, parseDataDef, parseMeasureDef, try parseSynthesisGoal, parseFuncDef] <?> "declaration"
+parseDeclaration = choice [parseTypeDef, parseDataDef, parseMeasureDef, parseQualifierDef, try parseSynthesisGoal, parseFuncDef] <?> "declaration"
 
 parseTypeDef :: Parser Declaration
 parseTypeDef = do
@@ -158,6 +158,11 @@ parseMeasureDef = do
   reservedOp "->"
   outSort <- parseSort
   return $ MeasureDef measureName inSort outSort
+  
+parseQualifierDef :: Parser Declaration
+parseQualifierDef = do
+  reserved "qualifier"
+  QualifierDef <$> commaSep parseFormula  
 
 parseFuncDef :: Parser Declaration
 parseFuncDef = do
@@ -171,6 +176,8 @@ parseSynthesisGoal = do
   reservedOp "="
   reservedOp "??"
   return $ SynthesisGoal goalId
+  
+{- Types -}  
 
 parseType :: Parser RType
 parseType = choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type"
@@ -232,6 +239,8 @@ parseSort = parseSortWithArgs <|> parseSortAtom
         typeParams <- many parseSortAtom
         return $ UninterpretedS typeName typeParams
       ]
+      
+{- Formulas -}     
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
@@ -265,6 +274,8 @@ parseTerm = choice [
     varOrApp = do
       name <- identifier
       option (Var UnknownS name) (parseTerm >>= return . Measure UnknownS name)
+      
+{- Misc -}      
 
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do

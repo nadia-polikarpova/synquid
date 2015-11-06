@@ -5,7 +5,9 @@
 
 - Multisets and sequences
 - Abstract refinements
+- Infer cond qualifiers
 - LFP solver for when CA is not required?
+- Bring symbolic search back? (Just for scalars?)
 
 - BUG: well-formedness constraints should be added in the environement where a type variable is created, rather when it gets unified, since the latter may have more variables after decomposing sybtyping over function types
 - When a measure is not mentioned in the goal spec, remove it from the componenets?
@@ -13,10 +15,10 @@
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 
 Front-end
-	- Parse qualifiers
 	- Command line args for params
 	
 	- Move tokens into a separate file and reuse in pretty pritner
 	- Make resolver multi-pass so that order of declarations doesn't matter
 	- Check if wf-metric is defined
+	- Type synonym arguments
 	- Attach positions to AST nodes?

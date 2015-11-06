@@ -37,6 +37,19 @@ toSort IntT = IntS
 toSort (DatatypeT name tArgs) = UninterpretedS name (map (toSort . baseTypeOf) tArgs)
 toSort (TypeVarT name) = UninterpretedS name []
 
+fromSort BoolS = ScalarT BoolT ftrue
+fromSort IntS = ScalarT IntT ftrue
+fromSort (UninterpretedS name []) = ScalarT (TypeVarT name) ftrue
+fromSort (UninterpretedS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs)) ftrue
+
+-- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
+complies :: Sort -> Sort -> Bool  
+complies UnknownS s = True  
+complies s UnknownS = True
+complies (SetS s) (SetS s') = complies s s'
+complies (UninterpretedS name sArgs) (UninterpretedS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
+complies s s' = s == s'
+
 arity (FunctionT _ _ t) = arity t + 1
 arity _ = 0
 
@@ -165,7 +178,7 @@ addRefinement t _ = error $ "addRefinement: applied to function type"
 renameVar :: Id -> Id -> RType -> RType -> RType
 renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
 renameVar old new t@(ScalarT b _)  (ScalarT baseT fml) = 
-  let newRefinement = substitute (Map.singleton old $ extractPrimitiveConst (Var (toSort b) new)) fml
+  let newRefinement = substitute (Map.singleton old (Var (toSort b) new)) fml
   in case baseT of
         DatatypeT name tArgs -> ScalarT (DatatypeT name $ map (renameVar old new t) tArgs) newRefinement
         _ -> ScalarT baseT newRefinement
@@ -283,24 +296,37 @@ programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteS
 
 -- | Typing environment
 data Environment = Environment {
+  -- | Variable part:
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types), indexed by arity
-  _constants :: Set Id,                    -- ^ Subset of symbols that are constants
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
-  _datatypes :: Map Id Datatype,           -- ^ Datatype representations
-  _measures :: Map Id (Sort, Sort),        -- ^ A map of the names of the `Measure`s for the types in `_datatypes` to their input and output `Sort`s
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
-  _typeSynonyms :: TypeSubstitution,
-  _usedScrutinees :: [RProgram]            -- ^ Program terms that has already been scrutinized
+  _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
+  -- | Constant part:
+  _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
+  _datatypes :: Map Id Datatype,           -- ^ Datatype representations
+  _measures :: Map Id (Sort, Sort),        -- ^ Measure types
+  _typeSynonyms :: TypeSubstitution        -- ^ Type synonym definitions
 }
 
 makeLenses ''Environment  
 
--- | Environment with no symbols or assumptions
-emptyEnv :: Environment
-emptyEnv = Environment Map.empty Set.empty Map.empty [] Map.empty Map.empty Set.empty Set.empty Map.empty Map.empty []
+-- | Empty environment
+emptyEnv = Environment {
+  _symbols = Map.empty,
+  _ghosts = Map.empty,
+  _boundTypeVars = [],
+  _assumptions = Set.empty,
+  _negAssumptions = Set.empty,
+  _shapeConstraints = Map.empty,
+  _usedScrutinees = [],
+  _constants = Set.empty,
+  _datatypes = Map.empty,
+  _measures = Map.empty,
+  _typeSynonyms = Map.empty
+}
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
 symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
@@ -355,11 +381,12 @@ addTypeVar a = over boundTypeVars (a :)
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> TypeSubstitution -> [Formula]
-allScalars env subst = map (uncurry $ flip Var) $ Map.toList $ Map.mapMaybe sort (symbolsOfArity 0 env)
+allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
-    sort (Forall _ _) = Nothing
-    sort (Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = sort (Monotype $ typeSubstitute subst t)
-    sort (Monotype (ScalarT b _)) = Just $ toSort b
+    toFormula (_, Forall _ _) = Nothing
+    toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
+    toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
+    toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
@@ -407,11 +434,12 @@ type ProgramAst = [Declaration]
 data ConstructorDef = ConstructorDef Id RSchema
   deriving (Eq)
 data Declaration =
-  TypeDef Id RType | -- | Type name and definition.
-  FuncDef Id RSchema | -- | Function name and signature.
-  DataDef Id [Id] (Maybe Id) [ConstructorDef] | -- | Datatype name, type parameters, and constructor definitions.
-  MeasureDef Id Sort Sort | -- | Measure name, input sort, output sort.
-  SynthesisGoal Id -- Name of the function to synthesize.
+  TypeDef Id RType |                            -- ^ Type name and definition
+  FuncDef Id RSchema |                          -- ^ Function name and signature
+  DataDef Id [Id] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, and constructor definitions
+  MeasureDef Id Sort Sort |                     -- ^ Measure name, input sort, output sort
+  QualifierDef [Formula] |                      -- ^ Qualifiers
+  SynthesisGoal Id                              -- ^ Name of the function to synthesize
   deriving (Eq)
 
 constructorName (ConstructorDef name _) = name
