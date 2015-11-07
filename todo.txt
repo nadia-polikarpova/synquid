@@ -15,8 +15,6 @@
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 
 Front-end
-	- Command line args for params
-	
 	- Move tokens into a separate file and reuse in pretty pritner
 	- Make resolver multi-pass so that order of declarations doesn't matter
 	- Check if wf-metric is defined
