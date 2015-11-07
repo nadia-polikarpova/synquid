@@ -1,0 +1,4 @@
+qualifier {x >= y, x <= y, x != y}
+
+max4 :: w:Int -> x:Int -> y:Int -> z:Int -> {Int | _v >= w && _v >= x && _v >= y && _v >= z}
+max4 = ??

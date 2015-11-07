@@ -287,6 +287,9 @@ getAllMUSs' controlLitsAux mustHave cores = do
           blockDown mss
           mapM litToFml mss >>= debugOutput "MSS"
           getAllMUSs' controlLitsAux mustHave cores
+        _ -> do
+          fmls <- mapM litToFml seed
+          error $ unwords $ ["getAllMUSs: Z3 returned Unknown for"] ++ map show fmls
               
   where
     -- | Get the formula mapped to a given control literal in the main solver

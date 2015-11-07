@@ -110,5 +110,5 @@ runOnFile explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Nothing -> putStr "No Solution"
+        Nothing -> putStr "No Solution" >> exitFailure
         Just prog -> print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))

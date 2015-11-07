@@ -37,7 +37,7 @@ testParse parser str = case parse parser "" str of
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "decreases", "else", "False", "if", "in", "Int", "match", "measure", "qualifier", "Set", "then", "True", "type", "where", "with"]
+keywords = ["Bool", "data", "decreases", "False", "in", "Int", "match", "measure", "qualifier", "Set", "True", "type", "where"]
 
 -- | Names of unary operators    
 unOpTokens :: Map UnOp String
@@ -162,7 +162,7 @@ parseMeasureDef = do
 parseQualifierDef :: Parser Declaration
 parseQualifierDef = do
   reserved "qualifier"
-  QualifierDef <$> commaSep parseFormula  
+  QualifierDef <$> braces (commaSep parseFormula)
 
 parseFuncDef :: Parser Declaration
 parseFuncDef = do

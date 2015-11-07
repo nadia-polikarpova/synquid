@@ -1,0 +1,4 @@
+qualifier {x >= y, x <= y, x != y}
+
+max3 :: x:Int -> y:Int -> z:Int -> {Int | _v >= x && _v >= y && _v >= z}
+max3 = ??
