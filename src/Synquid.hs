@@ -73,7 +73,6 @@ defaultExplorerParams = ExplorerParams {
   _scrutineeDepth = 0,
   _matchDepth = 1,
   _condDepth = 1,
-  _combineSymbols = PickDepthFirst,
   _fixStrategy = AllArguments,
   _polyRecursion = True,
   _incrementalSolving = True,
