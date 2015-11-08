@@ -337,10 +337,8 @@ generateEAt env typ 0 = do
 generateEAt env typ d = do    
   let maxArity = fst $ Map.findMax (env ^. symbols)
   guard $ arity typ < maxArity
-  generateApp (\e t -> generateEUpTo e t d) (\e t -> generateEAt e t (d - 1)) `mplus`
-    if d > 1 then generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) else mzero
-  -- (if d > 1 then generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) else mzero) `mplus`
-                -- generateApp  (\e t -> generateEUpTo e t d) (\e t -> generateEAt e t (d - 1))    
+  generateApp (\e t -> generateEUpTo e t (d - 1)) (\e t -> generateEAt e t (d - 1)) `mplus`
+    generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
   where
     generateApp genFun genArg = do
       a <- freshId "_a"
