@@ -7,6 +7,7 @@ import Synquid.Program
 import Synquid.Explorer
 import Synquid.Logic
 import Synquid.Pretty
+import Synquid.Util
 import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
@@ -59,10 +60,12 @@ resolveDeclaration :: Declaration -> Resolver ()
 resolveDeclaration (TypeDef typeName typeBody) = do
   typeBody' <- resolveType typeBody
   environment %= addTypeSynonym typeName typeBody'
-resolveDeclaration (FuncDef funcName typeSchema) = do
-  typeSchema' <- resolveSchema typeSchema
-  environment %= addPolyConstant funcName typeSchema'
+resolveDeclaration (FuncDef funcName typeSchema) = resolveSignature funcName typeSchema
 resolveDeclaration (DataDef dataName typeParams wfMetricMb constructors) = do
+  case wfMetricMb of
+    Nothing -> return ()
+    Just wfMetric -> do
+      ifM (not . Map.member wfMetric <$> (use $ environment . measures)) (throwError $ unwords ["Measure", wfMetric, "is undefined"]) (return ())
   let
     datatype = Datatype {
       _typeArgCount = length typeParams,
@@ -70,11 +73,7 @@ resolveDeclaration (DataDef dataName typeParams wfMetricMb constructors) = do
       _wfMetric = wfMetricMb
     }
   environment %= addDatatype dataName datatype
-  mapM_ resolveConstructor constructors
-  where
-    resolveConstructor (ConstructorDef name schema) = do
-      schema' <- resolveSchema schema
-      environment %= addPolyConstant name schema'
+  mapM_ (\(ConstructorDef name schema) -> resolveSignature name schema) constructors
 resolveDeclaration (MeasureDef measureName inSort outSort) = environment %= addMeasure measureName (inSort, outSort)
 resolveDeclaration (SynthesisGoal name) = do
   syms <- uses environment allSymbols
@@ -101,7 +100,16 @@ resolveType (ScalarT baseType typeFml) = do
   typeSyns <- use $ environment . typeSynonyms
   return $ substituteTypeSynonym typeSyns $ ScalarT baseType' typeFml'
   where
-    resolveBase (DatatypeT name tArgs) = DatatypeT name <$> mapM resolveType tArgs
+    resolveBase (DatatypeT name tArgs) = do
+      ds <- use $ environment . datatypes
+      case Map.lookup name ds of
+        Nothing -> do
+          tss <- use $ environment . typeSynonyms
+          case Map.lookup name tss of
+            Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
+            Just _ -> when (not $ null tArgs) $ throwError $ unwords ["Type synonym", name, "did not expect type arguments"]    
+        Just (Datatype n _ _) -> when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]   
+      DatatypeT name <$> mapM resolveType tArgs
     resolveBase baseT = return baseT
 resolveType (FunctionT x tArg tRes) = do
   when (x == valueVarName) $ throwError $
@@ -175,13 +183,27 @@ resolveFormula targetSort valueSort (Binary op l r) = do
       | op == Lt || op == Le || op == Gt || op == Ge        = UnknownS
       | op == And || op == Or || op == Implies || op == Iff = BoolS
       | op == Member                                        = UnknownS
+      | op == Union || op == Intersect || op == Diff        = SetS UnknownS
+      | op == Subset                                        = SetS UnknownS
       
     newOp op lSort
-      | op == Times || op == Plus || op == Minus || op == Le = case lSort of
-                                                                IntS -> return op
-                                                                SetS a -> return $ toSetOp op
-                                                                _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
-      | otherwise                                           = return op
+      | op == Times || op == Plus || op == Minus  = case lSort of
+                                                            IntS -> return op
+                                                            SetS a -> return $ toSetOp op
+                                                            _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+      | op == Le                                  = case lSort of
+                                                            IntS -> return op
+                                                            UninterpretedS _ [] -> return op  -- This is a hack: does not apply to datatypes
+                                                            SetS a -> return $ toSetOp op
+                                                            _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+      | op == Lt || op == Gt || op == Ge          = case lSort of
+                                                            IntS -> return op
+                                                            UninterpretedS _ [] -> return op  -- This is a hack: does not apply to datatypes
+                                                            _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+      | op == Eq  || op == Neq                    = case lSort of
+                                                            UninterpretedS _ (x:xs) -> throwError $ unwords ["No overloading of", show op, "for", show lSort] -- This is a hack: does not apply to datatypes
+                                                            _ -> return op
+      | otherwise                                 = return op
       
     toSetOp Times = Intersect
     toSetOp Plus = Union
@@ -224,3 +246,8 @@ substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName typeArgs) refi
     Nothing -> rtype
 substituteTypeSynonym synonyms (FunctionT argId argRef returnRef) = FunctionT argId (substituteTypeSynonym synonyms argRef) (substituteTypeSynonym synonyms returnRef)
 substituteTypeSynonym synonyms rtype = rtype
+
+resolveSignature name sch = do
+  ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of funtion", name]) (return ())
+  sch' <- resolveSchema sch
+  environment %= addPolyConstant name sch'

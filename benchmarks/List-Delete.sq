@@ -1,0 +1,13 @@
+qualifier {x == y}
+
+measure len :: List a -> Int
+measure elems :: List a -> Set a
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0 && elems _v == []}
+	Cons :: x: a -> xs: List a -> {List a | len _v > 0 && len _v == len xs + 1 && elems _v == elems xs + [x]}
+	
+delete :: x: a -> xs: List a -> {List a | elems _v == elems xs - [x]}
+delete = ??
+
+	

@@ -101,7 +101,7 @@ explore params solver goal = do
   where
     go :: Monad s => Explorer s RProgram
     go = do
-      pMain <- generateTopLevel (gEnvironment goal) (gSpec goal)
+      pMain <- generateTopLevel goal
       p <- generateAuxGoals pMain
       ifM (asks $ _incrementalSolving . fst) (return ()) (solveConstraints p)
       tass <- use typeAssignment
@@ -120,9 +120,9 @@ explore params solver goal = do
 {- AST exploration -}
     
 -- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@    
-generateTopLevel :: Monad s => Environment -> RSchema -> Explorer s RProgram
-generateTopLevel env (Forall a sch) = generateTopLevel (addTypeVar a env) sch
-generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
+generateTopLevel :: Monad s => Goal -> Explorer s RProgram
+generateTopLevel (Goal funName env (Forall a sch)) = generateTopLevel (Goal funName (addTypeVar a env) sch)
+generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
   where
     generateFix = do
       recCalls <- recursiveCalls t
@@ -144,9 +144,7 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
         DisableFixpoint -> return t
       if recType == t 
         then return [] 
-        else do
-          f <- freshId "f"
-          return $ [(f, recType)]
+        else return $ [(funName, recType)]
       
     -- | 'recursiveTypeTuple' @t fml@: type of the recursive call to a function of type @t@ when a lexicographic tuple of all recursible arguments decreases;
     -- @fml@ denotes the disjunction @x1' < x1 || ... || xk' < xk@ of strict termination conditions on all previously seen recursible arguments to be added to the type of the last recursible argument;
@@ -185,14 +183,15 @@ generateTopLevel env (Monotype t@(FunctionT _ _ _)) = generateFix
     terminationRefinement _ _ = Nothing
     
     
-generateTopLevel env (Monotype t) = generateI env t    
+generateTopLevel (Goal _ env (Monotype t)) = generateI env t    
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)  
 generateI :: Monad s => Environment -> RType -> Explorer s RProgram  
 generateI env t@(FunctionT x tArg tRes) = do
-  let ctx = \p -> Program (PFun x p) t    
-  pBody <- local (over (_1 . context) (. ctx)) $ generateI (addVariable x tArg $ env) tRes
+  x' <- if x == dontCare then freshId "x" else return x
+  let ctx = \p -> Program (PFun x' p) t    
+  pBody <- local (over (_1 . context) (. ctx)) $ generateI (addVariable x' tArg $ env) tRes
   return $ ctx pBody            
 generateI env t@(ScalarT _ _) = do
   deadBranch <- isEnvironmentInconsistent env
@@ -340,6 +339,8 @@ generateEAt env typ d = do
   guard $ arity typ < maxArity
   generateApp (\e t -> generateEUpTo e t d) (\e t -> generateEAt e t (d - 1)) `mplus`
     if d > 1 then generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) else mzero
+  -- (if d > 1 then generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 2)) else mzero) `mplus`
+                -- generateApp  (\e t -> generateEUpTo e t d) (\e t -> generateEAt e t (d - 1))    
   where
     generateApp genFun genArg = do
       a <- freshId "_a"

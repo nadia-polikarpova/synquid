@@ -2,8 +2,9 @@ import sys
 import os, os.path
 import shutil
 import time
-import pickle
-import re
+import difflib
+# import pickle
+# import re
 from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
@@ -11,14 +12,36 @@ from colorama import init, Fore, Back, Style
 SYNQUID_PATH = '..\\src\\Synquid.exe'
 BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
+ORACLE_NAME = 'oracle.log'
 OUTFILE_NAME = 'run_all.csv'
 
 BENCHMARKS = [
+    # Integers
     ('Int-Max2', []),
     ('Int-Max3', []),
     ('Int-Max4', []),
     ('Int-Max5', []),
     ('Int-Add', []),
+    # Lists
+    ('List-Null', []),
+    ('List-Elem', []),
+    ('List-Stutter', []),
+    ('List-Replicate', []),
+    ('List-Append', []),
+    ('List-Take', []),
+    ('List-Drop', []),
+    ('List-Delete', []),
+    ('List-ToNat', []),    
+    # Trees
+    ('Tree-Elem', []),
+    ('Tree-Flatten', []),    
+    # Insertion Sort
+    ('IncList-Insert', []),
+    ('IncList-InsertSort', []),    
+    # Merge sort
+    ('List-Split', ['-s=1', '-m=3']),
+    ('IncList-Merge', ['-m=2']),
+    ('IncList-MergeSort', ['-a=2', '-s=1', '-m=3']),
 ]
 
 class SynthesisResult:
@@ -32,8 +55,9 @@ class SynthesisResult:
 def run_benchmark(name, opts):
     print name,
 
-    with open(LOGFILE_NAME, 'a') as logfile:
+    with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.clock()
+      logfile.seek(0, os.SEEK_END)
       return_code = call([SYNQUID_PATH] + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.clock()
       
@@ -53,6 +77,13 @@ def postprocess():
                 outfile.write ('{0:0.2f}'.format(res.time))
                 outfile.write (',')
             outfile.write ('\n')
+            
+    if os.path.isfile(ORACLE_NAME):
+        fromlines = open(ORACLE_NAME).readlines()
+        tolines = open(LOGFILE_NAME, 'U').readlines()
+        diff = difflib.unified_diff(fromlines, tolines, n=0)
+        print
+        sys.stdout.writelines(diff)
 
 if __name__ == '__main__':
     init()

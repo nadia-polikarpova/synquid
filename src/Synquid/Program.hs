@@ -31,6 +31,7 @@ isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
+dontCare = "_"
 
 toSort BoolT = BoolS
 toSort IntT = IntS

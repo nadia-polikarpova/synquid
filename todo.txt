@@ -1,3 +1,5 @@
+- Add True and False by default
+- Type classes (to help instantiate qualifiers)
 - Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
 - Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry

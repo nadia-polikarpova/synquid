@@ -214,7 +214,7 @@ parseScalarRefType = braces $ do
 
 parseFunctionType :: Parser RType
 parseFunctionType = do
-  argId <- option "_" (try parseArgName)
+  argId <- option dontCare (try parseArgName)
   argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
   reservedOp "->"
   returnType <- parseType

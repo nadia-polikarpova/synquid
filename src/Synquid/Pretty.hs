@@ -229,7 +229,7 @@ programDoc tdoc (Program p typ) = let
     PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
     PIf c t e -> nest 2 $ withType (text "if" <+> pretty c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
-    PFix fs e -> nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
+    PFix fs e -> pDoc e -- nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
 
 instance (Pretty (TypeSkeleton r)) => Pretty (Program r) where
   pretty = programDoc pretty
