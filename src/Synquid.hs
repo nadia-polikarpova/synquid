@@ -22,10 +22,11 @@ releaseDate = fromGregorian 2015 11 20
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file appMax scrutineeMax fix inc log_) <- cmdArgs cla
+  (CommandLineArgs file appMax scrutineeMax matchMax fix inc log_) <- cmdArgs cla
   let explorerParams = defaultExplorerParams { 
     _eGuessDepth = appMax, 
-    _scrutineeDepth = scrutineeMax, 
+    _scrutineeDepth = scrutineeMax,
+    _matchDepth = matchMax,
     _fixStrategy = fix, 
     _incrementalSolving = inc, 
     _explorerLogLevel = log_ 
@@ -49,6 +50,7 @@ data CommandLineArgs
         -- | Explorer params
         app_max :: Int,
         scrutinee_max :: Int,
+        match_max :: Int,
         fix :: FixpointStrategy,
         inc :: Bool,
         log_ :: Int
@@ -59,6 +61,7 @@ cla = CommandLineArgs {
   file            = ""              &= typFile &= argPos 0,
   app_max         = 3               &= help ("Maximum depth of an application term (default: 3)"),
   scrutinee_max   = 0               &= help ("Maximum depth of a match scrutinee (default: 0)"),
+  match_max       = 1               &= help ("Maximum number of a matches (default: 1)"),
   fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
   inc             = True            &= help ("Incremental constraint solving (default: True)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)")      
@@ -68,7 +71,7 @@ cla = CommandLineArgs {
 defaultExplorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 0,
-  _matchDepth = 5,
+  _matchDepth = 1,
   _condDepth = 1,
   _combineSymbols = PickDepthFirst,
   _fixStrategy = AllArguments,
@@ -106,9 +109,10 @@ runOnFile explorerParams solverParams file = do
   where
     synthesizeGoal cquals tquals goal = do
       print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
-      print empty
+      -- print empty
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Nothing -> putStr "No Solution" >> exitFailure
         Just prog -> print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
+      print empty

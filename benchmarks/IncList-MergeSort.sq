@@ -1,0 +1,28 @@
+measure fst :: Pair a b -> a
+measure snd :: Pair a b -> b
+
+data Pair a b where
+	Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
+
+measure len :: List a -> Int
+measure elems :: List a -> Set a
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0 && elems _v == []}
+	Cons :: x: a -> xs: List a -> {List a | len _v > 0 && len _v == len xs + 1 && elems _v == elems xs + [x]}
+
+measure ilen :: IList a -> Int
+measure ielems :: IList a -> Set a
+
+data IList a decreases ilen where
+	INil :: {IList a | ilen _v == 0 && ielems _v == []}
+	ICons :: x: a -> xs: IList {a | x <= _v} -> {IList a | ilen _v > 0 && ilen _v == ilen xs + 1 && ielems _v == ielems xs + [x]}
+	
+split :: xs: List a -> {Pair {List a | ~(len xs - len _v * 2) <= 1} (List a) | len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }	
+merge :: xs: IList a -> ys: {IList a | ~(ilen _v - ilen xs) <= 1 } -> {IList a | ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
+
+mergeSort :: xs: List a -> {IList a | ilen _v == len xs && ielems _v == elems xs }
+mergeSort = ??
+
+
+	

@@ -73,12 +73,14 @@ toSpace quals = QSpace quals (length quals)
 
 -- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
 extractTypeQGen (BoolLit True) _ = []
-extractTypeQGen qual ((Var s _) : syms) = let 
-    (vals, other) = Set.partition (\v -> varName v == valueVarName) (varsOf qual)
-    (Var s' _) = if Set.null vals then error ("No _v in " ++ show qual) else Set.findMin vals
-  in if complies s s'
-      then allSubstitutions qual s (Set.toList other) syms
-      else []
+extractTypeQGen qual ((Var s _) : syms) = 
+  let (vals, other) = Set.partition (\v -> varName v == valueVarName) (varsOf qual)
+  in if Set.null vals 
+      then [] -- No _v in a refinement, happens sometimes
+      else let (Var s' _) = if Set.null vals then error ("No _v in " ++ show qual) else Set.findMin vals
+           in if complies s s'
+                then allSubstitutions qual s (Set.toList other) syms
+                else []
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 extractCondQGen qual syms = allSubstitutions qual UnknownS (Set.toList $ varsOf qual) syms
