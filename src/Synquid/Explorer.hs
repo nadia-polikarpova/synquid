@@ -55,7 +55,6 @@ data ExplorerParams = ExplorerParams {
   _scrutineeDepth :: Int,                 -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,                     -- ^ Maximum nesting level of matches
   _condDepth :: Int,                      -- ^ Maximum nesting level of conditionals
-  _combineSymbols :: PickSymbolStrategy,  -- ^ How to pick leaves in e-terms?
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _incrementalSolving :: Bool,            -- ^ Solve constraints as they appear (as opposed to all at once)?
@@ -313,10 +312,7 @@ generateEAt env typ 0 = do
   useCounts <- use symbolUseCount
   let symbols' = sortBy (mappedCompare (\(x, _) -> Map.findWithDefault 0 x useCounts)) symbols
   
-  combine <- asks $ _combineSymbols . fst
-  case combine of
-    PickDepthFirst -> msum $ map pickSymbol symbols'
-    PickInterleave -> foldl interleave mzero $ map pickSymbol symbols'
+  msum $ map pickSymbol symbols'
   
   where
     pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
