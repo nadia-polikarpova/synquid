@@ -1,0 +1,19 @@
+qualifier {x <= y}
+
+measure fst :: Pair a b -> a
+measure snd :: Pair a b -> b
+
+data Pair a b where
+	Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
+
+measure len :: List a -> Int
+measure elems :: List a -> Set a
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0 && elems _v == []}
+	Cons :: x: a -> xs: List a -> {List a | len _v > 0 && len _v == len xs + 1 && elems _v == elems xs + [x]}
+	
+partition :: p: a -> xs: List a -> {Pair {List {a | _v <= p} | len _v >= 0} {List {a | _v > p} | len _v >= 0} | len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }
+partition = ??
+
+	

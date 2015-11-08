@@ -42,6 +42,10 @@ BENCHMARKS = [
     ('List-Split', ['-s=1', '-m=3']),
     ('IncList-Merge', ['-m=2']),
     ('IncList-MergeSort', ['-a=2', '-s=1', '-m=3']),
+    # Quick sort
+    ('List-Partition', ['-s=1', '-m=2']),
+    ('IncList-PivotAppend', []),
+    ('IncList-QuickSort', ['-a=2', '-s=1', '-m=2']),    
 ]
 
 class SynthesisResult:
