@@ -56,13 +56,13 @@ synthesize explorerParams solverParams goal cquals tquals = do
     prune = pruneQualifiers solverParams
     
     -- | Qualifier generator for conditionals
-    condQuals = toSpace . foldl (|++|) (const []) (map extractCondQGen cquals)
+    condQuals = toSpace . foldl (|++|) (const []) (map (extractCondQGen $ gEnvironment goal) cquals)
     
     -- | Qualifier generator for types
     typeQuals = toSpace . foldl (|++|) 
-      (extractQGenFromType (toMonotype $ gSpec goal)) -- extract from spec
-      (map extractTypeQGen tquals ++ -- extract from given qualifiers
-      map (extractQGenFromType . toMonotype) (Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
+      (extractQGenFromType (gEnvironment goal) (toMonotype $ gSpec goal)) -- extract from spec
+      (map (extractTypeQGen $ gEnvironment goal) tquals ++ -- extract from given qualifiers
+      map (extractQGenFromType (gEnvironment goal) . toMonotype) (Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
     
 {- Qualifier Generators -}
 
@@ -72,38 +72,36 @@ infixr 5  |++|
 toSpace quals = QSpace quals (length quals)
 
 -- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
-extractTypeQGen (BoolLit True) _ = []
-extractTypeQGen qual ((Var s _) : syms) = 
+extractTypeQGen env (BoolLit True) _ = []
+extractTypeQGen env qual ((Var s _) : syms) = 
   let (vals, other) = Set.partition (\v -> varName v == valueVarName) (varsOf qual)
   in if Set.null vals 
       then [] -- No _v in a refinement, happens sometimes
       else let (Var s' _) = if Set.null vals then error ("No _v in " ++ show qual) else Set.findMin vals
            in if complies s s'
-                then allSubstitutions qual s (Set.toList other) syms
+                then allSubstitutions env qual s (Set.toList other) syms
                 else []
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
-extractCondQGen qual syms = allSubstitutions qual UnknownS (Set.toList $ varsOf qual) syms
+extractCondQGen env qual syms = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
-extractQGenFromType :: RType -> [Formula] -> [Formula]
-extractQGenFromType (ScalarT baseT fml) syms = 
+extractQGenFromType :: Environment -> RType -> [Formula] -> [Formula]
+extractQGenFromType env (ScalarT baseT fml) syms = 
   let 
     fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
-    extractFromBase (DatatypeT _ tArgs) = concatMap (flip extractQGenFromType syms) tArgs
+    extractFromBase (DatatypeT _ tArgs) = concatMap (flip (extractQGenFromType env) syms) tArgs
     extractFromBase _ = []
-  in concatMap (flip extractTypeQGen syms) fs ++ extractFromBase baseT
+  in concatMap (flip (extractTypeQGen env) syms) fs ++ extractFromBase baseT
   
-extractQGenFromType (FunctionT _ tArg tRes) syms = extractQGenFromType tArg syms ++ extractQGenFromType tRes syms    
+extractQGenFromType env (FunctionT _ tArg tRes) syms = extractQGenFromType env tArg syms ++ extractQGenFromType env tRes syms    
 
 -- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
--- allSubstitutions (BoolLit True) _ _ _ = []
-allSubstitutions qual valueSort vars syms = do
-  -- let syms' = map extractPrimitiveConst syms
+allSubstitutions env qual valueSort vars syms = do
   let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (fromJust $ sortOf v) (fromJust $ sortOf var)]
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)      
-  case resolveRefinement valueSort (substitute subst qual) of
+  case resolveRefinement env valueSort (substitute subst qual) of
     Nothing -> [] -- Variable sort mismatch
     Just qual' -> return qual'
   

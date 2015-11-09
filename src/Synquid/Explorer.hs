@@ -57,7 +57,8 @@ data ExplorerParams = ExplorerParams {
   _condDepth :: Int,                      -- ^ Maximum nesting level of conditionals
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
-  _incrementalSolving :: Bool,            -- ^ Solve constraints as they appear (as opposed to all at once)?
+  _hideScrutinees :: Bool,
+  _eagerMatch :: Bool,                    -- ^ Should we match eagerly on all unfolded variables?
   _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
   _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
@@ -102,7 +103,6 @@ explore params solver goal = do
     go = do
       pMain <- generateTopLevel goal
       p <- generateAuxGoals pMain
-      ifM (asks $ _incrementalSolving . fst) (return ()) (solveConstraints p)
       tass <- use typeAssignment
       sol <- uses candidates (solution . head)
       return $ programApplySolution sol $ programSubstituteTypes tass p
@@ -190,21 +190,21 @@ generateI :: Monad s => Environment -> RType -> Explorer s RProgram
 generateI env t@(FunctionT x tArg tRes) = do
   x' <- if x == dontCare then freshId "x" else return x
   let ctx = \p -> Program (PFun x' p) t    
-  pBody <- local (over (_1 . context) (. ctx)) $ generateI (addVariable x' tArg $ env) tRes
+  pBody <- local (over (_1 . context) (. ctx)) $ generateI (unfoldAllVariables $ addVariable x' tArg $ env) tRes
   return $ ctx pBody            
 generateI env t@(ScalarT _ _) = do
   deadBranch <- isEnvironmentInconsistent env
   if deadBranch
     then return $ Program (PSymbol "error") t
-    else ifM (asks $ _incrementalSolving . fst) 
-              (generateMaybeIf env t `mplus` generateMatch env t)
-              (guessE env t `mplus` generateMatch env t `mplus` generateIf env t)
+    else ifM (asks $ _eagerMatch . fst)
+            (generateMaybeMatch env t `mplus` generateMaybeMatch (unfoldAllVariables env) t)
+            (generateMaybeIf env t `mplus` generateMatch env t)
                                     
 -- | Guess an E-term and and check that is has type @t@ in the environment @env@
 guessE env t = do
   (env', res) <- generateE env t
   addConstraint $ Subtype env' (typeOf res) t False
-  ifM (asks $ _incrementalSolving . fst) (solveConstraints res) (return ())
+  solveConstraints res
   return res
   
 -- | Generate a (possibly generate) conditional term type @t@
@@ -212,14 +212,14 @@ generateMaybeIf env t = do
   cond <- Unknown Map.empty <$> freshId "c"
   addConstraint $ WellFormedCond env cond
   pThen <- once $ guessE (addAssumption cond env) t
-  condVal <- uses candidates (conjunction . flip valuation cond . solution . head) -- TODO: what to do with other solutions?
+  condVal <- uses candidates (conjunction . flip valuation cond . solution . head) -- TODO: what to do with other solutions?  
   case condVal of
     BoolLit True -> return pThen -- @pThen@ is valid under no assumptions: return it
     _ -> do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
       pElse <- local (over (_1 . context) (. \p -> Program (PIf condVal pThen p) t)) $
                   generateMaybeIf (addAssumption (fnot condVal) env) t
       return $ Program (PIf condVal pThen pElse) t  
-  
+
 -- | Generate a match term of type @t@
 generateMatch env t = do
   d <- asks $ _matchDepth . fst
@@ -237,14 +237,13 @@ generateMatch env t = do
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
           
           let scrutineeSymbols = symbolList pScrutinee
-          let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- Has not been used before
+          let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
                                 (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
                                 (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
           guard isGoodScrutinee
           
-          (env'', x) <- (addGhost pScrutinee) . (addScrutinee pScrutinee) $ env'
-          backtrackCase <- ifM (asks $ _incrementalSolving . fst) (return once) (return id)   -- When incremental solving is enabled, once a solution for a case is found, it's final and we don't need to backtrack past it
-          pCases <- mapM (backtrackCase . generateCase env'' x pScrutinee) ctors              -- Generate a case for each constructor of the datatype
+          (env'', x) <- toSymbol pScrutinee (addScrutinee pScrutinee env')
+          pCases <- mapM (once . generateCase env'' x pScrutinee) ctors              -- Generate a case for each constructor of the datatype
           return $ Program (PMatch pScrutinee pCases) t
                     
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
@@ -272,7 +271,53 @@ generateMatch env t = do
     addCaseSymbols env x (FunctionT y tArg tRes) = do
       argName <- freshId "z"
       (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
-      return (argName : args, env')          
+      return (argName : args, env')
+      
+generateMaybeMatch env t = do
+  cond <- Unknown Map.empty <$> freshId "c"
+  addConstraint $ WellFormedCond env cond
+  pThen <- once $ guessE (addAssumption cond env) t
+  condVal <- uses candidates (conjunction . flip valuation cond . solution . head) -- TODO: what to do with other solutions?  
+  case condVal of
+    BoolLit True -> return pThen -- @pThen@ is valid under no assumptions: return it
+    Binary Eq (Measure IntS m var) (IntLit _) -> generateKnownMatch env var pThen t
+    _ -> do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
+      pElse <- local (over (_1 . context) (. \p -> Program (PIf condVal pThen p) t)) $
+                  generateMaybeIf (addAssumption (fnot condVal) env) t
+      return $ Program (PIf condVal pThen pElse) t      
+
+generateKnownMatch :: Monad s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram      
+generateKnownMatch env var@(Var s x) pBaseCase t = do
+  let scrT@(ScalarT (DatatypeT scrDT _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+  let pScrutinee = Program (PSymbol x) (ScalarT (baseTypeOf scrT) (varRefinement x s))
+  let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
+  let env' = addScrutinee pScrutinee env
+  pCases <- mapM (once . generateCase env' x pScrutinee) (tail ctors)              -- Generate a case for each constructor of the datatype
+  return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
+  where      
+    -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
+    generateCase env scrName pScrutinee consName = do
+      case Map.lookup consName (allSymbols env) of
+        Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
+        Just consSch -> do
+          consT <- freshTypeVars consSch
+          matchConsType (lastType consT) (typeOf pScrutinee)
+          let ScalarT baseT _ = (typeOf pScrutinee)          
+          (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
+          pCaseExpr <- local (
+                               over (_1 . matchDepth) (-1 +)
+                             . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
+                            $ generateI caseEnv t
+          return $ Case consName args pCaseExpr
+          
+    -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
+    addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
+      -- return $ ([], addNegAssumption (fnot $ subst fml) env) -- here vacuous cases are allowed
+      return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
+    addCaseSymbols env x (FunctionT y tArg tRes) = do
+      argName <- freshId "z"
+      (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
+      return (argName : args, env')      
 
 -- | Generate a conditional term of type @t@
 generateIf env t = do
@@ -310,24 +355,27 @@ generateEAt _ _ d | d < 0 = mzero
 generateEAt env typ 0 = do
   symbols <- Map.toList <$> T.mapM freshTypeVars (symbolsOfArity (arity typ) env)
   useCounts <- use symbolUseCount
-  let symbols' = sortBy (mappedCompare (\(x, _) -> Map.findWithDefault 0 x useCounts)) symbols
+  let symbols' = if arity typ == 0 
+                    then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
+                    else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
   
   msum $ map pickSymbol symbols'
   
   where
     pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
       do
+        ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
         symbolUseCount %= Map.insertWith (+) name 1
         case Map.lookup name (env ^. shapeConstraints) of
           Nothing -> return ()
           Just sh -> do
             addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
-            ifM (asks $ _incrementalSolving . fst) (solveConstraints p) (return ())
+            solveConstraints p
         return (env, p)
 
     symbolType x t@(ScalarT b _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
-      | otherwise                       = ScalarT b (varRefinement x b) -- x is a scalar variable, use _v = x
+      | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
     symbolType _ t = t
         
 generateEAt env typ d = do    
@@ -343,7 +391,7 @@ generateEAt env typ d = do
                             $ generateFun genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
               
-      if isFunctionType tArg
+      (envfinal, pApp) <- if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
           arg <- enqueueGoal env' tArg
           return (env', Program (PApp fun arg) tRes)
@@ -352,9 +400,11 @@ generateEAt env typ d = do
                                   over (_1 . eGuessDepth) (-1 +)
                                 . over (_1 . context) (. \p -> Program (PApp fun p) tRes)) 
                                 $ generateArg genArg env' tArg
-          (env''', y) <- addGhost arg env''
+          (env''', y) <- toSymbol arg env''
           return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
-          
+      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
+      return (envfinal, pApp)
+                    
     generateFun genFun env tFun = do
       (env', fun) <- genFun env tFun
       let t = typeOf fun
@@ -362,8 +412,9 @@ generateEAt env typ d = do
       -- by comparing their result type with the spec's result type, 
       -- after replacing all refinements that depend on yet undefined variables with false.
       addConstraint $ Subtype env' (removeDependentRefinements (allArgs t) (lastType t)) (lastType tFun) False
+      -- addConstraint $ Subtype env' (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType tFun) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env' t tFun True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-      ifM (asks $ _incrementalSolving . fst) (solveConstraints fun) (return ())
+      solveConstraints fun
       return (env', fun)
     
     removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
@@ -372,20 +423,20 @@ generateEAt env typ d = do
     generateArg genArg env tArg = do
       (env', arg) <- genArg env tArg
       addConstraint $ Subtype env' (typeOf arg) tArg False
-      ifM (asks $ _incrementalSolving . fst) (solveConstraints arg) (return ())
+      solveConstraints arg
       return (env', arg)
+      
+-- | 'toSymbol' @p env@: a symbols with the same type as @p@ and an environment that defines that symbol (can be @p@ itself or a fresh ghost)
+toSymbol (Program (PSymbol name) _) env | not (Set.member name (env ^. constants)) = return (env, name)
+toSymbol p env = do
+  g <- freshId "g" 
+  return (addGhost g (typeOf p) env, g)   
       
 enqueueGoal env typ = do
   g <- freshId "g"
   auxGoals %= ((Goal g env $ Monotype typ) :)
   return $ Program (PSymbol g) typ      
-   
-addGhost :: Monad s => RProgram -> Environment -> Explorer s (Environment, Id)   
-addGhost (Program (PSymbol name) _) env | not (Set.member name (env ^. constants)) = return (env, name)
-addGhost p env = do
-  g <- freshId "g" 
-  return (over ghosts (Map.insert g (typeOf p)) env, g)          
-    
+       
 {- Constraint solving -}
 
 -- | Solve all currently unsolved constraints
@@ -487,7 +538,7 @@ simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 
   = do -- TODO: rename type vars
       -- simplifyConstraint (Subtype env tArg2 tArg1 False)
       -- writeLog 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1)
-      simplifyConstraint (Subtype (over ghosts (Map.insert y tArg1) env) (renameVar x y tArg2 tRes1) tRes2 True)
+      simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg2 tRes1) tRes2 True)
 simplifyConstraint' _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs)) fml))
   = do
       simplifyConstraint (WellFormed env tArg)

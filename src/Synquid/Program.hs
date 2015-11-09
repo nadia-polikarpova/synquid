@@ -62,7 +62,7 @@ allArgs (FunctionT x tArg tRes) = case tArg of
   ScalarT baseT _ -> Set.insert (Var (toSort baseT) x) $ allArgs tRes 
   _ -> allArgs tRes
   
-varRefinement x b = let s = toSort b in (Var s valueVarName |=| Var s x)
+varRefinement x s = Var s valueVarName |=| Var s x
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName
 isVarRefinemnt _ = False
 
@@ -244,7 +244,10 @@ data BareProgram r =
 data Program r = Program {
   content :: BareProgram r,
   typeOf :: TypeSkeleton r
-} deriving Eq
+}
+
+instance Eq (Program r) where
+  (==) (Program l _) (Program r _) = l == r
 
 -- | Fully defined programs 
 type RProgram = Program Formula
@@ -305,6 +308,7 @@ data Environment = Environment {
   _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
+  _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
   -- | Constant part:
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
   _datatypes :: Map Id Datatype,           -- ^ Datatype representations
@@ -323,6 +327,7 @@ emptyEnv = Environment {
   _negAssumptions = Set.empty,
   _shapeConstraints = Map.empty,
   _usedScrutinees = [],
+  _unfoldedVars = Set.empty,
   _constants = Set.empty,
   _datatypes = Map.empty,
   _measures = Map.empty,
@@ -350,9 +355,6 @@ addPolyVariable name sch = let n = arity (toMonotype sch) in (symbols %~ Map.ins
 addConstant :: Id -> RType -> Environment -> Environment
 addConstant name t = addPolyConstant name (Monotype t)
 
-addMeasure :: Id -> (Sort, Sort) -> Environment -> Environment
-addMeasure measureName sorts = over measures (Map.insert measureName sorts)
-
 -- | 'addPolyConstant' @name sch env@ : add type binding @name@ :: @sch@ to @env@
 addPolyConstant :: Id -> RSchema -> Environment -> Environment
 addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert name)
@@ -361,6 +363,14 @@ removeVariable :: Id -> Environment -> Environment
 removeVariable name env = case Map.lookup name (allSymbols env) of
   Nothing -> env
   Just sch -> over symbols (Map.insertWith (flip Map.difference) (arity $ toMonotype sch) (Map.singleton name sch)) . over constants (Set.delete name) $ env
+  
+unfoldAllVariables env = over unfoldedVars (Set.union (Map.keysSet (symbolsOfArity 0 env) Set.\\ (env ^. constants))) env  
+  
+addGhost :: Id -> RType -> Environment -> Environment  
+addGhost name t = over ghosts (Map.insert name t)
+
+addMeasure :: Id -> (Sort, Sort) -> Environment -> Environment
+addMeasure measureName sorts = over measures (Map.insert measureName sorts)
 
 addTypeSynonym :: Id -> RType -> Environment -> Environment
 addTypeSynonym name type' = over typeSynonyms (Map.insert name type')
@@ -387,6 +397,7 @@ allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0
     toFormula (_, Forall _ _) = Nothing
     toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
     toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
+    toFormula (x, Monotype (ScalarT b@(DatatypeT _ _) _)) = if Set.member x (env ^. unfoldedVars) then Just $ Var (toSort b) x else Nothing -- TODO: only true for match-related conditions
     toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
 
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
@@ -409,8 +420,6 @@ embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
       then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
       else Set.empty
-      -- else error $ unwords ["embedding: encountered free type variable", a, "in", show $ Map.keys subst]
-      -- else error $ unwords ["embedding: encountered free type variable", a, "in", show $ Map.keys subst]
     embedBinding _ (Monotype (ScalarT _ (BoolLit True))) = Set.empty -- Ignore trivial types
     embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants

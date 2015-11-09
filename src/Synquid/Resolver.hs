@@ -47,8 +47,8 @@ resolveProgramAst declarations =
         env' = foldr removeVariable env toRemove
       in Goal name env' spec
       
-resolveRefinement :: Sort -> Formula -> Maybe Formula
-resolveRefinement valueSort fml = case runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState emptyEnv [] [] [])) of
+resolveRefinement :: Environment -> Sort -> Formula -> Maybe Formula
+resolveRefinement env valueSort fml = case runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] [])) of
     Left _ -> Nothing
     Right fml' -> Just fml'
     
