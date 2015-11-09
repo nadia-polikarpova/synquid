@@ -1,0 +1,210 @@
+max2 :: (x:Int -> (y:Int -> {Int|_v >= x && _v >= y}))
+max2 = \x .
+  \y .
+    if x >= y
+      then x
+      else y
+
+max3 :: (x:Int -> (y:Int -> (z:Int -> {Int|(_v >= x && _v >= y) && _v >= z})))
+max3 = \x .
+  \y .
+    \z .
+      if x >= y && x >= z
+        then x
+        else if y >= z
+          then y
+          else z
+
+max4 :: (w:Int -> (x:Int -> (y:Int -> (z:Int -> {Int|((_v >= w && _v >= x) && _v >= y) && _v >= z}))))
+max4 = \w .
+  \x .
+    \y .
+      \z .
+        if w >= x && (w >= y && w >= z)
+          then w
+          else if x >= y && x >= z
+            then x
+            else if y >= z
+              then y
+              else z
+
+max5 :: (v:Int -> (w:Int -> (x:Int -> (y:Int -> (z:Int -> {Int|(((_v >= v && _v >= w) && _v >= x) && _v >= y) && _v >= z})))))
+max5 = \v .
+  \w .
+    \x .
+      \y .
+        \z .
+          if v >= w && (v >= x && (v >= y && v >= z))
+            then v
+            else if w >= x && (w >= y && w >= z)
+              then w
+              else if x >= y && x >= z
+                then x
+                else if y >= z
+                  then y
+                  else z
+
+add :: (x:{Int|_v >= 0} -> (y:{Int|_v >= 0} -> {Int|_v == x + y}))
+add = \x .
+  \y .
+    if 0 >= y
+      then x
+      else if 0 >= x
+        then y
+        else (inc ((add x) (dec y)))
+
+null :: <a> (xs:List (a) -> {Bool|_v == (len xs == 0)})
+null = \xs .
+  match xs with
+    Nil -> true
+    Cons z7 z8 -> false
+
+elem :: <a> (x:a -> (xs:List (a) -> {Bool|_v == (x) in (elems xs)}))
+elem = \x .
+  \xs .
+    match xs with
+      Nil -> false
+      Cons z7 z8 -> if z7 == x
+        then true
+        else ((elem x) z8)
+
+stutter :: <a> (xs:List (a) -> {List (a)|len _v == 2 * len xs})
+stutter = \xs .
+  match xs with
+    Nil -> Nil
+    Cons z8 z9 -> ((Cons z8) ((Cons z8) (stutter z9)))
+
+replicate :: <a> (n:{Int|_v >= 0} -> (x:a -> {List (a)|len _v == n}))
+replicate = \n .
+  \x .
+    if 0 >= n
+      then Nil
+      else ((Cons x) ((replicate (dec n)) x))
+
+append :: <a> (xs:List (a) -> (ys:List (a) -> {List (a)|len _v == len xs + len ys}))
+append = \xs .
+  \ys .
+    match xs with
+      Nil -> ys
+      Cons z8 z9 -> ((Cons z8) ((append z9) ys))
+
+take :: <a> (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == n}))
+take = \n .
+  \xs .
+    match xs with
+      Nil -> Nil
+      Cons z9 z10 -> if 0 >= n
+        then Nil
+        else ((Cons z9) ((take (dec n)) z10))
+
+drop :: <a> (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == len xs - n}))
+drop = \n .
+  \xs .
+    match xs with
+      Nil -> Nil
+      Cons z9 z10 -> if n <= 0
+        then ((Cons z9) z10)
+        else ((drop (dec n)) z10)
+
+delete :: <a> (x:a -> (xs:List (a) -> {List (a)|elems _v == (elems xs) - ([x])}))
+delete = \x .
+  \xs .
+    match xs with
+      Nil -> Nil
+      Cons z8 z9 -> if z8 == x
+        then ((delete x) z9)
+        else ((Cons z8) ((delete x) z9))
+
+toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
+toNat = \xs .
+  ((map \x13 .
+    if x13 >= 0
+      then x13
+      else (neg x13)) xs)
+
+elem :: <a> (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
+elem = \x .
+  \t .
+    match t with
+      Empty -> false
+      Node z7 z8 z9 -> if z7 == x
+        then (not false)
+        else ((or ((elem x) z8)) ((elem x) z9))
+
+flatten :: <a> (t:Tree (a) -> {List (a)|len _v == size t})
+flatten = \t .
+  match t with
+    Empty -> Nil
+    Node z10 z11 z12 -> ((Cons z10) ((append (flatten z11)) (flatten z12)))
+
+insert :: <a> (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
+insert = \x .
+  \xs .
+    match xs with
+      INil -> ((ICons x) INil)
+      ICons z17 z18 -> if x <= z17 && z17 <= x
+        then ((ICons z17) z18)
+        else if x <= z17
+          then ((ICons x) ((ICons z17) z18))
+          else ((ICons z17) ((insert x) z18))
+
+insertSort :: <a> (xs:List (a) -> {IList (a)|ielems _v == elems xs})
+insertSort = \xs .
+  match xs with
+    Nil -> INil
+    Cons z10 z11 -> ((insert z10) (insertSort z11))
+
+split :: <a> (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
+split = \xs .
+  match xs with
+    Nil -> ((Pair Nil) Nil)
+    Cons z23 z24 -> match z24 with
+      Nil -> ((Pair Nil) ((Cons z23) Nil))
+      Cons z57 z58 -> match (split z58) with
+        Pair z75 z76 -> ((Pair ((Cons z57) z75)) ((Cons z23) z76))
+
+merge :: <a> (xs:IList (a) -> (ys:IList (a) -> {IList (a)|ilen _v == ilen xs + ilen ys && ielems _v == (ielems xs) + (ielems ys)}))
+merge = \xs .
+  \ys .
+    match xs with
+      INil -> ys
+      ICons z8 z9 -> match ys with
+        INil -> ((ICons z8) z9)
+        ICons z24 z25 -> if z24 < z8
+          then ((ICons z24) ((merge ((ICons z8) z9)) z25))
+          else ((ICons z8) ((merge z9) ((ICons z24) z25)))
+
+mergeSort :: <a> (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
+mergeSort = \xs .
+  match xs with
+    Nil -> INil
+    Cons z10 z11 -> match z11 with
+      Nil -> ((ICons z10) INil)
+      Cons z34 z35 -> match (split xs) with
+        Pair z54 z55 -> ((merge (mergeSort z54)) (mergeSort z55))
+
+partition :: <a> (p:a -> (xs:List (a) -> {Pair ({List ({a|_v <= p})|len _v >= 0}) ({List ({a|_v > p})|len _v >= 0})|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
+partition = \p .
+  \xs .
+    match xs with
+      Nil -> ((Pair Nil) Nil)
+      Cons z24 z25 -> match ((partition p) z25) with
+        Pair z48 z49 -> if z24 <= p
+          then ((Pair ((Cons z24) z48)) z49)
+          else ((Pair z48) ((Cons z24) z49))
+
+pivotAppend :: <a> (p:a -> (xs:IList ({a|_v <= p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
+pivotAppend = \p .
+  \xs .
+    \ys .
+      match xs with
+        INil -> ((ICons p) ys)
+        ICons z15 z16 -> ((ICons z15) (((pivotAppend p) z16) ys))
+
+quickSort :: <a> (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
+quickSort = \xs .
+  match xs with
+    Nil -> INil
+    Cons z10 z11 -> match ((partition z10) z11) with
+      Pair z37 z38 -> (((pivotAppend z10) (quickSort z37)) (quickSort z38))
+
