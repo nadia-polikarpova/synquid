@@ -1,5 +1,6 @@
-- Add True and False by default
+- Make mergesort work with scrutinee hiding
 - Type classes (to help instantiate qualifiers)
+- How to always add the fact than len is non-negative?
 - Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
 - Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry

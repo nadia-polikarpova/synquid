@@ -22,13 +22,14 @@ releaseDate = fromGregorian 2015 11 20
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file appMax scrutineeMax matchMax fix inc log_) <- cmdArgs cla
+  (CommandLineArgs file appMax scrutineeMax matchMax fix keepScr eMatch log_) <- cmdArgs cla
   let explorerParams = defaultExplorerParams { 
     _eGuessDepth = appMax, 
     _scrutineeDepth = scrutineeMax,
     _matchDepth = matchMax,
-    _fixStrategy = fix, 
-    _incrementalSolving = inc, 
+    _fixStrategy = fix,
+    _hideScrutinees = not keepScr,
+    _eagerMatch = eMatch, 
     _explorerLogLevel = log_ 
     }
   let solverParams = defaultSolverParams {
@@ -52,7 +53,8 @@ data CommandLineArgs
         scrutinee_max :: Int,
         match_max :: Int,
         fix :: FixpointStrategy,
-        inc :: Bool,
+        keep_scrutinees :: Bool,
+        eager_match :: Bool,
         log_ :: Int
       }
   deriving (Data, Typeable, Show, Eq)
@@ -63,7 +65,8 @@ cla = CommandLineArgs {
   scrutinee_max   = 0               &= help ("Maximum depth of a match scrutinee (default: 0)"),
   match_max       = 1               &= help ("Maximum number of a matches (default: 1)"),
   fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
-  inc             = True            &= help ("Incremental constraint solving (default: True)"),
+  keep_scrutinees = False           &= help ("Keep scrutinized expressions in the evironment (default: False)"),
+  eager_match     = False           &= help ("Eagerly match on all unfolder variables (default: False)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)")      
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
@@ -75,7 +78,8 @@ defaultExplorerParams = ExplorerParams {
   _condDepth = 1,
   _fixStrategy = AllArguments,
   _polyRecursion = True,
-  _incrementalSolving = True,
+  _hideScrutinees = True,
+  _eagerMatch = False,
   _consistencyChecking = False,
   _condQualsGen = undefined,
   _typeQualsGen = undefined,
