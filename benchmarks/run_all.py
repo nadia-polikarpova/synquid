@@ -12,7 +12,7 @@ from colorama import init, Fore, Back, Style
 SYNQUID_PATH = '..\\src\\Synquid.exe'
 BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
-ORACLE_NAME = 'oracle.log'
+ORACLE_NAME = 'oracle'
 OUTFILE_NAME = 'run_all.csv'
 
 BENCHMARKS = [
