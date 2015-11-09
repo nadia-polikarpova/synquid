@@ -82,6 +82,7 @@ defaultExplorerParams = ExplorerParams {
   _eagerMatch = False,
   _consistencyChecking = False,
   _condQualsGen = undefined,
+  _matchQualsGen = undefined,
   _typeQualsGen = undefined,
   _context = id,
   _explorerLogLevel = 1

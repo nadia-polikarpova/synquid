@@ -42,6 +42,7 @@ synthesize explorerParams solverParams goal cquals tquals = do
     programs = let
         -- Initialize missing explorer parameters
         explorerParams' =  set condQualsGen condQuals .
+                           set matchQualsGen matchQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
       in explore explorerParams' (ConstraintSolver init refine prune checkConsistency) goal
@@ -57,6 +58,9 @@ synthesize explorerParams solverParams goal cquals tquals = do
     
     -- | Qualifier generator for conditionals
     condQuals = toSpace . foldl (|++|) (const []) (map (extractCondQGen $ gEnvironment goal) cquals)
+    
+    matchQuals = let env = gEnvironment goal
+      in toSpace . foldl (|++|) (const []) (map (extractMatchQGen env) (Map.toList $ env ^. datatypes))
     
     -- | Qualifier generator for types
     typeQuals = toSpace . foldl (|++|) 
@@ -84,6 +88,11 @@ extractTypeQGen env qual ((Var s _) : syms) =
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 extractCondQGen env qual syms = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
+
+extractMatchQGen env (dtName, (Datatype n ctors _)) syms = let baseCaseCtor = head ctors 
+  in case toMonotype $ allSymbols env Map.! baseCaseCtor of
+    FunctionT _ _ _ -> [] -- not supported
+    ScalarT baseT fml -> let s = toSort baseT in concatMap (\qual -> allSubstitutions env qual s [Var s valueVarName] syms) $ Set.toList (conjunctsOf fml)
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
 extractQGenFromType :: Environment -> RType -> [Formula] -> [Formula]

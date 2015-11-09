@@ -61,6 +61,7 @@ data ExplorerParams = ExplorerParams {
   _eagerMatch :: Bool,                    -- ^ Should we match eagerly on all unfolded variables?
   _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
+  _matchQualsGen :: QualsGen,
   _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
   _explorerLogLevel :: Int                -- ^ How verbose logging is
@@ -274,17 +275,16 @@ generateMatch env t = do
       return (argName : args, env')
       
 generateMaybeMatch env t = do
-  cond <- Unknown Map.empty <$> freshId "c"
-  addConstraint $ WellFormedCond env cond
-  pThen <- once $ guessE (addAssumption cond env) t
+  cond <- Unknown Map.empty <$> freshId "m"
+  addConstraint $ WellFormedMatchCond env cond
+  pThen <- once $ generateMaybeIf (addAssumption cond env) t
   condVal <- uses candidates (conjunction . flip valuation cond . solution . head) -- TODO: what to do with other solutions?  
   case condVal of
     BoolLit True -> return pThen -- @pThen@ is valid under no assumptions: return it
-    Binary Eq (Measure IntS m var) (IntLit _) -> generateKnownMatch env var pThen t
-    _ -> do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
-      pElse <- local (over (_1 . context) (. \p -> Program (PIf condVal pThen p) t)) $
-                  generateMaybeIf (addAssumption (fnot condVal) env) t
-      return $ Program (PIf condVal pThen pElse) t      
+    _ -> let vars = varsOf condVal 
+         in if Set.size vars == 1
+              then generateKnownMatch env (Set.findMin vars) pThen t
+              else error "Eager match on multiple variables at once not implemented"
 
 generateKnownMatch :: Monad s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram      
 generateKnownMatch env var@(Var s x) pBaseCase t = do
@@ -318,24 +318,6 @@ generateKnownMatch env var@(Var s x) pBaseCase t = do
       argName <- freshId "z"
       (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
       return (argName : args, env')      
-
--- | Generate a conditional term of type @t@
-generateIf env t = do
-  d <- asks $ _condDepth . fst
-  if d == 0
-    then mzero
-    else do    
-      cond <- Unknown Map.empty <$> freshId "c"
-      addConstraint $ WellFormedCond env cond
-      pThen <- local (
-                  over (_1 . condDepth) (-1 +) 
-                . over (_1 . context) (. \p -> Program (PIf cond p (hole t)) t)) 
-                $ generateI (addAssumption cond env) t
-      pElse <- local (
-                  over (_1 . condDepth) (-1 +)
-                . over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) 
-                $ generateI (addNegAssumption cond env) t          
-      return $ Program (PIf cond pThen pElse) t
                 
 -- | 'generateE' @env typ@ : explore all elimination terms of type shape @shape typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)
@@ -551,7 +533,8 @@ simplifyConstraint' _ (WellFormed env (FunctionT x tArg tRes))
 -- Simple constraint: add back      
 simplifyConstraint' _ c@(Subtype env (ScalarT baseT _) (ScalarT baseT' _) _) | baseT == baseT' = addConstraint c
 simplifyConstraint' _ c@(WellFormed env (ScalarT baseT _)) = addConstraint c
-simplifyConstraint' _ c@(WellFormedCond env _) = addConstraint c      
+simplifyConstraint' _ c@(WellFormedCond env _) = addConstraint c
+simplifyConstraint' _ c@(WellFormedMatchCond env _) = addConstraint c
 -- Otherwise (shape mismatch): fail      
 simplifyConstraint' _ _ = writeLog 1 (text "FAIL: shape mismatch") >> mzero
 
@@ -596,7 +579,31 @@ processConstraint (WellFormedCond env (Unknown _ u))
       tass <- use typeAssignment
       cq <- asks $ _condQualsGen . fst
       addQuals u (cq $ allScalars env tass)
+processConstraint (WellFormedMatchCond env (Unknown _ u))
+  = do
+      tass <- use typeAssignment
+      cq <- asks $ _matchQualsGen . fst
+      addQuals u (cq $ allPotentialScrutinees env tass)      
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
+
+-- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
+allScalars :: Environment -> TypeSubstitution -> [Formula]
+allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+  where
+    toFormula (_, Forall _ _) = Nothing
+    toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
+    toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
+    toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
+    
+-- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
+allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
+allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+  where
+    toFormula (x, Monotype t@(ScalarT b@(DatatypeT _ _) _)) = 
+      if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
+        then Just $ Var (toSort b) x 
+        else Nothing
+    toFormula _ = Nothing
           
 {- Utility -}
 

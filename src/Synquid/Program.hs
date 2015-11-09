@@ -390,16 +390,6 @@ lookupConstructor ctor env = let m = Map.filter (\dt -> ctor `elem` dt ^. constr
 addTypeVar :: Id -> Environment -> Environment
 addTypeVar a = over boundTypeVars (a :)
 
--- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
-allScalars :: Environment -> TypeSubstitution -> [Formula]
-allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
-  where
-    toFormula (_, Forall _ _) = Nothing
-    toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
-    toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
-    toFormula (x, Monotype (ScalarT b@(DatatypeT _ _) _)) = if Set.member x (env ^. unfoldedVars) then Just $ Var (toSort b) x else Nothing -- TODO: only true for match-related conditions
-    toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
-
 -- | 'addAssumption' @f env@ : @env@ with extra assumption @f@
 addAssumption :: Formula -> Environment -> Environment
 addAssumption f = assumptions %~ Set.insert f
@@ -432,6 +422,7 @@ embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls
 data Constraint = Subtype Environment RType RType Bool
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
+  | WellFormedMatchCond Environment Formula
   
 -- | Synthesis goal
 data Goal = Goal {
