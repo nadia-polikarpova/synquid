@@ -20,9 +20,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Control.Monad.Logic
-import Control.Monad.Trans.Maybe
-import Control.Applicative
+import Control.Monad
 import Control.Lens
 
 -- | 'synthesize' @templGenParam consGenParams solverParams env typ templ cq tq@ : synthesize a program that has a type @typ@ 
@@ -31,14 +29,14 @@ import Control.Lens
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
 synthesize :: ExplorerParams -> SolverParams -> Goal -> [Formula] -> [Formula] -> IO (Maybe RProgram)
 synthesize explorerParams solverParams goal cquals tquals = do
-  ps <- evalZ3State $ observeManyT 1 $ programs
+  ps <- evalZ3State programs
   case ps of
     [] -> return Nothing
     p : _ -> return $ Just p
     
   where
     -- | Stream of programs that satisfy the specification
-    programs :: LogicT Z3State RProgram
+    programs :: Z3State [RProgram]
     programs = let
         -- Initialize missing explorer parameters
         explorerParams' =  set condQualsGen condQuals .
@@ -106,6 +104,7 @@ extractQGenFromType env (ScalarT baseT fml) syms =
 extractQGenFromType env (FunctionT _ tArg tRes) syms = extractQGenFromType env tArg syms ++ extractQGenFromType env tRes syms    
 
 -- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
+allSubstitutions :: Environment -> Formula -> Sort -> [Formula] -> [Formula] -> [Formula]
 allSubstitutions env qual valueSort vars syms = do
   let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (fromJust $ sortOf v) (fromJust $ sortOf var)]
   subst <- Map.unions <$> mapM pickSubstForVar vars

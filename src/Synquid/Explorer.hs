@@ -95,8 +95,8 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolve
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
-explore :: Monad s => ExplorerParams -> ConstraintSolver s -> Goal -> LogicT s RProgram
-explore params solver goal = do
+explore :: Monad s => ExplorerParams -> ConstraintSolver s -> Goal -> s [RProgram]
+explore params solver goal = observeManyT 1 $ do
     initCand <- lift $ csInit solver
     runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] [] Map.empty [initCand] [] Map.empty)) (params, solver) 
   where
