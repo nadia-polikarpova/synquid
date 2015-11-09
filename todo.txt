@@ -4,7 +4,8 @@
 - Memoization
 	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
 - Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry
-- Match through CA
+- Make match through CA work with for base case constructors with arguments
+
 
 - Multisets and sequences
 - Abstract refinements
@@ -13,6 +14,7 @@
 - Bring symbolic search back? (Just for scalars?)
 
 - BUG: well-formedness constraints should be added in the environement where a type variable is created, rather when it gets unified, since the latter may have more variables after decomposing sybtyping over function types
+- Check that the first constructor is the base case
 - When a measure is not mentioned in the goal spec, remove it from the componenets?
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 - When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
