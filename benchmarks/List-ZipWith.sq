@@ -1,0 +1,10 @@
+measure len :: List a -> Int
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0}
+	Cons :: x: a -> xs: List a -> {List a | len _v > 0 && len _v == len xs + 1}
+	
+zipWith :: f: (a -> b -> c) -> xs: List a -> ys: {List b | len _v == len xs} -> {List c | len _v == len xs}
+zipWith = ??
+
+	
