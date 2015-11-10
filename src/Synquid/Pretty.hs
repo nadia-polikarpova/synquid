@@ -225,8 +225,10 @@ programDoc tdoc (Program p typ) = let
     withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
   in case p of
     PSymbol s -> withType $ text s
-    PApp f x -> parens (pDoc f <+> pDoc x)
-    PFun x e -> nest 2 $ withType (text "\\" <> text x <+> text ".") $+$ pDoc e
+    PApp f x -> case x of 
+      Program (PSymbol _) _ -> pDoc f <+> pDoc x
+      _ -> pDoc f <+> parens (pDoc x)
+    PFun x e -> withType (text "\\" <> text x <+> text ".") <+> pDoc e
     PIf c t e -> nest 2 $ withType (text "if" <+> pretty c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
     PFix fs e -> pDoc e -- nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e

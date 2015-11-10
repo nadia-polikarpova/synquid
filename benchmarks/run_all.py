@@ -31,6 +31,8 @@ BENCHMARKS = [
     ('List-Take', []),
     ('List-Drop', []),
     ('List-Delete', []),
+    ('List-Map', []),
+    ('List-ZipWith', ['-m 2']),
     ('List-ToNat', []),    
     # Trees
     ('Tree-Elem', []),
