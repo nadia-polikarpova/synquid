@@ -305,7 +305,6 @@ data Environment = Environment {
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
-  _negAssumptions :: Set Formula,          -- ^ Negative unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
   _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
@@ -324,7 +323,6 @@ emptyEnv = Environment {
   _ghosts = Map.empty,
   _boundTypeVars = [],
   _assumptions = Set.empty,
-  _negAssumptions = Set.empty,
   _shapeConstraints = Map.empty,
   _usedScrutinees = [],
   _unfoldedVars = Set.empty,
@@ -394,17 +392,13 @@ addTypeVar a = over boundTypeVars (a :)
 addAssumption :: Formula -> Environment -> Environment
 addAssumption f = assumptions %~ Set.insert f
 
--- | 'addNegAssumption' @f env@ : @env@ with extra assumption not @f@
-addNegAssumption :: Formula -> Environment -> Environment
-addNegAssumption f = negAssumptions %~ Set.insert f
-
 -- | 'addScrutinee' @p env@ : @env@ with @p@ marked as having been scrutinized already
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
--- | Positive and negative formulas encoded in an environment    
-embedding :: Environment -> TypeSubstitution -> (Set Formula, Set Formula)    
-embedding env subst = ((env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols), env ^.negAssumptions)
+-- | Assumptions encoded in an environment    
+embedding :: Environment -> TypeSubstitution -> Set Formula
+embedding env subst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
   where
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 

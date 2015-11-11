@@ -275,7 +275,6 @@ generateCase env scrName pScrutinee t consName = do
   where
     -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
     addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
-      -- return $ ([], addNegAssumption (fnot $ subst fml) env) -- here vacuous cases are allowed
       return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
     addCaseSymbols env x (FunctionT y tArg tRes) = do
       argName <- freshId "z"
@@ -512,8 +511,7 @@ solveConstraints p = do
       
 isEnvironmentInconsistent env = do
   tass <- use typeAssignment
-  let (poss, negs) = embedding env tass
-  let fml = (conjunction (poss `Set.union` (Set.map fnot negs)))
+  let fml = conjunction $ embedding env tass
   solv <- asks snd
   cands <- use candidates
   cands' <- lift . lift . lift $ csCheckConsistency solv [fml] cands
@@ -592,16 +590,14 @@ processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') False) 
       then return ()
       else do
         tass <- use typeAssignment
-        let (poss, negs) = embedding env tass
-        addHornClause (conjunction (Set.insert (typeSubstituteFML tass fml) poss)) (disjunction (Set.insert (typeSubstituteFML tass fml') negs))
+        addHornClause (conjunction (Set.insert (typeSubstituteFML tass fml) (embedding env tass))) (typeSubstituteFML tass fml')
 processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT' 
   = do
       tass <- use typeAssignment
-      let (poss, negs) = embedding env tass
       addConsistencyCheck (conjunction (        
                             Set.insert (typeSubstituteFML tass fml) $
                             Set.insert (typeSubstituteFML tass fml') $
-                            poss `Set.union` (Set.map fnot negs)))        
+                            embedding env tass))        
 processConstraint (WellFormed env (ScalarT baseT fml))
   = case fml of
       Unknown _ u -> do
@@ -617,8 +613,8 @@ processConstraint (WellFormedCond env (Unknown _ u))
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
-      cq <- asks $ _matchQualsGen . fst
-      addQuals u (cq $ allPotentialScrutinees env tass)      
+      mq <- asks $ _matchQualsGen . fst
+      addQuals u (mq $ allPotentialScrutinees env tass)      
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
