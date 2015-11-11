@@ -22,13 +22,13 @@ releaseDate = fromGregorian 2015 11 20
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file appMax scrutineeMax matchMax fix keepScr explicitMatch log_) <- cmdArgs cla
+  (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch log_) <- cmdArgs cla
   let explorerParams = defaultExplorerParams { 
     _eGuessDepth = appMax, 
     _scrutineeDepth = scrutineeMax,
     _matchDepth = matchMax,
     _fixStrategy = fix,
-    _hideScrutinees = not keepScr,
+    _hideScrutinees = hideScr,
     _abduceScrutinees = not explicitMatch, 
     _explorerLogLevel = log_ 
     }
@@ -53,7 +53,7 @@ data CommandLineArgs
         scrutinee_max :: Int,
         match_max :: Int,
         fix :: FixpointStrategy,
-        keep_scrutinees :: Bool,
+        hide_scrutinees :: Bool,
         explicit_match :: Bool,
         log_ :: Int
       }
@@ -62,10 +62,10 @@ data CommandLineArgs
 cla = CommandLineArgs {
   file            = ""              &= typFile &= argPos 0,
   app_max         = 3               &= help ("Maximum depth of an application term (default: 3)"),
-  scrutinee_max   = 0               &= help ("Maximum depth of a match scrutinee (default: 0)"),
-  match_max       = 1               &= help ("Maximum number of a matches (default: 1)"),
+  scrutinee_max   = 1               &= help ("Maximum depth of a match scrutinee (default: 0)"),
+  match_max       = 2               &= help ("Maximum number of a matches (default: 2)"),
   fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
-  keep_scrutinees = False           &= help ("Keep scrutinized expressions in the evironment (default: False)"),
+  hide_scrutinees = False           &= help ("Hide scrutinized expressions from the evironment (default: False)"),
   explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)")      
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
@@ -73,12 +73,12 @@ cla = CommandLineArgs {
 -- | Parameters for template exploration
 defaultExplorerParams = ExplorerParams {
   _eGuessDepth = 3,
-  _scrutineeDepth = 0,
-  _matchDepth = 1,
+  _scrutineeDepth = 1,
+  _matchDepth = 2,
   _condDepth = 1,
   _fixStrategy = AllArguments,
   _polyRecursion = True,
-  _hideScrutinees = True,
+  _hideScrutinees = False,
   _abduceScrutinees = True,
   _consistencyChecking = False,
   _condQualsGen = undefined,

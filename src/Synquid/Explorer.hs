@@ -355,13 +355,22 @@ generateEAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment
 generateEAt _ _ d | d < 0 = mzero
 
 generateEAt env typ 0 = do
-  symbols <- Map.toList <$> T.mapM freshTypeVars (symbolsOfArity (arity typ) env)
-  useCounts <- use symbolUseCount
-  let symbols' = if arity typ == 0 
-                    then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
-                    else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
-  
-  msum $ map pickSymbol symbols'
+  case soleConstructor (lastType typ) of
+    Just (name, sch) -> -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
+      if arity (toMonotype sch) == arity typ
+        then do
+          t <- freshTypeVars sch
+          pickSymbol (name, t)
+        else mzero
+        
+    Nothing -> do
+      symbols <- Map.toList <$> T.mapM freshTypeVars (symbolsOfArity (arity typ) env)
+      useCounts <- use symbolUseCount
+      let symbols' = if arity typ == 0 
+                        then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
+                        else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
+      
+      msum $ map pickSymbol symbols'
   
   where
     pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
@@ -379,6 +388,12 @@ generateEAt env typ 0 = do
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
       | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
     symbolType _ t = t
+    
+    soleConstructor (ScalarT (DatatypeT name args) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
+      in if length ctors == 1 
+          then Just (head ctors, allSymbols env Map.! (head ctors))
+          else Nothing
+    soleConstructor _ = Nothing
         
 generateEAt env typ d = do    
   let maxArity = fst $ Map.findMax (env ^. symbols)
