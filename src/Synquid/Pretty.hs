@@ -285,13 +285,13 @@ instance Pretty TypeSubstitution where
     
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
-prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions)) 
+prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions)) 
 -- prettyBindings env = commaSep (map pretty (Set.toList $ Map.keysSet (allSymbols env) Set.\\ (env ^. constants))) 
 prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
   
 instance Pretty Environment where
-  pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions) ++ map (pretty . fnot) (Set.toList $ env ^. negAssumptions))
+  pretty env = prettyBindings env <+> commaSep (map pretty (Set.toList $ env ^. assumptions))
   
 prettyConstraint :: Constraint -> Doc  
 prettyConstraint (Subtype env t1 t2 False) = prettyBindings env <+> prettyAssumptions env <+> text "|-" <+> pretty t1 <+> text "<:" <+> pretty t2
