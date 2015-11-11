@@ -118,10 +118,10 @@ insert :: <a> (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x
 insert = \x . \xs . match xs with
   INil -> ICons x INil
   ICons z15 z16 -> if x <= z15 && z15 <= x
-    then ICons z15 z16
-    else if x <= z15
-      then ICons x (ICons z15 z16)
-      else ICons z15 (insert x z16)
+    then xs
+    else if z15 <= x
+      then ICons z15 (insert x z16)
+      else ICons x (ICons z15 z16)
 
 insertSort :: <a> (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 insertSort = \xs . match xs with
@@ -131,10 +131,10 @@ insertSort = \xs . match xs with
 split :: <a> (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
 split = \xs . match xs with
   Nil -> Pair xs xs
-  Cons z17 z18 -> match z18 with
-    Nil -> Pair Nil (Cons z17 Nil)
-    Cons z52 z53 -> match split z53 with
-      Pair z70 z71 -> Pair (Cons z52 z70) (Cons z17 z71)
+  Cons z16 z17 -> match z17 with
+    Nil -> Pair z17 xs
+    Cons z36 z37 -> match split z37 with
+      Pair z54 z55 -> Pair (Cons z16 z54) (Cons z36 z55)
 
 merge :: <a> (xs:IList (a) -> (ys:IList (a) -> {IList (a)|ilen _v == ilen xs + ilen ys && ielems _v == (ielems xs) + (ielems ys)}))
 merge = \xs . \ys . match ys with
@@ -156,10 +156,10 @@ mergeSort = \xs . match xs with
 partition :: <a> (p:a -> (xs:List (a) -> {Pair ({List ({a|_v <= p})|len _v >= 0}) ({List ({a|_v > p})|len _v >= 0})|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
 partition = \p . \xs . match xs with
   Nil -> Pair Nil Nil
-  Cons z22 z23 -> match partition p z23 with
-    Pair z46 z47 -> if z22 <= p
-      then Pair (Cons z22 z46) z47
-      else Pair z46 (Cons z22 z47)
+  Cons z20 z21 -> match partition p z21 with
+    Pair z44 z45 -> if z20 <= p
+      then Pair (Cons z20 z44) z45
+      else Pair z44 (Cons z20 z45)
 
 pivotAppend :: <a> (p:a -> (xs:IList ({a|_v <= p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with

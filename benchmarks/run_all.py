@@ -14,6 +14,7 @@ BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME = 'oracle'
 OUTFILE_NAME = 'run_all.csv'
+COMMON_OPTS = []
 
 BENCHMARKS = [
     # Integers
@@ -27,12 +28,12 @@ BENCHMARKS = [
     ('List-Elem', []),
     ('List-Stutter', []),
     ('List-Replicate', []),
-    ('List-Append', []),
+    ('List-Append', ['-m=1']),
     ('List-Take', []),
     ('List-Drop', []),
     ('List-Delete', []),
     ('List-Map', []),
-    ('List-ZipWith', ['-m 2']),
+    ('List-ZipWith', []),
     ('List-ToNat', []),    
     # Trees
     ('Tree-Elem', []),
@@ -42,12 +43,12 @@ BENCHMARKS = [
     ('IncList-InsertSort', []),    
     # Merge sort
     ('List-Split', ['-s=1', '-m=3']),
-    ('IncList-Merge', ['-m=2']),
-    ('IncList-MergeSort', ['-a=2', '-s=1', '-m=3', '-k']),
+    ('IncList-Merge', ['-h']),
+    ('IncList-MergeSort', ['-a=2', '-s=1', '-m=3']),
     # Quick sort
-    ('List-Partition', ['-s=1', '-m=2']),
+    ('List-Partition', ['-s=1']),
     ('IncList-PivotAppend', []),
-    ('IncList-QuickSort', ['-a=2', '-s=1', '-m=2']),    
+    ('IncList-QuickSort', ['-a=2', '-s=1']),    
 ]
 
 class SynthesisResult:
@@ -64,7 +65,7 @@ def run_benchmark(name, opts):
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.clock()
       logfile.seek(0, os.SEEK_END)
-      return_code = call([SYNQUID_PATH] + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
+      return_code = call([SYNQUID_PATH] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.clock()
       
     print '{0:0.2f}'.format(end - start),
