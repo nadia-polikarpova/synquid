@@ -58,7 +58,7 @@ data ExplorerParams = ExplorerParams {
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _hideScrutinees :: Bool,
-  _eagerMatch :: Bool,                    -- ^ Should we match eagerly on all unfolded variables?
+  _abduceScrutinees :: Bool,                    -- ^ Should we match eagerly on all unfolded variables?
   _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
   _matchQualsGen :: QualsGen,
@@ -197,9 +197,9 @@ generateI env t@(ScalarT _ _) = do
   deadBranch <- isEnvironmentInconsistent env
   if deadBranch
     then return $ Program (PSymbol "error") t
-    else ifM (asks $ _eagerMatch . fst)
-            (generateMaybeMatch env t `mplus` generateMaybeMatch (unfoldAllVariables env) t)
-            (generateMaybeIf env t `mplus` generateMatch env t)
+    else ifM (asks $ _abduceScrutinees . fst)
+            (generateMaybeMatchIf env t)
+            (generateMaybeIf env t)
                                     
 -- | Guess an E-term and and check that is has type @t@ in the environment @env@
 guessE env t = do
@@ -208,18 +208,26 @@ guessE env t = do
   solveConstraints res
   return res
   
--- | Generate a (possibly generate) conditional term type @t@
-generateMaybeIf env t = do
-  cond <- Unknown Map.empty <$> freshId "c"
-  addConstraint $ WellFormedCond env cond
-  pThen <- once $ guessE (addAssumption cond env) t
-  condVal <- uses candidates (conjunction . flip valuation cond . solution . head) -- TODO: what to do with other solutions?  
-  case condVal of
-    BoolLit True -> return pThen -- @pThen@ is valid under no assumptions: return it
-    _ -> do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
-      pElse <- local (over (_1 . context) (. \p -> Program (PIf condVal pThen p) t)) $
-                  generateMaybeIf (addAssumption (fnot condVal) env) t
-      return $ Program (PIf condVal pThen pElse) t  
+-- | Generate a possibly conditional term type @t@, depending on whether a condition is abduced
+generateMaybeIf :: Monad s => Environment -> RType -> Explorer s RProgram   
+generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- If at least one solution without a match exists, go with it and continue with the else branch; otherwise try to match
+  where
+    -- | Guess an E-term and abduce a condition for it
+    generateThen = do
+      cUnknown <- Unknown Map.empty <$> freshId "c"
+      addConstraint $ WellFormedCond env cUnknown
+      pThen <- once $ guessE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it
+      candidates %= take 1 -- We also stick to the current valuations of unknowns: there should be no reason to reconsider them, since we've closed a top-level goal
+      cond <- uses candidates (conjunction . flip valuation cUnknown . solution . head)
+      return (cond, pThen)
+      
+    -- | Proceed after solution @pThen@ has been found under assumption @cond@
+    generateElse (cond, pThen) = if cond == ftrue
+      then return pThen -- @pThen@ is valid under no assumptions: return it
+      else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
+            pElse <- local (over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) $
+                        generateMaybeIf (addAssumption (fnot cond) env) t
+            return $ Program (PIf cond pThen pElse) t
 
 -- | Generate a match term of type @t@
 generateMatch env t = do
@@ -244,27 +252,27 @@ generateMatch env t = do
           guard isGoodScrutinee
           
           (env'', x) <- toSymbol pScrutinee (addScrutinee pScrutinee env')
-          pCases <- mapM (once . generateCase env'' x pScrutinee) ctors              -- Generate a case for each constructor of the datatype
+          pCases <- mapM (once . generateCase env'' x pScrutinee t) ctors              -- Generate a case for each constructor of the datatype
           return $ Program (PMatch pScrutinee pCases) t
                     
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
                                         
-  where      
-    -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
-    generateCase env scrName pScrutinee consName = do
-      case Map.lookup consName (allSymbols env) of
-        Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
-        Just consSch -> do
-          consT <- freshTypeVars consSch
-          matchConsType (lastType consT) (typeOf pScrutinee)
-          let ScalarT baseT _ = (typeOf pScrutinee)          
-          (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
-          pCaseExpr <- local (
-                               over (_1 . matchDepth) (-1 +)
-                             . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
-                            $ generateI caseEnv t
-          return $ Case consName args pCaseExpr
-      
+  
+-- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
+generateCase env scrName pScrutinee t consName = do
+  case Map.lookup consName (allSymbols env) of
+    Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
+    Just consSch -> do
+      consT <- freshTypeVars consSch
+      matchConsType (lastType consT) (typeOf pScrutinee)
+      let ScalarT baseT _ = (typeOf pScrutinee)          
+      (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
+      pCaseExpr <- local (
+                           over (_1 . matchDepth) (-1 +)
+                         . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
+                        $ generateI caseEnv t
+      return $ Case consName args pCaseExpr
+  where
     -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
     addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
       -- return $ ([], addNegAssumption (fnot $ subst fml) env) -- here vacuous cases are allowed
@@ -274,50 +282,62 @@ generateMatch env t = do
       (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
       return (argName : args, env')
       
-generateMaybeMatch env t = do
-  cond <- Unknown Map.empty <$> freshId "m"
-  addConstraint $ WellFormedMatchCond env cond
-  pThen <- once $ generateMaybeIf (addAssumption cond env) t
-  condVal <- uses candidates (conjunction . flip valuation cond . solution . head) -- TODO: what to do with other solutions?  
-  case condVal of
-    BoolLit True -> return pThen -- @pThen@ is valid under no assumptions: return it
-    _ -> let vars = varsOf condVal 
-         in if Set.size vars == 1
-              then generateKnownMatch env (Set.findMin vars) pThen t
-              else error "Eager match on multiple variables at once not implemented"
-
-generateKnownMatch :: Monad s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram      
-generateKnownMatch env var@(Var s x) pBaseCase t = do
-  let scrT@(ScalarT (DatatypeT scrDT _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
-  let pScrutinee = Program (PSymbol x) (ScalarT (baseTypeOf scrT) (varRefinement x s))
-  let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
-  let env' = addScrutinee pScrutinee env
-  pCases <- mapM (once . generateCase env' x pScrutinee) (tail ctors)              -- Generate a case for each constructor of the datatype
-  return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
-  where      
-    -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
-    generateCase env scrName pScrutinee consName = do
-      case Map.lookup consName (allSymbols env) of
-        Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
-        Just consSch -> do
-          consT <- freshTypeVars consSch
-          matchConsType (lastType consT) (typeOf pScrutinee)
-          let ScalarT baseT _ = (typeOf pScrutinee)          
-          (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
-          pCaseExpr <- local (
-                               over (_1 . matchDepth) (-1 +)
-                             . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
-                            $ generateI caseEnv t
-          return $ Case consName args pCaseExpr
-          
-    -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
-    addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in 
-      -- return $ ([], addNegAssumption (fnot $ subst fml) env) -- here vacuous cases are allowed
-      return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
-    addCaseSymbols env x (FunctionT y tArg tRes) = do
-      argName <- freshId "z"
-      (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
-      return (argName : args, env')      
+-- | Generate a possibly conditinal possibly match term, depending on which conditions are abduced      
+generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (generateMatch env t)
+  where
+    -- | Guess an E-term and abduce a condition and a match-condition for it
+    generateOneBranch = do
+      matchUnknown <- Unknown Map.empty <$> freshId "m"
+      addConstraint $ WellFormedMatchCond env matchUnknown    
+      condUnknown <- Unknown Map.empty <$> freshId "c"
+      addConstraint $ WellFormedCond env condUnknown
+      (matchConds, p0) <- once $ do
+        p0 <- guessE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
+        matchValuation <- uses candidates (Set.toList . flip valuation matchUnknown . solution . head)            
+        let allVars = Set.toList $ Set.unions (map varsOf matchValuation) 
+        let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) allVars -- group by vars
+        d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer
+        guard $ length matchConds <= d
+        return (matchConds, p0)
+      
+      cond <- uses candidates (conjunction . flip valuation condUnknown . solution . head)
+      candidates %= take 1
+      return (matchConds, cond, p0)
+            
+    -- | Proceed after solution @p0@ has been found under assumption @cond@ and match-assumption @matchCond@
+    generateOtherBranches (matchConds, cond, p0) = case matchConds of
+      [] -> if cond == ftrue
+        then return p0 -- @p0@ is valid under no assumptions: return it
+        else do -- @p0@ is valid under a nontrivial assumption, but no need to match
+              pElse <- local (over (_1 . context) (. \p -> Program (PIf cond p0 p) t)) $
+                          generateMaybeMatchIf (addAssumption (fnot cond) env) t
+              return $ Program (PIf cond p0 pElse) t  
+      _ -> if cond == ftrue
+        then generateMatchesFor env matchConds p0 t
+        else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
+              pThen <- once $ generateMatchesFor (addAssumption cond env) matchConds p0 t
+              pElse <- local (over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) $
+                          generateMaybeMatchIf (addAssumption (fnot cond) env) t
+              return $ Program (PIf cond pThen pElse) t                    
+                  
+    generateMatchesFor env [] pBaseCase t = return pBaseCase
+    generateMatchesFor env (matchCond : rest) pBaseCase t = do
+      let matchVar@(Var _ x) = Set.findMin $ varsOf matchCond
+      let scrT@(ScalarT (DatatypeT scrDT _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+      let pScrutinee = Program (PSymbol x) scrT
+      let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors      
+      pBaseCase' <- once $ local (over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t)) $
+                            generateMatchesFor (addScrutinee pScrutinee . addAssumption matchCond $ env) rest pBaseCase t -- TODO: if matchCond contains only a subset of case conjuncts, we should add the rest
+      generateKnownMatch env matchVar pBaseCase' t
+                  
+    generateKnownMatch :: Monad s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram      
+    generateKnownMatch env var@(Var s x) pBaseCase t = do
+      let scrT@(ScalarT (DatatypeT scrDT _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+      let pScrutinee = Program (PSymbol x) scrT 
+      let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
+      let env' = addScrutinee pScrutinee env
+      pCases <- mapM (once . generateCase env' x pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
+      return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
                 
 -- | 'generateE' @env typ@ : explore all elimination terms of type shape @shape typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)

@@ -40,19 +40,19 @@ add = \x . \y . if 0 >= y
 null :: <a> (xs:List (a) -> {Bool|_v == (len xs == 0)})
 null = \xs . match xs with
   Nil -> true
-  Cons z7 z8 -> false
+  Cons z5 z6 -> false
 
 elem :: <a> (x:a -> (xs:List (a) -> {Bool|_v == (x) in (elems xs)}))
 elem = \x . \xs . match xs with
   Nil -> false
-  Cons z7 z8 -> if z7 == x
+  Cons z5 z6 -> if z5 == x
     then true
-    else elem x z8
+    else elem x z6
 
 stutter :: <a> (xs:List (a) -> {List (a)|len _v == 2 * len xs})
 stutter = \xs . match xs with
-  Nil -> Nil
-  Cons z8 z9 -> Cons z8 (Cons z8 (stutter z9))
+  Nil -> xs
+  Cons z5 z6 -> Cons z5 (Cons z5 (stutter z6))
 
 replicate :: <a> (n:{Int|_v >= 0} -> (x:a -> {List (a)|len _v == n}))
 replicate = \n . \x . if 0 >= n
@@ -60,115 +60,115 @@ replicate = \n . \x . if 0 >= n
   else Cons x (replicate (dec n) x)
 
 append :: <a> (xs:List (a) -> (ys:List (a) -> {List (a)|len _v == len xs + len ys}))
-append = \xs . \ys . match xs with
-  Nil -> ys
-  Cons z8 z9 -> Cons z8 (append z9 ys)
+append = \xs . \ys . match ys with
+  Nil -> xs
+  Cons z6 z7 -> Cons z6 (append xs z7)
 
 take :: <a> (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == n}))
 take = \n . \xs . match xs with
-  Nil -> Nil
-  Cons z9 z10 -> if 0 >= n
+  Nil -> xs
+  Cons z6 z7 -> if 0 >= n
     then Nil
-    else Cons z9 (take (dec n) z10)
+    else Cons z6 (take (dec n) z7)
 
 drop :: <a> (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == len xs - n}))
-drop = \n . \xs . match xs with
-  Nil -> Nil
-  Cons z9 z10 -> if n <= 0
-    then Cons z9 z10
-    else drop (dec n) z10
+drop = \n . \xs . if n <= 0
+  then xs
+  else match xs with
+    Nil -> error
+    Cons z9 z10 -> drop (dec n) z10
 
 delete :: <a> (x:a -> (xs:List (a) -> {List (a)|elems _v == (elems xs) - ([x])}))
 delete = \x . \xs . match xs with
-  Nil -> Nil
-  Cons z8 z9 -> if z8 == x
-    then delete x z9
-    else Cons z8 (delete x z9)
+  Nil -> xs
+  Cons z5 z6 -> if z5 == x
+    then delete x z6
+    else Cons z5 (delete x z6)
 
 map :: <b> <a> (f:(_:a -> b) -> (xs:List (a) -> {List (b)|len _v == len xs}))
 map = \f . \xs . match xs with
   Nil -> Nil
-  Cons z8 z9 -> Cons (f z8) (map (\x35 . f x35) z9)
+  Cons z6 z7 -> Cons (f z6) (map (\x34 . f x34) z7)
 
 zipWith :: <c> <b> <a> (f:(_:a -> (_:b -> c)) -> (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (c)|len _v == len xs})))
 zipWith = \f . \xs . \ys . match xs with
   Nil -> Nil
-  Cons z9 z10 -> match ys with
+  Cons z7 z8 -> match ys with
     Nil -> error
-    Cons z15 z16 -> Cons (f z9 z15) (zipWith (\x48 . \x49 . f x48 x49) z10 z16)
+    Cons z13 z14 -> Cons (f z7 z13) (zipWith (\x47 . \x48 . f x47 x48) z8 z14)
 
 toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
-toNat = \xs . map (\x13 . if x13 >= 0
-  then x13
-  else neg x13) xs
+toNat = \xs . map (\x14 . if x14 >= 0
+  then x14
+  else neg x14) xs
 
 elem :: <a> (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
 elem = \x . \t . match t with
   Empty -> false
-  Node z7 z8 z9 -> if z7 == x
+  Node z5 z6 z7 -> if z5 == x
     then not false
-    else or (elem x z8) (elem x z9)
+    else or (elem x z6) (elem x z7)
 
 flatten :: <a> (t:Tree (a) -> {List (a)|len _v == size t})
 flatten = \t . match t with
   Empty -> Nil
-  Node z10 z11 z12 -> Cons z10 (append (flatten z11) (flatten z12))
+  Node z7 z8 z9 -> Cons z7 (append (flatten z8) (flatten z9))
 
 insert :: <a> (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
 insert = \x . \xs . match xs with
   INil -> ICons x INil
-  ICons z17 z18 -> if x <= z17 && z17 <= x
-    then ICons z17 z18
-    else if x <= z17
-      then ICons x (ICons z17 z18)
-      else ICons z17 (insert x z18)
+  ICons z15 z16 -> if x <= z15 && z15 <= x
+    then ICons z15 z16
+    else if x <= z15
+      then ICons x (ICons z15 z16)
+      else ICons z15 (insert x z16)
 
 insertSort :: <a> (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 insertSort = \xs . match xs with
   Nil -> INil
-  Cons z10 z11 -> insert z10 (insertSort z11)
+  Cons z7 z8 -> insert z7 (insertSort z8)
 
 split :: <a> (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
 split = \xs . match xs with
-  Nil -> Pair Nil Nil
-  Cons z23 z24 -> match z24 with
-    Nil -> Pair Nil (Cons z23 Nil)
-    Cons z57 z58 -> match split z58 with
-      Pair z75 z76 -> Pair (Cons z57 z75) (Cons z23 z76)
+  Nil -> Pair xs xs
+  Cons z17 z18 -> match z18 with
+    Nil -> Pair Nil (Cons z17 Nil)
+    Cons z52 z53 -> match split z53 with
+      Pair z70 z71 -> Pair (Cons z52 z70) (Cons z17 z71)
 
 merge :: <a> (xs:IList (a) -> (ys:IList (a) -> {IList (a)|ilen _v == ilen xs + ilen ys && ielems _v == (ielems xs) + (ielems ys)}))
-merge = \xs . \ys . match xs with
-  INil -> ys
-  ICons z8 z9 -> match ys with
-    INil -> ICons z8 z9
-    ICons z24 z25 -> if z24 < z8
-      then ICons z24 (merge (ICons z8 z9) z25)
-      else ICons z8 (merge z9 (ICons z24 z25))
+merge = \xs . \ys . match ys with
+  INil -> xs
+  ICons z6 z7 -> match xs with
+    INil -> ICons z6 z7
+    ICons z20 z21 -> if z20 < z6
+      then ICons z20 (merge z21 (ICons z6 z7))
+      else ICons z6 (merge (ICons z20 z21) z7)
 
 mergeSort :: <a> (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 mergeSort = \xs . match xs with
   Nil -> INil
-  Cons z10 z11 -> match z11 with
-    Nil -> ICons z10 INil
-    Cons z34 z35 -> match split xs with
-      Pair z54 z55 -> merge (mergeSort z54) (mergeSort z55)
+  Cons z7 z8 -> match z8 with
+    Nil -> ICons z7 INil
+    Cons z32 z33 -> match split xs with
+      Pair z52 z53 -> merge (mergeSort z52) (mergeSort z53)
 
 partition :: <a> (p:a -> (xs:List (a) -> {Pair ({List ({a|_v <= p})|len _v >= 0}) ({List ({a|_v > p})|len _v >= 0})|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
 partition = \p . \xs . match xs with
   Nil -> Pair Nil Nil
-  Cons z24 z25 -> match partition p z25 with
-    Pair z48 z49 -> if z24 <= p
-      then Pair (Cons z24 z48) z49
-      else Pair z48 (Cons z24 z49)
+  Cons z22 z23 -> match partition p z23 with
+    Pair z46 z47 -> if z22 <= p
+      then Pair (Cons z22 z46) z47
+      else Pair z46 (Cons z22 z47)
 
 pivotAppend :: <a> (p:a -> (xs:IList ({a|_v <= p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
   INil -> ICons p ys
-  ICons z15 z16 -> ICons z15 (pivotAppend p z16 ys)
+  ICons z13 z14 -> ICons z13 (pivotAppend p z14 ys)
 
 quickSort :: <a> (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 quickSort = \xs . match xs with
   Nil -> INil
-  Cons z10 z11 -> match partition z10 z11 with
-    Pair z37 z38 -> pivotAppend z10 (quickSort z37) (quickSort z38)
+  Cons z7 z8 -> match partition z7 z8 with
+    Pair z34 z35 -> pivotAppend z7 (quickSort z34) (quickSort z35)
 
