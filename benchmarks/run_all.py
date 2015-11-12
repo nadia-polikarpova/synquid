@@ -49,6 +49,9 @@ BENCHMARKS = [
     ('List-Partition', ['-s=1']),
     ('IncList-PivotAppend', []),
     ('IncList-QuickSort', ['-a=2', '-s=1']),    
+    # Binary search tree
+    ('BST-Insert', []),
+    ('BST-Sort', []),
 ]
 
 class SynthesisResult:
