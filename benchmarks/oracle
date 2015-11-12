@@ -102,6 +102,20 @@ toNat = \xs . map (\x14 . if x14 >= 0
   then x14
   else neg x14) xs
 
+insert :: <a> (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) + ([x])}))
+insert = \x . \xs . match xs with
+  UNil -> UCons x UNil
+  UCons z15 z16 -> if z15 == x
+    then xs
+    else UCons z15 (insert x z16)
+
+delete :: <a> (x:a -> (xs:UList (a) -> {UList ({a|_v /= x})|abs(ulen _v - ulen xs) <= 1}))
+delete = \x . \xs . match xs with
+  UNil -> UNil
+  UCons z6 z7 -> if z6 == x
+    then z7
+    else UCons z6 (delete x z7)
+
 elem :: <a> (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
 elem = \x . \t . match t with
   Empty -> false
@@ -171,4 +185,42 @@ quickSort = \xs . match xs with
   Nil -> INil
   Cons z7 z8 -> match partition z7 z8 with
     Pair z34 z35 -> pivotAppend z7 (quickSort z34) (quickSort z35)
+
+insert :: <a> (x:a -> (t:BST (a) -> {BST (a)|elems _v == (elems t) + ([x])}))
+insert = \x . \t . match t with
+  Empty -> Node x Empty Empty
+  Node z19 z20 z21 -> if x <= z19 && z19 <= x
+    then t
+    else if z19 <= x
+      then Node z19 z20 (insert x z21)
+      else Node z19 (insert x z20) z21
+
+insert :: <a> (x:a -> (t:BST (a) -> {BST (a)|telems _v == (telems t) + ([x])}))
+insert = \x . \t . match t with
+  Empty -> Node x Empty Empty
+  Node z25 z26 z27 -> if x <= z25 && z25 <= x
+    then t
+    else if z25 <= x
+      then Node z25 z26 (insert x z27)
+      else Node z25 (insert x z26) z27
+
+toBST :: <a> (xs:List (a) -> {BST (a)|telems _v == elems xs})
+toBST = \xs . match xs with
+  Nil -> Empty
+  Cons z8 z9 -> insert z8 (toBST z9)
+
+pivotAppend :: <a> (p:a -> (xs:IList ({a|_v < p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
+pivotAppend = \p . \xs . \ys . match xs with
+  INil -> ICons p ys
+  ICons z19 z20 -> ICons z19 (pivotAppend p z20 ys)
+
+flatten :: <a> (t:BST (a) -> {IList (a)|ielems _v == telems t})
+flatten = \t . match t with
+  Empty -> INil
+  Node z8 z9 z10 -> pivotAppend z8 (flatten z9) (flatten z10)
+
+sort :: <a> (xs:List (a) -> {IList (a)|ielems _v == elems xs})
+sort = \xs . match xs with
+  Nil -> INil
+  Cons z8 z9 -> flatten (toBST xs)
 
