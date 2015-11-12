@@ -46,7 +46,7 @@ synthesize explorerParams solverParams goal cquals tquals = do
                            set matchQualsGen matchQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
-      in explore explorerParams' (ConstraintSolver init refine prune check clearCache) goal
+      in explore explorerParams' (ConstraintSolver init refine prune check clearCache getMemo putMemo) goal
 
     init :: Z3Memo Candidate
     init = lift $ initialCandidate
@@ -62,6 +62,12 @@ synthesize explorerParams solverParams goal cquals tquals = do
 
     clearCache :: Z3Memo ()
     clearCache = put Map.empty
+    
+    getMemo :: Z3Memo Memo
+    getMemo = get
+    
+    putMemo :: Memo -> Z3Memo ()
+    putMemo = put
 
     -- | Qualifier generator for conditionals
     condQuals = toSpace . foldl (|++|) (const []) (map (extractCondQGen $ gEnvironment goal) cquals)

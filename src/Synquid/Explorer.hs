@@ -40,7 +40,9 @@ data ConstraintSolver s = ConstraintSolver {
   csRefine :: [Formula] -> QMap -> RProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
   csPruneQuals :: QSpace -> s QSpace,                                         -- ^ Prune redundant qualifiers
   csCheckConsistency :: [Formula] -> [Candidate] -> s [Candidate],            -- ^ Check consistency of formulas under candidates
-  csClearCache :: s ()
+  csClearCache :: s (),
+  csGetMemo :: s Memo,
+  csPutMemo :: Memo -> s()
 }
 
 -- | Choices for the type of terminating fixpoint operator
@@ -406,6 +408,11 @@ generateEAt env typ 0 = do
 generateEAt env typ d = do
   let maxArity = fst $ Map.findMax (env ^. symbols)
   guard $ arity typ < maxArity
+  
+  solv <- asks snd
+  memo <- lift . lift . lift $ csGetMemo solv  
+  -- writeLog 1 (text "MEMO" <+> pretty memo)
+  
   generateApp (\e t -> generateEUpTo e t (d - 1)) (\e t -> generateEAt e t (d - 1)) `mplus`
     generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
   where
@@ -428,6 +435,11 @@ generateEAt env typ d = do
           (env''', y) <- toSymbol arg env''
           return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
       ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
+      
+      solv <- asks snd
+      memo <- lift . lift . lift $ csGetMemo solv
+      lift . lift . lift $ csPutMemo solv (Map.insertWith (flip (++)) (env, typ, d) [pApp] memo)
+      
       return (envfinal, pApp)
 
     generateFun genFun env tFun = do

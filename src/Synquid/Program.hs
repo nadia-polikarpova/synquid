@@ -71,7 +71,7 @@ isVarRefinemnt _ = False
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   Forall Id (SchemaSkeleton r)
-  deriving (Eq)
+  deriving (Eq, Ord)
   
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
@@ -208,7 +208,7 @@ data DatatypeDef = DatatypeDef {
   _typeArgCount :: Int,
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
-}
+} deriving (Eq, Ord)
 
 makeLenses ''DatatypeDef
 
@@ -217,7 +217,7 @@ data MeasureDef = MeasureDef {
   _inSort :: Sort,
   _outSort :: Sort,
   _postcondition :: Formula
-}
+} deriving (Eq, Ord)
 
 makeLenses ''MeasureDef
 
@@ -243,7 +243,7 @@ data Case r = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
   expr :: Program r       -- ^ Result of the match in this case
-} deriving Eq    
+}  deriving (Eq, Ord)
     
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram r =
@@ -253,7 +253,7 @@ data BareProgram r =
   PIf Formula (Program r) (Program r) |   -- ^ Conditional
   PMatch (Program r) [Case r] |           -- ^ Pattern match on datatypes
   PFix [Id] (Program r)                   -- ^ Fixpoint  
-  deriving Eq
+  deriving (Eq, Ord)
   
 -- | Programs annotated with types  
 data Program r = Program {
@@ -263,6 +263,9 @@ data Program r = Program {
 
 instance Eq (Program r) where
   (==) (Program l _) (Program r _) = l == r
+  
+instance Ord (Program r) where
+  (<=) (Program l _) (Program r _) = l <= r  
 
 -- | Fully defined programs 
 type RProgram = Program Formula
@@ -328,7 +331,7 @@ data Environment = Environment {
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: TypeSubstitution        -- ^ Type synonym definitions
-}
+} deriving (Eq, Ord)
 
 makeLenses ''Environment  
 
