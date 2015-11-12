@@ -87,7 +87,7 @@ makeLenses ''ExplorerState
 -- | Impose typing constraint @c@ on the programs
 addConstraint c = typingConstraints %= (c :)
 addTypeAssignment tv t = typeAssignment %= Map.insert tv t
-addHornClause lhs rhs = hornClauses %= ((lhs |=>| rhs) :)
+addHornClause fml = hornClauses %= (fml :)
 addConsistencyCheck fml = consistencyChecks %= (fml :)
 
 -- | Computations that explore programs, parametrized by the the constraint solver and the backtracking monad
@@ -161,7 +161,9 @@ generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
           if seenLast
             then return (FunctionT y (addRefinement tArg argLe) tRes', True) -- already encountered the last recursible argument: add a nonstrict termination refinement to the current one
             -- else return (FunctionT y (addRefinement tArg (fml `orClean` argLt)) tRes', True) -- this is the last recursible argument: add the disjunction of strict termination refinements
-            else return (FunctionT y (addRefinement tArg (argLe `andClean` (fml `orClean` argLt))) tRes', True) -- TODO: this version in incomplete (does not allow later tuple values to go up), but is much faster
+            else if fml == ffalse
+                  then return (FunctionT y (addRefinement tArg argLt) tRes', True)
+                  else return (FunctionT y (addRefinement tArg (argLe `andClean` (fml `orClean` argLt))) tRes', True) -- TODO: this version in incomplete (does not allow later tuple values to go up), but is much faster
     recursiveTypeTuple t _ = return (t, False)
     
     -- | 'recursiveTypeFirst' @t fml@: type of the recursive call to a function of type @t@ when only the first recursible argument decreases
@@ -174,12 +176,14 @@ generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
     recursiveTypeFirst t = return t
 
     -- | If argument is recursible, return its strict and non-strict termination refinements, otherwise @Nothing@
-    terminationRefinement argName (ScalarT IntT fml) = Just (valInt |>=| IntLit 0  |&|  valInt |<| intVar argName, valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
+    terminationRefinement argName (ScalarT IntT fml) = Just ( valInt |>=| IntLit 0  |&|  valInt |<| intVar argName, 
+                                                              valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
     terminationRefinement argName (ScalarT dt@(DatatypeT name tArgs) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
-      Just mName -> let (inSort, outSort) = (env ^. measures) Map.! mName
+      Just mName -> let MeasureDef inSort outSort _ = (env ^. measures) Map.! mName
                         metric = Measure outSort mName           
-                    in Just (metric (Var inSort valueVarName) |<| metric (Var inSort argName), metric (Var inSort valueVarName) |<=| metric (Var inSort argName)) 
+                    in Just ( metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<| metric (Var inSort argName), 
+                              metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<=| metric (Var inSort argName)) 
     terminationRefinement _ _ = Nothing
     
     
@@ -590,7 +594,8 @@ processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') False) 
       then return ()
       else do
         tass <- use typeAssignment
-        addHornClause (conjunction (Set.insert (typeSubstituteFML tass fml) (embedding env tass))) (typeSubstituteFML tass fml')
+        let lhss = embedding env tass `Set.union` Set.fromList (typeSubstituteFML tass fml : allMeasurePostconditions baseT env)
+        addHornClause $ conjunction lhss |=>| typeSubstituteFML tass fml'
 processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT' 
   = do
       tass <- use typeAssignment

@@ -315,12 +315,13 @@ instance Pretty ConstructorDef where
   pretty (ConstructorDef name t) = text name <+> text "::" <+> pretty t
   
 instance Pretty Declaration where
-  pretty (TypeDef name t) = text "type" <+> text name <+> text "=" <+> pretty t
-  pretty (FuncDef name t) = text name <+> text "::" <+> pretty t
-  pretty (DataDef name typeVars wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>
+  pretty (TypeDecl name t) = text "type" <+> text name <+> text "=" <+> pretty t
+  pretty (FuncDecl name t) = text name <+> text "::" <+> pretty t
+  pretty (DataDecl name typeVars wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>
                                                             optionMaybe wfMetricMb (\m -> text "decreases" <+> text m) <+> text "where") $+$
                                                             vsep (map pretty ctors) 
-  pretty (MeasureDef name inSort outSort) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->" <+> pretty outSort
+  pretty (MeasureDecl name inSort outSort post) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->" 
+                                                  <+> if post == ftrue then pretty outSort else braces (pretty outSort <+> text "|" <+> pretty post)
   pretty (SynthesisGoal name) = text name <+> text "= ??"
     
 {- AST node counting -}

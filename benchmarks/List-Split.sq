@@ -4,12 +4,12 @@ measure snd :: Pair a b -> b
 data Pair a b where
 	Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
 
-measure len :: List a -> Int
+measure len :: List a -> {Int | _v >= 0}
 measure elems :: List a -> Set a
 
 data List a decreases len where
 	Nil :: {List a | len _v == 0 && elems _v == []}
-	Cons :: x: a -> xs: List a -> {List a | len _v > 0 && len _v == len xs + 1 && elems _v == elems xs + [x]}
+	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
 	
 split :: xs: List a -> {Pair {List a | ~(len xs - len _v * 2) <= 1} (List a) | len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }
 split = ??
