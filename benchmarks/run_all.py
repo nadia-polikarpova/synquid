@@ -34,7 +34,10 @@ BENCHMARKS = [
     ('List-Delete', []),
     ('List-Map', []),
     ('List-ZipWith', []),
-    ('List-ToNat', []),    
+    ('List-ToNat', []),
+    # Unique lists
+    ('UniqueList-Insert', []),
+    ('UniqueList-Delete', []),    
     # Trees
     ('Tree-Elem', []),
     ('Tree-Flatten', []),    
