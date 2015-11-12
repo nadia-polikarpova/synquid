@@ -1,8 +1,10 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+
 module Main where
 
 import Synquid.Logic
 import Synquid.Solver
-import Synquid.SMTSolver
+--import Synquid.SMTSolver
 import Synquid.Program
 import Synquid.Pretty
 import Synquid.Explorer
@@ -10,21 +12,26 @@ import Synquid.Synthesizer
 import Synquid.Parser
 import Synquid.Resolver
 
-import Data.List
+--import Data.List
 import Data.Maybe
-import qualified Data.Set as Set
-import Data.Set (Set)
+--import qualified Data.Set as Set
+--import Data.Set (Set)
 import qualified Data.Map as Map
-import Data.Map (Map, (!))
-import Control.Monad
+--import Data.Map (Map, (!))
+--import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 
+import Test.Framework hiding (Test)
+import Test.Framework.Providers.HUnit
+--import Test.Framework.Providers.QuickCheck2
 import Test.HUnit
+--import Test.QuickCheck
 
-main = runTestTT allTests
+main :: IO ()
+main = defaultMain $ allTests
 
-allTests = TestList [parserTests, resolverTests, integerTests, listTests, incListTests, treeTests]
+allTests = hUnitTestToTests $ TestList [parserTests, resolverTests, integerTests, listTests, incListTests, treeTests]
 
 integerTests = TestLabel "Integer" $ TestList [
     TestCase testApp
@@ -38,8 +45,8 @@ integerTests = TestLabel "Integer" $ TestList [
 
 listTests = TestLabel "List" $ TestList [
     TestCase testHead
-  , TestCase testNull  
-  , TestCase testReplicate  
+  , TestCase testNull
+  , TestCase testReplicate
   , TestCase testLength
   , TestCase testAppend
   , TestCase testStutter
@@ -50,19 +57,19 @@ listTests = TestLabel "List" $ TestList [
   , TestCase testUseMap
   , TestCase testUseFold1
   ]
-  
+
 incListTests = TestLabel "IncList" $ TestList [
     TestCase testMakeIncList
-  , TestCase testIncListInsert 
-  , TestCase testIncListMerge 
+  , TestCase testIncListInsert
+  , TestCase testIncListMerge
   ]
-  
+
 treeTests = TestLabel "Tree" $ TestList [
     TestCase testTreeRoot
   , TestCase testTreeSize
   , TestCase testTreeFlatten
-  ]  
-  
+  ]
+
 parserTests = TestLabel "Parser" $ TestList [testParseRefinement, testParseFunctionType, testParseTerm, testParseScalarType]
 resolverTests = TestLabel "Resolver" $ TestList [testResolveType]
 
@@ -87,7 +94,7 @@ defaultExplorerParams = ExplorerParams {
 -- | Parameters for constraint solving
 defaultSolverParams = SolverParams {
   pruneQuals = True,
-  optimalValuationsStrategy = MarcoValuations,    
+  optimalValuationsStrategy = MarcoValuations,
   semanticPrune = True,
   agressivePrune = True,
   candidatePickStrategy = InitializedWeakCandidate,
@@ -98,73 +105,73 @@ defaultSolverParams = SolverParams {
 
 testSynthesizeSuccess explorerParams solverParams env typ cquals tquals = do
   mProg <- synthesize explorerParams solverParams (Goal "test" env typ) cquals tquals
-  assertBool "Synthesis failed" $ isJust mProg  
-  
+  assertBool "Synthesis failed" $ isJust mProg
+
 {- Testing Synthesis of Integer Programs -}
 
 inequalities = do
   op <- [Ge, Le, Neq]
   return $ Binary op (intVar "x") (intVar "y")
-  
+
 inequalities0 = do
   op <- [Ge, Le, Neq]
   return $ Binary op (intVar "x") (IntLit 0)
 
--- | Single application  
-testApp = let 
+-- | Single application
+testApp = let
     env = addVariable "a" intAll .
           addVariable "b" intAll .
           addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
           addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
           id $ emptyEnv
     typ = Monotype $ int (valInt |>| intVar "b")
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []  
-  
--- | Multiple applications  
-testAppMany = let 
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
+
+-- | Multiple applications
+testAppMany = let
     env = addVariable "a" nat .
           addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
           addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
           id $ emptyEnv
     typ = Monotype $ int (valInt |=| intVar "a" |+| IntLit 5)
-  in testSynthesizeSuccess (defaultExplorerParams { _eGuessDepth = 5 }) defaultSolverParams env typ [] []  
-  
--- | Maximum of 2 integers  
+  in testSynthesizeSuccess (defaultExplorerParams { _eGuessDepth = 5 }) defaultSolverParams env typ [] []
+
+-- | Maximum of 2 integers
 testMax2 = let
   env = emptyEnv
-  typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")  
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []  
-  
+  typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y")
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []
+
 -- | Maximum of 3 integers
 testMax3 = let
   env = emptyEnv
-  typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")  
-  in testSynthesizeSuccess (defaultExplorerParams {_condDepth = 2}) defaultSolverParams env typ inequalities []      
-  
--- | Maximum of 4 integers  
+  typ = Monotype $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ int (valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
+  in testSynthesizeSuccess (defaultExplorerParams {_condDepth = 2}) defaultSolverParams env typ inequalities []
+
+-- | Maximum of 4 integers
 testMax4 = let
   env = emptyEnv
-  typ = Monotype $ FunctionT "w" intAll $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $ 
-                int (valInt |>=| intVar "w" |&| valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")  
+  typ = Monotype $ FunctionT "w" intAll $ FunctionT "x" intAll $ FunctionT "y" intAll $ FunctionT "z" intAll $
+                int (valInt |>=| intVar "w" |&| valInt |>=| intVar "x" |&| valInt |>=| intVar "y" |&| valInt |>=| intVar "z")
   in testSynthesizeSuccess (defaultExplorerParams {_condDepth = 3}) defaultSolverParams env typ inequalities []
-  
+
 -- | Absolute value
 testAbs = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
         id $ emptyEnv
   typ = Monotype $ FunctionT "x" intAll $ int ((valInt |=| intVar "x" ||| valInt |=| fneg (intVar "x")) |&| valInt |>=| IntLit 0)
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []    
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []
 
--- | Addition  
+-- | Addition
 testAddition = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "dec" (FunctionT "x" nat (int (valInt |=| intVar "x" |-| IntLit 1))) .
         addConstant "inc" (FunctionT "x" nat (int (valInt |=| intVar "x" |+| IntLit 1))) .
         id $ emptyEnv
-  typ = Monotype $ FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")  
+  typ = Monotype $ FunctionT "y" nat $ FunctionT "z" nat $ int (valInt |=| intVar "y" |+| intVar "z")
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []
-  
+
 {- Testing Synthesis of List Programs -}
 
 listT = DatatypeT "List"
@@ -191,94 +198,94 @@ addList = addDatatype "List" (DatatypeDef 1 ["Nil", "Cons"] (Just "len")) .
                                                                                                                      |&| mLen valList |>| IntLit 0
                                                                                                                      |&| mElems valList |=| mElems (listVar "xs") /+/ SetLit (VarS "a") [vartVar "a" "x"]
                                                                                    )))
-                                                                                   
+
 polyEq = [vartVar "a" "x" |=| vartVar "a" "y"]
-                                                                                                                                                                      
+
 testHead = let
   env = addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "xs" (list $ mLen valList |>| IntLit 0) (vart "a" $ valVart "a" `fin` mElems (listVar "xs"))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
+
 testNull = let
   env = addConstant "true" (bool valBool) .
         addConstant "false" (bool (fnot valBool)) .
         addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "xs" (listAll) (bool $ valBool |=| (mLen (listVar "xs") |=| IntLit 0))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
+
 testReplicate = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .            
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
         addList $ emptyEnv
-  typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT (listT [vartAll "a"]) $ mLen valList |=| intVar "n"))          
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []    
-  
+  typ = Forall "a" $ Monotype $ FunctionT "n" nat (FunctionT "y" (vartAll "a") (ScalarT (listT [vartAll "a"]) $ mLen valList |=| intVar "n"))
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []
+
 testLength = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
         addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "l" listAll (int $ valInt |=| mLen (listVar "l"))
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []    
-  
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
+
 testAppend = let
   env = addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "ys" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| mLen (listVar "ys")))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
+
 testStutter = let
   env = addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (list $ mLen valList |=| IntLit 2 |*| mLen (listVar "xs") |&| mElems valList |=| mElems (listVar "xs"))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
+
 testTake = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
         addList $ emptyEnv
-  typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| intVar "n"))  
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []  
-  
+  typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| intVar "n"))
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []
+
 testDrop = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
         addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "n" (int $ IntLit 0 |<=| valInt |&| valInt |<=| mLen (listVar "xs")) (list $ mLen valList |=| mLen (listVar "xs") |-| intVar "n"))
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []  
-  
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities []
+
 testDelete = let
   env = addList $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "xs" listAll (list $ mElems valList |=| mElems (listVar "xs") /-/ SetLit (VarS "a") [vartVar "a" "x"]))
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ polyEq []      
-  
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ polyEq []
+
 testMap = let
   env = addList $ emptyEnv
-  typ = (Forall "a" $ Forall "b" $ Monotype $ 
-                                    FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
+  typ = (Forall "a" $ Forall "b" $ Monotype $
+                                    FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b"))
                                     (FunctionT "xs" (ScalarT (listT [vartAll "a"]) ftrue) (ScalarT (listT [vartAll "b"]) $ mLen valList |=| mLen (listVar "xs"))))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
+
 testUseMap = let
-  env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $ 
-                                    FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b")) 
+  env = addPolyConstant "map" (Forall "a" $ Forall "b" $ Monotype $
+                                    FunctionT "f" (FunctionT "x" (vartAll "a") (vartAll "b"))
                                     (FunctionT "xs" (ScalarT (listT [vartAll "a"]) ftrue) (ScalarT (listT [vartAll "b"]) $ mLen valList |=| mLen (listVar "xs")))) .
-        addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .            
+        addConstant "neg" (FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))) .
         addList $ emptyEnv
   typ = Monotype $ FunctionT "xs" (intlist ftrue) (natlist $ mLen valList |=| mLen (listVar "xs"))
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities0 []  
-  
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ inequalities0 []
+
 testUseFold1 = let
-  env = addPolyConstant "fold1" (Forall "a" $ Monotype $ 
-                                    FunctionT "f" (FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (vartAll "a"))) 
+  env = addPolyConstant "fold1" (Forall "a" $ Monotype $
+                                    FunctionT "f" (FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (vartAll "a")))
                                     (FunctionT "xs" (ScalarT (listT [vartAll "a"]) $ mLen valList |>| IntLit 0) (vartAll "a"))) .
         addConstant "gcd" (FunctionT "x" pos (FunctionT "y" pos pos)) .
         addList $ emptyEnv
-  typ = Monotype $ FunctionT "xs" (poslist $ mLen valList |>| IntLit 0) nat    
+  typ = Monotype $ FunctionT "xs" (poslist $ mLen valList |>| IntLit 0) nat
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
-  
+
+
 {- Testing Synthesis of Sorted List Programs -}
 
 incListT = DatatypeT "IncList"
@@ -303,8 +310,8 @@ addIncList = addDatatype "IncList" (DatatypeDef 1 ["Nil", "Cons"] (Just "len")) 
           addPolyConstant "Nil" (Forall "a" $ Monotype $ incList $ mLen valIncList |=| IntLit 0
                                                                |&| mIElems valIncList  |=| SetLit (VarS "a") []
                                 ) .
-          addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") 
-                                                         (FunctionT "xs" (ScalarT (incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"]) ftrue) 
+          addPolyConstant "Cons" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a")
+                                                         (FunctionT "xs" (ScalarT (incListT [vart "a" $ valVart "a" |>=| vartVar "a" "x"]) ftrue)
                                                          (incList $ mLen valIncList |=| mLen (incListVar "xs") |+| IntLit 1
                                                                 |&| mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (VarS "a") [vartVar "a" "x"]
                                                           )))
@@ -312,22 +319,22 @@ addIncList = addDatatype "IncList" (DatatypeDef 1 ["Nil", "Cons"] (Just "len")) 
 testMakeIncList = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
         addConstant "dec" (FunctionT "x" intAll (int (valInt |=| intVar "x" |-| IntLit 1))) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
         addIncList $ emptyEnv
   typ = Monotype $ natInclist $ mIElems valIncList |=| SetLit IntS [IntLit 0, IntLit 1]
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-  
+
 testIncListInsert = let
   env = addIncList $ emptyEnv
   typ = Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (VarS "a") [vartVar "a" "x"])))
-  in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
-  
+  in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []
+
 testIncListMerge = let
   env = addPolyConstant "insert" (Forall "a" $ Monotype $ (FunctionT "x" (vartAll "a") (FunctionT "xs" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ SetLit (VarS "a") [vartVar "a" "x"])))) .
         addIncList $ emptyEnv
   typ = Forall "a" $ Monotype $ (FunctionT "xs" (incList ftrue) (FunctionT "ys" (incList ftrue) (incList $ mIElems valIncList |=| mIElems (incListVar "xs") /+/ mIElems (incListVar "ys"))))
-  in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []          
-  
+  in testSynthesizeSuccess (defaultExplorerParams {_eGuessDepth = 2}) defaultSolverParams env typ polyInequalities []
+
 -- | Create `Test`s from a parser function and test-cases consisting of an input string and the expected parsed AST.
 createParserTestList :: (Show a, Eq a) => Parser a -> [(String, a)] -> Test
 createParserTestList parser testCases = TestList $ map createTestCase testCases
@@ -386,7 +393,7 @@ testResolveType = TestList $ map createTestCase [
   where
     createTestCase (env, inputStr, resolvedAst) = TestCase $ assertEqual inputStr (Right resolvedAst) $
       testParse parseType inputStr >>= \t -> runExcept (evalStateT (resolveType t) (ResolverState env [] [] []))
-  
+
 {- Testing Synthesis of Tree Programs -}
 
 treeT = DatatypeT "Tree"
@@ -402,32 +409,32 @@ mTElems = Measure (SetS (VarS "a")) "telems"
 addTree = addDatatype "Tree" (DatatypeDef 1 ["Empty", "Node"] (Just "size")) .
           addMeasure "size" (MeasureDef (DataS "Tree" [VarS "a"]) IntS ftrue) .
           addMeasure "elems" (MeasureDef (DataS "Tree" [VarS "a"]) (SetS (VarS "a")) ftrue) .
-          addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $  
+          addPolyConstant "Empty" (Forall "a" $ Monotype $ tree $
             mSize valTree  |=| IntLit 0
             -- |&| (mTElems valTree |=| SetLit (TypeVarT "a") [])
             ) .
-          addPolyConstant "Node" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "l" treeAll (FunctionT "r" treeAll (tree $  
+          addPolyConstant "Node" (Forall "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "l" treeAll (FunctionT "r" treeAll (tree $
             mSize valTree |=| mSize (treeVar "l") |+| mSize (treeVar "r") |+| IntLit 1
             |&| mSize (treeVar "l") |>=| IntLit 0 |&| mSize (treeVar "r") |>=| IntLit 0
             -- |&| mTElems valTree |=| mTElems (treeVar "l") /+/ mTElems (treeVar "r") /+/ SetLit (TypeVarT "a") [vartVar "a" "x"]
-            ))))            
-  
+            ))))
+
 testTreeRoot = let
   env = addTree $ emptyEnv
-  typ = Forall "a" $ Monotype $ FunctionT "t" (tree $ mSize valTree |>| IntLit 0) (vartAll "a") -- $ valVart "a" `fin` mTElems (treeVar "t"))  
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []          
-            
-              
+  typ = Forall "a" $ Monotype $ FunctionT "t" (tree $ mSize valTree |>| IntLit 0) (vartAll "a") -- $ valVart "a" `fin` mTElems (treeVar "t"))
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
+
+
 testTreeSize = let
   env = addConstant "0" (int (valInt |=| IntLit 0)) .
-        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .  
+        addConstant "inc" (FunctionT "x" intAll (int (valInt |=| intVar "x" |+| IntLit 1))) .
         addConstant "plus" (FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))) .
         addTree $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "t" treeAll (int $ valInt |=| mSize (treeVar "t"))
   in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
-            
+
 testTreeFlatten = let
   env = addPolyConstant "append" (Forall "a" $ Monotype $ FunctionT "xs" listAll (FunctionT "ys" listAll (list $ mLen valList |=| mLen (listVar "xs") |+| mLen (listVar "ys")))) .
         addList $ addTree $ emptyEnv
   typ = Forall "a" $ Monotype $ FunctionT "t" treeAll (list $ mLen valList |=| mSize (treeVar "t"))
-  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []  
+  in testSynthesizeSuccess defaultExplorerParams defaultSolverParams env typ [] []
