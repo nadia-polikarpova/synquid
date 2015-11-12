@@ -267,7 +267,7 @@ generateCase env scrName pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env 
     Just consSch -> do
-      consT <- freshTypeVars consSch
+      consT <- freshTypeVars consSch ftrue
       matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)          
       (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment          
@@ -359,15 +359,13 @@ generateEAt _ _ d | d < 0 = mzero
 
 generateEAt env typ 0 = do
   case soleConstructor (lastType typ) of
-    Just (name, sch) -> -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
-      if arity (toMonotype sch) == arity typ
-        then do
-          t <- freshTypeVars sch
-          pickSymbol (name, t)
-        else mzero
+    Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
+      guard $ arity (toMonotype sch) == arity typ
+      t <- instantiate sch
+      pickSymbol (name, t)
         
     Nothing -> do
-      symbols <- Map.toList <$> T.mapM freshTypeVars (symbolsOfArity (arity typ) env)
+      symbols <- Map.toList <$> T.mapM instantiate (symbolsOfArity (arity typ) env)
       useCounts <- use symbolUseCount
       let symbols' = if arity typ == 0 
                         then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
@@ -386,6 +384,10 @@ generateEAt env typ 0 = do
             addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
             solveConstraints p
         return (env, p)
+        
+    instantiate sch = if arity (toMonotype sch) == 0
+      then freshTypeVars sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
+      else freshTypeVars sch ftrue
 
     symbolType x t@(ScalarT b _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
@@ -594,14 +596,16 @@ processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') False) 
       then return ()
       else do
         tass <- use typeAssignment
-        let lhss = embedding env tass `Set.union` Set.fromList (typeSubstituteFML tass fml : allMeasurePostconditions baseT env)
-        addHornClause $ conjunction lhss |=>| typeSubstituteFML tass fml'
+        let sortSubstFml = sortSubstituteFml (asSortSubst tass)
+        let lhss = embedding env tass `Set.union` Set.fromList (sortSubstFml fml : allMeasurePostconditions baseT env)
+        addHornClause $ conjunction lhss |=>| sortSubstFml fml'
 processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT' 
   = do
       tass <- use typeAssignment
+      let sortSubstFml = sortSubstituteFml (asSortSubst tass)
       addConsistencyCheck (conjunction (        
-                            Set.insert (typeSubstituteFML tass fml) $
-                            Set.insert (typeSubstituteFML tass fml') $
+                            Set.insert (sortSubstFml fml) $
+                            Set.insert (sortSubstFml fml') $
                             embedding env tass))        
 processConstraint (WellFormed env (ScalarT baseT fml))
   = case fml of
@@ -657,12 +661,12 @@ freshId prefix = do
   return $ prefix ++ show i
       
 -- | Replace all type variables with fresh identifiers    
-freshTypeVars :: Monad s => RSchema -> Explorer s RType    
-freshTypeVars sch = freshTypeVars' Map.empty sch
+freshTypeVars :: Monad s => RSchema -> Formula -> Explorer s RType    
+freshTypeVars sch fml = freshTypeVars' Map.empty sch
   where
     freshTypeVars' subst (Forall a sch) = do
       a' <- freshId "a"      
-      freshTypeVars' (Map.insert a (vartAll a') subst) sch
+      freshTypeVars' (Map.insert a (vart a' fml) subst) sch
     freshTypeVars' subst (Monotype t) = return $ typeSubstitute subst t
 
 -- | 'fresh @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements

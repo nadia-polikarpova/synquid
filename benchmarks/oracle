@@ -153,7 +153,7 @@ mergeSort = \xs . match xs with
     Cons z32 z33 -> match split xs with
       Pair z52 z53 -> merge (mergeSort z52) (mergeSort z53)
 
-partition :: <a> (p:a -> (xs:List (a) -> {Pair ({List ({a|_v <= p})|len _v >= 0}) ({List ({a|_v > p})|len _v >= 0})|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
+partition :: <a> (p:a -> (xs:List (a) -> {Pair (List ({a|_v <= p})) (List ({a|_v > p}))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
 partition = \p . \xs . match xs with
   Nil -> Pair Nil Nil
   Cons z20 z21 -> match partition p z21 with

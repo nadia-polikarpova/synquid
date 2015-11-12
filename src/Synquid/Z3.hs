@@ -81,9 +81,11 @@ toZ3Sort s = do
       z3s <- case s of
         BoolS -> mkBoolSort
         IntS -> mkIntSort
-        -- TypeVarT name -> mkStringSymbol name >>= mkUninterpretedSort
-        UninterpretedS name args -> mkIntSort
-        SetS el -> toZ3Sort el >>= mkSetSort          
+        -- VarS name -> mkStringSymbol name >>= mkUninterpretedSort
+        VarS name -> mkIntSort
+        DataS name args -> mkIntSort
+        SetS el -> toZ3Sort el >>= mkSetSort
+        -- UnknownS -> mkIntSort
       sorts %= Map.insert s z3s
       return z3s  
   

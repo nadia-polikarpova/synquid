@@ -230,8 +230,9 @@ parseSort = parseSortWithArgs <|> parseSortAtom
     parseSortAtom = choice [
       parens parseSort,
       BoolS <$ reserved "Bool",
-      IntS <$ reserved "Int",      
-      flip UninterpretedS [] <$> (parseIdentifier <|> parseTypeName)
+      IntS <$ reserved "Int",
+      VarS <$> parseIdentifier,
+      flip DataS [] <$> parseTypeName
       ]
       
     parseSortWithArgs = choice [
@@ -239,7 +240,7 @@ parseSort = parseSortWithArgs <|> parseSortAtom
       do
         typeName <- parseTypeName
         typeParams <- many parseSortAtom
-        return $ UninterpretedS typeName typeParams
+        return $ DataS typeName typeParams
       ]
       
 parseRefinedSort :: Parser (Sort, Formula)
