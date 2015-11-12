@@ -195,15 +195,15 @@ resolveFormula targetSort valueSort (Binary op l r) = do
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Le                                  = case lSort of
                                                             IntS -> return op
-                                                            UninterpretedS _ [] -> return op  -- This is a hack: does not apply to datatypes
+                                                            VarS _ -> return op
                                                             SetS a -> return $ toSetOp op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Lt || op == Gt || op == Ge          = case lSort of
                                                             IntS -> return op
-                                                            UninterpretedS _ [] -> return op  -- This is a hack: does not apply to datatypes
+                                                            VarS _  -> return op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Eq  || op == Neq                    = case lSort of
-                                                            UninterpretedS _ (x:xs) -> throwError $ unwords ["No overloading of", show op, "for", show lSort] -- This is a hack: does not apply to datatypes
+                                                            DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
                                                             _ -> return op
       | otherwise                                 = return op
       
@@ -226,10 +226,10 @@ resolveFormula targetSort valueSort (Measure UnknownS name argFml) = do
   ms <- use $ environment . measures
   case Map.lookup name ms of
     Nothing -> throwError $ unwords ["Measure", name, "is undefined"]
-    Just (MeasureDef (UninterpretedS dtName tVars) outSort _) -> do
-      argFml' <- resolveFormula (UninterpretedS dtName $ replicate (length tVars) UnknownS) valueSort argFml
-      let (UninterpretedS _ tArgs) = fromJust $ sortOf argFml'
-      let outSort' = sortSubstitute (Map.fromList $ zip (map (\(UninterpretedS a _) -> a) tVars) (map fromSort tArgs)) outSort
+    Just (MeasureDef (DataS dtName tVars) outSort _) -> do
+      argFml' <- resolveFormula (DataS dtName $ replicate (length tVars) UnknownS) valueSort argFml
+      let (DataS _ tArgs) = fromJust $ sortOf argFml'
+      let outSort' = sortSubstitute (Map.fromList $ zip (map (\(VarS a) -> a) tVars) tArgs) outSort
       if complies outSort' targetSort
         then return $ Measure outSort' name argFml'
         else throwError $ unwords ["Enountered measure", name, "where", show targetSort, "was expected"]

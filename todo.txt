@@ -8,6 +8,7 @@
 - LFP solver for when CA is not required?
 - Bring symbolic search back? (Just for scalars?)
 - Prove measure postconditions
+- BUG: polymorphic qualifier extraction
 - BUG: well-formedness constraints should be added in the environement where a type variable is created, rather when it gets unified, since the latter may have more variables after decomposing sybtyping over function types
 - Check that the first constructor is the base case
 - When a measure is not mentioned in the goal spec, remove it from the componenets?

@@ -35,20 +35,21 @@ dontCare = "_"
 
 toSort BoolT = BoolS
 toSort IntT = IntS
-toSort (DatatypeT name tArgs) = UninterpretedS name (map (toSort . baseTypeOf) tArgs)
-toSort (TypeVarT name) = UninterpretedS name []
+toSort (DatatypeT name tArgs) = DataS name (map (toSort . baseTypeOf) tArgs)
+toSort (TypeVarT name) = VarS name
 
 fromSort BoolS = ScalarT BoolT ftrue
 fromSort IntS = ScalarT IntT ftrue
-fromSort (UninterpretedS name []) = ScalarT (TypeVarT name) ftrue
-fromSort (UninterpretedS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs)) ftrue
+fromSort (VarS name) = ScalarT (TypeVarT name) ftrue
+fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs)) ftrue
 
 -- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
 complies :: Sort -> Sort -> Bool  
 complies UnknownS s = True  
 complies s UnknownS = True
 complies (SetS s) (SetS s') = complies s s'
-complies (UninterpretedS name sArgs) (UninterpretedS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
+complies (VarS name) (VarS name') = name == name'
+complies (DataS name sArgs) (DataS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
 complies s s' = s == s'
 
 arity (FunctionT _ _ t) = arity t + 1
@@ -79,9 +80,15 @@ toMonotype (Forall _ t) = toMonotype t
 -- | Mapping from type variables to types
 type TypeSubstitution = Map Id RType
 
+-- Mapping from type variables to sorts
+type SortSubstitution = Map Id Sort
+
+asSortSubst :: TypeSubstitution -> SortSubstitution
+asSortSubst = Map.map (toSort . baseTypeOf)
+
 -- | 'typeSubstitute' @t@ : substitute all free type variables in @t@
 typeSubstitute :: TypeSubstitution -> RType -> RType
-typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (typeSubstituteFML subst r)
+typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubstituteFml (asSortSubst subst) r)
   where
     substituteBase = case baseT of
       TypeVarT a -> case Map.lookup a subst of
@@ -92,24 +99,23 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (typeSubst
       _ -> ScalarT baseT ftrue
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
 
-typeSubstituteFML subst fml = case fml of 
-  SetLit el es -> SetLit (sortSubstitute subst el) (map (typeSubstituteFML subst) es)
+sortSubstituteFml :: SortSubstitution -> Formula -> Formula
+sortSubstituteFml subst fml = case fml of 
+  SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
   Var s name -> Var (sortSubstitute subst s) name
-  Unknown s name -> Unknown (Map.map (typeSubstituteFML subst) s) name
-  Unary op e -> Unary op (typeSubstituteFML subst e)
-  Binary op l r -> Binary op (typeSubstituteFML subst l) (typeSubstituteFML subst r)
-  Measure s name e -> Measure (sortSubstitute subst s) name (typeSubstituteFML subst e)
+  Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
+  Unary op e -> Unary op (sortSubstituteFml subst e)
+  Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
+  Measure s name e -> Measure (sortSubstitute subst s) name (sortSubstituteFml subst e)
   _ -> fml
   
-sortSubstitute :: TypeSubstitution -> Sort -> Sort
-sortSubstitute subst s@(UninterpretedS name []) = case Map.lookup name subst of
-  Just (ScalarT b _) -> toSort b
-  Just _ -> error $ unwords ["typeSubstituteFML: cannot substitute function type for", name]
+sortSubstitute :: SortSubstitution -> Sort -> Sort
+sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
+  Just s' -> s'
   Nothing -> s
-sortSubstitute subst (UninterpretedS name args) = UninterpretedS name (map (sortSubstitute subst) args)
+sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
 sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
 sortSubstitute _ s = s
-  
   
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
@@ -406,7 +412,7 @@ addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
-allMeasuresOf dtName env = Map.filter (\(MeasureDef (UninterpretedS sName _) _ _) -> dtName == sName) $ env ^. measures
+allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions baseT@(DatatypeT dtName _) env = catMaybes $ map extractPost (Map.toList $ allMeasuresOf dtName env)
