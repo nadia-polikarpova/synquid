@@ -9,7 +9,7 @@ from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
 # Parameters
-SYNQUID_PATH = '..\\src\\Synquid.exe'
+SYNQUID_PATH = '../dist/build/synquid/synquid'
 BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME = 'oracle'
@@ -69,10 +69,10 @@ def run_benchmark(name, opts):
     print name,
 
     with open(LOGFILE_NAME, 'a+') as logfile:
-      start = time.clock()
+      start = time.time()
       logfile.seek(0, os.SEEK_END)
       return_code = call([SYNQUID_PATH] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.clock()
+      end = time.time()
       
     print '{0:0.2f}'.format(end - start),
     if return_code:        
