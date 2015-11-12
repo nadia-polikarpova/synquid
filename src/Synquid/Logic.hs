@@ -56,7 +56,8 @@ data Formula =
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
-  Measure Sort Id Formula             -- ^ Measure application
+  Measure Sort Id Formula |           -- ^ Measure application
+  All Formula Formula
   deriving (Eq, Ord)
   
 valueVarName = "_v"
@@ -114,6 +115,7 @@ varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
 varsOf (Measure _ _ e) = varsOf e
+varsOf (All x e) = Set.delete x (varsOf e)
 varsOf _ = Set.empty
 
 -- | 'unknownsOf' @fml@ : set of all predicate unknowns of @fml@
@@ -163,6 +165,7 @@ sortOf (Binary op e1 e2)
   | op == Member                                        = do l <- sortOf e1; r <- sortOf e2; guard (r == SetS l); return BoolS 
   | op == Subset                                        = do l <- sortOf e1; guard (isSetS l); r <- sortOf e2; guard (r == l); return BoolS
 sortOf (Measure s _ _)                    = Just $ s
+sortOf (All x e)                          = (sortOf e >>= guard . (== BoolS)) >> return BoolS
   
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
@@ -175,6 +178,9 @@ substitute subst fml = case fml of
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
   Measure b name arg -> Measure b name (substitute subst arg)
+  All v@(Var _ x) e -> if x `Map.member` subst
+                            then error $ unwords ["Scoped variable clashes with substitution variable", x]
+                            else All v (substitute subst e)
   otherwise -> fml
   where
     compose old new = if Map.null old
@@ -242,6 +248,7 @@ applySolution sol fml = case fml of
     Nothing -> fml
   Unary op fml' -> Unary op (applySolution sol fml')
   Binary op fml1 fml2 -> Binary op (applySolution sol fml1) (applySolution sol fml2)
+  All x fml' -> All x (applySolution sol fml')
   otherwise -> fml
       
 -- | 'merge' @sol sol'@ : element-wise conjunction of @sol@ and @sol'@

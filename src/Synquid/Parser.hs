@@ -70,7 +70,7 @@ otherOps :: [String]
 otherOps = ["::", ":", "->", "|", "=", "??", ","] 
 
 -- | Characters allowed in identifiers (in addition to letters and digits)
-identifierChars = "_"
+identifierChars = "_'"
 -- | Start of a multi-line comment
 commentStart = "{-"
 -- | End of a multi-line comment
