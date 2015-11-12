@@ -5,3 +5,7 @@ syntax: glob
 *~
 ./.cabal-sandbox
 ./cabal.sandbox.config
+
+# this is platform specific
+./benchmarks/run_all.py
+./benchmarks/oracle
