@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveProgramAst, resolveRefinement, resolveType) where
+module Synquid.Resolver (resolveProgramAst, resolveRefinement, resolveType, ResolverState (..)) where
 
 import Synquid.Program
 import Synquid.Explorer
