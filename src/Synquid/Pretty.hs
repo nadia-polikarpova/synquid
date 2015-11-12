@@ -181,6 +181,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
     Measure b name arg -> text name <+> pretty arg -- text name <> text ":" <> pretty  b <+> pretty arg
+    All x e -> text "forall" <+> pretty x <+> text "." <+> pretty e
   )
   where
     n' = power fml
@@ -333,6 +334,7 @@ fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
+fmlNodeCount (All _ e) = 1 + fmlNodeCount e
 fmlNodeCount _ = 1
 
 -- | 'typeNodeCount' @t@ : cumulative size of all refinements in @t@

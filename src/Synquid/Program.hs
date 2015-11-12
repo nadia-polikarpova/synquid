@@ -7,6 +7,7 @@ import Synquid.Logic
 import Synquid.Util
 
 import Data.Maybe
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -107,6 +108,7 @@ sortSubstituteFml subst fml = case fml of
   Unary op e -> Unary op (sortSubstituteFml subst e)
   Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
   Measure s name e -> Measure (sortSubstitute subst s) name (sortSubstituteFml subst e)
+  All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   _ -> fml
   
 sortSubstitute :: SortSubstitution -> Sort -> Sort
@@ -415,12 +417,27 @@ addScrutinee p = usedScrutinees %~ (p :)
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
-allMeasurePostconditions baseT@(DatatypeT dtName _) env = catMaybes $ map extractPost (Map.toList $ allMeasuresOf dtName env)
+allMeasurePostconditions baseT@(DatatypeT dtName tArgs) env = 
+    let allMeasures = Map.toList $ allMeasuresOf dtName env 
+    in catMaybes $ map extractPost allMeasures ++ map elemProperties allMeasures
   where
     extractPost (mName, MeasureDef _ outSort fml) = 
       if fml == ftrue
         then Nothing
         else Just $ substitute (Map.singleton valueVarName (Measure outSort mName (Var (toSort baseT) valueVarName))) fml
+        
+    elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _) = case elemIndex a vars of
+      Nothing -> Nothing
+      Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
+                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
+                    then Nothing
+                    else  let
+                            elemSort = toSort elemT
+                            scopedVar = Var elemSort "_x"
+                            setVal = Measure (SetS elemSort) mName (Var (toSort baseT) valueVarName)
+                          in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
+    elemProperties (mName, MeasureDef _ _ _) = Nothing
+    
 allMeasurePostconditions _ _ = []        
 
 -- | Assumptions encoded in an environment    

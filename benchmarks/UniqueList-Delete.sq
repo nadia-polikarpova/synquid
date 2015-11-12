@@ -7,5 +7,6 @@ data UList a decreases ulen where
 	UNil :: {UList a | ulen _v == 0 && uelems _v == []}
 	UCons :: x: a -> xs: UList {a | x != _v} -> {UList a | ulen _v == ulen xs + 1 && uelems _v == uelems xs + [x]}
 	
-delete :: x: a -> xs: UList a -> {UList {a | _v != x} | ~(ulen _v - ulen xs) <= 1}
+-- delete :: x: a -> xs: UList a -> {UList {a | _v != x} | ~(ulen _v - ulen xs) <= 1}
+delete :: x: a -> xs: UList a -> {UList a | uelems _v == uelems xs - [x]}
 delete = ??

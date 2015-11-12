@@ -136,6 +136,11 @@ toAST expr = case expr of
     -- decl <- measure b (ident ++ show tArg ++ show b) tArg
     decl <- measure s ident tArg
     mapM toAST [arg] >>= mkApp decl
+  All (Var s x) e -> do
+    const <- var s x
+    app <- toApp const
+    body <- toAST e
+    mkForallConst [] [app] body
   where
     setLiteral el xs = do
       emp <- toZ3Sort el >>= mkEmptySet

@@ -597,7 +597,7 @@ processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') False) 
       else do
         tass <- use typeAssignment
         let sortSubstFml = sortSubstituteFml (asSortSubst tass)
-        let lhss = embedding env tass `Set.union` Set.fromList (sortSubstFml fml : allMeasurePostconditions baseT env)
+        let lhss = embedding env tass `Set.union` Set.fromList [sortSubstFml fml] -- (sortSubstFml fml : allMeasurePostconditions baseT env)
         addHornClause $ conjunction lhss |=>| sortSubstFml fml'
 processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT' 
   = do
