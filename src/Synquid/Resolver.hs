@@ -57,30 +57,32 @@ resolveRefinement env valueSort fml = case runExcept (evalStateT (resolveFormula
 type Resolver a = StateT ResolverState (Except ErrMsg) a    
 
 resolveDeclaration :: Declaration -> Resolver ()
-resolveDeclaration (TypeDef typeName typeBody) = do
+resolveDeclaration (TypeDecl typeName typeBody) = do
   typeBody' <- resolveType typeBody
   environment %= addTypeSynonym typeName typeBody'
-resolveDeclaration (FuncDef funcName typeSchema) = resolveSignature funcName typeSchema
-resolveDeclaration (DataDef dataName typeParams wfMetricMb constructors) = do
+resolveDeclaration (FuncDecl funcName typeSchema) = resolveSignature funcName typeSchema
+resolveDeclaration (DataDecl dataName typeParams wfMetricMb constructors) = do
   case wfMetricMb of
     Nothing -> return ()
     Just wfMetric -> do
       ifM (not . Map.member wfMetric <$> (use $ environment . measures)) (throwError $ unwords ["Measure", wfMetric, "is undefined"]) (return ())
   let
-    datatype = Datatype {
+    datatype = DatatypeDef {
       _typeArgCount = length typeParams,
       _constructors = map constructorName constructors,
       _wfMetric = wfMetricMb
     }
   environment %= addDatatype dataName datatype
   mapM_ (\(ConstructorDef name schema) -> resolveSignature name schema) constructors
-resolveDeclaration (MeasureDef measureName inSort outSort) = environment %= addMeasure measureName (inSort, outSort)
+resolveDeclaration (MeasureDecl measureName inSort outSort post) = do
+  post' <- resolveFormula BoolS outSort post
+  environment %= addMeasure measureName (MeasureDef inSort outSort post')
 resolveDeclaration (SynthesisGoal name) = do
   syms <- uses environment allSymbols
   if Map.member name syms
     then goalNames %= (++ [name])
     else throwError $ unwords ["No specification found for synthesis goal", name]
-resolveDeclaration (QualifierDef quals) = mapM_ resolveQualifier quals
+resolveDeclaration (QualifierDecl quals) = mapM_ resolveQualifier quals
   where
     resolveQualifier q = if Set.member valueVarName (Set.map varName $ varsOf q)
       then typeQualifiers %= (q:)
@@ -108,7 +110,7 @@ resolveType (ScalarT baseType typeFml) = do
           case Map.lookup name tss of
             Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
             Just _ -> when (not $ null tArgs) $ throwError $ unwords ["Type synonym", name, "did not expect type arguments"]    
-        Just (Datatype n _ _) -> when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]   
+        Just (DatatypeDef n _ _) -> when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]   
       DatatypeT name <$> mapM resolveType tArgs
     resolveBase baseT = return baseT
 resolveType (FunctionT x tArg tRes) = do
@@ -224,7 +226,7 @@ resolveFormula targetSort valueSort (Measure UnknownS name argFml) = do
   ms <- use $ environment . measures
   case Map.lookup name ms of
     Nothing -> throwError $ unwords ["Measure", name, "is undefined"]
-    Just (UninterpretedS dtName tVars, outSort) -> do
+    Just (MeasureDef (UninterpretedS dtName tVars) outSort _) -> do
       argFml' <- resolveFormula (UninterpretedS dtName $ replicate (length tVars) UnknownS) valueSort argFml
       let (UninterpretedS _ tArgs) = fromJust $ sortOf argFml'
       let outSort' = sortSubstitute (Map.fromList $ zip (map (\(UninterpretedS a _) -> a) tVars) (map fromSort tArgs)) outSort

@@ -4,12 +4,12 @@ false :: {Bool | !_v}
 not :: x: Bool -> {Bool | _v == !x}
 or :: x: Bool -> y: Bool -> {Bool | _v == (x || y)}
 
-measure size :: Tree a -> Int
+measure size :: Tree a -> {Int | _v >= 0}
 measure telems :: Tree a -> Set a
 
 data Tree a decreases size where
 	Empty :: {Tree a | size _v == 0 && telems _v == []}
-	Node :: x: a -> l: Tree a -> r: Tree a -> {Tree a | size l >= 0 && size r >= 0 && size _v == size l + size r + 1 && telems _v == telems l + telems r + [x]}
+	Node :: x: a -> l: Tree a -> r: Tree a -> {Tree a | size _v == size l + size r + 1 && telems _v == telems l + telems r + [x]}
 	
 elem :: x: a -> t: Tree a -> {Bool | _v == (x in telems t)}
 elem = ??

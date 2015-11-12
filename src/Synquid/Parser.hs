@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 -- | The parser for Synquid's program specification DSL.
 module Synquid.Parser where
 
@@ -130,7 +132,7 @@ parseTypeDef = do
   typeName <- parseTypeName
   reservedOp "="
   typeDef <- parseType
-  return $ TypeDef typeName typeDef
+  return $ TypeDecl typeName typeDef
 
 parseDataDef :: Parser Declaration
 parseDataDef = do
@@ -140,7 +142,7 @@ parseDataDef = do
   wfMetricName <- optionMaybe $ reserved "decreases" >> parseIdentifier
   reserved "where"
   constructors <- many1 parseConstructorDef
-  return $ DataDef typeName typeParams wfMetricName constructors
+  return $ DataDecl typeName typeParams wfMetricName constructors
 
 parseConstructorDef :: Parser ConstructorDef
 parseConstructorDef = do
@@ -156,19 +158,19 @@ parseMeasureDef = do
   reservedOp "::"
   inSort <- parseSort
   reservedOp "->"
-  outSort <- parseSort
-  return $ MeasureDef measureName inSort outSort
+  (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
+  return $ MeasureDecl measureName inSort outSort post
   
 parseQualifierDef :: Parser Declaration
 parseQualifierDef = do
   reserved "qualifier"
-  QualifierDef <$> braces (commaSep parseFormula)
+  QualifierDecl <$> braces (commaSep parseFormula)
 
 parseFuncDef :: Parser Declaration
 parseFuncDef = do
   funcName <- parseIdentifier
   reservedOp "::"
-  FuncDef funcName . Monotype <$> parseType
+  FuncDecl funcName . Monotype <$> parseType
 
 parseSynthesisGoal :: Parser Declaration
 parseSynthesisGoal = do
@@ -239,6 +241,13 @@ parseSort = parseSortWithArgs <|> parseSortAtom
         typeParams <- many parseSortAtom
         return $ UninterpretedS typeName typeParams
       ]
+      
+parseRefinedSort :: Parser (Sort, Formula)
+parseRefinedSort = braces $ do
+  s <- parseSort
+  reservedOp "|"
+  refinement <- parseFormula
+  return (s, refinement)
       
 {- Formulas -}     
 

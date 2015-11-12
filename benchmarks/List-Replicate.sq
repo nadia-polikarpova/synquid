@@ -6,11 +6,11 @@ zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
 dec :: x: Int -> {Int | _v == x - 1}
 
-measure len :: List a -> Int
+measure len :: List a -> {Int | _v >= 0}
 
 data List a decreases len where
 	Nil :: {List a | len _v == 0}
-	Cons :: x: a -> xs: List a -> {List a | len _v > 0 && len _v == len xs + 1}
+	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1}
 	
 replicate :: n: Nat -> x: a -> {List a | len _v == n}
 replicate = ??

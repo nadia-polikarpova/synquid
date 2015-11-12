@@ -198,13 +198,22 @@ typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
 -- | User-defined datatype representation
-data Datatype = Datatype {
+data DatatypeDef = DatatypeDef {
   _typeArgCount :: Int,
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
 }
 
-makeLenses ''Datatype
+makeLenses ''DatatypeDef
+
+-- | User-defined measure function representation
+data MeasureDef = MeasureDef {
+  _inSort :: Sort,
+  _outSort :: Sort,
+  _postcondition :: Formula
+}
+
+makeLenses ''MeasureDef
 
 -- | Building types
 bool = ScalarT BoolT  
@@ -310,8 +319,8 @@ data Environment = Environment {
   _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
   -- | Constant part:
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
-  _datatypes :: Map Id Datatype,           -- ^ Datatype representations
-  _measures :: Map Id (Sort, Sort),        -- ^ Measure types
+  _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
+  _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: TypeSubstitution        -- ^ Type synonym definitions
 }
 
@@ -367,14 +376,14 @@ unfoldAllVariables env = over unfoldedVars (Set.union (Map.keysSet (symbolsOfAri
 addGhost :: Id -> RType -> Environment -> Environment  
 addGhost name t = over ghosts (Map.insert name t)
 
-addMeasure :: Id -> (Sort, Sort) -> Environment -> Environment
-addMeasure measureName sorts = over measures (Map.insert measureName sorts)
+addMeasure :: Id -> MeasureDef -> Environment -> Environment
+addMeasure measureName m = over measures (Map.insert measureName m)
 
 addTypeSynonym :: Id -> RType -> Environment -> Environment
 addTypeSynonym name type' = over typeSynonyms (Map.insert name type')
 
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment
-addDatatype :: Id -> Datatype -> Environment -> Environment
+addDatatype :: Id -> DatatypeDef -> Environment -> Environment
 addDatatype name dt = over datatypes (Map.insert name dt)
 
 -- | 'lookupConstructor' @ctor env@ : the name of the datatype for which @ctor@ is regisered as a constructor in @env@, if any
@@ -396,6 +405,18 @@ addAssumption f = assumptions %~ Set.insert f
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
+-- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
+allMeasuresOf dtName env = Map.filter (\(MeasureDef (UninterpretedS sName _) _ _) -> dtName == sName) $ env ^. measures
+
+-- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
+allMeasurePostconditions baseT@(DatatypeT dtName _) env = catMaybes $ map extractPost (Map.toList $ allMeasuresOf dtName env)
+  where
+    extractPost (mName, MeasureDef _ outSort fml) = 
+      if fml == ftrue
+        then Nothing
+        else Just $ substitute (Map.singleton valueVarName (Measure outSort mName (Var (toSort baseT) valueVarName))) fml
+allMeasurePostconditions _ _ = []        
+
 -- | Assumptions encoded in an environment    
 embedding :: Environment -> TypeSubstitution -> Set Formula
 embedding env subst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
@@ -404,10 +425,9 @@ embedding env subst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls 
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
       then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
       else Set.empty
-    embedBinding _ (Monotype (ScalarT _ (BoolLit True))) = Set.empty -- Ignore trivial types
     embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
-      else Set.singleton $ substitute (Map.singleton valueVarName (Var (toSort baseT) x)) fml
+      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) (fml : allMeasurePostconditions baseT env)
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants
     
 {- Misc -}
@@ -429,12 +449,12 @@ type ProgramAst = [Declaration]
 data ConstructorDef = ConstructorDef Id RSchema
   deriving (Eq)
 data Declaration =
-  TypeDef Id RType |                            -- ^ Type name and definition
-  FuncDef Id RSchema |                          -- ^ Function name and signature
-  DataDef Id [Id] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, and constructor definitions
-  MeasureDef Id Sort Sort |                     -- ^ Measure name, input sort, output sort
-  QualifierDef [Formula] |                      -- ^ Qualifiers
-  SynthesisGoal Id                              -- ^ Name of the function to synthesize
+  TypeDecl Id RType |                            -- ^ Type name and definition
+  FuncDecl Id RSchema |                          -- ^ Function name and signature
+  DataDecl Id [Id] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, and constructor definitions
+  MeasureDecl Id Sort Sort Formula |             -- ^ Measure name, input sort, output sort, postcondition
+  QualifierDecl [Formula] |                      -- ^ Qualifiers
+  SynthesisGoal Id                               -- ^ Name of the function to synthesize
   deriving (Eq)
 
 constructorName (ConstructorDef name _) = name
