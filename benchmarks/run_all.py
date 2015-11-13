@@ -1,5 +1,6 @@
 import sys
 import os, os.path
+import platform
 import shutil
 import time
 import difflib
@@ -9,8 +10,8 @@ from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
 # Parameters
-if os.name == 'nt': SYNQUID_PATH = '..\\src\\Synquid.exe'
-else: SYNQUID_PATH = '../dist/build/synquid/synquid'
+SYNQUID_PATH_LINUX = '../dist/build/synquid/synquid'
+SYNQUID_PATH_WINDOWS = '../src/Synquid.exe'
 BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME = 'oracle'
@@ -35,10 +36,13 @@ BENCHMARKS = [
     ('List-Delete', []),
     ('List-Map', []),
     #('List-ZipWith', []),
+    ('List-ZipWith', []),
     ('List-ToNat', []),
     # Unique lists
     ('UniqueList-Insert', []),
     ('UniqueList-Delete', []),
+    ('UniqueList-Delete', []),
+    ('List-Nub', ['-f=FirstArgument', '-m=1']),
     # Trees
     ('Tree-Elem', []),
     ('Tree-Flatten', []),
@@ -54,6 +58,7 @@ BENCHMARKS = [
     ('IncList-PivotAppend', []),
     ('IncList-QuickSort', ['-a=2', '-s=1']),
     # Binary search tree
+    ('BST-Member', []),
     ('BST-Insert', []),
     ('BST-Sort', []),
 ]
@@ -72,7 +77,7 @@ def run_benchmark(name, opts):
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
       logfile.seek(0, os.SEEK_END)
-      return_code = call([SYNQUID_PATH] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
+      return_code = call([synquid_path] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.time()
 
       print '{0:0.2f}'.format(end - start),
@@ -114,6 +119,11 @@ def postprocess():
 if __name__ == '__main__':
     init()
     results = {}
+    
+    if platform.system() == 'Linux':
+        synquid_path = SYNQUID_PATH_LINUX
+    else:
+        synquid_path = SYNQUID_PATH_WINDOWS
 
     if os.path.isfile(LOGFILE_NAME):
       os.remove(LOGFILE_NAME)
