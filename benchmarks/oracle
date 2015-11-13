@@ -109,12 +109,24 @@ insert = \x . \xs . match xs with
     then xs
     else UCons z15 (insert x z16)
 
-delete :: <a> (x:a -> (xs:UList (a) -> {UList ({a|_v /= x})|abs(ulen _v - ulen xs) <= 1}))
+delete :: <a> (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
 delete = \x . \xs . match xs with
+  UNil -> xs
+  UCons z5 z6 -> if z5 == x
+    then z6
+    else UCons z5 (delete x z6)
+
+strengthen :: <a> (x:a -> (xs:{UList (a)|!(x) in (uelems _v)} -> {UList ({a|_v /= x})|uelems _v == uelems xs && ulen _v == ulen xs}))
+strengthen = \x . \xs . match xs with
   UNil -> UNil
-  UCons z6 z7 -> if z6 == x
-    then z7
-    else UCons z6 (delete x z7)
+  UCons z7 z8 -> UCons z7 (strengthen x z8)
+
+nub' :: <a> (xs:List (a) -> (acc:UList (a) -> {UList (a)|uelems _v == (uelems acc) + (elems xs)}))
+nub' = \xs . \acc . match xs with
+  Nil -> acc
+  Cons z6 z7 -> if (z6) in (uelems acc)
+    then nub' z7 acc
+    else nub' z7 (UCons z6 (strengthen z6 acc))
 
 elem :: <a> (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
 elem = \x . \t . match t with
@@ -185,6 +197,15 @@ quickSort = \xs . match xs with
   Nil -> INil
   Cons z7 z8 -> match partition z7 z8 with
     Pair z34 z35 -> pivotAppend z7 (quickSort z34) (quickSort z35)
+
+member :: <a> (x:a -> (t:BST (a) -> {Bool|_v == (x) in (telems t)}))
+member = \x . \t . match t with
+  Empty -> false
+  Node z5 z6 z7 -> if x <= z5 && z5 <= x
+    then true
+    else if x <= z5
+      then member x z6
+      else member x z7
 
 insert :: <a> (x:a -> (t:BST (a) -> {BST (a)|elems _v == (elems t) + ([x])}))
 insert = \x . \t . match t with
