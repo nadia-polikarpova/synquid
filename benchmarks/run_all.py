@@ -35,7 +35,6 @@ BENCHMARKS = [
     ('List-Drop', []),
     ('List-Delete', []),
     ('List-Map', []),
-    #('List-ZipWith', []),
     ('List-ZipWith', []),
     ('List-ToNat', []),
     # Unique lists
@@ -86,18 +85,6 @@ def run_benchmark(name, opts):
       else:
           results [name] = SynthesisResult(name, (end - start))
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([SYNQUID_PATH] + COMMON_OPTS + ["-u=0"] + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
-
-      print '{0:0.2f}'.format(end - start),
-      if return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
-      else:
-          results [name] = SynthesisResult(name, (end - start))
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
 
 def postprocess():
     with open(OUTFILE_NAME, 'w') as outfile:
