@@ -22,21 +22,22 @@ releaseDate = fromGregorian 2015 11 20
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch log_) <- cmdArgs cla
-  let explorerParams = defaultExplorerParams { 
-    _eGuessDepth = appMax, 
+  (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch log_ useMemoization) <- cmdArgs cla
+  let explorerParams = defaultExplorerParams {
+    _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
     _matchDepth = matchMax,
     _fixStrategy = fix,
     _hideScrutinees = hideScr,
-    _abduceScrutinees = not explicitMatch, 
-    _explorerLogLevel = log_ 
+    _abduceScrutinees = not explicitMatch,
+    _explorerLogLevel = log_,
+    _useMemoization = useMemoization
     }
   let solverParams = defaultSolverParams {
     solverLogLevel = log_
     }
   runOnFile explorerParams solverParams file
-  
+
 {- Command line arguments -}
 
 deriving instance Typeable FixpointStrategy
@@ -55,10 +56,11 @@ data CommandLineArgs
         fix :: FixpointStrategy,
         hide_scrutinees :: Bool,
         explicit_match :: Bool,
-        log_ :: Int
+        log_ :: Int,
+        use_memoization :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
-  
+
 cla = CommandLineArgs {
   file            = ""              &= typFile &= argPos 0,
   app_max         = 3               &= help ("Maximum depth of an application term (default: 3)"),
@@ -67,7 +69,8 @@ cla = CommandLineArgs {
   fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
   hide_scrutinees = False           &= help ("Hide scrutinized expressions from the evironment (default: False)"),
   explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
-  log_            = 0               &= help ("Logger verboseness level (default: 0)")      
+  log_            = 0               &= help ("Logger verboseness level (default: 0)"),
+  use_memoization = True            &= help ("Use memoization (default: True)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
@@ -85,13 +88,14 @@ defaultExplorerParams = ExplorerParams {
   _matchQualsGen = undefined,
   _typeQualsGen = undefined,
   _context = id,
-  _explorerLogLevel = 1
+  _explorerLogLevel = 1,
+  _useMemoization = True
 }
 
 -- | Parameters for constraint solving
 defaultSolverParams = SolverParams {
   pruneQuals = True,
-  optimalValuationsStrategy = MarcoValuations,    
+  optimalValuationsStrategy = MarcoValuations,
   semanticPrune = True,
   agressivePrune = True,
   candidatePickStrategy = InitializedWeakCandidate,
@@ -100,9 +104,9 @@ defaultSolverParams = SolverParams {
   solverLogLevel = 1
 }
 
--- | Parse and resolve file, then synthesize the specified goals 
-runOnFile :: ExplorerParams -> SolverParams -> String -> IO ()      
-runOnFile explorerParams solverParams file = do 
+-- | Parse and resolve file, then synthesize the specified goals
+runOnFile :: ExplorerParams -> SolverParams -> String -> IO ()
+runOnFile explorerParams solverParams file = do
   parseResult <- parseFromFile Parser.parseProgram file
   case parseResult of
     Left parseErr -> (putStr $ show parseErr) >> exitFailure
