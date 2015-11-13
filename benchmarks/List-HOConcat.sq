@@ -1,0 +1,19 @@
+qualifier {}
+
+measure len :: List a -> {Int | _v >= 0}
+
+data List a decreases len where
+  Nil :: {List a | len _v == 0}
+  Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1}
+
+measure sumLen :: ListOfLists a -> {Int | _v >= 0}
+measure len2 :: ListOfLists a -> {Int | _v >= 0}
+
+data ListOfLists a decreases len2 where
+  Nil2 :: {ListOfLists a | sumLen _v == 0 && len2 _v == 0}
+  Cons2 :: x: List a -> xs: ListOfLists a -> {ListOfLists a | sumLen _v == sumLen xs + len x && len2 _v == len2 xs +1  }
+
+append :: la: List a -> lb: List a -> { List a | len _v == len la + len lb }
+
+concatHO :: l: ListOfLists a -> { List a | len _v == sumLen l }
+concatHO = ??
