@@ -205,7 +205,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
       unknownsVal <- mapM (singleUnknownCandidates lhsVal) unknownsList
       let isValidsplit ss s = Set.unions ss == s && sum (map Set.size ss) == Set.size s
       guard $ isValidsplit unknownsVal lhsVal
-      return $ Map.fromList $ zipWith unsubst unknownsList unknownsVal
+      return $ Map.fromListWith Set.union $ zipWith unsubst unknownsList unknownsVal
       
     unsubst u@(Unknown s name) quals = (name, Set.map (substitute (inverse s)) quals)
           
