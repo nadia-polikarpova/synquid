@@ -63,13 +63,14 @@ data ExplorerParams = ExplorerParams {
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _hideScrutinees :: Bool,
-  _abduceScrutinees :: Bool,                    -- ^ Should we match eagerly on all unfolded variables?
+  _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
   _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
   _matchQualsGen :: QualsGen,
   _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
-  _explorerLogLevel :: Int                -- ^ How verbose logging is
+  _explorerLogLevel :: Int,               -- ^ How verbose logging is
+  _useMemoization :: Bool                 -- ^ Should we memoize enumerated terms (and corresponding environments)
 }
 
 makeLenses ''ExplorerParams
@@ -409,66 +410,72 @@ generateEAt env typ d = do
   let maxArity = fst $ Map.findMax (env ^. symbols)
   guard $ arity typ < maxArity
 
-  solv <- asks snd
-  mem <- lift . lift . lift $ csGetMemo solv
-  -- writeLog 1 (text "MEMO" <+> pretty memo)
-
-  case Map.lookup (env, typ, d) mem of
-    Just pApps -> do
-      writeLog 1 (text "Fetching from the memory store for: " <+> pretty (env, typ, d))
-      --msum $ map (\x -> return (env, x)) pApps
-      msum $ map return pApps
-    Nothing -> do
-      writeLog 1 (text "No fetching for: " <+> pretty (env, typ, d))
+  -- if using memoization, try to fetch from memoization store
+  useMemoization <- asks $ (_useMemoization . fst)
+  if (useMemoization) then do
+    solv <- asks snd
+    mem <- lift . lift . lift $ csGetMemo solv
+    -- writeLog 1 (text "MEMO" <+> pretty memo)
+    case Map.lookup (env, typ, d) mem of
+      Just pApps -> do
+        writeLog 1 (text "Fetching from the memory store for: " <+> pretty (env, typ, d))
+        --msum $ map (\x -> return (env, x)) pApps
+        msum $ map return pApps
+      Nothing -> do
+        writeLog 1 (text "No fetching for: " <+> pretty (env, typ, d))
+        generateAllApps
+  else
+    generateAllApps
+  where
+    generateAllApps =
       generateApp (\e t -> generateEUpTo e t (d - 1)) (\e t -> generateEAt e t (d - 1)) `mplus`
         generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
-      where
-        generateApp genFun genArg = do
-          a <- freshId "_a"
-          x <- freshId "x"
-          (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll a)) typ))
-                                $ generateFun genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
-          let FunctionT x tArg tRes = typeOf fun
+    generateApp genFun genArg = do
+      a <- freshId "_a"
+      x <- freshId "x"
+      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll a)) typ))
+                            $ generateFun genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
+      let FunctionT x tArg tRes = typeOf fun
 
-          (envfinal, pApp) <- if isFunctionType tArg
-            then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-              arg <- enqueueGoal env' tArg
-              return (env', Program (PApp fun arg) tRes)
-            else do -- First-order argument: generate now
-              (env'', arg) <- local (
-                                      over (_1 . eGuessDepth) (-1 +)
-                                    . over (_1 . context) (. \p -> Program (PApp fun p) tRes))
-                                    $ generateArg genArg env' tArg
-              (env''', y) <- toSymbol arg env''
-              return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
-          ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
+      (envfinal, pApp) <- if isFunctionType tArg
+        then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
+          arg <- enqueueGoal env' tArg
+          return (env', Program (PApp fun arg) tRes)
+        else do -- First-order argument: generate now
+          (env'', arg) <- local (
+                                  over (_1 . eGuessDepth) (-1 +)
+                                . over (_1 . context) (. \p -> Program (PApp fun p) tRes))
+                                $ generateArg genArg env' tArg
+          (env''', y) <- toSymbol arg env''
+          return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
+      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
 
-          solv <- asks snd
-          memo <- lift . lift . lift $ csGetMemo solv
-          lift . lift . lift $ csPutMemo solv (Map.insertWith (flip (++)) (env, typ, d) [(envfinal, pApp)] memo)
+      solv <- asks snd
+      memo <- lift . lift . lift $ csGetMemo solv
+      lift . lift . lift $ csPutMemo solv (Map.insertWith (flip (++)) (env, typ, d) [(envfinal, pApp)] memo)
 
-          return (envfinal, pApp)
+      return (envfinal, pApp)
 
-        generateFun genFun env tFun = do
-          (env', fun) <- genFun env tFun
-          let t = typeOf fun
-          -- The following performs early filtering of incomplete application terms
-          -- by comparing their result type with the spec's result type,
-          -- after replacing all refinements that depend on yet undefined variables with false.
-          addConstraint $ Subtype env' (removeDependentRefinements (allArgs t) (lastType t)) (lastType tFun) False
-          -- addConstraint $ Subtype env' (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType tFun) False
-          ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env' t tFun True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-          solveConstraints fun
-          return (env', fun)
+    generateFun genFun env tFun = do
+      (env', fun) <- genFun env tFun
+      let t = typeOf fun
+      -- The following performs early filtering of incomplete application terms
+      -- by comparing their result type with the spec's result type,
+      -- after replacing all refinements that depend on yet undefined variables with false.
+      addConstraint $ Subtype env' (removeDependentRefinements (allArgs t) (lastType t)) (lastType tFun) False
+      -- addConstraint $ Subtype env' (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType tFun) False
+      ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env' t tFun True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+      solveConstraints fun
+      return (env', fun)
 
-        removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
-        removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)
+    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
+    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)
 
-        generateArg genArg env tArg = do
-          (env', arg) <- genArg env tArg
-          addConstraint $ Subtype env' (typeOf arg) tArg False
-          solveConstraints arg
-          return (env', arg)
+    generateArg genArg env tArg = do
+      (env', arg) <- genArg env tArg
+      addConstraint $ Subtype env' (typeOf arg) tArg False
+      solveConstraints arg
+      return (env', arg)
 
 -- | 'toSymbol' @p env@: a symbols with the same type as @p@ and an environment that defines that symbol (can be @p@ itself or a fresh ghost)
 toSymbol (Program (PSymbol name) _) env | not (Set.member name (env ^. constants)) = return (env, name)
