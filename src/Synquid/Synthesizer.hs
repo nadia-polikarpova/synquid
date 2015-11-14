@@ -46,7 +46,7 @@ synthesize explorerParams solverParams goal cquals tquals = do
                            set matchQualsGen matchQuals .
                            set typeQualsGen typeQuals
                            $ explorerParams
-      in explore explorerParams' (ConstraintSolver init refine prune check clearCache getMemo putMemo) goal
+      in explore explorerParams' (ConstraintSolver init refine prune check clearMemo getMemo putMemo) goal
 
     init :: Z3Memo Candidate
     init = lift $ initialCandidate
@@ -60,8 +60,8 @@ synthesize explorerParams solverParams goal cquals tquals = do
     check :: [Formula] -> [Candidate] -> Z3Memo [Candidate]
     check fml c = lift $ checkConsistency fml c
 
-    clearCache :: Z3Memo ()
-    clearCache = put Map.empty
+    clearMemo :: Z3Memo ()
+    clearMemo = put Map.empty
     
     getMemo :: Z3Memo Memo
     getMemo = get

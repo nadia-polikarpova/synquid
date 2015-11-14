@@ -53,6 +53,7 @@ complies (VarS name) (VarS name') = name == name'
 complies (DataS name sArgs) (DataS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
 complies s s' = s == s'
 
+arity :: TypeSkeleton r -> Int
 arity (FunctionT _ _ t) = arity t + 1
 arity _ = 0
 
@@ -333,9 +334,15 @@ data Environment = Environment {
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: TypeSubstitution        -- ^ Type synonym definitions
-} deriving (Eq, Ord)
+} -- deriving
 
-makeLenses ''Environment  
+makeLenses ''Environment
+
+instance Eq Environment where
+  (==) e1 e2 = (e1 ^. symbols) == (e2 ^. symbols) && (e1 ^. assumptions) == (e2 ^. assumptions)
+  
+instance Ord Environment where
+  (<=) e1 e2 = (e1 ^. symbols) <= (e2 ^. symbols) && (e1 ^. assumptions) <= (e2 ^. assumptions)  
 
 -- | Empty environment
 emptyEnv = Environment {
@@ -463,13 +470,14 @@ data Constraint = Subtype Environment RType RType Bool
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
   | WellFormedMatchCond Environment Formula
+  deriving (Eq, Ord)
   
 -- | Synthesis goal
 data Goal = Goal {
   gName :: Id, 
   gEnvironment :: Environment, 
   gSpec :: RSchema
-}  
+} deriving (Eq, Ord)
   
 type ProgramAst = [Declaration]
 data ConstructorDef = ConstructorDef Id RSchema

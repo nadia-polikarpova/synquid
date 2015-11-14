@@ -200,6 +200,9 @@ instance Pretty Solution where
 instance Pretty QSpace where
   pretty space = braces $ commaSep $ map pretty $ view qualifiers space
   
+instance Show QSpace where
+  show = show . pretty
+  
 instance Pretty QMap where
   pretty = vMapDoc text pretty  
   
@@ -288,8 +291,8 @@ instance Pretty TypeSubstitution where
 prettyBinding (name, typ) = text name <+> text "::" <+> pretty typ
 
 prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions)) 
--- prettyBindings env = commaSep (map pretty (Set.toList $ Map.keysSet (allSymbols env) Set.\\ (env ^. constants))) 
-prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
+prettyBindings env = commaSep (map pretty (Map.keys $ removeDomain (env ^. constants) (allSymbols env))) 
+-- prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
 prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
   
@@ -306,11 +309,23 @@ prettyConstraint (WellFormedMatchCond env c) = prettyBindings env <+> text "|- (
 instance Pretty Constraint where
   pretty = prettyConstraint
   
+instance Show Constraint where
+  show = show . pretty
+  
 instance Pretty Candidate where
   pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))    
+  
+instance Show Candidate where
+  show = show . pretty
     
 candidateDoc :: RProgram -> Candidate -> Doc
 candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
+
+instance Pretty Goal where
+  pretty (Goal name env spec) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec
+  
+instance Show Goal where
+  show = show. pretty
 
 {- Input language -}
 
