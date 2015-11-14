@@ -395,7 +395,7 @@ generateEAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment
 generateEAt _ _ d | d < 0 = mzero
 generateEAt env typ d = do
   useMem <- asks $ (_useMemoization . fst)
-  if not useMem -- || d == 0
+  if not useMem || d == 0
     then do -- Do not use memoization
       (envFinal, p) <- enumerateAt env typ d
       checkE envFinal typ p
