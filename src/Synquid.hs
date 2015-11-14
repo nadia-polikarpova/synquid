@@ -70,7 +70,7 @@ cla = CommandLineArgs {
   hide_scrutinees = False           &= help ("Hide scrutinized expressions from the evironment (default: False)"),
   explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
-  use_memoization = True            &= help ("Use memoization (default: True)")
+  use_memoization = False           &= help ("Use memoization (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
@@ -89,7 +89,7 @@ defaultExplorerParams = ExplorerParams {
   _typeQualsGen = undefined,
   _context = id,
   _explorerLogLevel = 1,
-  _useMemoization = True
+  _useMemoization = False
 }
 
 -- | Parameters for constraint solving
