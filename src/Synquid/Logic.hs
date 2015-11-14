@@ -200,7 +200,7 @@ substitute subst fml = case fml of
 data QSpace = QSpace {
     _qualifiers :: [Formula],         -- ^ Qualifiers 
     _maxCount :: Int                  -- ^ Maximum number of qualifiers in a valuation
-  }
+  } deriving (Eq, Ord)
 
 makeLenses ''QSpace  
 

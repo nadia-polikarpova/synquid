@@ -24,8 +24,6 @@ import Control.Lens
 import Control.Monad.Trans.Maybe
 import Debug.Trace
 
-type Memo = Map (Environment, RType, Int) [(Environment, RProgram)]
-
 {- Interface -}
 
 -- | State space generator (returns a state space for a list of symbols in scope)
@@ -33,17 +31,6 @@ type QualsGen = [Formula] -> QSpace
 
 -- | Empty state space generator
 emptyGen = const emptyQSpace
-
--- | Incremental second-order constraint solver
-data ConstraintSolver s = ConstraintSolver {
-  csInit :: s Candidate,                                                      -- ^ Initial candidate solution
-  csRefine :: [Formula] -> QMap -> RProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
-  csPruneQuals :: QSpace -> s QSpace,                                         -- ^ Prune redundant qualifiers
-  csCheckConsistency :: [Formula] -> [Candidate] -> s [Candidate],            -- ^ Check consistency of formulas under candidates
-  csClearCache :: s (),
-  csGetMemo :: s Memo,
-  csPutMemo :: Memo -> s()
-}
 
 -- | Choices for the type of terminating fixpoint operator
 data FixpointStrategy =
@@ -86,9 +73,35 @@ data ExplorerState = ExplorerState {
   _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
   _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
   _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
-}
+} deriving (Eq, Ord, Show)
 
 makeLenses ''ExplorerState
+
+-- | Key in the memoization store
+data MemoKey = MemoKey {
+  keyEnv :: Environment, 
+  keyTypeArity :: Int, 
+  keyLastType :: RType,
+  keyDepth :: Int, 
+  keyState :: ExplorerState  
+} deriving (Eq, Ord)
+  
+instance Pretty MemoKey where
+  pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
+
+-- | Memoization store  
+type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
+
+-- | Incremental second-order constraint solver
+data ConstraintSolver s = ConstraintSolver {
+  csInit :: s Candidate,                                                      -- ^ Initial candidate solution
+  csRefine :: [Formula] -> QMap -> RProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
+  csPruneQuals :: QSpace -> s QSpace,                                         -- ^ Prune redundant qualifiers
+  csCheckConsistency :: [Formula] -> [Candidate] -> s [Candidate],            -- ^ Check consistency of formulas under candidates
+  csClearMemo :: s (),                                                        -- ^ Clear the memoization store
+  csGetMemo :: s Memo,                                                        -- ^ Retrieve the memoization store
+  csPutMemo :: Memo -> s()                                                    -- ^ Store the momization store
+}
 
 -- | Impose typing constraint @c@ on the programs
 addConstraint c = typingConstraints %= (c :)
@@ -133,9 +146,9 @@ generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
     generateFix = do
       recCalls <- recursiveCalls t
       polymorphic <- asks $ _polyRecursion . fst
-      let env' = if polymorphic
-                    then let tvs = env ^. boundTypeVars in
-                      foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
+      let tvs = env ^. boundTypeVars
+      let env' = if polymorphic && not (null tvs)
+                    then foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
                     else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
       let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
       p <- local (over (_1 . context) (. ctx)) $ generateI env' t
@@ -211,13 +224,6 @@ generateI env t@(ScalarT _ _) = do
             (generateMaybeMatchIf env t)
             (generateMaybeIf env t)
 
--- | Guess an E-term and and check that is has type @t@ in the environment @env@
-guessE env t = do
-  (env', res) <- generateE env t
-  addConstraint $ Subtype env' (typeOf res) t False
-  solveConstraints res
-  return res
-
 -- | Generate a possibly conditional term type @t@, depending on whether a condition is abduced
 generateMaybeIf :: Monad s => Environment -> RType -> Explorer s RProgram
 generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- If at least one solution without a match exists, go with it and continue with the else branch; otherwise try to match
@@ -226,7 +232,7 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
     generateThen = do
       cUnknown <- Unknown Map.empty <$> freshId "c"
       addConstraint $ WellFormedCond env cUnknown
-      pThen <- once $ guessE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it
+      (_, pThen) <- once $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it
       candidates %= take 1 -- We also stick to the current valuations of unknowns: there should be no reason to reconsider them, since we've closed a top-level goal
       cond <- uses candidates (conjunction . flip valuation cUnknown . solution . head)
       return (cond, pThen)
@@ -301,7 +307,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       condUnknown <- Unknown Map.empty <$> freshId "c"
       addConstraint $ WellFormedCond env condUnknown
       (matchConds, p0) <- once $ do
-        p0 <- guessE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
+        (_, p0) <- generateE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
         matchValuation <- uses candidates (Set.toList . flip valuation matchUnknown . solution . head)
         let allVars = Set.toList $ Set.unions (map varsOf matchValuation)
         let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) allVars -- group by vars
@@ -347,8 +353,8 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       let env' = addScrutinee pScrutinee env
       pCases <- mapM (once . generateCase env' x pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
       return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
-
--- | 'generateE' @env typ@ : explore all elimination terms of type shape @shape typ@ in environment @env@
+      
+-- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)
 generateE :: Monad s => Environment -> RType -> Explorer s (Environment, RProgram)
 generateE env typ = do
@@ -362,8 +368,62 @@ generateEUpTo env typ d = msum $ map (generateEAt env typ) [0..d]
 -- | 'generateEAt' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth exactly to @d@
 generateEAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 generateEAt _ _ d | d < 0 = mzero
+generateEAt env typ d = do
+  useMem <- asks $ (_useMemoization . fst)
+  if not useMem || d == 0
+    then do -- Do not use memoization
+      (envFinal, p) <- enumerateAt env typ d
+      checkE envFinal typ p
+      return (envFinal, p)
+    else do -- Try to fetch from memoization store
+      startState <- get      
+      let tass = startState ^. typeAssignment      
+      let memoKey = MemoKey env (arity typ) (typeSubstitute tass (lastType typ)) d startState      
+      startMemo <- getMemo
+      case Map.lookup memoKey startMemo of
+        Just results -> do -- Found memoizaed results: fetch
+          writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$ 
+                      text "Result:" $+$ vsep (map (\(env', p, _) -> pretty env' $+$ programDoc (const Synquid.Pretty.empty) p) results))                    
+          msum $ map applyMemoized results
+        Nothing -> do -- Nothing found: enumerate and memoize
+          writeLog 1 (text "Nothing found for:" <+> pretty memoKey)          
+          (envFinal, p) <- enumerateAt env typ d
+          checkE envFinal typ p
+          
+          memo <- getMemo
+          finalState <- get
+          let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
+          writeLog 1 (text "Memoizing for: " <+> pretty memoKey $+$ text "result:" $+$ pretty envFinal $+$ programDoc (const Synquid.Pretty.empty) p)
+          putMemo memo'
+          
+          return (envFinal, p)
+  where
+    getMemo = asks snd >>= lift . lift . lift . csGetMemo
+    putMemo memo = asks snd >>= lift . lift . lift . (flip csPutMemo memo)
+  
+    applyMemoized (finalEnv, p, finalState) = do
+      put finalState
+      return (joinEnv env finalEnv, p) 
+  
+    joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
 
-generateEAt env typ 0 = do
+-- | Perform a gradual check that @p@ has type @typ@ in @env@:
+-- if @p@ is a scalar, perform a full subtyping check;
+-- if @p@ is a (partially applied) function, check as much as possible with unknown arguments 
+checkE :: Monad s => Environment -> RType -> RProgram -> Explorer s () 
+checkE env typ p = do
+  if arity typ == 0
+    then addConstraint $ Subtype env (typeOf p) typ False
+    else do
+      addConstraint $ Subtype env (removeDependentRefinements (allArgs (typeOf p)) (lastType (typeOf p))) (lastType typ) False
+      ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+  solveConstraints p  
+  where
+    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
+    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)        
+
+enumerateAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)    
+enumerateAt env typ 0 = do
   case soleConstructor (lastType typ) of
     Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
       guard $ arity (toMonotype sch) == arity typ
@@ -386,9 +446,7 @@ generateEAt env typ 0 = do
         symbolUseCount %= Map.insertWith (+) name 1
         case Map.lookup name (env ^. shapeConstraints) of
           Nothing -> return ()
-          Just sh -> do
-            addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
-            solveConstraints p
+          Just sh -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
         return (env, p)
 
     instantiate sch = if arity (toMonotype sch) == 0
@@ -406,35 +464,19 @@ generateEAt env typ 0 = do
           else Nothing
     soleConstructor _ = Nothing
 
-generateEAt env typ d = do
+enumerateAt env typ d = do
   let maxArity = fst $ Map.findMax (env ^. symbols)
   guard $ arity typ < maxArity
-
-  -- if using memoization, try to fetch from memoization store
-  useMemoization <- asks $ (_useMemoization . fst)
-  if (useMemoization) then do
-    solv <- asks snd
-    mem <- lift . lift . lift $ csGetMemo solv
-    -- writeLog 1 (text "MEMO" <+> pretty memo)
-    case Map.lookup (env, typ, d) mem of
-      Just pApps -> do
-        writeLog 1 (text "Fetching from the memory store for: " <+> pretty (env, typ, d))
-        --msum $ map (\x -> return (env, x)) pApps
-        msum $ map return pApps
-      Nothing -> do
-        writeLog 1 (text "No fetching for: " <+> pretty (env, typ, d))
-        generateAllApps
-  else
-    generateAllApps
+  generateAllApps
   where
     generateAllApps =
       generateApp (\e t -> generateEUpTo e t (d - 1)) (\e t -> generateEAt e t (d - 1)) `mplus`
         generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
+        
     generateApp genFun genArg = do
-      a <- freshId "_a"
       x <- freshId "x"
-      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll a)) typ))
-                            $ generateFun genFun env (FunctionT x (vartAll a) typ) -- Find all functions that unify with (? -> typ)
+      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll dontCare)) typ))
+                            $ genFun env (FunctionT x (vartAll dontCare) typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
       (envfinal, pApp) <- if isFunctionType tArg
@@ -445,37 +487,11 @@ generateEAt env typ d = do
           (env'', arg) <- local (
                                   over (_1 . eGuessDepth) (-1 +)
                                 . over (_1 . context) (. \p -> Program (PApp fun p) tRes))
-                                $ generateArg genArg env' tArg
+                                $ genArg env' tArg
           (env''', y) <- toSymbol arg env''
           return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
       ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
-
-      solv <- asks snd
-      memo <- lift . lift . lift $ csGetMemo solv
-      lift . lift . lift $ csPutMemo solv (Map.insertWith (flip (++)) (env, typ, d) [(envfinal, pApp)] memo)
-
       return (envfinal, pApp)
-
-    generateFun genFun env tFun = do
-      (env', fun) <- genFun env tFun
-      let t = typeOf fun
-      -- The following performs early filtering of incomplete application terms
-      -- by comparing their result type with the spec's result type,
-      -- after replacing all refinements that depend on yet undefined variables with false.
-      addConstraint $ Subtype env' (removeDependentRefinements (allArgs t) (lastType t)) (lastType tFun) False
-      -- addConstraint $ Subtype env' (refineBot $ shape $ lastType t) (refineTop $ shape $ lastType tFun) False
-      ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env' t tFun True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-      solveConstraints fun
-      return (env', fun)
-
-    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
-    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)
-
-    generateArg genArg env tArg = do
-      (env', arg) <- genArg env tArg
-      addConstraint $ Subtype env' (typeOf arg) tArg False
-      solveConstraints arg
-      return (env', arg)
 
 -- | 'toSymbol' @p env@: a symbols with the same type as @p@ and an environment that defines that symbol (can be @p@ itself or a fresh ghost)
 toSymbol (Program (PSymbol name) _) env | not (Set.member name (env ^. constants)) = return (env, name)
@@ -696,7 +712,11 @@ freshTypeVars sch fml = freshTypeVars' Map.empty sch
     freshTypeVars' subst (Forall a sch) = do
       a' <- freshId "a"
       freshTypeVars' (Map.insert a (vart a' fml) subst) sch
-    freshTypeVars' subst (Monotype t) = return $ typeSubstitute subst t
+    freshTypeVars' subst (Monotype t) = go subst t
+    go subst (FunctionT x tArg tRes) = do
+      x' <- freshId "x"
+      liftM2 (FunctionT x') (go subst tArg) (go subst (renameVar x x' tArg tRes))
+    go subst t = return $ typeSubstitute subst t
 
 -- | 'fresh @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> Explorer s RType
