@@ -64,7 +64,7 @@ makeLenses ''ExplorerParams
 
 -- | State of program exploration
 data ExplorerState = ExplorerState {
-  _idCount :: Int,                              -- ^ Number of unique identifiers issued so far
+  _idCount :: Map String Int,                   -- ^ Number of unique identifiers issued so far
   _typingConstraints :: [Constraint],           -- ^ Typing constraints yet to be converted to horn clauses
   _qualifierMap :: QMap,                        -- ^ State spaces for all the unknowns generated from well-formedness constraints
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints since the last liquid assignment refinement
@@ -73,21 +73,46 @@ data ExplorerState = ExplorerState {
   _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
   _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
   _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
-} deriving (Eq, Ord, Show)
+} deriving Show
 
 makeLenses ''ExplorerState
+
+instance Eq ExplorerState where
+  (==) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) == restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
+                  -- _typingConstraints st1 == _typingConstraints st2 &&
+                  -- _qualifierMap st1 == _qualifierMap st2 &&
+                  -- _hornClauses st1 == _hornClauses st2 &&
+                  -- _consistencyChecks st1 == _consistencyChecks st2 &&
+                  _typeAssignment st1 == _typeAssignment st2 &&
+                  _candidates st1 == _candidates st2
+                  -- _auxGoals st1 == _auxGoals st2
+                  
+instance Ord ExplorerState where
+  (<=) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) <= restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
+                -- _typingConstraints st1 <= _typingConstraints st2 &&
+                -- _qualifierMap st1 <= _qualifierMap st2 &&
+                -- _hornClauses st1 <= _hornClauses st2 &&
+                -- _consistencyChecks st1 <= _consistencyChecks st2 &&
+                _typeAssignment st1 <= _typeAssignment st2 &&
+                _candidates st1 <= _candidates st2
+                -- _auxGoals st1 <= _auxGoals st2
+                
+instance Pretty ExplorerState where
+  pretty st = hMapDoc pretty pretty $ _idCount st
+
 
 -- | Key in the memoization store
 data MemoKey = MemoKey {
   keyEnv :: Environment, 
   keyTypeArity :: Int, 
-  keyLastType :: RType,
-  keyDepth :: Int, 
-  keyState :: ExplorerState  
+  keyLastShape :: SType,
+  keyState :: ExplorerState,
+  keyDepth :: Int
 } deriving (Eq, Ord)
   
 instance Pretty MemoKey where
-  pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
+  -- pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
+  pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (_candidates st))
 
 -- | Memoization store  
 type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
@@ -117,7 +142,7 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolve
 explore :: Monad s => ExplorerParams -> ConstraintSolver s -> Goal -> s [RProgram]
 explore params solver goal = observeManyT 1 $ do
     initCand <- lift $ csInit solver
-    runReaderT (evalStateT go (ExplorerState 0 [] Map.empty [] [] Map.empty [initCand] [] Map.empty)) (params, solver)
+    runReaderT (evalStateT go (ExplorerState Map.empty [] Map.empty [] [] Map.empty [initCand] [] Map.empty)) (params, solver)
   where
     go :: Monad s => Explorer s RProgram
     go = do
@@ -230,11 +255,11 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
   where
     -- | Guess an E-term and abduce a condition for it
     generateThen = do
-      cUnknown <- Unknown Map.empty <$> freshId "c"
+      cUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- once $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it
       candidates %= take 1 -- We also stick to the current valuations of unknowns: there should be no reason to reconsider them, since we've closed a top-level goal
-      cond <- uses candidates (conjunction . flip valuation cUnknown . solution . head)
+      cond <- uses candidates (conjunction . flip valuation cUnknown . solution . head)      
       return (cond, pThen)
 
     -- | Proceed after solution @pThen@ has been found under assumption @cond@
@@ -251,7 +276,7 @@ generateMatch env t = do
   if d == 0
     then mzero
     else do
-      a <- freshId "_a"
+      a <- freshId "a"
       (env', pScrutinee) <- local (
                                     over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params)
                                   . over (_1 . context) (. \p -> Program (PMatch p []) t))
@@ -293,7 +318,7 @@ generateCase env scrName pScrutinee t consName = do
     addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
       return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
     addCaseSymbols env x (FunctionT y tArg tRes) = do
-      argName <- freshId "z"
+      argName <- freshId "x"
       (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
       return (argName : args, env')
 
@@ -302,9 +327,9 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
   where
     -- | Guess an E-term and abduce a condition and a match-condition for it
     generateOneBranch = do
-      matchUnknown <- Unknown Map.empty <$> freshId "m"
+      matchUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedMatchCond env matchUnknown
-      condUnknown <- Unknown Map.empty <$> freshId "c"
+      condUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env condUnknown
       (matchConds, p0) <- once $ do
         (_, p0) <- generateE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
@@ -370,7 +395,7 @@ generateEAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment
 generateEAt _ _ d | d < 0 = mzero
 generateEAt env typ d = do
   useMem <- asks $ (_useMemoization . fst)
-  if not useMem || d == 0
+  if not useMem -- || d == 0
     then do -- Do not use memoization
       (envFinal, p) <- enumerateAt env typ d
       checkE envFinal typ p
@@ -378,32 +403,35 @@ generateEAt env typ d = do
     else do -- Try to fetch from memoization store
       startState <- get      
       let tass = startState ^. typeAssignment      
-      let memoKey = MemoKey env (arity typ) (typeSubstitute tass (lastType typ)) d startState      
+      let memoKey = MemoKey env (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
       startMemo <- getMemo
       case Map.lookup memoKey startMemo of
         Just results -> do -- Found memoizaed results: fetch
           writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$ 
-                      text "Result:" $+$ vsep (map (\(env', p, _) -> pretty env' $+$ programDoc (const Synquid.Pretty.empty) p) results))                    
+                      text "Result:" $+$ vsep (map (\(env', p, _) -> programDoc (const Synquid.Pretty.empty) p) results))
           msum $ map applyMemoized results
         Nothing -> do -- Nothing found: enumerate and memoize
           writeLog 1 (text "Nothing found for:" <+> pretty memoKey)          
           (envFinal, p) <- enumerateAt env typ d
-          checkE envFinal typ p
           
           memo <- getMemo
           finalState <- get
           let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
-          writeLog 1 (text "Memoizing for: " <+> pretty memoKey $+$ text "result:" $+$ pretty envFinal $+$ programDoc (const Synquid.Pretty.empty) p)
+          writeLog 1 (text "Memoizing for:" <+> pretty memoKey <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty (typeOf p))
+                    
           putMemo memo'
           
+          checkE envFinal typ p                    
           return (envFinal, p)
   where
     getMemo = asks snd >>= lift . lift . lift . csGetMemo
     putMemo memo = asks snd >>= lift . lift . lift . (flip csPutMemo memo)
-  
+    
     applyMemoized (finalEnv, p, finalState) = do
       put finalState
-      return (joinEnv env finalEnv, p) 
+      let env' = joinEnv env finalEnv
+      checkE env' typ p
+      return (env', p) 
   
     joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
 
@@ -500,7 +528,7 @@ toSymbol p env = do
   return (addGhost g (typeOf p) env, g)
 
 enqueueGoal env typ = do
-  g <- freshId "g"
+  g <- freshId "f"
   auxGoals %= ((Goal g env $ Monotype typ) :)
   return $ Program (PSymbol g) typ
 
@@ -531,14 +559,14 @@ solveConstraints p = do
       -- if type assignment has changed, we might be able to process more constraints:
       if Map.size tass' > Map.size tass
         then simplifyAllConstraints
-        else writeLog 1 (text "With Shapes" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) (programSubstituteTypes tass p))
+        else return () -- writeLog 1 (text "With Shapes" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) (programSubstituteTypes tass p))
 
     -- | Convert simple typing constraints into horn clauses and qualifier maps
     processAllConstraints = do
       cs <- use typingConstraints
       typingConstraints .= []
-      mapM_ processConstraint cs
-
+      mapM_ processConstraint cs  
+  
     -- | Refine the current liquid assignments using the horn clauses
     solveHornClauses = do
       solv <- asks snd
@@ -701,8 +729,8 @@ addQuals name quals = do
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> Explorer s String
 freshId prefix = do
-  i <- use idCount
-  idCount .= i + 1
+  i <- uses idCount (Map.findWithDefault 0 prefix)
+  idCount %= Map.insert prefix (i + 1)
   return $ prefix ++ show i
 
 -- | Replace all type variables with fresh identifiers

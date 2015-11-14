@@ -263,4 +263,15 @@ data Candidate = Candidate {
     validConstraints :: Set Formula,
     invalidConstraints :: Set Formula,
     label :: String
-  } deriving (Eq, Ord)
+  }
+  
+instance Eq Candidate where
+  (==) c1 c2 = Map.filter (not . Set.null) (solution c1) == Map.filter (not . Set.null) (solution c2) &&
+               validConstraints c1 == validConstraints c2 &&
+               invalidConstraints c1 == invalidConstraints c2 
+
+instance Ord Candidate where
+  (<=) c1 c2 = Map.filter (not . Set.null) (solution c1) <= Map.filter (not . Set.null) (solution c2) &&
+               validConstraints c1 <= validConstraints c2 &&
+               invalidConstraints c1 <= invalidConstraints c2 
+               
