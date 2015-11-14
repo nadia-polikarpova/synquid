@@ -1,2 +1,5 @@
+[repository]
+native = CRLF
+
 [patterns]
 ** = native
