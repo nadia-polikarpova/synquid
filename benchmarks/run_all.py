@@ -29,11 +29,13 @@ BENCHMARKS = [
     ('List-Stutter', []),
     ('List-Replicate', []),
     ('List-Append', ['-m=1']),
+    ('List-Concat', []),
     ('List-Take', []),
     ('List-Drop', []),
     ('List-Delete', []),
     ('List-Map', []),
     ('List-ZipWith', []),
+    ('List-Zip', []),
     ('List-ToNat', []),
     # Unique lists
     ('UniqueList-Insert', []),

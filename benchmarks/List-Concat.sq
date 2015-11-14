@@ -1,22 +1,17 @@
-qualifier {x >= y, x <= y, x != y}
-
-type Nat = {Int | _v >= 0}
-
-measure fst :: Pair a b -> a
-measure snd :: Pair a b -> b
-
-data Pair a b where
-  Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
-
-zero :: {Int | _v == 0}
-inc :: x: Int -> {Int | _v == x + 1}
-dec :: x: Int -> {Int | _v == x - 1}
-
 measure len :: List a -> {Int | _v >= 0}
 
 data List a decreases len where
   Nil :: {List a | len _v == 0}
   Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1}
 
-concat :: la: List a -> lb: List a -> { List a | len _v == len la + len lb }
+measure len2 :: ListOfLists a -> {Int | _v >= 0}
+measure sumLen :: ListOfLists a -> {Int | _v >= 0}
+
+data ListOfLists a decreases len2 where
+  Nil2 :: {ListOfLists a | len2 _v == 0 && sumLen _v == 0}
+  Cons2 :: x: List a -> xs: ListOfLists a -> {ListOfLists a | len2 _v == len2 xs + 1 && sumLen _v == sumLen xs + len x }
+
+append :: xs: List a -> ys: List a -> { List a | len _v == len xs + len ys }
+
+concat :: xss: ListOfLists a -> { List a | len _v == sumLen xss }
 concat = ??

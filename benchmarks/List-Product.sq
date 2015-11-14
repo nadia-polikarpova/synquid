@@ -1,7 +1,3 @@
-qualifier {}
-
-type Nat = {Int | _v >= 0}
-
 measure fst :: Pair a b -> a
 measure snd :: Pair a b -> b
 
