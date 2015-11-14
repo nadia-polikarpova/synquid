@@ -4,8 +4,6 @@ import platform
 import shutil
 import time
 import difflib
-# import pickle
-# import re
 from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
