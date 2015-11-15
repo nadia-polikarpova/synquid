@@ -44,7 +44,7 @@ BENCHMARKS = [
     ('UniqueList-Delete', []),
     ('UniqueList-Delete', []),
     ('List-Nub', ['-f=FirstArgument', '-m=1']),
-    ('List-Compress', []),
+    ('List-Compress', ['-h']),
     # Trees
     ('Tree-Elem', []),
     ('Tree-Flatten', []),
