@@ -23,6 +23,7 @@ import Data.Map (Map)
 import Control.Monad
 import Control.Monad.State
 import Control.Lens
+import Control.Applicative ((<$>))
 
 type Z3Memo = StateT Memo Z3State
 
