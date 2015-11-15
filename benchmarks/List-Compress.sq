@@ -1,0 +1,28 @@
+qualifier {x == y, x != y}
+
+measure len :: List a -> {Int | _v >= 0}
+measure elems :: List a -> Set a
+
+data List a decreases len where
+  Nil :: {List a | len _v == 0 && elems _v == []}
+  Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+
+measure len2 :: List2 a -> {Int | _v >= 0}
+measure headSet :: List2 a -> Set a
+measure elems2 :: List2 a -> Set a
+
+data List2 a decreases len2 where
+  Nil2 :: {List2 a | len2 _v == 0 && elems2 _v == [] && headSet _v == []}
+  Cons2 :: x: a -> xs: {List2 a | !(x in headSet _v)} -> {List2 a | elems2 _v == elems2 xs + [x] && len2 _v == len2 xs + 1 && headSet _v == [x] }
+
+--measure ulen :: UList a -> {Int | _v >= 0}
+--measure uelems :: UList a -> Set a
+--
+--data UList a decreases ulen where
+  --UNil :: {UList a | ulen _v == 0 && uelems _v == []}
+  --UCons :: x: a -> xs: UList {a | x != _v} -> {UList a | ulen _v == ulen xs + 1 && uelems _v == uelems xs + [x]}
+--
+strengthen :: x: a -> xs: {List2 a | !(x in headSet _v)} -> {List2 a | elems2 _v == elems2 xs && len2 _v == len2 xs}
+
+compress :: xs: List a -> {List2 a | elems2 _v == elems xs}
+compress = ??
