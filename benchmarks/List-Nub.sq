@@ -1,4 +1,7 @@
-qualifier {x == y, x != y, x in uelems xs}
+qualifier {x == y, x != y}
+
+true :: {Bool | _v}
+false :: {Bool | !_v}
 
 measure len :: List a -> {Int | _v >= 0}
 measure elems :: List a -> Set a
@@ -13,6 +16,9 @@ measure uelems :: UList a -> Set a
 data UList a decreases ulen where
 	UNil :: {UList a | ulen _v == 0 && uelems _v == []}
 	UCons :: x: a -> xs: UList {a | x != _v} -> {UList a | ulen _v == ulen xs + 1 && uelems _v == uelems xs + [x]}
+	
+elem :: x: a -> xs: UList a -> {Bool | _v == (x in uelems xs)}
+elem = ??	
 	
 strengthen :: x: a -> xs: {UList a | !(x in uelems _v)} -> {UList {a | _v != x} | uelems _v == uelems xs && ulen _v == ulen xs}
 strengthen = ??

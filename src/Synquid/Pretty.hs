@@ -234,7 +234,7 @@ programDoc tdoc (Program p typ) = let
       Program (PSymbol _) _ -> pDoc f <+> pDoc x
       _ -> pDoc f <+> parens (pDoc x)
     PFun x e -> withType (text "\\" <> text x <+> text ".") <+> pDoc e
-    PIf c t e -> nest 2 $ withType (text "if" <+> pretty c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
+    PIf c t e -> nest 2 $ withType (text "if" <+> pDoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
     PFix fs e -> pDoc e -- nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
 
@@ -365,7 +365,7 @@ programNodeCount (Program p _) = case p of
   PSymbol _ -> 1
   PApp e1 e2 -> 1 + programNodeCount e1 + programNodeCount e2
   PFun _ e -> 1 + programNodeCount e 
-  PIf c e1 e2 -> 1 + fmlNodeCount c + programNodeCount e1 + programNodeCount e2
+  PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
   PFix _ e -> 1 + programNodeCount e
 

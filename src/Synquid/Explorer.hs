@@ -266,9 +266,14 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
     generateElse (cond, pThen) = if cond == ftrue
       then return pThen -- @pThen@ is valid under no assumptions: return it
       else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
-            pElse <- local (over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) $
-                        generateMaybeIf (addAssumption (fnot cond) env) t
-            return $ Program (PIf cond pThen pElse) t
+            pCond <- generateCondition env cond
+            pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
+                        generateMaybeIf (addAssumption (fnot cond) env) t            
+            return $ Program (PIf pCond pThen pElse) t
+            
+generateCondition env fml = if isExecutable fml
+                              then return $ fmlToProgram fml 
+                              else snd <$> once (generateE env (ScalarT BoolT $ valBool |=| fml))            
 
 -- | Generate a match term of type @t@
 generateMatch env t = do
@@ -349,16 +354,18 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       [] -> if cond == ftrue
         then return p0 -- @p0@ is valid under no assumptions: return it
         else do -- @p0@ is valid under a nontrivial assumption, but no need to match
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf cond p0 p) t)) $
+              pCond <- generateCondition env cond
+              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond p0 p) t)) $
                           generateMaybeMatchIf (addAssumption (fnot cond) env) t
-              return $ Program (PIf cond p0 pElse) t
+              return $ Program (PIf pCond p0 pElse) t
       _ -> if cond == ftrue
         then generateMatchesFor env matchConds p0 t
         else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
+              pCond <- generateCondition env cond
               pThen <- once $ generateMatchesFor (addAssumption cond env) matchConds p0 t
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf cond pThen p) t)) $
+              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
                           generateMaybeMatchIf (addAssumption (fnot cond) env) t
-              return $ Program (PIf cond pThen pElse) t
+              return $ Program (PIf pCond pThen pElse) t
 
     generateMatchesFor env [] pBaseCase t = return pBaseCase
     generateMatchesFor env (matchCond : rest) pBaseCase t = do
@@ -476,15 +483,15 @@ enumerateAt env typ 0 = do
           Nothing -> return ()
           Just sh -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
         return (env, p)
+        
+    symbolType x t@(ScalarT b _)
+      | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
+      | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
+    symbolType _ t = t        
 
     instantiate sch = if arity (toMonotype sch) == 0
       then freshTypeVars sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
       else freshTypeVars sch ftrue
-
-    symbolType x t@(ScalarT b _)
-      | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
-      | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
-    symbolType _ t = t
 
     soleConstructor (ScalarT (DatatypeT name args) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
@@ -764,6 +771,31 @@ fresh env (FunctionT x tArg tFun) = do
 
 matchConsType (ScalarT (DatatypeT d vars) _) (ScalarT (DatatypeT d' args) _) | d == d' = zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
 matchConsType _ _ = mzero
+
+fmlToProgram :: Formula -> RProgram
+fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
+fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
+fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
+fmlToProgram fml@(Unary op e) = let 
+    s = fromJust $ sortOf fml 
+    p = fmlToProgram e
+    fun = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p) opRes)
+  in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
+  where    
+    opRes 
+      | op == Not = bool $ valBool |=| fnot (intVar "x")
+      | otherwise = int $ valInt |=| Unary op (intVar "x")    
+fmlToProgram fml@(Binary op e1 e2) = let 
+    s = fromJust $ sortOf fml 
+    p1 = fmlToProgram e1
+    p2 = fmlToProgram e2
+    fun1 = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
+    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
+  in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
+  where
+    opRes 
+      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
+      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
 
 writeLog level msg = do
   maxLevel <- asks $ _explorerLogLevel . fst

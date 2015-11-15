@@ -166,6 +166,14 @@ sortOf (Binary op e1 e2)
   | op == Subset                                        = do l <- sortOf e1; guard (isSetS l); r <- sortOf e2; guard (r == l); return BoolS
 sortOf (Measure s _ _)                    = Just $ s
 sortOf (All x e)                          = (sortOf e >>= guard . (== BoolS)) >> return BoolS
+
+isExecutable :: Formula -> Bool
+isExecutable (SetLit _ _) = False
+isExecutable (Unary _ e) = isExecutable e
+isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
+isExecutable (Measure _ _ _) = False
+isExecutable (All _ _) = False
+isExecutable _ = True
   
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
 substitute :: Substitution -> Formula -> Formula
