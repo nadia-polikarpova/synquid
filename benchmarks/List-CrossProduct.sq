@@ -1,0 +1,30 @@
+measure fst :: Pair a b -> a
+measure snd :: Pair a b -> b
+
+data Pair a b where
+  Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
+
+measure len :: List a -> {Int | _v >= 0}
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0}
+	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1}
+
+map :: f: (a -> b) -> xs: List a -> { List b | len _v == len xs }
+
+append :: la: List a -> lb: List a -> { List a | len _v == len la + len lb }
+
+product :: la: List a -> lb: List b -> {List (Pair (a) (b)) | len _v == len la * len lb}
+
+measure len2 :: ListOfLists a -> {Int | _v >= 0}
+measure sumLen :: ListOfLists a -> {Int | _v >= 0}
+
+data ListOfLists a decreases len2 where
+  Nil2 :: {ListOfLists a | len2 _v == 0 && sumLen _v == 0}
+  Cons2 :: x: List a -> xs: ListOfLists a -> {ListOfLists a | len2 _v == len2 xs + 1 && sumLen _v == sumLen xs + len x }
+
+--product :: l: ListOfLists a -> {List (Pair (a) (b)) | len _v == len la * len lb}
+
+productAsList :: la: List a -> lb: List a -> {List { List a | len _v == 2 } | len _v == len la * len lb}
+
+cprod :: l: ListOfLists

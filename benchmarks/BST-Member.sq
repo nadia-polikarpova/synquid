@@ -1,4 +1,5 @@
 qualifier {x <= y, x >= y, x != y}
+-- solution without == is kind of weird here
 
 true :: {Bool | _v}
 false :: {Bool | !_v}
@@ -9,6 +10,6 @@ measure telems :: BST a -> Set a
 data BST a decreases size where
 	Empty :: {BST a | size _v == 0 && telems _v == []}
 	Node :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> {BST a | size _v == size l + size r + 1 && telems _v == telems l + telems r + [x]}
-	
+
 member :: x: a -> t: BST a -> {Bool | _v == (x in telems t)}
 member = ??

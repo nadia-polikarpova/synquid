@@ -12,7 +12,8 @@ SYNQUID_PATH_LINUX = '../dist/build/synquid/synquid'
 SYNQUID_PATH_WINDOWS = '../src/Synquid.exe'
 BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
-ORACLE_NAME = 'oracle'
+ORACLE_NAME_WINDOWS = 'oracle'
+ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
 COMMON_OPTS = []
 
@@ -37,11 +38,13 @@ BENCHMARKS = [
     ('List-ZipWith', []),
     ('List-Zip', []),
     ('List-ToNat', []),
+    ('List-Product', []),
     # Unique lists
     ('UniqueList-Insert', []),
     ('UniqueList-Delete', []),
     ('UniqueList-Delete', []),
     ('List-Nub', ['-f=FirstArgument', '-m=1']),
+    ('List-Compress', []),
     # Trees
     ('Tree-Elem', []),
     ('Tree-Flatten', []),
@@ -60,6 +63,8 @@ BENCHMARKS = [
     ('BST-Member', []),
     ('BST-Insert', []),
     ('BST-Sort', []),
+    # Binary heap
+    ('BinHeap-Member', []),
 ]
 
 class SynthesisResult:
@@ -73,7 +78,7 @@ class SynthesisResult:
 def run_benchmark(name, opts):
     print name,
 
-    with open(LOGFILE_NAME, 'a+') as logfile:          
+    with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
       logfile.seek(0, os.SEEK_END)
       return_code = call([synquid_path] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
@@ -84,7 +89,7 @@ def run_benchmark(name, opts):
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
           results [name] = SynthesisResult(name, (end - start))
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL          
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
 
 def postprocess():
     with open(OUTFILE_NAME, 'w') as outfile:
@@ -96,8 +101,8 @@ def postprocess():
                 outfile.write (',')
             outfile.write ('\n')
 
-    if os.path.isfile(ORACLE_NAME):
-        fromlines = open(ORACLE_NAME).readlines()
+    if os.path.isfile(oracle_name):
+        fromlines = open(oracle_name).readlines()
         tolines = open(LOGFILE_NAME, 'U').readlines()
         diff = difflib.unified_diff(fromlines, tolines, n=0)
         print
@@ -106,11 +111,13 @@ def postprocess():
 if __name__ == '__main__':
     init()
     results = {}
-    
+
     if platform.system() == 'Linux':
         synquid_path = SYNQUID_PATH_LINUX
+        oracle_name = ORACLE_NAME_LINUX
     else:
         synquid_path = SYNQUID_PATH_WINDOWS
+        oracle_name = ORACLE_NAME_WINDOWS
 
     if os.path.isfile(LOGFILE_NAME):
       os.remove(LOGFILE_NAME)
