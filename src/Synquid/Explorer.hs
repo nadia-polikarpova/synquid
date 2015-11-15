@@ -86,7 +86,7 @@ instance Eq ExplorerState where
                   _typeAssignment st1 == _typeAssignment st2 &&
                   _candidates st1 == _candidates st2
                   -- _auxGoals st1 == _auxGoals st2
-                  
+
 instance Ord ExplorerState where
   (<=) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) <= restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
                 -- _typingConstraints st1 <= _typingConstraints st2 &&
@@ -96,25 +96,25 @@ instance Ord ExplorerState where
                 _typeAssignment st1 <= _typeAssignment st2 &&
                 _candidates st1 <= _candidates st2
                 -- _auxGoals st1 <= _auxGoals st2
-                
+
 instance Pretty ExplorerState where
   pretty st = hMapDoc pretty pretty $ _idCount st
 
 
 -- | Key in the memoization store
 data MemoKey = MemoKey {
-  keyEnv :: Environment, 
-  keyTypeArity :: Int, 
+  keyEnv :: Environment,
+  keyTypeArity :: Int,
   keyLastShape :: SType,
   keyState :: ExplorerState,
   keyDepth :: Int
 } deriving (Eq, Ord)
-  
+
 instance Pretty MemoKey where
   -- pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
   pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (_candidates st))
 
--- | Memoization store  
+-- | Memoization store
 type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 
 -- | Incremental second-order constraint solver
@@ -259,7 +259,7 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- once $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it
       candidates %= take 1 -- We also stick to the current valuations of unknowns: there should be no reason to reconsider them, since we've closed a top-level goal
-      cond <- uses candidates (conjunction . flip valuation cUnknown . solution . head)      
+      cond <- uses candidates (conjunction . flip valuation cUnknown . solution . head)
       return (cond, pThen)
 
     -- | Proceed after solution @pThen@ has been found under assumption @cond@
@@ -378,7 +378,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       let env' = addScrutinee pScrutinee env
       pCases <- mapM (once . generateCase env' x pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
       return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
-      
+
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)
 generateE :: Monad s => Environment -> RType -> Explorer s (Environment, RProgram)
@@ -401,56 +401,56 @@ generateEAt env typ d = do
       checkE envFinal typ p
       return (envFinal, p)
     else do -- Try to fetch from memoization store
-      startState <- get      
-      let tass = startState ^. typeAssignment      
+      startState <- get
+      let tass = startState ^. typeAssignment
       let memoKey = MemoKey env (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
       startMemo <- getMemo
       case Map.lookup memoKey startMemo of
         Just results -> do -- Found memoizaed results: fetch
-          writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$ 
+          writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$
                       text "Result:" $+$ vsep (map (\(env', p, _) -> programDoc (const Synquid.Pretty.empty) p) results))
           msum $ map applyMemoized results
         Nothing -> do -- Nothing found: enumerate and memoize
-          writeLog 1 (text "Nothing found for:" <+> pretty memoKey)          
+          writeLog 1 (text "Nothing found for:" <+> pretty memoKey)
           (envFinal, p) <- enumerateAt env typ d
-          
+
           memo <- getMemo
           finalState <- get
           let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
           writeLog 1 (text "Memoizing for:" <+> pretty memoKey <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty (typeOf p))
-                    
+
           putMemo memo'
-          
-          checkE envFinal typ p                    
+
+          checkE envFinal typ p
           return (envFinal, p)
   where
     getMemo = asks snd >>= lift . lift . lift . csGetMemo
     putMemo memo = asks snd >>= lift . lift . lift . (flip csPutMemo memo)
-    
+
     applyMemoized (finalEnv, p, finalState) = do
       put finalState
       let env' = joinEnv env finalEnv
       checkE env' typ p
-      return (env', p) 
-  
+      return (env', p)
+
     joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
 
 -- | Perform a gradual check that @p@ has type @typ@ in @env@:
 -- if @p@ is a scalar, perform a full subtyping check;
--- if @p@ is a (partially applied) function, check as much as possible with unknown arguments 
-checkE :: Monad s => Environment -> RType -> RProgram -> Explorer s () 
+-- if @p@ is a (partially applied) function, check as much as possible with unknown arguments
+checkE :: Monad s => Environment -> RType -> RProgram -> Explorer s ()
 checkE env typ p = do
   if arity typ == 0
     then addConstraint $ Subtype env (typeOf p) typ False
     else do
       addConstraint $ Subtype env (removeDependentRefinements (allArgs (typeOf p)) (lastType (typeOf p))) (lastType typ) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-  solveConstraints p  
+  solveConstraints p
   where
     removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
-    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)        
+    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)
 
-enumerateAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)    
+enumerateAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
   case soleConstructor (lastType typ) of
     Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
@@ -474,7 +474,9 @@ enumerateAt env typ 0 = do
         symbolUseCount %= Map.insertWith (+) name 1
         case Map.lookup name (env ^. shapeConstraints) of
           Nothing -> return ()
-          Just sh -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
+          Just sh -> do
+            addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
+            solveConstraints p
         return (env, p)
 
     instantiate sch = if arity (toMonotype sch) == 0
@@ -500,7 +502,7 @@ enumerateAt env typ d = do
     generateAllApps =
       generateApp (\e t -> generateEUpTo e t (d - 1)) (\e t -> generateEAt e t (d - 1)) `mplus`
         generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
-        
+
     generateApp genFun genArg = do
       x <- freshId "x"
       (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll dontCare)) typ))
@@ -565,8 +567,8 @@ solveConstraints p = do
     processAllConstraints = do
       cs <- use typingConstraints
       typingConstraints .= []
-      mapM_ processConstraint cs  
-  
+      mapM_ processConstraint cs
+
     -- | Refine the current liquid assignments using the horn clauses
     solveHornClauses = do
       solv <- asks snd
