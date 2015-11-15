@@ -8,7 +8,18 @@ data BST a decreases size where
 	Node :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> {BST a | size _v == size l + size r + 1 && 
                                                                                elems _v == elems l + elems r + [x]}
 
+
+--============================================================================
+-- mergePivot p l1 l2 =
+--   match l1 with
+--     Empty -> l2
+--     Node e1 l1 r1 -> Node e1 l1 (mergePivot p r1 t2)
+--
+-- args to use: -e -m=1 -a=2
+--============================================================================
+
 mergePivot :: p: a -> t1: BST {a | _v < p} -> t2: BST {a | _v > p} -> {BST a | elems _v == elems t1 + elems t2}
+mergePivot = ?? 
 
 --============================================================================
 -- delete t x =
@@ -20,7 +31,7 @@ mergePivot :: p: a -> t1: BST {a | _v < p} -> t2: BST {a | _v > p} -> {BST a | e
 --                        then Node e (delete x l) r
 --                        else Node e l (delete x r)
 --
--- args used: -m=2 -a=2 -e
+-- args used: -e -m=1 -a=2
 --============================================================================
 
 delete :: t: BST a -> x: a -> {BST a | elems _v == elems t - [x]}
