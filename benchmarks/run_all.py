@@ -24,6 +24,7 @@ BENCHMARKS = [
     ('Int-Max4', []),
     ('Int-Max5', []),
     ('Int-Add', []),
+    ('Int-Max-Abstract', []),
     # Lists
     ('List-Null', []),
     ('List-Elem', []),

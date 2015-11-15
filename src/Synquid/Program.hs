@@ -72,12 +72,14 @@ isVarRefinemnt _ = False
 -- | Polymorphic type skeletons (parametrized by refinements)
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
-  Forall Id (SchemaSkeleton r)
+  ForallT Id (SchemaSkeleton r) |       -- Type-polymorphic
+  ForallP Id [Sort] (SchemaSkeleton r)  -- Predicate-polymorphic
   deriving (Eq, Ord)
   
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
-toMonotype (Forall _ t) = toMonotype t
+toMonotype (ForallT _ t) = toMonotype t
+toMonotype (ForallP _ _ t) = toMonotype t
   
 -- | Mapping from type variables to types
 type TypeSubstitution = Map Id RType
@@ -109,6 +111,7 @@ sortSubstituteFml subst fml = case fml of
   Unary op e -> Unary op (sortSubstituteFml subst e)
   Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
   Measure s name e -> Measure (sortSubstitute subst s) name (sortSubstituteFml subst e)
+  Pred name es -> Pred name (map (sortSubstituteFml subst) es)
   All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   _ -> fml
   
@@ -155,11 +158,6 @@ shape (ScalarT IntT _) = ScalarT IntT ()
 shape (ScalarT BoolT _) = ScalarT BoolT ()
 shape (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ()
 shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
-
--- | Forget refinements of a schema
-polyShape :: RSchema -> SSchema
-polyShape (Monotype t) = Monotype (shape t)
-polyShape (Forall a sch) = Forall a (polyShape sch)
 
 -- | Insert weakest refinement
 refineTop :: SType -> RType
@@ -325,6 +323,7 @@ data Environment = Environment {
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types), indexed by arity
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
+  _boundPredicates :: Map Id [Sort],       -- ^ Signatures of bound abstract refinements
   _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
@@ -349,6 +348,7 @@ emptyEnv = Environment {
   _symbols = Map.empty,
   _ghosts = Map.empty,
   _boundTypeVars = [],
+  _boundPredicates = Map.empty,
   _assumptions = Set.empty,
   _shapeConstraints = Map.empty,
   _usedScrutinees = [],
@@ -396,6 +396,9 @@ addGhost name t = over ghosts (Map.insert name t)
 
 addMeasure :: Id -> MeasureDef -> Environment -> Environment
 addMeasure measureName m = over measures (Map.insert measureName m)
+
+addPredicate :: Id -> [Sort] -> Environment -> Environment
+addPredicate predName argSorts = over boundPredicates (Map.insert predName argSorts)
 
 addTypeSynonym :: Id -> RType -> Environment -> Environment
 addTypeSynonym name type' = over typeSynonyms (Map.insert name type')

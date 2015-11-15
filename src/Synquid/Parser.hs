@@ -10,8 +10,7 @@ import Data.Char
 import Data.List
 import Data.Map (Map, (!), elems, fromList)
 
-import qualified Control.Applicative as Applicative
-import Control.Applicative ((<$), (*>), (<*))
+import Control.Applicative hiding ((<|>), many)
 import Control.Monad.Except
 import Control.Monad.Identity
 
@@ -67,7 +66,7 @@ binOpTokens = fromList [(Times,     "*")
                         
 -- | Other operators         
 otherOps :: [String]
-otherOps = ["::", ":", "->", "|", "=", "??", ","] 
+otherOps = ["::", ":", "->", "|", "=", "??", ",", "."] 
 
 -- | Characters allowed in identifiers (in addition to letters and digits)
 identifierChars = "_'"
@@ -119,7 +118,7 @@ braces = Token.braces lexer
 comma = Token.comma lexer
 commaSep = Token.commaSep lexer
 commaSep1 = Token.commaSep1 lexer
-
+dot = Token.dot lexer
       
 {- Declarations -}      
 
@@ -148,7 +147,7 @@ parseConstructorDef :: Parser ConstructorDef
 parseConstructorDef = do
   ctorName <- parseTypeName
   reservedOp "::"
-  ctorType <- Monotype <$> parseType
+  ctorType <- parseSchema
   return $ ConstructorDef ctorName ctorType
 
 parseMeasureDef :: Parser Declaration
@@ -170,7 +169,7 @@ parseFuncDef :: Parser Declaration
 parseFuncDef = do
   funcName <- parseIdentifier
   reservedOp "::"
-  FuncDecl funcName . Monotype <$> parseType
+  FuncDecl funcName <$> parseSchema
 
 parseSynthesisGoal :: Parser Declaration
 parseSynthesisGoal = do
@@ -179,7 +178,23 @@ parseSynthesisGoal = do
   reservedOp "??"
   return $ SynthesisGoal goalId
   
-{- Types -}  
+{- Types -}
+
+parseSchema :: Parser RSchema
+parseSchema = parseForall <|> (Monotype <$> parseType)
+
+parseForall :: Parser RSchema
+parseForall = do
+  (p, sorts) <- angles parsePredDecl
+  dot
+  sch <- parseSchema
+  return $ ForallP p sorts sch
+  where
+    parsePredDecl = do
+      predName <- parseTypeName
+      reservedOp "::"
+      sorts <- parseSort `sepBy1` reservedOp "->"
+      return (predName, take (length sorts - 1) sorts)    
 
 parseType :: Parser RType
 parseType = choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type"
@@ -276,11 +291,16 @@ parseTerm = choice [
   , parseBoolLit
   , parseIntLit
   , parseSetLit
+  , try parsePredApp
   , varOrApp ]
   where
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
     parseSetLit = SetLit UnknownS <$> brackets (commaSep parseFormula)
+    parsePredApp = do
+      name <- parseTypeName
+      args <- many1 parseTerm
+      return $ Pred name args
     varOrApp = do
       name <- identifier
       option (Var UnknownS name) (parseTerm >>= return . Measure UnknownS name)

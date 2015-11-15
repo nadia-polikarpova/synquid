@@ -181,7 +181,8 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
     Measure b name arg -> text name <+> pretty arg -- text name <> text ":" <> pretty  b <+> pretty arg
-    All x e -> text "forall" <+> pretty x <+> text "." <+> pretty e
+    Pred name args -> text name <+> hsep (map pretty args)
+    All x e -> parens (text "forall" <+> pretty x <+> text "." <+> pretty e)
   )
   where
     n' = power fml
@@ -265,14 +266,11 @@ instance Pretty RType where
 instance Show RType where
  show = show . pretty  
  
-prettySSchema :: SSchema -> Doc
-prettySSchema (Monotype t) = pretty t
-prettySSchema (Forall a t) = angles (text a) <+> pretty t
- 
 instance Pretty SSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
-    Forall a sch' -> angles (text a) <+> pretty sch'
+    ForallT a sch' -> angles (text a) <+> text "." <+> pretty sch'
+    ForallP p sorts sch' -> angles (text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS) <+> text "." <+> pretty sch'
     
 instance Show SSchema where
  show = show . pretty      
@@ -280,7 +278,8 @@ instance Show SSchema where
 instance Pretty RSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
-    Forall a sch' -> angles (text a) <+> pretty sch'
+    ForallT a sch' -> angles (text a) <+> text "." <+> pretty sch'
+    ForallP p sorts sch' -> angles (text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS) <+> text "." <+> pretty sch'
     
 instance Show RSchema where
   show = show . pretty       
@@ -350,6 +349,7 @@ fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
+fmlNodeCount (Pred _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (All _ e) = 1 + fmlNodeCount e
 fmlNodeCount _ = 1
 
