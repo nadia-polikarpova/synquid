@@ -14,5 +14,5 @@ map :: f: (a -> b) -> xs: List a -> { List b | len _v == len xs }
 
 append :: la: List a -> lb: List a -> { List a | len _v == len la + len lb }
 
-product :: la: {List a | len _v > 0 } -> lb: {List b | len _v > 0} -> {List (Pair (a) (b)) | len _v == len la * len lb}
+product :: la: List a -> lb: List b -> {List (Pair (a) (b)) | len _v == len la * len lb}
 product = ??
