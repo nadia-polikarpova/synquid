@@ -1,0 +1,28 @@
+qualifier {x < y}
+
+measure size :: Heap a -> {Int | _v >= 0}
+measure elems :: Heap a -> Set a
+
+--============================================================================
+-- Min Heap
+--============================================================================
+data Heap a decreases size where
+	Empty :: {Heap a | size _v == 0 && elems _v == []}
+	Node :: x: a -> l: Heap {a | _v > x} -> r: Heap {a | _v > x} -> {Heap a | size _v == size l + size r + 1 && 
+                                                                                  elems _v == elems l + elems r + [x]}
+
+--============================================================================
+-- insert t x = 
+--   match t with
+--     Empty      -> Node x Empty Empty
+--     Node e l r -> if e < x
+--                   then Node e l (insert r x)
+--                   else if x < e
+--                        then Node x l (insert r e)
+--                        else t
+--
+-- args to use: -e -m=1 -a=2
+--============================================================================
+
+insert :: t: Heap a -> x: a -> {Heap a | elems _v == elems t + [x]}
+insert = ??
