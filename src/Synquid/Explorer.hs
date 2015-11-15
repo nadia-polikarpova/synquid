@@ -165,7 +165,8 @@ explore params solver goal = observeManyT 1 $ do
 
 -- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@
 generateTopLevel :: Monad s => Goal -> Explorer s RProgram
-generateTopLevel (Goal funName env (Forall a sch)) = generateTopLevel (Goal funName (addTypeVar a env) sch)
+generateTopLevel (Goal funName env (ForallT a sch)) = generateTopLevel (Goal funName (addTypeVar a env) sch)
+generateTopLevel (Goal funName env (ForallP pName pSorts sch)) = generateTopLevel (Goal funName (addPredicate pName pSorts env) sch)
 generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
   where
     generateFix = do
@@ -173,7 +174,7 @@ generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
       polymorphic <- asks $ _polyRecursion . fst
       let tvs = env ^. boundTypeVars
       let env' = if polymorphic && not (null tvs)
-                    then foldr (\(f, t') -> addPolyVariable f (foldr Forall (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
+                    then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
                     else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
       let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
       p <- local (over (_1 . context) (. ctx)) $ generateI env' t
@@ -712,7 +713,7 @@ processConstraint c = error $ show $ text "processConstraint: not a simple const
 allScalars :: Environment -> TypeSubstitution -> [Formula]
 allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
-    toFormula (_, Forall _ _) = Nothing
+    toFormula (_, ForallT _ _) = Nothing
     toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
     toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
     toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
@@ -746,7 +747,7 @@ freshId prefix = do
 freshTypeVars :: Monad s => RSchema -> Formula -> Explorer s RType
 freshTypeVars sch fml = freshTypeVars' Map.empty sch
   where
-    freshTypeVars' subst (Forall a sch) = do
+    freshTypeVars' subst (ForallT a sch) = do
       a' <- freshId "a"
       freshTypeVars' (Map.insert a (vart a' fml) subst) sch
     freshTypeVars' subst (Monotype t) = go subst t
@@ -779,7 +780,7 @@ fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |
 fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
 fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
 fmlToProgram fml@(Unary op e) = let 
-    s = fromJust $ sortOf fml 
+    s = sortOf fml 
     p = fmlToProgram e
     fun = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p) opRes)
   in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
@@ -788,7 +789,7 @@ fmlToProgram fml@(Unary op e) = let
       | op == Not = bool $ valBool |=| fnot (intVar "x")
       | otherwise = int $ valInt |=| Unary op (intVar "x")    
 fmlToProgram fml@(Binary op e1 e2) = let 
-    s = fromJust $ sortOf fml 
+    s = sortOf fml 
     p1 = fmlToProgram e1
     p2 = fmlToProgram e2
     fun1 = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))

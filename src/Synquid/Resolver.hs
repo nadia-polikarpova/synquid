@@ -91,9 +91,17 @@ resolveDeclaration (QualifierDecl quals) = mapM_ resolveQualifier quals
 {- Types -}
 
 resolveSchema :: RSchema -> Resolver RSchema
-resolveSchema (Monotype t) = do
-  t' <- resolveType t
-  return $ Foldable.foldl (flip Forall) (Monotype t') $ typeVarsOf t'
+resolveSchema sch = do
+  sch' <- resolveSchema' sch
+  return $ Foldable.foldl (flip ForallT) sch' $ typeVarsOf (toMonotype sch')
+  where
+    resolveSchema' (ForallP predName sorts sch) = do
+      oldEnv <- use environment
+      environment %= addPredicate predName sorts
+      sch' <- resolveSchema' sch
+      environment .= oldEnv
+      return $ ForallP predName sorts sch'
+    resolveSchema' (Monotype t) = Monotype <$> resolveType t
 
 resolveType :: RType -> Resolver RType
 resolveType (ScalarT baseType typeFml) = do
@@ -132,7 +140,7 @@ resolveFormula targetSort valueSort (SetLit UnknownS memberFmls) =
       [] -> return $ SetLit (elemSort targetSort) []
       (fml:fmls) -> do
         fml' <- resolveFormula (elemSort targetSort) valueSort fml
-        let newElemSort = fromJust $ sortOf fml'
+        let newElemSort = sortOf fml'
         fmls' <- mapM (resolveFormula newElemSort valueSort) fmls
         return $ SetLit newElemSort (fml':fmls')
     else throwError $ unwords ["Enountered set literal where", show targetSort, "was expected"]
@@ -171,7 +179,7 @@ resolveFormula targetSort valueSort (Unary op fml) = fmap (Unary op) $
 
 resolveFormula targetSort valueSort (Binary op l r) = do
   l' <- resolveFormula (leftSort op) valueSort l
-  let lS = fromJust $ sortOf l'
+  let lS = sortOf l'
   op' <- newOp op lS
   let (rS, resS) = rightRes op' lS
   r' <- resolveFormula rS valueSort r
@@ -228,13 +236,24 @@ resolveFormula targetSort valueSort (Measure UnknownS name argFml) = do
     Nothing -> throwError $ unwords ["Measure", name, "is undefined"]
     Just (MeasureDef (DataS dtName tVars) outSort _) -> do
       argFml' <- resolveFormula (DataS dtName $ replicate (length tVars) UnknownS) valueSort argFml
-      let (DataS _ tArgs) = fromJust $ sortOf argFml'
+      let (DataS _ tArgs) = sortOf argFml'
       let outSort' = sortSubstitute (Map.fromList $ zip (map (\(VarS a) -> a) tVars) tArgs) outSort
       if complies outSort' targetSort
         then return $ Measure outSort' name argFml'
         else throwError $ unwords ["Enountered measure", name, "where", show targetSort, "was expected"]
+        
+resolveFormula targetSort valueSort (Pred name argFmls) = 
+  if complies targetSort BoolS
+    then do
+      ps <- use $ environment . boundPredicates
+      case Map.lookup name ps of
+        Nothing -> throwError $ unwords ["Predicate", name, "is undefined"]
+        Just argSorts -> if length argFmls /= length argSorts
+                          then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate", name, "and got", show (length argFmls)]
+                          else Pred name <$> zipWithM (flip resolveFormula valueSort) argSorts argFmls
+    else throwError $ unwords ["Enountered a predicate where", show targetSort, "was expected"]
     
-resolveFormula targetSort _ fml = let s = fromJust $ sortOf fml -- Formula of a known type: check
+resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type: check
   in if complies targetSort s
     then return fml
     else throwError $ unwords ["Enountered", show s, "where", show targetSort, "was expected"]

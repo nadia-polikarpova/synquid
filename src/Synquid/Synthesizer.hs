@@ -79,9 +79,9 @@ synthesize explorerParams solverParams goal cquals tquals = do
 
     -- | Qualifier generator for types
     typeQuals = toSpace . foldl (|++|)
-      (extractQGenFromType (gEnvironment goal) (gSpec goal)) -- extract from spec
+      (extractQGenFromType (gEnvironment goal) (toMonotype $ gSpec goal)) -- extract from spec
       (map (extractTypeQGen $ gEnvironment goal) tquals ++ -- extract from given qualifiers
-      map (extractQGenFromType (gEnvironment goal)) (Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
+      map (extractQGenFromType (gEnvironment goal)) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
 
 {- Qualifier Generators -}
 
@@ -110,20 +110,16 @@ extractMatchQGen env (dtName, (DatatypeDef n ctors _)) syms = let baseCaseCtor =
     ScalarT baseT fml -> let s = toSort baseT in concatMap (\qual -> allSubstitutions env qual s [Var s valueVarName] syms) $ Set.toList (conjunctsOf fml)
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
-extractQGenFromType :: Environment -> RSchema -> [Formula] -> [Formula]
-extractQGenFromType = collect Map.empty
-  where
-    collect subst env (Forall a sch) = collect (Map.insert a UnknownS subst) env sch
-    collect subst env (Monotype t) = extractQGenFromType' subst env t
-    extractQGenFromType' subst env (ScalarT baseT fml) syms =
-      let
-        -- fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
-        -- fs = map (sortSubstituteFml subst) $ Set.toList $ conjunctsOf fml
-        fs = Set.toList $ conjunctsOf fml -- TODO: this treats polymorphic formulas incorrectly
-        extractFromBase (DatatypeT _ tArgs) = concatMap (flip (extractQGenFromType' subst env) syms) tArgs
-        extractFromBase _ = []
-      in concatMap (flip (extractTypeQGen env) syms) fs ++ extractFromBase baseT
-    extractQGenFromType' subst env (FunctionT _ tArg tRes) syms = extractQGenFromType' subst env tArg syms ++ extractQGenFromType' subst env tRes syms
+extractQGenFromType :: Environment -> RType -> [Formula] -> [Formula]
+extractQGenFromType env (ScalarT baseT fml) syms =
+  let
+    -- fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
+    -- fs = map (sortSubstituteFml subst) $ Set.toList $ conjunctsOf fml
+    fs = Set.toList $ conjunctsOf fml -- TODO: this treats polymorphic formulas incorrectly
+    extractFromBase (DatatypeT _ tArgs) = concatMap (flip (extractQGenFromType env) syms) tArgs
+    extractFromBase _ = []
+  in concatMap (flip (extractTypeQGen env) syms) fs ++ extractFromBase baseT
+extractQGenFromType env (FunctionT _ tArg tRes) syms = extractQGenFromType env tArg syms ++ extractQGenFromType env tRes syms
     
 -- | Extract conditional qualifiers from the types of Boolean functions    
 extractCondFromType :: Environment -> RType -> [Formula] -> [Formula]
@@ -135,7 +131,7 @@ extractCondFromType _ _ _ = []
 -- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
 allSubstitutions :: Environment -> Formula -> Sort -> [Formula] -> [Formula] -> [Formula]
 allSubstitutions env qual valueSort vars syms = do
-  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (fromJust $ sortOf v) (fromJust $ sortOf var)]
+  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (sortOf v) (sortOf var)]
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)
   case resolveRefinement env valueSort (substitute subst qual) of

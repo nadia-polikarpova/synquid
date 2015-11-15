@@ -57,7 +57,8 @@ data Formula =
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
   Measure Sort Id Formula |           -- ^ Measure application
-  All Formula Formula
+  Pred Id [Formula] |                 -- ^ Abstract refinement application
+  All Formula Formula                 -- ^ Universal quantification
   deriving (Eq, Ord)
   
 valueVarName = "_v"
@@ -115,6 +116,7 @@ varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
 varsOf (Measure _ _ e) = varsOf e
+varsOf (Pred _ es) = Set.unions $ map varsOf es
 varsOf (All x e) = Set.delete x (varsOf e)
 varsOf _ = Set.empty
 
@@ -146,32 +148,29 @@ conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
 conjunctsOf f = Set.singleton f
 
 -- | Base type of a term in the refinement logic
-sortOf :: Formula -> Maybe Sort
-sortOf (BoolLit _)                            = Just BoolS
-sortOf (IntLit _)                             = Just IntS
-sortOf (SetLit b es)                          = mapM_ (\e -> sortOf e >>= guard . (== b)) es >> return (SetS b)  
-sortOf (Var s _ )                             = Just s
-sortOf (Unknown _ _)                          = Just BoolS
+sortOf :: Formula -> Sort
+sortOf (BoolLit _)                               = BoolS
+sortOf (IntLit _)                                = IntS
+sortOf (SetLit b es)                             = SetS b
+sortOf (Var s _ )                                = s
+sortOf (Unknown _ _)                             = BoolS
 sortOf (Unary op e)
-  | op == Neg || op == Abs                    = (sortOf e >>= guard . (== IntS)) >> return IntS
-  | otherwise                                 = (sortOf e >>= guard . (== BoolS)) >> return BoolS
+  | op == Neg || op == Abs                       = IntS
+  | otherwise                                    = BoolS
 sortOf (Binary op e1 e2)
-  | op == Times || op == Plus || op == Minus            = do l <- sortOf e1; guard (l == IntS); r <- sortOf e2; guard (r == IntS); return IntS
-  | op == Eq  || op == Neq                              = do l <- sortOf e1; r <- sortOf e2; guard (l == r); return BoolS
-  -- | op == Lt || op == Le || op == Gt || op == Ge        = do l <- sortOf e1; guard (l == IntS); r <- sortOf e2; guard (r == IntS); return BoolS
-  | op == Lt || op == Le || op == Gt || op == Ge        = do l <- sortOf e1; r <- sortOf e2; guard (l == r); return BoolS -- make comparisons generic
-  | op == And || op == Or || op == Implies || op == Iff = do l <- sortOf e1; guard (l == BoolS); r <- sortOf e2; guard (r == BoolS); return BoolS
-  | op == Union || op == Intersect || op == Diff        = do l <- sortOf e1; guard (isSetS l); r <- sortOf e2; guard (r == l); return l
-  | op == Member                                        = do l <- sortOf e1; r <- sortOf e2; guard (r == SetS l); return BoolS 
-  | op == Subset                                        = do l <- sortOf e1; guard (isSetS l); r <- sortOf e2; guard (r == l); return BoolS
-sortOf (Measure s _ _)                    = Just $ s
-sortOf (All x e)                          = (sortOf e >>= guard . (== BoolS)) >> return BoolS
+  | op == Times || op == Plus || op == Minus     = IntS
+  | op == Union || op == Intersect || op == Diff = sortOf e1
+  | otherwise                                    = BoolS
+sortOf (Measure s _ _)                           = s
+sortOf (Pred _ _)                                = BoolS
+sortOf (All x e)                                 = BoolS
 
 isExecutable :: Formula -> Bool
 isExecutable (SetLit _ _) = False
 isExecutable (Unary _ e) = isExecutable e
 isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
 isExecutable (Measure _ _ _) = False
+isExecutable (Pred _ _) = False
 isExecutable (All _ _) = False
 isExecutable _ = True
   
@@ -186,6 +185,7 @@ substitute subst fml = case fml of
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
   Measure b name arg -> Measure b name (substitute subst arg)
+  Pred name args -> Pred name $ map (substitute subst) args
   All v@(Var _ x) e -> if x `Map.member` subst
                             then error $ unwords ["Scoped variable clashes with substitution variable", x]
                             else All v (substitute subst e)
