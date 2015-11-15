@@ -253,7 +253,7 @@ data BareProgram r =
   PSymbol Id |                            -- ^ Symbol (variable or constant)
   PApp (Program r) (Program r) |          -- ^ Function application
   PFun Id (Program r) |                   -- ^ Lambda abstraction
-  PIf Formula (Program r) (Program r) |   -- ^ Conditional
+  PIf (Program r) (Program r) (Program r) |   -- ^ Conditional
   PMatch (Program r) [Case r] |           -- ^ Pattern match on datatypes
   PFix [Id] (Program r)                   -- ^ Fixpoint  
   deriving (Eq, Ord)
@@ -287,7 +287,7 @@ programSubstituteTypes subst (Program p t) = Program (programSubstituteTypes' p)
     programSubstituteTypes' (PSymbol name) = PSymbol name
     programSubstituteTypes' (PApp fun arg) = PApp (pst fun) (pst arg)
     programSubstituteTypes' (PFun name p) = PFun name (pst p)    
-    programSubstituteTypes' (PIf fml p1 p2) = PIf fml (pst p1) (pst p2)
+    programSubstituteTypes' (PIf c p1 p2) = PIf (pst c) (pst p1) (pst p2)
     programSubstituteTypes' (PMatch scr cases) = PMatch (pst scr) (map (\(Case ctr args p) -> Case ctr args (pst p)) cases)
     programSubstituteTypes' (PFix args p) = PFix args (pst p)
 
@@ -300,7 +300,7 @@ programApplySolution sol (Program p t) = Program (programApplySolution' p) (type
     programApplySolution' (PSymbol name) = PSymbol name
     programApplySolution' (PApp fun arg) = PApp (pas fun) (pas arg)
     programApplySolution' (PFun name p) = PFun name (pas p)    
-    programApplySolution' (PIf fml p1 p2) = PIf (applySolution sol fml) (pas p1) (pas p2)
+    programApplySolution' (PIf c p1 p2) = PIf (pas c) (pas p1) (pas p2)
     programApplySolution' (PMatch scr cases) = PMatch (pas scr) (map (\(Case ctr args p) -> Case ctr args (pas p)) cases)
     programApplySolution' (PFix args p) = PFix args (pas p)
     
@@ -313,7 +313,7 @@ programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteS
     programSubstituteSymbol' (PSymbol x) = if x == name then content subterm else p
     programSubstituteSymbol' (PApp fun arg) = PApp (pss fun) (pss arg)
     programSubstituteSymbol' (PFun name pBody) = PFun name (pss pBody)    
-    programSubstituteSymbol' (PIf fml p1 p2) = PIf fml (pss p1) (pss p2)
+    programSubstituteSymbol' (PIf c p1 p2) = PIf (pss c) (pss p1) (pss p2)
     programSubstituteSymbol' (PMatch scr cases) = PMatch (pss scr) (map (\(Case ctr args pBody) -> Case ctr args (pss pBody)) cases)
     programSubstituteSymbol' (PFix args pBody) = PFix args (pss pBody)
 
@@ -461,8 +461,8 @@ embedding env subst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls 
     embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
       else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) (fml : allMeasurePostconditions baseT env)
-    embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants
-    
+    embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants    
+        
 {- Misc -}
           
 -- | Typing constraints

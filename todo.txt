@@ -1,10 +1,7 @@
-- Memoization
-	- How to transform cached results when adding more assumptions? Having a weaker/stronger spec?
-	- Symmetry analysis: if a function result type is symmetric in values of arg, then we can cut the symmetry
 - Abstract refinements	
-- When abduced condition is not computtional, turn in into an aux goal	
 - Type classes (to help instantiate qualifiers)	
 - Multisets and sequences
+- Memoization: remove subsumed components?
 
 - LFP solver for when CA is not required?
 - Bring symbolic search back? (Just for scalars?)

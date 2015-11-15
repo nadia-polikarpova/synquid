@@ -73,19 +73,7 @@ class SynthesisResult:
 def run_benchmark(name, opts):
     print name,
 
-    with open(LOGFILE_NAME, 'a+') as logfile:
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([synquid_path] + COMMON_OPTS + opts + ['-u=False'] + [name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
-
-      print '{0:0.2f}'.format(end - start),
-      if return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      else:
-          results [name] = SynthesisResult(name, (end - start))
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-          
+    with open(LOGFILE_NAME, 'a+') as logfile:          
       start = time.time()
       logfile.seek(0, os.SEEK_END)
       return_code = call([synquid_path] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)

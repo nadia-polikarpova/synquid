@@ -70,7 +70,9 @@ synthesize explorerParams solverParams goal cquals tquals = do
     putMemo = put
 
     -- | Qualifier generator for conditionals
-    condQuals = toSpace . foldl (|++|) (const []) (map (extractCondQGen $ gEnvironment goal) cquals)
+    condQuals = toSpace . foldl (|++|) (const []) 
+      (map (extractCondQGen $ gEnvironment goal) cquals ++
+       map (extractCondFromType (gEnvironment goal)) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal))
 
     matchQuals = let env = gEnvironment goal
       in toSpace . foldl (|++|) (const []) (map (extractMatchQGen env) (Map.toList $ env ^. datatypes))
@@ -122,6 +124,13 @@ extractQGenFromType = collect Map.empty
         extractFromBase _ = []
       in concatMap (flip (extractTypeQGen env) syms) fs ++ extractFromBase baseT
     extractQGenFromType' subst env (FunctionT _ tArg tRes) syms = extractQGenFromType' subst env tArg syms ++ extractQGenFromType' subst env tRes syms
+    
+-- | Extract conditional qualifiers from the types of Boolean functions    
+extractCondFromType :: Environment -> RType -> [Formula] -> [Formula]
+extractCondFromType env t@(FunctionT _ _ _) syms = case lastType t of
+  ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName -> allSubstitutions env fml UnknownS (Set.toList $ varsOf fml) syms
+  _ -> []
+extractCondFromType _ _ _ = []  
 
 -- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
 allSubstitutions :: Environment -> Formula -> Sort -> [Formula] -> [Formula] -> [Formula]
