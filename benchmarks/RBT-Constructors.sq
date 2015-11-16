@@ -1,0 +1,48 @@
+qualifier {x < y, x == y}
+
+measure size        :: RBT a -> {Int | _v >= 0}
+measure elems       :: RBT a -> Set a
+measure isRed       :: RBT a -> Bool 
+measure blackHeight :: RBT a -> Int
+
+type Color = {Int | _v == 0 || _v == 1}
+
+data RBT a decreases size where
+    Empty :: {RBT a | size _v == 0 && 
+              elems _v == [] && 
+              !isRed _v &&                 -- nils (empty nodes) must be black
+              blackHeight _v == 0}         -- black-height of nils is 0
+    Node  :: x: a -> 
+             color: Color -> 
+             left:  {RBT {a | _v < x} | color == 1 ==> !isRed _v} ->                 -- left keys are less than this key; a red node must have black children
+             right: {RBT {a | _v > x} | (color == 1 ==> !isRed _v) &&                -- right keys are greater than this key; a red node must have black children; 
+                                        (blackHeight _v == blackHeight left)} ->     -- blackHeight the same as of left
+             {RBT a | size _v == size left + size right + 1 && 
+                      elems _v == elems left + elems right + [x] && 
+                      (!isRed _v ==> (blackHeight _v == blackHeight left + 1)) &&    -- if black ==> black-height is black-height of sub + 1
+                      (isRed _v ==> (blackHeight _v == blackHeight left)) &&         -- if red   ==> black-height is black-height of sub
+                      (isRed _v <==> color == 1)}                   
+                      
+
+black :: {Int | _v == 0}
+red   :: {Int | _v == 1}
+
+--============================================================================
+-- Constructors taking 2, 3, 4 nodes.
+--
+-- args used: -e -m=0 -a=2
+--============================================================================
+
+singleton :: x: a -> {RBT a | elems _v == [x] && isRed _v}
+singleton = ??
+
+dupleton :: x: a -> y: a -> {RBT a | elems _v == [x, y]}
+dupleton = ??
+
+tripleton :: x: a -> y: a -> z: a -> {RBT a | elems _v == [x, y, z]}
+tripleton = ??
+
+-- very slow
+-- quadrupleton :: x: a -> y: a -> z: a -> u: a -> {RBT a | elems _v == [x, y, z, u]}
+-- quadrupleton = ?? 
+
