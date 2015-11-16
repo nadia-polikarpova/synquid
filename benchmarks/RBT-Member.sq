@@ -2,8 +2,10 @@ qualifier {x < y, x == y}
 
 type Color = {Int | _v == 0 || _v == 1}
 
-black :: {Int | _v == 0}
-red   :: {Int | _v == 1}
+black :: {Int  | _v == 0}
+red   :: {Int  | _v == 1}
+true  :: {Bool | _v}
+false :: {Bool | !_v} -- TODO(BUG): when this line is commented out, this gets printed out: "Sorts (Array Int Bool) and (Array Bool Bool) are incompatible"
 
 measure size        :: RBT a -> {Int | _v >= 0}
 measure elems       :: RBT a -> Set a
@@ -27,30 +29,21 @@ data RBT a decreases size where
                       (isRed _v <==> color == 1)}                   
 
 --======================================================================
--- Takes two RBTs split around a pivot point, and returns a new RBT
--- that contains the pivot point as well as the elements from both
--- input RBTs.
+-- Solution:
 --
--- Using this function to synthesize insert is a bit too much of a cheat,
--- since this function is really no simpler than insert.  In the RBT'
--- example, this function is relaxed, so that it actually matches
--- the Leon implementation.
---======================================================================
-balance :: x: a -> c: Color -> l: RBT {a | _v < x} -> r: RBT {a | _v > x} -> {RBT a | elems _v == elems l + elems r + [x]}
-
---======================================================================
--- insert x t =
+-- member = x t
 --   match t with
---     Empty -> Node x red Empty Empty
---     Node e c l r -> if x == e
---                     then t
---                     else if e < x
---                          then balance e c l (insert x r)
---                          else balance e c (insert x l) r
+--     Empty -> false
+--     Node e c l r -> if e == x
+--                     then true
+--                     else if x < e
+--                          then member x l
+--                          else member x r
 --
--- args used: -e -m=1 -a=2
--- time: 1m38s (on aleks's X1 Carbon)
+-- args used       : -e -m=1 -a=2
+-- components used : none
+-- time            : 3s (on aleks's X1 Carbon)
 --======================================================================
 
-insert :: x: a -> t: RBT a -> {RBT a | elems _v == elems t + [x]}
-insert = ??
+member :: x: a -> t: RBT a -> {Bool | _v <==> (x in elems t)}
+member = ??
