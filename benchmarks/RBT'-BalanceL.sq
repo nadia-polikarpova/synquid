@@ -1,0 +1,89 @@
+--==========================================================================================
+-- running the whole file should take ~1m30s
+--
+-- This doesn't look killer, but it won't hurt. 
+--
+-- Syntesizing 'balance' at once would require at least 4 matches, so not sure whether that
+-- would scale (not tried it though).
+--==========================================================================================
+
+qualifier {x == y}
+
+type Color = {Int | _v == 0 || _v == 1}
+
+black :: {Int | _v == 0}
+red   :: {Int | _v == 1}
+
+measure size               :: RBT' a -> {Int | _v >= 0}
+measure elems              :: RBT' a -> Set a
+measure isRed              :: RBT' a -> Bool 
+measure blackHeight        :: RBT' a -> Int
+measure redsHaveBlacks     :: RBT' a -> Bool
+measure descRedsHaveBlacks :: RBT' a -> Bool
+
+--==========================================================================================
+-- RBT' is like real RBT just without the "Red node has black children" constraint. Instead
+-- of encoding it as an invariant, that particular constraint is encoded as a measure, so
+-- that only select functions can decide to enforce it in their postconditions.
+--==========================================================================================
+data RBT' a decreases size where
+    Empty :: {RBT' a | size _v == 0          && 
+                       elems _v == []        && 
+                       !isRed _v             &&         -- nils (empty nodes) must be black
+                       redsHaveBlacks _v     &&         -- neither red nor has any children, thus, true
+                       descRedsHaveBlacks _v &&         -- has no children, thus, true
+                       blackHeight _v == 0}             -- black-height of nils is 0 (could be 1, doesn't matter)
+    Node  :: x: a -> 
+             color: Color -> 
+             left:  RBT' {a | _v < x} ->                                              -- left keys are less than this key
+             right: {RBT' {a | _v > x} | (blackHeight _v == blackHeight left)} ->     -- right keys are greater than this key; blackHeight the same as of left
+             {RBT' a | size _v == size left + size right + 1 && 
+                       elems _v == elems left + elems right + [x] && 
+                       (!isRed _v ==> (blackHeight _v == blackHeight left + 1)) &&    -- if black ==> black-height is black-height of sub + 1
+                       (isRed  _v ==> (blackHeight _v == blackHeight left)) &&        -- if red   ==> black-height is black-height of sub
+                       (!isRed _v ==> (redsHaveBlacks _v <==> (redsHaveBlacks left && redsHaveBlacks right))) &&
+                       (isRed  _v ==> (redsHaveBlacks _v <==> (!isRed left && !isRed left && redsHaveBlacks left && redsHaveBlacks right))) &&
+                       (descRedsHaveBlacks _v <==> (descRedsHaveBlacks left && descRedsHaveBlacks right)) &&
+                       (isRed _v <==> color == 1)}                   
+
+--==========================================================================================
+-- Should try to figure out the first two cases, i.e., 
+--
+--       B                R         |       B                R
+--      / \             /   \       |      / \             /   \
+--     R  pr           B     B      |     R  pr           B     B
+--    / \     --->    / \   / \     |    / \     --->    / \   / \
+--   R  nr          cl  cr nr  pr   |   nl  R           nl cl cr pr
+--  / \                             |      / \
+-- cl cr                            |     cl cr
+--
+-- Times out after 6 hours or so.
+--
+-- Expected solution (something like)
+-- 
+-- balanceL x c l r =
+--   match l with
+--   | Empty -> error
+--   | Node lx lc ll lr -> match ll with
+--                         | Empty -> match lr with
+--                                    | Empty -> Node x c l r
+--                                    | Node rx rc rl rr -> if rc == black
+--                                                          then error
+--                                                          else Node rx red (Node lx black ll rl) (Node x black rr r)
+--                         | Node llx llc lll llr -> if llc == black
+--                                                   then match lr with
+--                                                        | Empty -> error
+--                                                        | Node ... -> (similar to the previous match on lr)
+--                                                   else Node lx red (Node llx black lll llr) (Node x black lr r)
+-- 
+-- args used       : -e -m=4 -a=2
+-- components used : none
+-- time            : to
+--==========================================================================================
+
+balanceL :: x: a -> 
+            c: black -> 
+            l: {RBT' {a | _v < x} | isRed _v && descRedsHaveBlacks _v} -> 
+            r: {RBT' {a | _v > x} | isRed _v && redsHaveBlacks _v && blackHeight _v == blackHeight l} -> 
+            {RBT' a | elems _v == elems l + elems r + [x] && isRed _v && redsHaveBlacks _v}
+balanceL = ??
