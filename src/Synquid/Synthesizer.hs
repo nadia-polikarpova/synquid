@@ -107,7 +107,7 @@ extractTypeQGen env qual (val@(Var s valName) : syms) =
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 extractCondQGen env qual syms = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
 
-extractMatchQGen env (dtName, (DatatypeDef n ctors _)) syms = let baseCaseCtor = head ctors
+extractMatchQGen env (dtName, (DatatypeDef _ _ ctors _)) syms = let baseCaseCtor = head ctors
   in case toMonotype $ allSymbols env Map.! baseCaseCtor of
     FunctionT _ _ _ -> [] -- not supported
     ScalarT baseT fml -> let s = toSort baseT in concatMap (\qual -> allSubstitutions env qual s [Var s valueVarName] syms) $ Set.toList (conjunctsOf fml)
@@ -119,7 +119,12 @@ extractQGenFromType env (ScalarT baseT fml) syms =
     -- fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
     -- fs = map (sortSubstituteFml subst) $ Set.toList $ conjunctsOf fml
     fs = Set.toList $ conjunctsOf fml -- TODO: this treats polymorphic formulas incorrectly
-    extractFromBase (DatatypeT _ tArgs) = concatMap (flip (extractQGenFromType env) syms) tArgs
+    replaceWithValueVar pArg = let lastVar = last $ Set.toList $ varsOf pArg
+      in substitute (Map.singleton (varName lastVar) (Var (sortOf lastVar) valueVarName)) pArg    
+    extractFromBase (DatatypeT _ tArgs pArgs) = 
+      let
+        ps = Set.toList $ Set.unions (map (conjunctsOf . replaceWithValueVar) pArgs)
+      in concatMap (flip (extractQGenFromType env) syms) tArgs ++ concatMap (flip (extractTypeQGen env) syms) ps
     extractFromBase _ = []
   in concatMap (flip (extractTypeQGen env) syms) fs ++ extractFromBase baseT
 extractQGenFromType env (FunctionT _ tArg tRes) syms = extractQGenFromType env tArg syms ++ extractQGenFromType env tRes syms

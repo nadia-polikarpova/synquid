@@ -224,7 +224,7 @@ generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
     -- | If argument is recursible, return its strict and non-strict termination refinements, otherwise @Nothing@
     terminationRefinement argName (ScalarT IntT fml) = Just ( valInt |>=| IntLit 0  |&|  valInt |<| intVar argName,
                                                               valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
-    terminationRefinement argName (ScalarT dt@(DatatypeT name tArgs) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
+    terminationRefinement argName (ScalarT dt@(DatatypeT name _ _) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just mName -> let MeasureDef inSort outSort _ = (env ^. measures) Map.! mName
                         metric = Measure outSort mName
@@ -291,7 +291,7 @@ generateMatch env t = do
                                   $ generateE env (vartAll a) -- Generate a scrutinee of an arbitrary type
 
       case typeOf pScrutinee of
-        (ScalarT (DatatypeT scrDT _) _) -> do -- Type of the scrutinee is a datatype
+        (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
 
           let scrutineeSymbols = symbolList pScrutinee
@@ -373,7 +373,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
     generateMatchesFor env [] pBaseCase t = return pBaseCase
     generateMatchesFor env (matchCond : rest) pBaseCase t = do
       let matchVar@(Var _ x) = Set.findMin $ varsOf matchCond
-      let scrT@(ScalarT (DatatypeT scrDT _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+      let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       pBaseCase' <- once $ local (over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t)) $
@@ -382,7 +382,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
 
     generateKnownMatch :: Monad s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram
     generateKnownMatch env var@(Var s x) pBaseCase t = do
-      let scrT@(ScalarT (DatatypeT scrDT _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+      let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       let env' = addScrutinee pScrutinee env
@@ -457,8 +457,10 @@ checkE env typ p = do
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
   solveConstraints p
   where
-    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs) fml) = ScalarT (DatatypeT name $ map (removeDependentRefinements argNames) typeArgs) (if varsOf fml `disjoint` argNames then fml else ffalse)
-    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (if varsOf fml `disjoint` argNames then fml else ffalse)
+    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
+      ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
+    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (removeFrom argNames fml)
+    removeFrom argNames fml = if varsOf fml `disjoint` argNames then fml else ffalse
 
 enumerateAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
@@ -498,7 +500,7 @@ enumerateAt env typ 0 = do
       then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
       else instantiate env sch ftrue
 
-    soleConstructor (ScalarT (DatatypeT name args) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
+    soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
           then Just (head ctors, allSymbols env Map.! (head ctors))
           else Nothing
@@ -637,10 +639,14 @@ simplifyConstraint' _ c@(Subtype env t (ScalarT (TypeVarT a) _) _)
   | not (isBound a env) = unify c env a t
 
 -- Compound types: decompose
-simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs)) fml) (ScalarT (DatatypeT name' (tArg':tArgs')) fml') consistent)
+simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml) (ScalarT (DatatypeT name' (tArg':tArgs') pArgs') fml') consistent)
   = do
       simplifyConstraint (Subtype env tArg tArg' consistent)
-      simplifyConstraint (Subtype env (ScalarT (DatatypeT name tArgs) fml) (ScalarT (DatatypeT name' tArgs') fml') consistent)
+      simplifyConstraint (Subtype env (ScalarT (DatatypeT name tArgs pArgs) fml) (ScalarT (DatatypeT name' tArgs' pArgs') fml') consistent)
+simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name [] (pArg:pArgs)) fml) (ScalarT (DatatypeT name' [] (pArg':pArgs')) fml') consistent)
+  = do
+      simplifyConstraint (Subtype emptyEnv (int $ pArg) (int $ pArg') consistent) -- Is this a cheat?
+      simplifyConstraint (Subtype env (ScalarT (DatatypeT name [] pArgs) fml) (ScalarT (DatatypeT name' [] pArgs') fml') consistent)      
 simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False)
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
@@ -651,10 +657,10 @@ simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 
       -- simplifyConstraint (Subtype env tArg2 tArg1 False)
       -- writeLog 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1)
       simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg2 tRes1) tRes2 True)
-simplifyConstraint' _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs)) fml))
+simplifyConstraint' _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
   = do
       simplifyConstraint (WellFormed env tArg)
-      simplifyConstraint (WellFormed env (ScalarT (DatatypeT name tArgs) fml))
+      simplifyConstraint (WellFormed env (ScalarT (DatatypeT name tArgs pArgs) fml))
 simplifyConstraint' _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)
@@ -674,10 +680,8 @@ unify c env a t = if a `Set.member` typeVarsOf t
   else do
     t' <- fresh env t
     writeLog 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
-    -- addConstraint $ WellFormed env t'
     addTypeAssignment a t'
     simplifyConstraint c
-
 
 -- | Convert simple constraint to horn clauses and qualifier maps
 processConstraint :: Monad s => Constraint -> Explorer s ()
@@ -755,7 +759,7 @@ allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
 allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
-    toFormula (x, Monotype t@(ScalarT b@(DatatypeT _ _) _)) =
+    toFormula (x, Monotype t@(ScalarT b@(DatatypeT _ _ _) _)) =
       if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
         then Just $ Var (toSort b) x
         else Nothing
@@ -801,17 +805,26 @@ fresh env (ScalarT (TypeVarT a) _)
   | not (isBound a env) = do
   a' <- freshId "a"
   return $ ScalarT (TypeVarT a') ftrue
-fresh env (ScalarT (DatatypeT name tArgs) _) = do
+fresh env (ScalarT (DatatypeT name tArgs pArgs) _) = do
   k <- freshId "u"
   tArgs' <- mapM (fresh env) tArgs
-  return $ ScalarT (DatatypeT name tArgs') (Unknown Map.empty k)
+  pArgs' <- mapM freshPred pArgs  
+  return $ ScalarT (DatatypeT name tArgs' pArgs') (Unknown Map.empty k)
 fresh env (ScalarT baseT _) = do
   k <- freshId "u"
   return $ ScalarT baseT (Unknown Map.empty k)
 fresh env (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
+  
+freshPred fml = do
+  p' <- freshId "P"  
+  let args = Set.toList $ varsOf fml -- ToDo: relying on the fact that we always use deBrujns and they will be ordered properly: is that true?
+  return $ Pred p' args
 
-matchConsType (ScalarT (DatatypeT d vars) _) (ScalarT (DatatypeT d' args) _) | d == d' = zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
+matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args pArgs) _) | d == d' 
+  = do
+      zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
+      zipWithM_ (\(Pred p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType _ _ = mzero
 
 fmlToProgram :: Formula -> RProgram

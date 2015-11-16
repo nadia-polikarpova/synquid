@@ -24,7 +24,6 @@ BENCHMARKS = [
     ('Int-Max4', []),
     ('Int-Max5', []),
     ('Int-Add', []),
-    ('Int-Max-Abstract', []),
     # Lists
     ('List-Null', []),
     ('List-Elem', []),
@@ -70,6 +69,13 @@ BENCHMARKS = [
     ('BinHeap-Member', []),
 ]
 
+ABS_BENCHMARKS = [
+    # Integers
+    ('Int-Max', []),
+    # Insertion Sort
+    ('IncList-Insert', []),
+]
+
 class SynthesisResult:
     def __init__(self, name, time):
         self.name = name
@@ -78,13 +84,13 @@ class SynthesisResult:
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', '
 
-def run_benchmark(name, opts):
+def run_benchmark(name, opts, path=''):
     print name,
 
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
       logfile.seek(0, os.SEEK_END)
-      return_code = call([synquid_path] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
+      return_code = call([synquid_path] + COMMON_OPTS + opts + [path + name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.time()
 
       print '{0:0.2f}'.format(end - start),
@@ -102,7 +108,16 @@ def postprocess():
                 res = results [name]
                 outfile.write ('{0:0.2f}'.format(res.time))
                 outfile.write (',')
-            outfile.write ('\n')
+            outfile.write ('\n')        
+            
+        for (short_name, args) in ABS_BENCHMARKS:
+            name = short_name + '-Abs' 
+            outfile.write (name + ',')
+            if name in results:
+                res = results [name]
+                outfile.write ('{0:0.2f}'.format(res.time))
+                outfile.write (',')
+            outfile.write ('\n')            
 
     if os.path.isfile(oracle_name):
         fromlines = open(oracle_name).readlines()
@@ -127,6 +142,9 @@ if __name__ == '__main__':
 
     for (name, args) in BENCHMARKS:
         run_benchmark(name, args)
+    print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Abstract refinements' + Style.RESET_ALL
+    for (name, args) in ABS_BENCHMARKS:
+        run_benchmark(name, args, 'abstract/')    
 
     postprocess()
 

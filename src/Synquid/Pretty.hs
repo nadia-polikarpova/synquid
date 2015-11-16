@@ -211,13 +211,13 @@ instance Pretty SBaseType where
   pretty IntT = text "Int"
   pretty BoolT = text "Bool"    
   pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
-  pretty (DatatypeT name tArgs) = text name <+> hsep (map (parens . pretty) tArgs)
+  pretty (DatatypeT name tArgs pArgs) = text name <+> hsep (map (parens . pretty) tArgs) <+> hsep (map (angles . pretty) pArgs)
   
 instance Pretty RBaseType where
   pretty IntT = text "Int"
   pretty BoolT = text "Bool"    
   pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
-  pretty (DatatypeT name tArgs) = text name <+> hsep (map (parens . pretty) tArgs)
+  pretty (DatatypeT name tArgs pArgs) = text name <+> hsep (map (parens . pretty) tArgs) <+> hsep (map (angles . pretty) pArgs)
   
 instance Show RBaseType where
   show = show . pretty
@@ -332,10 +332,15 @@ instance Show Goal where
 instance Pretty ConstructorDef where
   pretty (ConstructorDef name t) = text name <+> text "::" <+> pretty t
   
+instance Pretty PredDecl where
+  pretty (PredDecl p sorts) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
+  
 instance Pretty Declaration where
   pretty (TypeDecl name t) = text "type" <+> text name <+> text "=" <+> pretty t
+  pretty (QualifierDecl fmls) = text "qualifier" <+> braces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> text "::" <+> pretty t
-  pretty (DataDecl name typeVars wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>
+  pretty (DataDecl name typeVars predParams wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>
+                                                            hsep (map pretty predParams) <+>
                                                             optionMaybe wfMetricMb (\m -> text "decreases" <+> text m) <+> text "where") $+$
                                                             vsep (map pretty ctors) 
   pretty (MeasureDecl name inSort outSort post) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->" 
@@ -356,7 +361,7 @@ fmlNodeCount _ = 1
 
 -- | 'typeNodeCount' @t@ : cumulative size of all refinements in @t@
 typeNodeCount :: RType -> Int 
-typeNodeCount (ScalarT (DatatypeT _ tArgs) fml) = fmlNodeCount fml + sum (map typeNodeCount tArgs)
+typeNodeCount (ScalarT (DatatypeT _ tArgs pArgs) fml) = fmlNodeCount fml + sum (map typeNodeCount tArgs) + sum (map fmlNodeCount pArgs)
 typeNodeCount (ScalarT _ fml) = fmlNodeCount fml
 typeNodeCount (FunctionT _ tArg tRes) = typeNodeCount tArg + typeNodeCount tRes 
 
