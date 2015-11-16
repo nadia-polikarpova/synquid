@@ -64,6 +64,8 @@ BENCHMARKS = [
     ('BST-Member', []),
     ('BST-Insert', []),
     ('BST-Sort', []),
+    # works with: -m=2 -e (fast), -m=2 slower
+    ('BST-Delete', ['-m=1', '-e', '-a=2']),
     # Binary heap
     ('BinHeap-Member', []),
 ]
