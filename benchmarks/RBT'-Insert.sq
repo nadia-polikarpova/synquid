@@ -42,15 +42,17 @@ balance :: x: a -> c: Color -> l: RBT' {a | _v < x} -> r: RBT' {a | _v > x} -> {
 -- it was before the insertion. Consequently, it is sufficient to create a RED node and 
 -- insert it at an appropriate leaf position. 
 --------------------------------------------------------------------------------------------
--- bstIns = x t
---   match t with
---     Empty -> Node x red Empty Empty
---     Node e c l r -> if x == e
---                     then t
---                     else if e < x
---                          then Node e c l (bstIns x r)
---                          else Node e (bstIns x l) r
+-- Solution:
 --
+--   bstIns = x t
+--     match t with
+--       Empty -> Node x red Empty Empty
+--       Node e c l r -> if x == e
+--                       then t
+--                       else if e < x
+--                            then Node e c l (bstIns x r)
+--                            else Node e (bstIns x l) r
+--  
 -- args used       : -e -m=1 -a=2
 -- components used : none (adding balance makes it take longer, but still works)
 -- time            : 38s (on aleks's X1 Carbon)
