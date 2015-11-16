@@ -5,6 +5,7 @@ module Synquid.Parser where
 
 import Synquid.Logic
 import Synquid.Program
+import Synquid.Util
 
 import Data.Char
 import Data.List
@@ -194,7 +195,7 @@ parseForall = do
       predName <- parseTypeName
       reservedOp "::"
       sorts <- parseSort `sepBy1` reservedOp "->"
-      return (predName, take (length sorts - 1) sorts)    
+      return (predName, init sorts)    
 
 parseType :: Parser RType
 parseType = choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type"
@@ -286,24 +287,26 @@ parseFormula = buildExpressionParser exprTable parseTerm <?> "refinement term"
     binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (Binary op)) assoc
 
 parseTerm :: Parser Formula
-parseTerm = choice [
-    parens parseFormula
-  , parseBoolLit
-  , parseIntLit
-  , parseSetLit
-  , try parsePredApp
-  , varOrApp ]
+parseTerm = try parseAppTerm <|> parseAtomTerm
   where
+    parseAppTerm = parsePredApp <|> parseMeasureApp
+    parseAtomTerm = choice [
+        parens parseFormula
+      , parseBoolLit
+      , parseIntLit
+      , parseSetLit
+      , Var UnknownS <$> identifier ]
+      
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
     parseSetLit = SetLit UnknownS <$> brackets (commaSep parseFormula)
     parsePredApp = do
       name <- parseTypeName
-      args <- many1 parseTerm
+      args <- many1 parseAtomTerm
       return $ Pred name args
-    varOrApp = do
+    parseMeasureApp = do
       name <- identifier
-      option (Var UnknownS name) (parseTerm >>= return . Measure UnknownS name)
+      parseAtomTerm >>= return . Measure UnknownS name
       
 {- Misc -}      
 

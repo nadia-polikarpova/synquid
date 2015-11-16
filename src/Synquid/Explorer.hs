@@ -70,6 +70,7 @@ data ExplorerState = ExplorerState {
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints since the last liquid assignment refinement
   _consistencyChecks :: [Formula],              -- ^ Consistency clauses generated from incomplete subtyping constraints since the last liquid assignment refinement
   _typeAssignment :: TypeSubstitution,          -- ^ Current assignment to free type variables
+  _predAssignment :: Substitution,              -- ^ Current assignment to free predicate variables
   _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
   _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
   _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
@@ -99,7 +100,6 @@ instance Ord ExplorerState where
 
 instance Pretty ExplorerState where
   pretty st = hMapDoc pretty pretty $ _idCount st
-
 
 -- | Key in the memoization store
 data MemoKey = MemoKey {
@@ -131,6 +131,7 @@ data ConstraintSolver s = ConstraintSolver {
 -- | Impose typing constraint @c@ on the programs
 addConstraint c = typingConstraints %= (c :)
 addTypeAssignment tv t = typeAssignment %= Map.insert tv t
+addPredAssignment p fml = predAssignment %= Map.insert p fml
 addHornClause fml = hornClauses %= (fml :)
 addConsistencyCheck fml = consistencyChecks %= (fml :)
 
@@ -142,7 +143,7 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolve
 explore :: Monad s => ExplorerParams -> ConstraintSolver s -> Goal -> s [RProgram]
 explore params solver goal = observeManyT 1 $ do
     initCand <- lift $ csInit solver
-    runReaderT (evalStateT go (ExplorerState Map.empty [] Map.empty [] [] Map.empty [initCand] [] Map.empty)) (params, solver)
+    runReaderT (evalStateT go (ExplorerState Map.empty [] Map.empty [] [] Map.empty Map.empty [initCand] [] Map.empty)) (params, solver)
   where
     go :: Monad s => Explorer s RProgram
     go = do
@@ -283,6 +284,7 @@ generateMatch env t = do
     then mzero
     else do
       a <- freshId "a"
+      addConstraint $ WellFormed env (vart a ftrue)
       (env', pScrutinee) <- local (
                                     over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params)
                                   . over (_1 . context) (. \p -> Program (PMatch p []) t))
@@ -310,7 +312,7 @@ generateCase env scrName pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- freshTypeVars consSch ftrue
+      consT <- instantiate env consSch ftrue
       matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)
       (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment
@@ -463,11 +465,10 @@ enumerateAt env typ 0 = do
   case soleConstructor (lastType typ) of
     Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
       guard $ arity (toMonotype sch) == arity typ
-      t <- instantiate sch
-      pickSymbol (name, t)
+      pickSymbol (name, sch)
 
     Nothing -> do
-      symbols <- Map.toList <$> T.mapM instantiate (symbolsOfArity (arity typ) env)
+      let symbols = Map.toList $ symbolsOfArity (arity typ) env
       useCounts <- use symbolUseCount
       let symbols' = if arity typ == 0
                         then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
@@ -476,25 +477,26 @@ enumerateAt env typ 0 = do
       msum $ map pickSymbol symbols'
 
   where
-    pickSymbol (name, t) = let p = Program (PSymbol name) (symbolType name t) in
-      do
-        ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
-        symbolUseCount %= Map.insertWith (+) name 1
-        case Map.lookup name (env ^. shapeConstraints) of
-          Nothing -> return ()
-          Just sh -> do
-            addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
-            solveConstraints p
-        return (env, p)
+    pickSymbol (name, sch) = do
+      t <- freshInstance sch
+      let p = Program (PSymbol name) (symbolType name t)
+      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
+      symbolUseCount %= Map.insertWith (+) name 1
+      case Map.lookup name (env ^. shapeConstraints) of
+        Nothing -> return ()
+        Just sh -> do
+          addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
+          solveConstraints p
+      return (env, p)
         
     symbolType x t@(ScalarT b _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
       | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
     symbolType _ t = t        
 
-    instantiate sch = if arity (toMonotype sch) == 0
-      then freshTypeVars sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
-      else freshTypeVars sch ftrue
+    freshInstance sch = if arity (toMonotype sch) == 0
+      then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
+      else instantiate env sch ftrue
 
     soleConstructor (ScalarT (DatatypeT name args) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
@@ -576,6 +578,8 @@ solveConstraints p = do
       cs <- use typingConstraints
       typingConstraints .= []
       mapM_ processConstraint cs
+      pass' <- use predAssignment
+      writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')
 
     -- | Refine the current liquid assignments using the horn clauses
     solveHornClauses = do
@@ -600,7 +604,8 @@ solveConstraints p = do
 
 isEnvironmentInconsistent env = do
   tass <- use typeAssignment
-  let fml = conjunction $ embedding env tass
+  pass <- use predAssignment
+  let fml = conjunction $ embedding env tass pass
   solv <- asks snd
   cands <- use candidates
   cands' <- lift . lift . lift $ csCheckConsistency solv [fml] cands
@@ -616,12 +621,15 @@ simplifyConstraint' tass (Subtype env tv@(ScalarT (TypeVarT a) _) t consistent) 
   = simplifyConstraint (Subtype env (typeSubstitute tass tv) t consistent)
 simplifyConstraint' tass (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env t (typeSubstitute tass tv) consistent)
+simplifyConstraint' tass (WellFormed env tv@(ScalarT (TypeVarT a) _)) | a `Map.member` tass
+  = simplifyConstraint (WellFormed env (typeSubstitute tass tv))
 -- Two unknown free variables: nothing can be done for now
 simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _)
   | not (isBound a env) && not (isBound b env)
   = if a == b
       then writeLog 1 "simplifyConstraint: equal type variables on both sides"
       else addConstraint c
+simplifyConstraint' _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) = addConstraint c
 -- Unknown free variable and a type: extend type assignment
 simplifyConstraint' _ c@(Subtype env (ScalarT (TypeVarT a) _) t _)
   | not (isBound a env) = unify c env a t
@@ -653,10 +661,11 @@ simplifyConstraint' _ (WellFormed env (FunctionT x tArg tRes))
       simplifyConstraint (WellFormed (addVariable x tArg env) tRes)
 
 -- Simple constraint: add back
-simplifyConstraint' _ c@(Subtype env (ScalarT baseT _) (ScalarT baseT' _) _) | baseT == baseT' = addConstraint c
-simplifyConstraint' _ c@(WellFormed env (ScalarT baseT _)) = addConstraint c
-simplifyConstraint' _ c@(WellFormedCond env _) = addConstraint c
-simplifyConstraint' _ c@(WellFormedMatchCond env _) = addConstraint c
+simplifyConstraint' _ c@(Subtype _ (ScalarT baseT _) (ScalarT baseT' _) _) | baseT == baseT' = addConstraint c
+simplifyConstraint' _ c@(WellFormed _ (ScalarT baseT _)) = addConstraint c
+simplifyConstraint' _ c@(WellFormedCond _ _) = addConstraint c
+simplifyConstraint' _ c@(WellFormedMatchCond _ _) = addConstraint c
+simplifyConstraint' _ c@(WellFormedPredicate _ _ _) = addConstraint c
 -- Otherwise (shape mismatch): fail
 simplifyConstraint' _ _ = writeLog 1 (text "FAIL: shape mismatch") >> mzero
 
@@ -665,7 +674,7 @@ unify c env a t = if a `Set.member` typeVarsOf t
   else do
     t' <- fresh env t
     writeLog 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
-    addConstraint $ WellFormed env t'
+    -- addConstraint $ WellFormed env t'
     addTypeAssignment a t'
     simplifyConstraint c
 
@@ -674,23 +683,32 @@ unify c env a t = if a `Set.member` typeVarsOf t
 processConstraint :: Monad s => Constraint -> Explorer s ()
 processConstraint c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _)
   | not (isBound a env) && not (isBound b env) = addConstraint c
-processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') False) | baseT == baseT'
-  = if fml == ffalse || fml' == ftrue
+processConstraint c@(WellFormed env (ScalarT (TypeVarT a) _))
+  | not (isBound a env) = addConstraint c
+processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | baseTL == baseTR
+  = if l == ffalse || r == ftrue
       then return ()
       else do
         tass <- use typeAssignment
-        let sortSubstFml = sortSubstituteFml (asSortSubst tass)
-        let lhss = embedding env tass `Set.union` Set.fromList [sortSubstFml fml] -- (sortSubstFml fml : allMeasurePostconditions baseT env)
-        addHornClause $ conjunction lhss |=>| sortSubstFml fml'
+        pass <- use predAssignment
+        let l' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) l
+        let r' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) r
+        if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ env ^. boundPredicates)
+          then do        
+            let lhss = embedding env tass pass `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
+            addHornClause $ conjunction lhss |=>| r'
+          else -- One of the sides contains free predicates: nothing can be done yet
+            addConstraint c
 processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT'
-  = do
+  = do -- TODO: abs ref here
       tass <- use typeAssignment
+      pass <- use predAssignment
       let sortSubstFml = sortSubstituteFml (asSortSubst tass)
       addConsistencyCheck (conjunction (
                             Set.insert (sortSubstFml fml) $
                             Set.insert (sortSubstFml fml') $
-                            embedding env tass))
-processConstraint (WellFormed env (ScalarT baseT fml))
+                            embedding env tass pass))
+processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
       Unknown _ u -> do
         tass <- use typeAssignment
@@ -707,6 +725,21 @@ processConstraint (WellFormedMatchCond env (Unknown _ u))
       tass <- use typeAssignment
       mq <- asks $ _matchQualsGen . fst
       addQuals u (mq $ allPotentialScrutinees env tass)
+processConstraint c@(WellFormedPredicate env sorts p) 
+  = do
+      tass <- use typeAssignment
+      let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
+      if any (isFreeVariable tass) typeVars
+        then addConstraint c -- Still has type variables: cannot determine shape
+        else do
+          u <- freshId "u"
+          addPredAssignment p (Unknown Map.empty u)
+          let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
+          let vars = zipWith Var sorts' deBrujns
+          tq <- asks $ _typeQualsGen . fst
+          addQuals u (tq $ last vars : init vars)
+  where
+    isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
@@ -744,17 +777,23 @@ freshId prefix = do
   return $ prefix ++ show i
 
 -- | Replace all type variables with fresh identifiers
-freshTypeVars :: Monad s => RSchema -> Formula -> Explorer s RType
-freshTypeVars sch fml = freshTypeVars' Map.empty sch
+instantiate :: Monad s => Environment -> RSchema -> Formula -> Explorer s RType
+instantiate env sch fml = writeLog 1 (text "INSTANTIATE" <+> pretty sch) >> instantiate' Map.empty Map.empty sch
   where
-    freshTypeVars' subst (ForallT a sch) = do
+    instantiate' subst pSubst (ForallT a sch) = do
       a' <- freshId "a"
-      freshTypeVars' (Map.insert a (vart a' fml) subst) sch
-    freshTypeVars' subst (Monotype t) = go subst t
-    go subst (FunctionT x tArg tRes) = do
+      addConstraint $ WellFormed env (vart a' ftrue)
+      instantiate' (Map.insert a (vart a' fml) subst) pSubst sch
+    instantiate' subst pSubst (ForallP p argSorts sch) = do
+      p' <- freshId "P"
+      let argSorts' = map (sortSubstitute (asSortSubst subst)) argSorts
+      addConstraint $ WellFormedPredicate env argSorts' p'
+      instantiate' subst (Map.insert p (Pred p' (zipWith Var argSorts deBrujns)) pSubst) sch
+    instantiate' subst pSubst (Monotype t) = go subst pSubst t
+    go subst pSubst (FunctionT x tArg tRes) = do
       x' <- freshId "x"
-      liftM2 (FunctionT x') (go subst tArg) (go subst (renameVar x x' tArg tRes))
-    go subst t = return $ typeSubstitute subst t
+      liftM2 (FunctionT x') (go subst pSubst tArg) (go subst pSubst (renameVar x x' tArg tRes))
+    go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t
 
 -- | 'fresh @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> Explorer s RType
