@@ -7,7 +7,9 @@ data List a <P :: a -> a -> Bool> decreases len where
 	Nil :: {List a <P> | len _v == 0 && elems _v == []}
 	Cons :: x: a -> xs: List {a | P x _v} <P> -> {List a <P> | len _v == len xs + 1 && elems _v == elems xs + [x]}
 	
-insert :: x: a -> xs: List a <{_0 <= _1}> -> {List a <{_0 <= _1}> | elems _v == elems xs + [x]}
+type IncList a = List a <{_0 <= _1}>	
+	
+insert :: x: a -> xs: IncList a -> {IncList a | elems _v == elems xs + [x]}
 insert = ??
 
 	
