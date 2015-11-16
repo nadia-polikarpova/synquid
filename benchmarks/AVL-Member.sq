@@ -1,0 +1,15 @@
+qualifier {x == y, x <= y, x >= y}
+
+true :: {Bool | _v}
+false :: {Bool | !_v}
+
+measure size :: AVL a -> {Int | _v >= 0}
+measure elems :: AVL a -> Set a
+measure height :: AVL a -> {Int | _v >= 0}
+
+data AVL a decreases size where
+	Empty :: {AVL a | size _v == 0 && elems _v == [] && height _v == 0}
+	Node :: x: a -> l: AVL {a | _v < x} -> r: { AVL {a | x < _v} | 1 <= height l - height _v && height l - height _v <= 1 } -> {AVL a | size _v == size l + size r + 1 && elems _v == elems l + elems r + [x] && ((height _v == height r && height r > height l) || (height _v == height l && height r <= height l)) }
+
+member :: x: a -> t: AVL a -> {Bool | _v == (x in elems t)}
+member = ??
