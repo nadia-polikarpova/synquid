@@ -5,9 +5,11 @@ measure elems :: BST a -> Set a
 
 data BST a decreases size where
 	Empty :: {BST a | size _v == 0 && elems _v == []}
-	Node :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> {BST a | size _v == size l + size r + 1 && 
-                                                                               elems _v == elems l + elems r + [x]}
-
+	Node  :: x: a -> 
+                 l: BST {a | _v < x} ->  
+                 r: BST {a | x < _v} -> 
+                 {BST a | size _v == size l + size r + 1 && 
+                          elems _v == elems l + elems r + [x]}
 
 --============================================================================
 -- mergePivot p l1 l2 =
