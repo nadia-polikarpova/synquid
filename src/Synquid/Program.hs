@@ -17,7 +17,7 @@ import Control.Lens
 
 {- Type skeletons -}
 
-data BaseType r = BoolT | IntT | DatatypeT Id [TypeSkeleton r] | TypeVarT Id
+data BaseType r = BoolT | IntT | DatatypeT Id [TypeSkeleton r] [r] | TypeVarT Id
   deriving (Eq, Ord)
   
 -- | Type skeletons (parametrized by refinements)
@@ -35,13 +35,13 @@ resType (FunctionT _ _ t) = t
 
 toSort BoolT = BoolS
 toSort IntT = IntS
-toSort (DatatypeT name tArgs) = DataS name (map (toSort . baseTypeOf) tArgs)
+toSort (DatatypeT name tArgs _) = DataS name (map (toSort . baseTypeOf) tArgs)
 toSort (TypeVarT name) = VarS name
 
 fromSort BoolS = ScalarT BoolT ftrue
 fromSort IntS = ScalarT IntT ftrue
 fromSort (VarS name) = ScalarT (TypeVarT name) ftrue
-fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs)) ftrue
+fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) ftrue -- TODO: what to do with pArgs?
 
 -- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
 complies :: Sort -> Sort -> Bool  
@@ -97,8 +97,11 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubst
       TypeVarT a -> case Map.lookup a subst of
         Just t -> typeSubstitute subst t
         Nothing -> ScalarT (TypeVarT a) ftrue
-      DatatypeT name tArgs -> let tArgs' = map (typeSubstitute subst) tArgs 
-        in ScalarT (DatatypeT name tArgs') ftrue
+      DatatypeT name tArgs pArgs -> 
+        let 
+          tArgs' = map (typeSubstitute subst) tArgs 
+          pArgs' = map (sortSubstituteFml (asSortSubst subst)) pArgs
+        in ScalarT (DatatypeT name tArgs' pArgs') ftrue
       _ -> ScalarT baseT ftrue
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
 
@@ -125,7 +128,7 @@ sortSubstitute _ s = s
 typeSubstitutePred :: Substitution -> RType -> RType
 typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
   in case t of
-    ScalarT (DatatypeT name tArgs) fml -> ScalarT (DatatypeT name (map tsp tArgs)) (substitutePredicate pSubst fml)
+    ScalarT (DatatypeT name tArgs pArgs) fml -> ScalarT (DatatypeT name (map tsp tArgs) (map (substitutePredicate pSubst) pArgs)) (substitutePredicate pSubst fml)
     ScalarT baseT fml -> ScalarT baseT (substitutePredicate pSubst fml)
     FunctionT x tArg tRes -> FunctionT x (tsp tArg) (tsp tRes)
   
@@ -133,7 +136,7 @@ typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
 typeVarsOf :: TypeSkeleton r -> Set Id
 typeVarsOf t@(ScalarT baseT r) = case baseT of
   TypeVarT name -> Set.singleton name  
-  DatatypeT _ tArgs -> Set.unions (map typeVarsOf tArgs)
+  DatatypeT _ tArgs _ -> Set.unions (map typeVarsOf tArgs)
   _ -> Set.empty
 typeVarsOf (FunctionT _ tArg tRes) = typeVarsOf tArg `Set.union` typeVarsOf tRes
 
@@ -159,7 +162,7 @@ type RSchema = SchemaSkeleton Formula
 
 -- | Forget refinements of a type
 shape :: RType -> SType  
-shape (ScalarT (DatatypeT name tArgs) _) = ScalarT (DatatypeT name (map shape tArgs)) ()
+shape (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map shape tArgs) (replicate (length pArgs) ())) ()
 shape (ScalarT IntT _) = ScalarT IntT ()
 shape (ScalarT BoolT _) = ScalarT BoolT ()
 shape (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ()
@@ -167,7 +170,7 @@ shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
 
 -- | Insert weakest refinement
 refineTop :: SType -> RType
-refineTop (ScalarT (DatatypeT name tArgs) _) = ScalarT (DatatypeT name (map refineTop tArgs)) ftrue
+refineTop (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map refineTop tArgs) (replicate (length pArgs) ftrue)) ftrue
 refineTop (ScalarT IntT _) = ScalarT IntT ftrue
 refineTop (ScalarT BoolT _) = ScalarT BoolT ftrue
 refineTop (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ftrue
@@ -175,7 +178,7 @@ refineTop (FunctionT x tArg tFun) = FunctionT x (refineBot tArg) (refineTop tFun
 
 -- | Insert strongest refinement
 refineBot :: SType -> RType
-refineBot (ScalarT (DatatypeT name tArgs) _) = ScalarT (DatatypeT name (map refineBot tArgs)) ffalse
+refineBot (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map refineBot tArgs) (replicate (length pArgs) ffalse)) ffalse
 refineBot (ScalarT IntT _) = ScalarT IntT ffalse
 refineBot (ScalarT BoolT _) = ScalarT BoolT ffalse
 refineBot (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ffalse
@@ -192,27 +195,29 @@ addRefinement t _ = error $ "addRefinement: applied to function type"
 renameVar :: Id -> Id -> RType -> RType -> RType
 renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
 renameVar old new t@(ScalarT b _)  (ScalarT baseT fml) = 
-  let newRefinement = substitute (Map.singleton old (Var (toSort b) new)) fml
+  let 
+    subst = substitute (Map.singleton old (Var (toSort b) new))
   in case baseT of
-        DatatypeT name tArgs -> ScalarT (DatatypeT name $ map (renameVar old new t) tArgs) newRefinement
-        _ -> ScalarT baseT newRefinement
+        DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (renameVar old new t) tArgs) (map subst pArgs)) (subst fml)
+        _ -> ScalarT baseT (subst fml)
 renameVar old new t                  (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
 
 -- | 'unknownsOfType' @t: all unknowns in @t@
 unknownsOfType :: RType -> Set Formula 
-unknownsOfType (ScalarT (DatatypeT _ tArgs) fml) = Set.unions $ unknownsOf fml : map unknownsOfType tArgs
+unknownsOfType (ScalarT (DatatypeT _ tArgs pArgs) fml) = Set.unions $ unknownsOf fml : map unknownsOf pArgs ++ map unknownsOfType tArgs
 unknownsOfType (ScalarT _ fml) = unknownsOf fml
 unknownsOfType (FunctionT _ tArg tRes) = unknownsOfType tArg `Set.union` unknownsOfType tRes
 
 -- | Instantiate unknowns in a type
 typeApplySolution :: Solution -> RType -> RType
-typeApplySolution sol (ScalarT (DatatypeT name tArgs) fml) = ScalarT (DatatypeT name $ map (typeApplySolution sol) tArgs) (applySolution sol fml)
+typeApplySolution sol (ScalarT (DatatypeT name tArgs pArgs) fml) = ScalarT (DatatypeT name (map (typeApplySolution sol) tArgs) (map (applySolution sol) pArgs)) (applySolution sol fml)
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
   _typeArgCount :: Int,
+  _predArgs :: [[Sort]],
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
 } deriving (Eq, Ord)
@@ -436,7 +441,7 @@ addScrutinee p = usedScrutinees %~ (p :)
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
-allMeasurePostconditions baseT@(DatatypeT dtName tArgs) env = 
+allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env = 
     let allMeasures = Map.toList $ allMeasuresOf dtName env 
     in catMaybes $ map extractPost allMeasures ++ map elemProperties allMeasures
   where
@@ -492,13 +497,15 @@ data Goal = Goal {
 type ProgramAst = [Declaration]
 data ConstructorDef = ConstructorDef Id RSchema
   deriving (Eq)
+data PredDecl = PredDecl Id [Sort]  
+  deriving (Eq)
 data Declaration =
-  TypeDecl Id RType |                            -- ^ Type name and definition
-  FuncDecl Id RSchema |                          -- ^ Function name and signature
-  DataDecl Id [Id] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, and constructor definitions
-  MeasureDecl Id Sort Sort Formula |             -- ^ Measure name, input sort, output sort, postcondition
-  QualifierDecl [Formula] |                      -- ^ Qualifiers
-  SynthesisGoal Id                               -- ^ Name of the function to synthesize
+  TypeDecl Id RType |                                       -- ^ Type name and definition
+  FuncDecl Id RSchema |                                     -- ^ Function name and signature
+  DataDecl Id [Id] [PredDecl] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
+  MeasureDecl Id Sort Sort Formula |                        -- ^ Measure name, input sort, output sort, postcondition
+  QualifierDecl [Formula] |                                 -- ^ Qualifiers
+  SynthesisGoal Id                                          -- ^ Name of the function to synthesize
   deriving (Eq)
 
 constructorName (ConstructorDef name _) = name

@@ -61,19 +61,22 @@ resolveDeclaration (TypeDecl typeName typeBody) = do
   typeBody' <- resolveType typeBody
   environment %= addTypeSynonym typeName typeBody'
 resolveDeclaration (FuncDecl funcName typeSchema) = resolveSignature funcName typeSchema
-resolveDeclaration (DataDecl dataName typeParams wfMetricMb constructors) = do
+resolveDeclaration (DataDecl dataName typeParams predParams wfMetricMb constructors) = do
   case wfMetricMb of
     Nothing -> return ()
     Just wfMetric -> do
       ifM (not . Map.member wfMetric <$> (use $ environment . measures)) (throwError $ unwords ["Measure", wfMetric, "is undefined"]) (return ())
+  -- ToDo: check sorts in predParams
   let
     datatype = DatatypeDef {
       _typeArgCount = length typeParams,
+      _predArgs = map (\(PredDecl _ sorts) -> sorts) predParams,
       _constructors = map constructorName constructors,
       _wfMetric = wfMetricMb
     }
   environment %= addDatatype dataName datatype
-  mapM_ (\(ConstructorDef name schema) -> resolveSignature name schema) constructors
+  let addPreds sch = foldl (\s (PredDecl p sorts) -> ForallP p sorts s) sch predParams
+  mapM_ (\(ConstructorDef name schema) -> resolveSignature name $ addPreds schema) constructors
 resolveDeclaration (MeasureDecl measureName inSort outSort post) = do
   post' <- resolveFormula BoolS outSort post
   environment %= addMeasure measureName (MeasureDef inSort outSort post')
@@ -110,17 +113,35 @@ resolveType (ScalarT baseType typeFml) = do
   typeSyns <- use $ environment . typeSynonyms
   return $ substituteTypeSynonym typeSyns $ ScalarT baseType' typeFml'
   where
-    resolveBase (DatatypeT name tArgs) = do
+    resolveBase :: BaseType Formula -> Resolver (BaseType Formula)
+    resolveBase (DatatypeT name tArgs pArgs) = do
       ds <- use $ environment . datatypes
       case Map.lookup name ds of
         Nothing -> do
           tss <- use $ environment . typeSynonyms
           case Map.lookup name tss of
             Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
-            Just _ -> when (not $ null tArgs) $ throwError $ unwords ["Type synonym", name, "did not expect type arguments"]    
-        Just (DatatypeDef n _ _) -> when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]   
-      DatatypeT name <$> mapM resolveType tArgs
+            Just _ -> when (not $ null tArgs) $ throwError $ unwords ["Type synonym", name, "did not expect type arguments"]
+          return $ DatatypeT name [] []
+        Just (DatatypeDef n pVars _ _) -> do
+          when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]
+          when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
+          tArgs' <- mapM resolveType tArgs
+          pArgs' <- zipWithM resolvePredArg pVars pArgs
+          return $ DatatypeT name tArgs' pArgs'
     resolveBase baseT = return baseT
+    
+    resolvePredArg :: [Sort] -> Formula -> Resolver Formula
+    resolvePredArg sorts fml = do
+      oldEnv <- use environment
+      let vars = zipWith Var sorts deBrujns
+      environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
+      res <- case fml of
+                Pred p [] -> resolveFormula BoolS UnknownS (Pred p vars)
+                _ -> resolveFormula BoolS UnknownS fml
+      environment .= oldEnv      
+      return res
+      
 resolveType (FunctionT x tArg tRes) = do
   when (x == valueVarName) $ throwError $
     valueVarName ++ " is a reserved variable name, so you can't bind function arguments to it"
@@ -261,7 +282,7 @@ resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type:
 {- Misc -}
 
 substituteTypeSynonym :: TypeSubstitution -> RType -> RType
-substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName typeArgs) refinement) =
+substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName _ _) refinement) =
   case synonyms ^. at typeName of
     Just val -> addRefinement val refinement -- TODO: add polymorphic synonyms 
     Nothing -> rtype

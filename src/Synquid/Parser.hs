@@ -139,10 +139,11 @@ parseDataDef = do
   reserved "data"
   typeName <- parseTypeName
   typeParams <- many parseIdentifier
+  predParams <- many $ angles parsePredDecl
   wfMetricName <- optionMaybe $ reserved "decreases" >> parseIdentifier
   reserved "where"
   constructors <- many1 parseConstructorDef
-  return $ DataDecl typeName typeParams wfMetricName constructors
+  return $ DataDecl typeName typeParams predParams wfMetricName constructors  
 
 parseConstructorDef :: Parser ConstructorDef
 parseConstructorDef = do
@@ -186,16 +187,10 @@ parseSchema = parseForall <|> (Monotype <$> parseType)
 
 parseForall :: Parser RSchema
 parseForall = do
-  (p, sorts) <- angles parsePredDecl
+  (PredDecl p sorts) <- angles parsePredDecl
   dot
   sch <- parseSchema
   return $ ForallP p sorts sch
-  where
-    parsePredDecl = do
-      predName <- parseTypeName
-      reservedOp "::"
-      sorts <- parseSort `sepBy1` reservedOp "->"
-      return (predName, init sorts)    
 
 parseType :: Parser RType
 parseType = choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type"
@@ -214,13 +209,16 @@ parseUnrefTypeNoArgs = do
     parseBaseType = choice [
       BoolT <$ reserved "Bool",
       IntT <$ reserved "Int",
-      flip DatatypeT [] <$> parseTypeName,
+      (\name -> DatatypeT name [][]) <$> parseTypeName,
       TypeVarT <$> parseIdentifier]
   
 parseUnrefTypeWithArgs = do
   name <- parseTypeName
   typeArgs <- many parseTypeAtom
-  return $ ScalarT (DatatypeT name typeArgs) ftrue    
+  predArgs <- many (angles parsePredArg)
+  return $ ScalarT (DatatypeT name typeArgs predArgs) ftrue    
+  
+parsePredArg = braces parseFormula <|> (flip Pred [] <$> parseTypeName)
   
 parseScalarUnrefType = parseUnrefTypeWithArgs <|> parseUnrefTypeNoArgs
   
@@ -308,7 +306,14 @@ parseTerm = try parseAppTerm <|> parseAtomTerm
       name <- identifier
       parseAtomTerm >>= return . Measure UnknownS name
       
-{- Misc -}      
+{- Misc -}
+
+parsePredDecl :: Parser PredDecl
+parsePredDecl = do
+  predName <- parseTypeName
+  reservedOp "::"
+  sorts <- parseSort `sepBy1` reservedOp "->"
+  return $ PredDecl predName (init sorts)
 
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do
