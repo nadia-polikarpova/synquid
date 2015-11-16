@@ -32,7 +32,6 @@ isFunctionType (FunctionT _ _ _) = True
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
-dontCare = "_"
 
 toSort BoolT = BoolS
 toSort IntT = IntS
@@ -122,6 +121,13 @@ sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
 sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
 sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
 sortSubstitute _ s = s
+
+typeSubstitutePred :: Substitution -> RType -> RType
+typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
+  in case t of
+    ScalarT (DatatypeT name tArgs) fml -> ScalarT (DatatypeT name (map tsp tArgs)) (substitutePredicate pSubst fml)
+    ScalarT baseT fml -> ScalarT baseT (substitutePredicate pSubst fml)
+    FunctionT x tArg tRes -> FunctionT x (tsp tArg) (tsp tRes)
   
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
@@ -333,7 +339,7 @@ data Environment = Environment {
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: TypeSubstitution        -- ^ Type synonym definitions
-} -- deriving
+}
 
 makeLenses ''Environment
 
@@ -454,8 +460,8 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs) env =
 allMeasurePostconditions _ _ = []        
 
 -- | Assumptions encoded in an environment    
-embedding :: Environment -> TypeSubstitution -> Set Formula
-embedding env subst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
+embedding :: Environment -> TypeSubstitution -> Substitution -> Set Formula
+embedding env subst pSubst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
   where
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
@@ -463,7 +469,7 @@ embedding env subst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls 
       else Set.empty
     embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
-      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) (fml : allMeasurePostconditions baseT env)
+      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) ((substitutePredicate pSubst fml) : allMeasurePostconditions baseT env)
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants    
         
 {- Misc -}
@@ -473,6 +479,7 @@ data Constraint = Subtype Environment RType RType Bool
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
   | WellFormedMatchCond Environment Formula
+  | WellFormedPredicate Environment [Sort] Id
   deriving (Eq, Ord)
   
 -- | Synthesis goal

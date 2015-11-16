@@ -304,6 +304,7 @@ prettyConstraint (Subtype env t1 t2 True) = prettyBindings env <+> prettyAssumpt
 prettyConstraint (WellFormed env t) = prettyBindings env <+> text "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> text "|-" <+> pretty c
 prettyConstraint (WellFormedMatchCond env c) = prettyBindings env <+> text "|- (match)" <+> pretty c
+prettyConstraint (WellFormedPredicate _ sorts p) = text "|-" <+> pretty p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
   
 instance Pretty Constraint where
   pretty = prettyConstraint

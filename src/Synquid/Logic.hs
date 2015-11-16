@@ -61,6 +61,7 @@ data Formula =
   All Formula Formula                 -- ^ Universal quantification
   deriving (Eq, Ord)
   
+dontCare = "_"  
 valueVarName = "_v"
 unknownName (Unknown _ name) = name
 varName (Var _ name) = name
@@ -139,6 +140,14 @@ posNegUnknowns _ = (Set.empty, Set.empty)
 posUnknowns = fst . posNegUnknowns
 negUnknowns = snd . posNegUnknowns
 
+predsOf :: Formula -> Set Id
+predsOf (Pred p es) = Set.insert p (Set.unions $ map predsOf es)
+predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
+predsOf (Unary _ e) = predsOf e
+predsOf (Binary _ e1 e2) = predsOf e1 `Set.union` predsOf e2
+predsOf (All x e) = predsOf e
+predsOf _ = Set.empty
+
 -- | 'leftHandSide' @fml@ : left-hand side of a binary expression
 leftHandSide (Binary _ l _) = l
 -- | 'rightHandSide' @fml@ : right-hand side of a binary expression
@@ -201,6 +210,18 @@ substitute subst fml = case fml of
                 Just (Var b' v) -> if b == b' 
                   then Map.insert x (Var b v) $ compose old' (Map.delete y new)
                   else error "Base type mismatch when composing pending substitutions"
+                  
+deBrujns = map (\i -> dontCare ++ show i) [0..] 
+                  
+substitutePredicate :: Substitution -> Formula -> Formula
+substitutePredicate pSubst fml = case fml of
+  Pred name args -> case Map.lookup name pSubst of
+                      Nothing -> Pred name (map (substitutePredicate pSubst) args)
+                      Just value -> substitute (Map.fromList $ zip deBrujns args) value
+  Unary op fml' -> Unary op (substitutePredicate pSubst fml')
+  Binary op fml1 fml2 -> Binary op (substitutePredicate pSubst fml1) (substitutePredicate pSubst fml2)
+  All v@(Var _ x) e -> All v (substitutePredicate pSubst e)
+  _ -> fml
 
 {- Qualifiers -}
 
