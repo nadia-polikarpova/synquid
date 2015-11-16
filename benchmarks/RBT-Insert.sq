@@ -26,7 +26,16 @@ data RBT a decreases size where
                       (isRed _v ==> (blackHeight _v == blackHeight left)) &&         -- if red   ==> black-height is black-height of sub
                       (isRed _v <==> color == 1)}                   
 
-
+--======================================================================
+-- Takes two RBTs split around a pivot point, and returns a new RBT
+-- that contains the pivot point as well as the elements from both
+-- input RBTs.
+--
+-- Using this function to synthesize insert is a bit too much of a cheat,
+-- since this function is really no simpler than insert.  In the RBT'
+-- example, this function is relaxed, so that it actually matches
+-- the Leon implementation.
+--======================================================================
 balance :: x: a -> c: Color -> l: RBT {a | _v < x} -> r: RBT {a | _v > x} -> {RBT a | elems _v == elems l + elems r + [x]}
 
 --======================================================================
