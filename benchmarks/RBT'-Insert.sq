@@ -1,0 +1,81 @@
+qualifier {x < y, x == y}
+
+type Color = {Int | _v == 0 || _v == 1}
+
+black :: {Int | _v == 0}
+red   :: {Int | _v == 1}
+
+measure size           :: RBT' a -> {Int | _v >= 0}
+measure elems          :: RBT' a -> Set a
+measure isRed          :: RBT' a -> Bool 
+measure blackHeight    :: RBT' a -> Int
+measure redsHaveBlacks :: RBT' a -> Bool
+
+--==========================================================================================
+-- RBT' is like real RBT just without the "Red node has black children" constraint. Instead
+-- of encoding it as an invariant, that particular constraint is encoded as a measure, so
+-- that only select functions can decide to enforce it in their postconditions.
+--==========================================================================================
+data RBT' a decreases size where
+    Empty :: {RBT' a | size _v == 0      && 
+                       elems _v == []    && 
+                       !isRed _v         &&         -- nils (empty nodes) must be black
+                       redsHaveBlacks _v &&         -- neither red nor has any children, thus, true
+                       blackHeight _v == 0}         -- black-height of nils is 0 (could be 1, doesn't matter)
+    Node  :: x: a -> 
+             color: Color -> 
+             left:  RBT' {a | _v < x} ->                                              -- left keys are less than this key
+             right: {RBT' {a | _v > x} | (blackHeight _v == blackHeight left)} ->     -- right keys are greater than this key; blackHeight the same as of left
+             {RBT' a | size _v == size left + size right + 1 && 
+                       elems _v == elems left + elems right + [x] && 
+                       (!isRed _v ==> (blackHeight _v == blackHeight left + 1)) &&    -- if black ==> black-height is black-height of sub + 1
+                       (isRed _v ==> (blackHeight _v == blackHeight left)) &&         -- if red   ==> black-height is black-height of sub
+                       (!isRed _v ==> (redsHaveBlacks _v <==> (redsHaveBlacks left && redsHaveBlacks right))) &&                           
+                       (isRed _v ==> (redsHaveBlacks _v <==> (!isRed left && !isRed left && redsHaveBlacks left && redsHaveBlacks right))) &&
+                       (isRed _v <==> color == 1)}                   
+
+balance :: x: a -> c: Color -> l: RBT' {a | _v < x} -> r: RBT' {a | _v > x} -> {RBT' a | elems _v == elems l + elems r + [x] && redsHaveBlacks _v}
+
+--==========================================================================================
+-- Like real insert except it doesn't inforce the "red node has black children" constraint.
+-- It does, however, enforce that 'blackHeight' of the resulting tree remains the same as
+-- it was before the insertion. Consequently, it is sufficient to create a RED node and 
+-- insert it at an appropriate leaf position. 
+--------------------------------------------------------------------------------------------
+-- bstIns = x t
+--   match t with
+--     Empty -> Node x red Empty Empty
+--     Node e c l r -> if x == e
+--                     then t
+--                     else if e < x
+--                          then Node e c l (bstIns x r)
+--                          else Node e (bstIns x l) r
+--
+-- args used       : -e -m=1 -a=2
+-- components used : none (adding balance makes it take longer, but still works)
+-- time            : 38s (on aleks's X1 Carbon)
+--==========================================================================================
+
+bstIns :: x: a -> t: RBT' a -> {RBT' a | elems _v == elems t + [x] && blackHeight _v == blackHeight t}
+bstIns = ??
+
+--==========================================================================================
+-- Real RBT insert: requires that for the input RBT' tree 'redsHaveBlacks' holds, as well 
+-- as for the resulting tree.
+--------------------------------------------------------------------------------------------
+-- insert x t =
+--   match t with
+--     Empty -> Node x red Empty Empty
+--     Node e c l r -> if x == e
+--                     then t
+--                     else if e < x
+--                          then balance e c l (bstIns x r)
+--                          else balance e c (bstIns x l) r
+--
+-- args used       : -e -m=1 -a=2
+-- components used : balance, bstIns
+-- time            : 2m31s (on aleks's X1 Carbon)
+--==========================================================================================
+
+insert :: x: a -> t: {RBT' a | redsHaveBlacks _v} -> {RBT' a | elems _v == elems t + [x] && redsHaveBlacks _v}
+insert = ??
