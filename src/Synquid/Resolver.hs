@@ -57,9 +57,12 @@ resolveRefinement env valueSort fml = case runExcept (evalStateT (resolveFormula
 type Resolver a = StateT ResolverState (Except ErrMsg) a    
 
 resolveDeclaration :: Declaration -> Resolver ()
-resolveDeclaration (TypeDecl typeName typeBody) = do
+resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
   typeBody' <- resolveType typeBody
-  environment %= addTypeSynonym typeName typeBody'
+  let extraTypeVars = typeVarsOf typeBody' Set.\\ Set.fromList typeVars
+  if Set.null extraTypeVars
+    then environment %= addTypeSynonym typeName typeVars typeBody'
+    else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the defintion of type synonym", typeName, "are undefined"]
 resolveDeclaration (FuncDecl funcName typeSchema) = resolveSignature funcName typeSchema
 resolveDeclaration (DataDecl dataName typeParams predParams wfMetricMb constructors) = do
   case wfMetricMb of
@@ -107,30 +110,29 @@ resolveSchema sch = do
     resolveSchema' (Monotype t) = Monotype <$> resolveType t
 
 resolveType :: RType -> Resolver RType
-resolveType (ScalarT baseType typeFml) = do
-  baseType' <- resolveBase baseType
-  typeFml' <- resolveFormula BoolS (toSort baseType) typeFml
-  typeSyns <- use $ environment . typeSynonyms
-  return $ substituteTypeSynonym typeSyns $ ScalarT baseType' typeFml'
-  where
-    resolveBase :: BaseType Formula -> Resolver (BaseType Formula)
-    resolveBase (DatatypeT name tArgs pArgs) = do
-      ds <- use $ environment . datatypes
-      case Map.lookup name ds of
-        Nothing -> do
-          tss <- use $ environment . typeSynonyms
-          case Map.lookup name tss of
-            Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
-            Just _ -> when (not $ null tArgs) $ throwError $ unwords ["Type synonym", name, "did not expect type arguments"]
-          return $ DatatypeT name [] []
-        Just (DatatypeDef n pVars _ _) -> do
-          when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]
-          when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
-          tArgs' <- mapM resolveType tArgs
-          pArgs' <- zipWithM resolvePredArg pVars pArgs
-          return $ DatatypeT name tArgs' pArgs'
-    resolveBase baseT = return baseT
-    
+resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
+  ds <- use $ environment . datatypes
+  case Map.lookup name ds of
+    Nothing -> do
+      tss <- use $ environment . typeSynonyms
+      case Map.lookup name tss of
+        Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
+        Just (tVars, t) -> do
+          when (length tArgs /= length tVars) $ throwError $ unwords ["Type synonym", name, "expected", show (length tVars), "type arguments and got", show (length tArgs)]
+          let tempVars = take (length tVars) deBrujns
+          let t' = typeSubstitute (Map.fromList $ zip tVars (map vartAll tempVars)) t -- We need to do this since tVars and tArgs are not necessarily disjoint
+          let t'' = typeSubstitute (Map.fromList $ zip tempVars tArgs) t'
+          fml' <- resolveFormula BoolS (toSort $ baseTypeOf t'') fml
+          return $ addRefinement t'' fml'
+    Just (DatatypeDef n pVars _ _) -> do
+      when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]
+      when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
+      tArgs' <- mapM resolveType tArgs
+      pArgs' <- zipWithM resolvePredArg pVars pArgs
+      let baseT' = DatatypeT name tArgs' pArgs'
+      fml' <- resolveFormula BoolS (toSort baseT') fml
+      return $ ScalarT baseT' fml'
+  where    
     resolvePredArg :: [Sort] -> Formula -> Resolver Formula
     resolvePredArg sorts fml = do
       oldEnv <- use environment
@@ -140,7 +142,8 @@ resolveType (ScalarT baseType typeFml) = do
                 Pred p [] -> resolveFormula BoolS UnknownS (Pred p vars)
                 _ -> resolveFormula BoolS UnknownS fml
       environment .= oldEnv      
-      return res
+      return res      
+resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveFormula BoolS (toSort baseT) fml
       
 resolveType (FunctionT x tArg tRes) = do
   when (x == valueVarName) $ throwError $
@@ -280,14 +283,6 @@ resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type:
     else throwError $ unwords ["Enountered", show s, "where", show targetSort, "was expected"]
 
 {- Misc -}
-
-substituteTypeSynonym :: TypeSubstitution -> RType -> RType
-substituteTypeSynonym synonyms rtype@(ScalarT (DatatypeT typeName _ _) refinement) =
-  case synonyms ^. at typeName of
-    Just val -> addRefinement val refinement -- TODO: add polymorphic synonyms 
-    Nothing -> rtype
-substituteTypeSynonym synonyms (FunctionT argId argRef returnRef) = FunctionT argId (substituteTypeSynonym synonyms argRef) (substituteTypeSynonym synonyms returnRef)
-substituteTypeSynonym synonyms rtype = rtype
 
 resolveSignature name sch = do
   ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of funtion", name]) (return ())

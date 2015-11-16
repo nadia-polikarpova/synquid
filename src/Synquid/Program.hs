@@ -343,7 +343,7 @@ data Environment = Environment {
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
-  _typeSynonyms :: TypeSubstitution        -- ^ Type synonym definitions
+  _typeSynonyms :: Map Id ([Id], RType)    -- ^ Type synonym definitions
 }
 
 makeLenses ''Environment
@@ -411,8 +411,8 @@ addMeasure measureName m = over measures (Map.insert measureName m)
 addPredicate :: Id -> [Sort] -> Environment -> Environment
 addPredicate predName argSorts = over boundPredicates (Map.insert predName argSorts)
 
-addTypeSynonym :: Id -> RType -> Environment -> Environment
-addTypeSynonym name type' = over typeSynonyms (Map.insert name type')
+addTypeSynonym :: Id -> [Id] -> RType -> Environment -> Environment
+addTypeSynonym name tvs t = over typeSynonyms (Map.insert name (tvs, t))
 
 -- | 'addDatatype' @name env@ : add datatype @name@ to the environment
 addDatatype :: Id -> DatatypeDef -> Environment -> Environment
@@ -500,7 +500,7 @@ data ConstructorDef = ConstructorDef Id RSchema
 data PredDecl = PredDecl Id [Sort]  
   deriving (Eq)
 data Declaration =
-  TypeDecl Id RType |                                       -- ^ Type name and definition
+  TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature
   DataDecl Id [Id] [PredDecl] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
   MeasureDecl Id Sort Sort Formula |                        -- ^ Measure name, input sort, output sort, postcondition

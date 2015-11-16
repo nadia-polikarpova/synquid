@@ -336,7 +336,7 @@ instance Pretty PredDecl where
   pretty (PredDecl p sorts) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
   
 instance Pretty Declaration where
-  pretty (TypeDecl name t) = text "type" <+> text name <+> text "=" <+> pretty t
+  pretty (TypeDecl name tvs t) = text "type" <+> text name <+> hsep (map text tvs) <+> text "=" <+> pretty t
   pretty (QualifierDecl fmls) = text "qualifier" <+> braces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> text "::" <+> pretty t
   pretty (DataDecl name typeVars predParams wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>

@@ -130,9 +130,10 @@ parseTypeDef :: Parser Declaration
 parseTypeDef = do
   reserved "type"
   typeName <- parseTypeName
+  typeVars <- many parseIdentifier
   reservedOp "="
   typeDef <- parseType
-  return $ TypeDecl typeName typeDef
+  return $ TypeDecl typeName typeVars typeDef
 
 parseDataDef :: Parser Declaration
 parseDataDef = do
