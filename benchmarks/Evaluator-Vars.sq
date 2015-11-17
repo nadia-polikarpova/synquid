@@ -1,0 +1,52 @@
+qualifier {x >= y, x <= y, x != y}
+
+--type Nat = {Int | _v >= 0}
+zero :: {Int | _v == 0}
+one :: {Int | _v == 1}
+two :: {Int | _v == 2}
+--inc :: x:Nat -> {Int | _v == x + 1}
+--dec :: x:Nat -> {Int | _v == x - 1}
+
+measure size :: AST -> {Int | _v >= 0}
+measure result :: AST -> Int
+measure elems :: AST -> Set Int
+
+data AST decreases size where
+  Zero :: {AST | size _v == 0 && result _v == 0 && elems _v == []}
+  One :: {AST | size _v == 0 && result _v == 1 && elems _v == []}
+  Two :: {AST | size _v == 0 && result _v == 2 && elems _v == []}
+  Var :: x: Int -> {AST | size _v == 1 && result _v == x && elems _v == [x]}
+  PlusNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l + result r && elems _v == elems l + elems r}
+  MinusNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l - result r && elems _v == elems l + elems r}
+  ProductNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l * result r && elems _v == elems l + elems r}
+
+  --True :: x: Int -> {AST | size _v == 1 && result _v == x}
+  --False :: x: Int -> {AST | size _v == 1 && result _v == x}
+  --AndNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l - result r}
+
+type OpCode = {Int | _v >= 0 && _v <= 2}
+
+measure size2 :: PAST -> {Int | _v >= 0}
+measure result2 :: PAST -> Int
+measure elems2 :: PAST -> Set Int
+
+
+data PAST decreases size2 where
+  IntNode :: x: Int -> {PAST | size2 _v == 0 && result2 _v == x && elems2 _v == []}
+  VarNode :: x: Int -> {PAST | size2 _v == 0 && result2 _v == x && elems2 _v == [x]}
+  OpNode :: op: OpCode -> l: PAST -> r: PAST -> {PAST | size2 _v == size2 l + size2 r + 1 &&
+    elems2 _v == elems2 l + elems2 r &&
+    ((op == 0) ==> result2 _v == result2 l + result2 r) &&
+    ((op == 2) ==> result2 _v == result2 l * result2 r) &&
+    ((op == 1) ==> result2 _v == result2 l - result2 r)
+  }
+
+--measure len :: List -> {Int | _v >= 0}
+--measure result :: List -> Int
+--
+--data List decreases len where
+  --IntNode :: x: Int -> {AST | len _v == 1 && result _v == x}
+  --Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+
+transform :: x: AST -> {PAST | result2 _v == result x && elems2 _v == elems x}
+transform = ??
