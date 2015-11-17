@@ -61,7 +61,7 @@ refineCandidates params quals constraints cands = evalFixPointSolver go params
       (valids', invalids') <- partitionM (isValidFml . applySolution sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
       
--- | 'pruneQualifiers' @params quals@ : remove logically equivalent qualifiers from @quals@
+-- | 'pruneQualifiers' @params quals@ : remove reducdant and trivial qualifiers from @quals@
 pruneQualifiers :: SMTSolver s => SolverParams -> QSpace -> s QSpace    
 pruneQualifiers params quals = evalFixPointSolver (ifM (asks pruneQuals) (pruneQSpace quals) (return quals)) params
 
@@ -275,7 +275,8 @@ pruneValuations assumptions = let isSubsumed val vals = let fml = conjunction (v
 pruneQSpace :: SMTSolver s => QSpace -> FixPointSolver s QSpace 
 pruneQSpace qSpace = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
   in do
-    quals <- prune isSubsumed (qSpace ^. qualifiers)
+    quals' <- filterM (\q -> ifM (isValidFml q) (return False) (not <$> isValidFml (fnot q))) (qSpace ^. qualifiers) 
+    quals <- prune isSubsumed quals'
     return $ set qualifiers quals qSpace
   
 -- | 'prune' @isSubsumed xs@ : prune all elements of @xs@ subsumed by another element according to @isSubsumed@  
