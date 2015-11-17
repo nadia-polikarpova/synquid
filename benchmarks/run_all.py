@@ -67,6 +67,9 @@ BENCHMARKS = [
     ('BST-Delete', ['-m=1', '-e', '-a=2']),
     # Binary heap
     ('BinHeap-Member', []),
+    # Evaluation
+    ('Evaluator', []),
+    ('Evaluator-Vars', []),
 ]
 
 ABS_BENCHMARKS = [
@@ -108,16 +111,16 @@ def postprocess():
                 res = results [name]
                 outfile.write ('{0:0.2f}'.format(res.time))
                 outfile.write (',')
-            outfile.write ('\n')        
-            
+            outfile.write ('\n')
+
         for (short_name, args) in ABS_BENCHMARKS:
-            name = short_name + '-Abs' 
+            name = short_name + '-Abs'
             outfile.write (name + ',')
             if name in results:
                 res = results [name]
                 outfile.write ('{0:0.2f}'.format(res.time))
                 outfile.write (',')
-            outfile.write ('\n')            
+            outfile.write ('\n')
 
     if os.path.isfile(oracle_name):
         fromlines = open(oracle_name).readlines()
@@ -144,7 +147,7 @@ if __name__ == '__main__':
         run_benchmark(name, args)
     print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Abstract refinements' + Style.RESET_ALL
     for (name, args) in ABS_BENCHMARKS:
-        run_benchmark(name, args, 'abstract/')    
+        run_benchmark(name, args, 'abstract/')
 
     postprocess()
 
