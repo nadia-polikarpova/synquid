@@ -283,12 +283,10 @@ generateMatch env t = do
   if d == 0
     then mzero
     else do
-      a <- freshId "a"
-      addConstraint $ WellFormed env (vart a ftrue)
       (env', pScrutinee) <- local (
                                     over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params)
                                   . over (_1 . context) (. \p -> Program (PMatch p []) t))
-                                  $ generateE env (vartAll a) -- Generate a scrutinee of an arbitrary type
+                                  $ generateE env (vartAll dontCare) -- Generate a scrutinee of an arbitrary type
 
       case typeOf pScrutinee of
         (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
@@ -477,7 +475,6 @@ enumerateAt env typ 0 = do
                         else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
 
       msum $ map pickSymbol symbols'
-
   where
     pickSymbol (name, sch) = do
       t <- freshInstance sch
@@ -556,6 +553,7 @@ solveConstraints p = do
   writeLog 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p))
 
   simplifyAllConstraints
+  processAllPredicates
   processAllConstraints
   solveHornClauses
   ifM (asks $ _consistencyChecking . fst) checkConsistency (return ())
@@ -574,14 +572,19 @@ solveConstraints p = do
       if Map.size tass' > Map.size tass
         then simplifyAllConstraints
         else return () -- writeLog 1 (text "With Shapes" $+$ programDoc (\typ -> option (not $ Set.null $ unknownsOfType typ) (pretty typ)) (programSubstituteTypes tass p))
+        
+    processAllPredicates = do
+      cs <- use typingConstraints
+      typingConstraints .= []
+      mapM_ processWFPredicate cs
+      pass' <- use predAssignment
+      writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')        
 
     -- | Convert simple typing constraints into horn clauses and qualifier maps
     processAllConstraints = do
       cs <- use typingConstraints
       typingConstraints .= []
       mapM_ processConstraint cs
-      pass' <- use predAssignment
-      writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')
 
     -- | Refine the current liquid assignments using the horn clauses
     solveHornClauses = do
@@ -618,6 +621,8 @@ simplifyConstraint c = do
   tass <- use typeAssignment
   simplifyConstraint' tass c
 
+simplifyConstraint' tass (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) | a == dontCare -- Dummy type variable: drop
+  = return ()
 -- -- Type variable with known assignment: substitute
 simplifyConstraint' tass (Subtype env tv@(ScalarT (TypeVarT a) _) t consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env (typeSubstitute tass tv) t consistent)
@@ -645,7 +650,8 @@ simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) 
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name tArgs pArgs) fml) (ScalarT (DatatypeT name' tArgs' pArgs') fml') consistent)
 simplifyConstraint' _ (Subtype env (ScalarT (DatatypeT name [] (pArg:pArgs)) fml) (ScalarT (DatatypeT name' [] (pArg':pArgs')) fml') consistent)
   = do
-      simplifyConstraint (Subtype emptyEnv (int $ pArg) (int $ pArg') consistent) -- Is this a cheat?
+      -- simplifyConstraint (Subtype emptyEnv (int $ pArg) (int $ pArg') consistent) -- Is this a cheat?
+      simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent) -- Is this a cheat?
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name [] pArgs) fml) (ScalarT (DatatypeT name' [] pArgs') fml') consistent)      
 simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False)
   = do -- TODO: rename type vars
@@ -656,7 +662,7 @@ simplifyConstraint' _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 
   = do -- TODO: rename type vars
       -- simplifyConstraint (Subtype env tArg2 tArg1 False)
       -- writeLog 1 (text "RENAME VAR" <+> text x <+> text y <+> text "IN" <+> pretty tRes1)
-      simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg2 tRes1) tRes2 True)
+      simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
 simplifyConstraint' _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
   = do
       simplifyConstraint (WellFormed env tArg)
@@ -682,6 +688,28 @@ unify c env a t = if a `Set.member` typeVarsOf t
     writeLog 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
     addTypeAssignment a t'
     simplifyConstraint c
+    
+processWFPredicate :: Monad s => Constraint -> Explorer s ()    
+processWFPredicate c@(WellFormedPredicate env sorts p) 
+  = do
+      tass <- use typeAssignment
+      pass <- use predAssignment      
+      if Map.member p pass
+        then return ()
+        else let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
+             in if any (isFreeVariable tass) typeVars
+                then addConstraint c -- Still has type variables: cannot determine shape
+                else do
+                  u <- freshId "u"
+                  addPredAssignment p (Unknown Map.empty u)
+                  let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
+                  let vars = zipWith Var sorts' deBrujns
+                  tq <- asks $ _typeQualsGen . fst
+                  addQuals env u (tq $ last vars : init vars)
+  where
+    isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
+processWFPredicate c = addConstraint c  
+    
 
 -- | Convert simple constraint to horn clauses and qualifier maps
 processConstraint :: Monad s => Constraint -> Explorer s ()
@@ -698,52 +726,37 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         let l' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) l
         let r' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) r
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ env ^. boundPredicates)
-          then do        
+          then do
             let lhss = embedding env tass pass `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             addHornClause $ conjunction lhss |=>| r'
           else -- One of the sides contains free predicates: nothing can be done yet
             addConstraint c
-processConstraint (Subtype env (ScalarT baseT fml) (ScalarT baseT' fml') True) | baseT == baseT'
+processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
       tass <- use typeAssignment
       pass <- use predAssignment
-      let sortSubstFml = sortSubstituteFml (asSortSubst tass)
+      let l' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) l
+      let r' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) r      
       addConsistencyCheck (conjunction (
-                            Set.insert (sortSubstFml fml) $
-                            Set.insert (sortSubstFml fml') $
+                            Set.insert l' $ Set.insert r' $
                             embedding env tass pass))
 processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
       Unknown _ u -> do
         tass <- use typeAssignment
         tq <- asks $ _typeQualsGen . fst
-        addQuals u (tq $ Var (toSort baseT) valueVarName : allScalars env tass)
+        addQuals env u (tq $ Var (toSort baseT) valueVarName : allScalars env tass)
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       cq <- asks $ _condQualsGen . fst
-      addQuals u (cq $ allScalars env tass)
+      addQuals env u (cq $ allScalars env tass)
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       mq <- asks $ _matchQualsGen . fst
-      addQuals u (mq $ allPotentialScrutinees env tass)
-processConstraint c@(WellFormedPredicate env sorts p) 
-  = do
-      tass <- use typeAssignment
-      let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
-      if any (isFreeVariable tass) typeVars
-        then addConstraint c -- Still has type variables: cannot determine shape
-        else do
-          u <- freshId "u"
-          addPredAssignment p (Unknown Map.empty u)
-          let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
-          let vars = zipWith Var sorts' deBrujns
-          tq <- asks $ _typeQualsGen . fst
-          addQuals u (tq $ last vars : init vars)
-  where
-    isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
+      addQuals env u (mq $ allPotentialScrutinees env tass)
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
@@ -767,10 +780,10 @@ allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symb
 
 {- Utility -}
 
-addQuals :: Monad s => Id -> QSpace -> Explorer s ()
-addQuals name quals = do
+addQuals :: Monad s => Environment -> Id -> QSpace -> Explorer s ()
+addQuals env name quals = do
   solv <- asks snd
-  quals' <- lift . lift . lift . csPruneQuals solv $ quals
+  quals' <- lift . lift . lift $ csPruneQuals solv quals
   qualifierMap %= Map.insert name quals'
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
@@ -825,6 +838,8 @@ matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args p
   = do
       zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred p _) fml -> addPredAssignment p fml) pVars pArgs
+      -- pass' <- use predAssignment
+      -- writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')        
 matchConsType _ _ = mzero
 
 fmlToProgram :: Formula -> RProgram
