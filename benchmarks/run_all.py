@@ -49,6 +49,7 @@ BENCHMARKS = [
     # Trees
     ('Tree-Elem', []),
     ('Tree-Flatten', []),
+    ('Tree-HBal', []),
     # Insertion Sort
     ('IncList-Insert', []),
     ('IncList-InsertSort', []),
