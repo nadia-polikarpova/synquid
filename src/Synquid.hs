@@ -23,7 +23,7 @@ releaseDate = fromGregorian 2015 11 20
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
   (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch
-    consistency log_ useMemoization show_solution_size) <- cmdArgs cla
+    consistency log_ useMemoization print_solution_size) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -39,7 +39,7 @@ main = do
     solverLogLevel = log_
     }
   let synquidParams = defaultSynquidParams {
-    showSolutionSize = show_solution_size
+    showSolutionSize = print_solution_size
   }
   runOnFile synquidParams explorerParams solverParams file
 
@@ -64,7 +64,7 @@ data CommandLineArgs
         consistency :: Bool,
         log_ :: Int,
         use_memoization :: Bool,
-        show_solution_size :: Bool
+        print_solution_size :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
 
@@ -79,7 +79,7 @@ cla = CommandLineArgs {
   consistency     = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
   use_memoization = False           &= help ("Use memoization (default: False)"),
-  show_solution_size = False        &= help ("Show size of the synthesized solution (default: False)")
+  print_solution_size = False       &= help ("Show size of the synthesized solution (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration

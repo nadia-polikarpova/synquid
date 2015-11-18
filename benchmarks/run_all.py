@@ -15,7 +15,7 @@ LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME_WINDOWS = 'oracle'
 ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
-COMMON_OPTS = []
+COMMON_OPTS = ['--print-solution-size=True']
 
 BENCHMARKS = [
     # Integers
@@ -80,9 +80,10 @@ ABS_BENCHMARKS = [
 ]
 
 class SynthesisResult:
-    def __init__(self, name, time):
+    def __init__(self, name, time, size):
         self.name = name
         self.time = time
+        self.size = size
 
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', '
@@ -100,7 +101,8 @@ def run_benchmark(name, opts, path=''):
       if return_code:
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
-          results [name] = SynthesisResult(name, (end - start))
+          solutionSize = os.popen("tail -n 2 %s | grep -oP '\d+'" % LOGFILE_NAME).read()
+          results [name] = SynthesisResult(name, (end - start), solutionSize[:-1])
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
 
 def postprocess():
@@ -111,6 +113,8 @@ def postprocess():
                 res = results [name]
                 outfile.write ('{0:0.2f}'.format(res.time))
                 outfile.write (',')
+                outfile.write (res.size)
+                outfile.write (',')
             outfile.write ('\n')
 
         for (short_name, args) in ABS_BENCHMARKS:
@@ -119,6 +123,8 @@ def postprocess():
             if name in results:
                 res = results [name]
                 outfile.write ('{0:0.2f}'.format(res.time))
+                outfile.write (',')
+                outfile.write (res.size)
                 outfile.write (',')
             outfile.write ('\n')
 
