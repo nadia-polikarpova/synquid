@@ -15,6 +15,7 @@ import System.Exit
 import System.Console.CmdArgs
 import Data.Time.Calendar
 import Text.ParserCombinators.Parsec (parse, parseFromFile)
+import Data.Map (size)
 
 programName = "synquid"
 versionName = "0.2"
@@ -154,6 +155,10 @@ runOnFile synquidParams explorerParams solverParams file = do
               if (showSolutionSize synquidParams) then parens (text "Size:" <+> pretty (programNodeCount prog))
               else empty
             specSizeDoc =
-              if (showSpecInfo synquidParams) then parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal))
-              else empty
+              if (showSpecInfo synquidParams)
+                then
+                  parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
+                    parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
+                    parens (text "#components:" <+> pretty ((size $ _symbols $ gEnvironment goal) - 1)) -- we only solve one goal
+                else empty
       print empty
