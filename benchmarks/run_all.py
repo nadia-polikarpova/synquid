@@ -3,6 +3,7 @@ import os, os.path
 import platform
 import shutil
 import time
+import re
 import difflib
 from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
@@ -15,7 +16,7 @@ LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME_WINDOWS = 'oracle'
 ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
-COMMON_OPTS = ['--print-solution-size=True']
+COMMON_OPTS = ['--print-solution-size=True', '--print-spec-info=True']
 
 BENCHMARKS = [
     # Integers
@@ -80,13 +81,14 @@ ABS_BENCHMARKS = [
 ]
 
 class SynthesisResult:
-    def __init__(self, name, time, size):
+    def __init__(self, name, time, size, specSize):
         self.name = name
         self.time = time
         self.size = size
+        self.specSize = specSize
 
     def str(self):
-        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', '
+        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', '
 
 def run_benchmark(name, opts, path=''):
     print name,
@@ -101,31 +103,25 @@ def run_benchmark(name, opts, path=''):
       if return_code:
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
-          solutionSize = os.popen("tail -n 2 %s | grep -oP '\d+'" % LOGFILE_NAME).read()
-          results [name] = SynthesisResult(name, (end - start), solutionSize[:-1])
+          lastLines = os.popen("tail -n 3 %s" % LOGFILE_NAME).read().split('\n')
+          solutionSize = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
+          specSize = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
+          results [name] = SynthesisResult(name, (end - start), solutionSize, specSize)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
 
 def postprocess():
     with open(OUTFILE_NAME, 'w') as outfile:
         for (name, args) in BENCHMARKS:
-            outfile.write (name + ',')
             if name in results:
                 res = results [name]
-                outfile.write ('{0:0.2f}'.format(res.time))
-                outfile.write (',')
-                outfile.write (res.size)
-                outfile.write (',')
+                outfile.write (res.str())
             outfile.write ('\n')
 
         for (short_name, args) in ABS_BENCHMARKS:
             name = short_name + '-Abs'
-            outfile.write (name + ',')
             if name in results:
                 res = results [name]
-                outfile.write ('{0:0.2f}'.format(res.time))
-                outfile.write (',')
-                outfile.write (res.size)
-                outfile.write (',')
+                outfile.write (res.str())
             outfile.write ('\n')
 
     if os.path.isfile(oracle_name):

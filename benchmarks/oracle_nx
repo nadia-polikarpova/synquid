@@ -3,6 +3,7 @@ max2 = \x . \y . if (>=) x y
   then x
   else y
 (Size: 11)
+(Spec size: 7)
 
 max3 :: (x:Int -> (y:Int -> (z:Int -> {Int|(_v >= x && _v >= y) && _v >= z})))
 max3 = \x . \y . \z . if (&&) ((>=) x y) ((>=) x z)
@@ -11,6 +12,7 @@ max3 = \x . \y . \z . if (&&) ((>=) x y) ((>=) x z)
     then y
     else z
 (Size: 27)
+(Spec size: 11)
 
 max4 :: (w:Int -> (x:Int -> (y:Int -> (z:Int -> {Int|((_v >= w && _v >= x) && _v >= y) && _v >= z}))))
 max4 = \w . \x . \y . \z . if (&&) ((>=) w x) ((&&) ((>=) w y) ((>=) w z))
@@ -21,6 +23,7 @@ max4 = \w . \x . \y . \z . if (&&) ((>=) w x) ((&&) ((>=) w y) ((>=) w z))
       then y
       else z
 (Size: 51)
+(Spec size: 15)
 
 max5 :: (v:Int -> (w:Int -> (x:Int -> (y:Int -> (z:Int -> {Int|(((_v >= v && _v >= w) && _v >= x) && _v >= y) && _v >= z})))))
 max5 = \v . \w . \x . \y . \z . if (&&) ((>=) v w) ((&&) ((>=) v x) ((&&) ((>=) v y) ((>=) v z)))
@@ -33,6 +36,7 @@ max5 = \v . \w . \x . \y . \z . if (&&) ((>=) v w) ((&&) ((>=) v x) ((&&) ((>=) 
         then y
         else z
 (Size: 83)
+(Spec size: 19)
 
 add :: (x:{Int|_v >= 0} -> (y:{Int|_v >= 0} -> {Int|_v == x + y}))
 add = \x . \y . if (>=) 0 y
@@ -41,12 +45,14 @@ add = \x . \y . if (>=) 0 y
     then y
     else inc (add x (dec y))
 (Size: 26)
+(Spec size: 11)
 
 null :: <a> . (xs:List (a) -> {Bool|_v == (len xs == 0)})
 null = \xs . match xs with
   Nil -> true
   Cons x3 x4 -> false
 (Size: 6)
+(Spec size: 6)
 
 elem :: <a> . (x:a -> (xs:List (a) -> {Bool|_v == (x) in (elems xs)}))
 elem = \x . \xs . match xs with
@@ -55,30 +61,35 @@ elem = \x . \xs . match xs with
     then true
     else elem x x4
 (Size: 18)
+(Spec size: 6)
 
 stutter :: <a> . (xs:List (a) -> {List (a)|len _v == 2 * len xs})
 stutter = \xs . match xs with
   Nil -> xs
   Cons x3 x4 -> Cons x3 (Cons x3 (stutter x4))
 (Size: 16)
+(Spec size: 7)
 
 replicate :: <a> . (n:{Int|_v >= 0} -> (x:a -> {List (a)|len _v == n}))
 replicate = \n . \x . if (>=) 0 n
   then Nil
   else Cons x (replicate (dec n) x)
 (Size: 21)
+(Spec size: 7)
 
 append :: <a> . (xs:List (a) -> (ys:List (a) -> {List (a)|len _v == len xs + len ys}))
 append = \xs . \ys . match ys with
   Nil -> xs
   Cons x4 x5 -> Cons x4 (append xs x5)
 (Size: 15)
+(Spec size: 8)
 
 concat :: <a> . (xss:ListOfLists (a) -> {List (a)|len _v == sumLen xss})
 concat = \xss . match xss with
   Nil2 -> Nil
   Cons2 x3 x4 -> append x3 (concat x4)
 (Size: 12)
+(Spec size: 5)
 
 take :: <a> . (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == n}))
 take = \n . \xs . match xs with
@@ -87,6 +98,7 @@ take = \n . \xs . match xs with
     then Nil
     else Cons x4 (take (dec n) x5)
 (Size: 24)
+(Spec size: 11)
 
 drop :: <a> . (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == len xs - n}))
 drop = \n . \xs . if (<=) n 0
@@ -95,6 +107,7 @@ drop = \n . \xs . if (<=) n 0
     Nil -> error
     Cons x4 x5 -> drop (dec n) x5
 (Size: 20)
+(Spec size: 14)
 
 delete :: <a> . (x:a -> (xs:List (a) -> {List (a)|elems _v == (elems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -103,12 +116,14 @@ delete = \x . \xs . match xs with
     then delete x x4
     else Cons x3 (delete x x4)
 (Size: 26)
+(Spec size: 8)
 
 map :: <b> . <a> . (f:(_:a -> b) -> (xs:List (a) -> {List (b)|len _v == len xs}))
 map = \f . \xs . match xs with
   Nil -> Nil
   Cons x3 x4 -> Cons (f x3) (map (\x14 . f x14) x4)
 (Size: 20)
+(Spec size: 5)
 
 zipWith :: <c> . <b> . <a> . (f:(_:a -> (_:b -> c)) -> (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (c)|len _v == len xs})))
 zipWith = \f . \xs . \ys . match xs with
@@ -117,6 +132,7 @@ zipWith = \f . \xs . \ys . match xs with
     Nil -> error
     Cons x8 x9 -> Cons (f x4 x8) (zipWith (\x22 . \x23 . f x22 x23) x5 x9)
 (Size: 31)
+(Spec size: 10)
 
 zip :: <b> . <a> . (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (Pair (a) (b))|len _v == len xs}))
 zip = \xs . \ys . match xs with
@@ -125,18 +141,21 @@ zip = \xs . \ys . match xs with
     Nil -> error
     Cons x8 x9 -> Cons (Pair x4 x8) (zip x5 x9)
 (Size: 22)
+(Spec size: 10)
 
 toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
 toNat = \xs . map (\x4 . if (>=) x4 0
   then x4
   else neg x4) xs
 (Size: 17)
+(Spec size: 8)
 
 product :: <b> . <a> . (la:List (a) -> (lb:List (b) -> {List (Pair (a) (b))|len _v == len la * len lb}))
 product = \la . \lb . match la with
   Nil -> Nil
   Cons x4 x5 -> append (map (\x13 . Pair x4 x13) lb) (product x5 lb)
 (Size: 24)
+(Spec size: 8)
 
 insert :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -145,6 +164,7 @@ insert = \x . \xs . match xs with
     then xs
     else UCons x7 (insert x x8)
 (Size: 26)
+(Spec size: 8)
 
 delete :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -153,6 +173,7 @@ delete = \x . \xs . match xs with
     then x4
     else UCons x3 (delete x x4)
 (Size: 22)
+(Spec size: 8)
 
 delete :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -161,6 +182,7 @@ delete = \x . \xs . match xs with
     then x4
     else UCons x3 (delete x x4)
 (Size: 22)
+(Spec size: 8)
 
 elem :: <a> . (x:a -> (xs:UList (a) -> {Bool|_v == (x) in (uelems xs)}))
 elem = \x . \xs . match xs with
@@ -169,12 +191,14 @@ elem = \x . \xs . match xs with
     then true
     else elem x x4
 (Size: 18)
+(Spec size: 6)
 
 strengthen :: <a> . (x:a -> (xs:{UList (a)|!(x) in (uelems _v)} -> {UList ({a|_v /= x})|uelems _v == uelems xs && ulen _v == ulen xs}))
 strengthen = \x . \xs . match xs with
   UNil -> UNil
   UCons x3 x4 -> UCons x3 (strengthen x x4)
 (Size: 15)
+(Spec size: 19)
 
 nub' :: <a> . (xs:List (a) -> (acc:UList (a) -> {UList (a)|uelems _v == (uelems acc) + (elems xs)}))
 nub' = \xs . \acc . match xs with
@@ -183,6 +207,7 @@ nub' = \xs . \acc . match xs with
     then nub' x4 acc
     else nub' x4 (UCons x3 (strengthen x3 acc))
 (Size: 30)
+(Spec size: 8)
 
 compress :: <a> . (xs:List (a) -> {CList (a)|celems _v == elems xs})
 compress = \xs . match xs with
@@ -193,6 +218,7 @@ compress = \xs . match xs with
       then CCons x13 x14
       else CCons x3 (CCons x13 x14)
 (Size: 34)
+(Spec size: 5)
 
 elem :: <a> . (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
 elem = \x . \t . match t with
@@ -201,12 +227,14 @@ elem = \x . \t . match t with
     then not false
     else or (elem x x5) (elem x x6)
 (Size: 28)
+(Spec size: 6)
 
 flatten :: <a> . (t:Tree (a) -> {List (a)|len _v == size t})
 flatten = \t . match t with
   Empty -> Nil
   Node x4 x5 x6 -> Cons x4 (append (flatten x5) (flatten x6))
 (Size: 18)
+(Spec size: 5)
 
 insert :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -217,12 +245,14 @@ insert = \x . \xs . match xs with
       then ICons x7 (insert x x8)
       else ICons x (ICons x7 x8)
 (Size: 49)
+(Spec size: 8)
 
 insertSort :: <a> . (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 insertSort = \xs . match xs with
   Nil -> INil
   Cons x3 x4 -> insert x3 (insertSort x4)
 (Size: 12)
+(Spec size: 5)
 
 split :: <a> . (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
 split = \xs . match xs with
@@ -232,6 +262,7 @@ split = \xs . match xs with
     Cons x15 x16 -> match split x16 with
       Pair x21 x22 -> Pair (Cons x15 x21) (Cons x7 x22)
 (Size: 33)
+(Spec size: 31)
 
 merge :: <a> . (xs:IList (a) -> (ys:IList (a) -> {IList (a)|ilen _v == ilen xs + ilen ys && ielems _v == (ielems xs) + (ielems ys)}))
 merge = \xs . \ys . match ys with
@@ -242,6 +273,7 @@ merge = \xs . \ys . match ys with
       then ICons x12 (merge x13 (ICons x4 x5))
       else ICons x4 (merge (ICons x12 x13) x5)
 (Size: 45)
+(Spec size: 17)
 
 mergeSort :: <a> . (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 mergeSort = \xs . match xs with
@@ -251,6 +283,7 @@ mergeSort = \xs . match xs with
     Cons x11 x12 -> match split xs with
       Pair x17 x18 -> merge (mergeSort x17) (mergeSort x18)
 (Size: 25)
+(Spec size: 11)
 
 partition :: <a> . (p:a -> (xs:List (a) -> {Pair (List ({a|_v <= p})) (List ({a|_v > p}))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
 partition = \p . \xs . match xs with
@@ -260,12 +293,14 @@ partition = \p . \xs . match xs with
       then Pair (Cons x7 x15) x16
       else Pair x15 (Cons x7 x16)
 (Size: 40)
+(Spec size: 27)
 
 pivotAppend :: <a> . (p:a -> (xs:IList ({a|_v <= p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
   INil -> ICons p ys
   ICons x8 x9 -> ICons x8 (pivotAppend p x9 ys)
 (Size: 22)
+(Spec size: 28)
 
 quickSort :: <a> . (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 quickSort = \xs . match xs with
@@ -273,6 +308,7 @@ quickSort = \xs . match xs with
   Cons x3 x4 -> match partition x3 x4 with
     Pair x11 x12 -> pivotAppend x3 (quickSort x11) (quickSort x12)
 (Size: 22)
+(Spec size: 11)
 
 member :: <a> . (x:a -> (t:BST (a) -> {Bool|_v == (x) in (telems t)}))
 member = \x . \t . match t with
@@ -283,6 +319,7 @@ member = \x . \t . match t with
       then member x x5
       else member x x6
 (Size: 37)
+(Spec size: 6)
 
 insert :: <a> . (x:a -> (t:BST (a) -> {BST (a)|elems _v == (elems t) + ([x])}))
 insert = \x . \t . match t with
@@ -293,6 +330,7 @@ insert = \x . \t . match t with
       then Node x10 x11 (insert x x12)
       else Node x10 (insert x x11) x12
 (Size: 55)
+(Spec size: 8)
 
 insert :: <a> . (x:a -> (t:BST (a) -> {BST (a)|telems _v == (telems t) + ([x])}))
 insert = \x . \t . match t with
@@ -303,36 +341,42 @@ insert = \x . \t . match t with
       then Node x10 x11 (insert x x12)
       else Node x10 (insert x x11) x12
 (Size: 55)
+(Spec size: 8)
 
 toBST :: <a> . (xs:List (a) -> {BST (a)|telems _v == elems xs})
 toBST = \xs . match xs with
   Nil -> Empty
   Cons x3 x4 -> insert x3 (toBST x4)
 (Size: 12)
+(Spec size: 5)
 
 pivotAppend :: <a> . (p:a -> (xs:IList ({a|_v < p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
   INil -> ICons p ys
   ICons x8 x9 -> ICons x8 (pivotAppend p x9 ys)
 (Size: 22)
+(Spec size: 28)
 
 flatten :: <a> . (t:BST (a) -> {IList (a)|ielems _v == telems t})
 flatten = \t . match t with
   Empty -> INil
   Node x4 x5 x6 -> pivotAppend x4 (flatten x5) (flatten x6)
 (Size: 16)
+(Spec size: 5)
 
 sort :: <a> . (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 sort = \xs . match xs with
   Nil -> INil
   Cons x3 x4 -> flatten (toBST xs)
 (Size: 10)
+(Spec size: 5)
 
 mergePivot :: <a> . (p:a -> (t1:BST ({a|_v < p}) -> (t2:BST ({a|_v > p}) -> {BST (a)|elems _v == (elems t1) + (elems t2)})))
 mergePivot = \p . \t1 . \t2 . match t1 with
   Empty -> t2
   Node x5 x6 x7 -> Node x5 x6 (mergePivot p x7 t2)
 (Size: 20)
+(Spec size: 14)
 
 delete :: <a> . (t:BST (a) -> (x:a -> {BST (a)|elems _v == (elems t) - ([x])}))
 delete = \t . \x . match t with
@@ -343,6 +387,7 @@ delete = \t . \x . match t with
       then Node x4 x5 (delete x6 x)
       else Node x4 (delete x5 x) x6
 (Size: 47)
+(Spec size: 8)
 
 member :: <a> . (x:a -> (t:Heap (a) -> {Bool|_v == (x) in (elems t)}))
 member = \x . \t . match t with
@@ -351,6 +396,7 @@ member = \x . \t . match t with
     then not false
     else or (member x x5) (member x x6)
 (Size: 28)
+(Spec size: 6)
 
 transform :: (x:AST -> {PAST|result2 _v == result x})
 transform = \x . match x with
@@ -361,6 +407,7 @@ transform = \x . match x with
   MinusNode x23 x24 -> OpNode one (transform x23) (transform x24)
   ProductNode x37 x38 -> OpNode two (transform x37) (transform x38)
 (Size: 46)
+(Spec size: 5)
 
 transform :: (x:AST -> {PAST|result2 _v == result x && elems2 _v == elems x})
 transform = \x . match x with
@@ -372,12 +419,14 @@ transform = \x . match x with
   MinusNode x27 x28 -> OpNode one (transform x27) (transform x28)
   ProductNode x41 x42 -> OpNode two (transform x41) (transform x42)
 (Size: 49)
+(Spec size: 11)
 
 max :: <P :: Int -> Bool> . (x:{Int|P _v} -> (y:{Int|P _v} -> {Int|(P _v && _v >= x) && _v >= y}))
 max = \x . \y . if (>=) x y
   then x
   else y
 (Size: 11)
+(Spec size: 14)
 
 insert :: <a> . (x:a -> (xs:List (a) <_0 <= _1> -> {List (a) <_0 <= _1>|elems _v == (elems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -388,4 +437,5 @@ insert = \x . \xs . match xs with
       then Cons x7 (insert x x8)
       else Cons x (Cons x7 x8)
 (Size: 49)
+(Spec size: 14)
 
