@@ -204,12 +204,13 @@ substitute subst fml = case fml of
       then new
       else if Map.null new
         then old
-        else  let ((x, Var b y), old') = Map.deleteFindMin old
-              in case Map.lookup y new of
-                Nothing -> Map.insert x (Var b y) $ compose old' new
-                Just (Var b' v) -> if b == b' 
-                  then Map.insert x (Var b v) $ compose old' (Map.delete y new)
-                  else error "Base type mismatch when composing pending substitutions"
+        else  case Map.deleteFindMin old of
+                ((x, Var b y), old') -> case Map.lookup y new of
+                    Nothing -> Map.insert x (Var b y) $ compose old' new
+                    Just (Var b' v) -> if b == b' 
+                      then Map.insert x (Var b v) $ compose old' (Map.delete y new)
+                      else error "Base type mismatch when composing pending substitutions"
+                _ -> compose (Map.deleteMin old) new
                   
 deBrujns = map (\i -> dontCare ++ show i) [0..] 
                   
