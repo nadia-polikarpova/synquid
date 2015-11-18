@@ -176,6 +176,7 @@ def postprocess():
                     ' & ' + '{0:0.2f}'.format(res.time) + ' \\\\'
                     outfile.write (row)
                 outfile.write ('\n')
+            outfile.write ('\\hline')
 
         for (short_name, args) in ABS_BENCHMARKS:
             name = short_name + '-Abs'
