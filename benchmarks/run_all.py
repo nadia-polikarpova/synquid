@@ -81,14 +81,16 @@ ABS_BENCHMARKS = [
 ]
 
 class SynthesisResult:
-    def __init__(self, name, time, size, specSize):
+    def __init__(self, name, time, size, specSize, nMeasures, nComponents):
         self.name = name
         self.time = time
         self.size = size
         self.specSize = specSize
+        self.nMeasures = nMeasures
+        self.nComponents = nComponents
 
     def str(self):
-        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', '
+        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', ' + self.nMeasures + ', ' + self.nComponents
 
 def run_benchmark(name, opts, path=''):
     print name,
@@ -103,10 +105,12 @@ def run_benchmark(name, opts, path=''):
       if return_code:
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
-          lastLines = os.popen("tail -n 3 %s" % LOGFILE_NAME).read().split('\n')
+          lastLines = os.popen("tail -n 5 %s" % LOGFILE_NAME).read().split('\n')
           solutionSize = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
           specSize = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
-          results [name] = SynthesisResult(name, (end - start), solutionSize, specSize)
+          measures = re.match("\(#measures: (\d+)\).*$", lastLines[2]).group(1)
+          components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
+          results [name] = SynthesisResult(name, (end - start), solutionSize, specSize, measures, components)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
 
 def postprocess():
