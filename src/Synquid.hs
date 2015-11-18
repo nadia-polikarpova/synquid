@@ -15,7 +15,7 @@ import System.Exit
 import System.Console.CmdArgs
 import Data.Time.Calendar
 import Text.ParserCombinators.Parsec (parse, parseFromFile)
-import Data.Map (size)
+import Data.Map (size, elems, keys)
 
 programName = "synquid"
 versionName = "0.2"
@@ -156,9 +156,16 @@ runOnFile synquidParams explorerParams solverParams file = do
               else empty
             specSizeDoc =
               if (showSpecInfo synquidParams)
-                then
-                  parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
-                    parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
-                    parens (text "#components:" <+> pretty ((size $ _symbols $ gEnvironment goal) - 1)) -- we only solve one goal
-                else empty
+              then
+                parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
+                  parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
+                  parens (text "#components:" <+>
+                    pretty (
+                      --(size $ _symbols $ gEnvironment goal) -
+                      let
+                        constructors = concat $ map (\dt -> (_constructors dt)) $ elems $ _datatypes $ gEnvironment goal
+                      in
+                        (sum $ map (\inMap -> length $ filter (\k -> not(k `elem` constructors)) $ keys inMap)
+                          (elems $ _symbols $ gEnvironment goal)))) -- we only solve one goal
+              else empty
       print empty
