@@ -243,13 +243,10 @@ generateI env t@(FunctionT x tArg tRes) = do
   let ctx = \p -> Program (PFun x' p) t
   pBody <- local (over (_1 . context) (. ctx)) $ generateI (unfoldAllVariables $ addVariable x' tArg $ env) tRes
   return $ ctx pBody
-generateI env t@(ScalarT _ _) = do
-  deadBranch <- isEnvironmentInconsistent env
-  if deadBranch
-    then return $ Program (PSymbol "error") t
-    else ifM (asks $ _abduceScrutinees . fst)
-            (generateMaybeMatchIf env t)
-            (generateMaybeIf env t)
+generateI env t@(ScalarT _ _) = ifM (asks $ _abduceScrutinees . fst)
+                                    (generateMaybeMatchIf env t)
+                                    (generateMaybeIf env t)
+            
 
 -- | Generate a possibly conditional term type @t@, depending on whether a condition is abduced
 generateMaybeIf :: Monad s => Environment -> RType -> Explorer s RProgram
@@ -299,11 +296,41 @@ generateMatch env t = do
           guard isGoodScrutinee
 
           (env'', x) <- toSymbol pScrutinee (addScrutinee pScrutinee env')
-          pCases <- mapM (once . generateCase env'' x pScrutinee t) ctors              -- Generate a case for each constructor of the datatype
-          return $ Program (PMatch pScrutinee pCases) t
+          (pCase, cond) <- once $ generateFirstCase env'' x pScrutinee t (head ctors)             -- First case generated separately in an attempt to abduce a condition for the whole match
+          if cond == ftrue
+            then do -- First case is valid unconditionally
+              pCases <- mapM (once . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
+              return $ Program (PMatch pScrutinee (pCase : pCases)) t
+            else do -- First case is valid under a condition
+              pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the asumption
+              let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
+              pCond <- generateCondition env cond
+              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $               -- Gnereate the else branch
+                          generateI (addAssumption (fnot cond) env) t            
+              return $ Program (PIf pCond pThen pElse) t
 
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
-
+        
+generateFirstCase env scrName pScrutinee t consName = do
+  case Map.lookup consName (allSymbols env) of
+    Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
+    Just consSch -> do
+      consT <- instantiate env consSch ftrue
+      matchConsType (lastType consT) (typeOf pScrutinee)
+      let ScalarT baseT _ = (typeOf pScrutinee)
+      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) consT
+      
+      deadBranchCond <- isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
+      case deadBranchCond of
+        Nothing -> do
+                    let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+                    pCaseExpr <- local (
+                                         over (_1 . matchDepth) (-1 +)
+                                       . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
+                                      $ generateI caseEnv t
+                    return $ (Case consName args pCaseExpr, ftrue)
+        
+        Just cond -> return $ (Case consName args (Program (PSymbol "error") t), cond)
 
 -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
 generateCase env scrName pScrutinee t consName = do
@@ -313,20 +340,20 @@ generateCase env scrName pScrutinee t consName = do
       consT <- instantiate env consSch ftrue
       matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)
-      (args, caseEnv) <- addCaseSymbols env (Var (toSort baseT) scrName) consT -- Add bindings for constructor arguments and refine the scrutinee type in the environment
+      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) consT
+      let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
       pCaseExpr <- local (
                            over (_1 . matchDepth) (-1 +)
                          . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
                         $ generateI caseEnv t
       return $ Case consName args pCaseExpr
-  where
-    -- | 'addCaseSymbols' @env x tX case@ : extension of @env@ that assumes that scrutinee @x@ of type @tX@.
-    addCaseSymbols env x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
-      return $ ([], addAssumption (subst fml) env) -- here disallowed unless no other choice
-    addCaseSymbols env x (FunctionT y tArg tRes) = do
-      argName <- freshId "x"
-      (args, env') <- addCaseSymbols (addVariable argName tArg env) x (renameVar y argName tArg tRes)
-      return (argName : args, env')
+
+caseSymbols x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
+  return ([], [], subst fml)
+caseSymbols x (FunctionT y tArg tRes) = do
+  argName <- freshId "x"
+  (args, syms, ass) <- caseSymbols x (renameVar y argName tArg tRes)
+  return (argName : args, (argName, tArg) : syms, ass)            
 
 -- | Generate a possibly conditinal possibly match term, depending on which conditions are abduced
 generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (generateMatch env t)
@@ -473,7 +500,6 @@ enumerateAt env typ 0 = do
       let symbols' = if arity typ == 0
                         then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
                         else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
-
       msum $ map pickSymbol symbols'
   where
     pickSymbol (name, sch) = do
@@ -607,14 +633,23 @@ solveConstraints p = do
       candidates .= cands'
       consistencyChecks .= []
 
-isEnvironmentInconsistent env = do
+isEnvironmentInconsistent env env' t = do
+  cUnknown <- Unknown Map.empty <$> freshId "u"
+  addConstraint $ WellFormedCond env cUnknown
+  solveConstraints (Program (PSymbol "error") t)
+
   tass <- use typeAssignment
   pass <- use predAssignment
+  qmap <- use qualifierMap
   let fml = conjunction $ embedding env tass pass
+  let fml' = conjunction $ embedding env' tass pass
   solv <- asks snd
   cands <- use candidates
-  cands' <- lift . lift . lift $ csCheckConsistency solv [fml] cands
-  return $ null cands'
+  cands' <- lift . lift . lift $ csRefine solv [(cUnknown |&| fml) |=>| fnot fml'] qmap (Program (PSymbol "error") t) cands
+  
+  if null cands'
+    then return Nothing
+    else return $ Just $ (conjunction . flip valuation cUnknown . solution . head) cands'
 
 simplifyConstraint :: Monad s => Constraint -> Explorer s ()
 simplifyConstraint c = do
@@ -705,7 +740,7 @@ processWFPredicate c@(WellFormedPredicate env sorts p)
                   let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
                   let vars = zipWith Var sorts' deBrujns
                   tq <- asks $ _typeQualsGen . fst
-                  addQuals env u (tq $ last vars : init vars)
+                  addQuals u (tq $ last vars : (init vars ++ allScalars env tass))
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processWFPredicate c = addConstraint c  
@@ -745,18 +780,18 @@ processConstraint (WellFormed env (ScalarT baseT fml))
       Unknown _ u -> do
         tass <- use typeAssignment
         tq <- asks $ _typeQualsGen . fst
-        addQuals env u (tq $ Var (toSort baseT) valueVarName : allScalars env tass)
+        addQuals u (tq $ Var (toSort baseT) valueVarName : allScalars env tass)
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       cq <- asks $ _condQualsGen . fst
-      addQuals env u (cq $ allScalars env tass)
+      addQuals u (cq $ allScalars env tass)
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       mq <- asks $ _matchQualsGen . fst
-      addQuals env u (mq $ allPotentialScrutinees env tass)
+      addQuals u (mq $ allPotentialScrutinees env tass)
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
@@ -767,7 +802,7 @@ allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0
     toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
     toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
     toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
-
+    
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
 allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
@@ -780,8 +815,8 @@ allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symb
 
 {- Utility -}
 
-addQuals :: Monad s => Environment -> Id -> QSpace -> Explorer s ()
-addQuals env name quals = do
+addQuals :: Monad s => Id -> QSpace -> Explorer s ()
+addQuals name quals = do
   solv <- asks snd
   quals' <- lift . lift . lift $ csPruneQuals solv quals
   qualifierMap %= Map.insert name quals'
