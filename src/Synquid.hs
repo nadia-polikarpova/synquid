@@ -22,7 +22,8 @@ releaseDate = fromGregorian 2015 11 20
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch consistency log_ useMemoization) <- cmdArgs cla
+  (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch
+    consistency log_ useMemoization show_solution_size) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -37,7 +38,10 @@ main = do
   let solverParams = defaultSolverParams {
     solverLogLevel = log_
     }
-  runOnFile explorerParams solverParams file
+  let synquidParams = defaultSynquidParams {
+    showSolutionSize = show_solution_size
+  }
+  runOnFile synquidParams explorerParams solverParams file
 
 {- Command line arguments -}
 
@@ -59,7 +63,8 @@ data CommandLineArgs
         explicit_match :: Bool,
         consistency :: Bool,
         log_ :: Int,
-        use_memoization :: Bool
+        use_memoization :: Bool,
+        show_solution_size :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
 
@@ -73,7 +78,8 @@ cla = CommandLineArgs {
   explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
   consistency     = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
-  use_memoization = False           &= help ("Use memoization (default: False)")
+  use_memoization = False           &= help ("Use memoization (default: False)"),
+  show_solution_size = False        &= help ("Show size of the synthesized solution (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
@@ -107,9 +113,18 @@ defaultSolverParams = SolverParams {
   solverLogLevel = 1
 }
 
+-- | Parameters of the synthesis
+data SynquidParams = SynquidParams {
+  showSolutionSize :: Bool                    -- ^ Print synthesized term size
+}
+
+defaultSynquidParams = SynquidParams {
+  showSolutionSize = False
+}
+
 -- | Parse and resolve file, then synthesize the specified goals
-runOnFile :: ExplorerParams -> SolverParams -> String -> IO ()
-runOnFile explorerParams solverParams file = do
+runOnFile :: SynquidParams -> ExplorerParams -> SolverParams -> String -> IO ()
+runOnFile synquidParams explorerParams solverParams file = do
   parseResult <- parseFromFile Parser.parseProgram file
   case parseResult of
     Left parseErr -> (putStr $ show parseErr) >> exitFailure
@@ -125,5 +140,10 @@ runOnFile explorerParams solverParams file = do
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Nothing -> putStr "No Solution" >> exitFailure
-        Just prog -> print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog -- $+$ parens (text "Size:" <+> pretty (programNodeCount prog))
+        Just prog ->
+          print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog $+$ solutionSizeDoc
+          where
+            solutionSizeDoc =
+              if (showSolutionSize synquidParams) then parens (text "Size:" <+> pretty (programNodeCount prog))
+              else empty
       print empty
