@@ -159,6 +159,9 @@ runOnFile synquidParams explorerParams solverParams file = do
                 then
                   parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
                     parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
-                    parens (text "#components:" <+> pretty ((size $ _symbols $ gEnvironment goal) - 1)) -- we only solve one goal
+                    parens (text "#components:" <+>
+                      pretty (
+                        (size $ _symbols $ gEnvironment goal) -
+                        (size $ _datatypes $ gEnvironment goal) - 1)) -- we only solve one goal
                 else empty
       print empty
