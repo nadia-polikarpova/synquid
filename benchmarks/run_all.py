@@ -85,8 +85,8 @@ BENCHMARKS = [
     ],
     ["User",
         # Evaluation
-        [('Evaluator', 'addition', []),
-        ('Evaluator-Vars', 'addition', [])]
+        [('Evaluator', 'desugar AST', []),
+        ('Evaluator-Vars', 'desugar AST with variables', [])]
     ]
 ]
 #BENCHMARKS = dict(map(lambda (k,v): [k].extend(v), my_dictionary.iteritems()))
@@ -97,6 +97,28 @@ ABS_BENCHMARKS = [
     # Insertion Sort
     ('IncList-Insert', []),
 ]
+
+COMPONENTS = {
+   "Int-Add": "integer",
+   "List-Null": "bool",
+   "List-Elem": "bool",
+   "List-Replicate": "integer",
+   "List-Take": "integer",
+   "List-Drop": "integer",
+   "List-Concat": "append",
+   "List-ToNat": "map, negate",
+   "List-Product": "map, append",
+   "List-Nub": "bool, elem",
+   "Tree-Elem": "bool",
+   "Tree-Flatten": "append",
+   "Tree-HBal": "integer",
+   "IncList-InsertSort": "insert",
+   "IncList-MergeSort": "split, merge",
+   "IncList-QuickSort": "partition, pivotAppend",
+   "BST-Member": "bool",
+   "Evaluator": "integer",
+   "Evaluator-Vars": "integer",
+}
 
 class SynthesisResult:
     def __init__(self, name, time, size, specSize, nMeasures, nComponents):
@@ -147,7 +169,12 @@ def postprocess():
                     outfile.write (' & ')
                     outfile.write (tableName)
                     outfile.write (' & ')
-                    outfile.write (res.str())
+                    row = ' & ' + res.nMeasures + '& ' + res.nComponents + \
+                    ' & ' + COMPONENTS.get(name, '') + \
+                    ' & ' + res.size + '& ' + '{0:0.2f}'.format(res.time) + \
+                    ' & ' + '{0:0.2f}'.format(res.time)  + '& ' + '{0:0.2f}'.format(res.time) + \
+                    ' & ' + '{0:0.2f}'.format(res.time) + ' \\\\'
+                    outfile.write (row)
                 outfile.write ('\n')
 
         for (short_name, args) in ABS_BENCHMARKS:
