@@ -37,11 +37,6 @@ add = \x . \y . if (>=) 0 y
     then y
     else inc (add x (dec y))
 
-max2 :: <P :: Int -> Bool> . (x:{Int|P _v} -> (y:{Int|P _v} -> {Int|(P _v && _v >= x) && _v >= y}))
-max2 = \x . \y . if (>=) x y
-  then x
-  else y
-
 null :: <a> . (xs:List (a) -> {Bool|_v == (len xs == 0)})
 null = \xs . match xs with
   Nil -> true
@@ -98,14 +93,14 @@ delete = \x . \xs . match xs with
 map :: <b> . <a> . (f:(_:a -> b) -> (xs:List (a) -> {List (b)|len _v == len xs}))
 map = \f . \xs . match xs with
   Nil -> Nil
-  Cons x3 x4 -> Cons (f x3) (map (\x19 . f x19) x4)
+  Cons x3 x4 -> Cons (f x3) (map (\x14 . f x14) x4)
 
 zipWith :: <c> . <b> . <a> . (f:(_:a -> (_:b -> c)) -> (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (c)|len _v == len xs})))
 zipWith = \f . \xs . \ys . match xs with
   Nil -> Nil
   Cons x4 x5 -> match ys with
     Nil -> error
-    Cons x8 x9 -> Cons (f x4 x8) (zipWith (\x26 . \x27 . f x26 x27) x5 x9)
+    Cons x8 x9 -> Cons (f x4 x8) (zipWith (\x22 . \x23 . f x22 x23) x5 x9)
 
 zip :: <b> . <a> . (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (Pair (a) (b))|len _v == len xs}))
 zip = \xs . \ys . match xs with
@@ -115,21 +110,21 @@ zip = \xs . \ys . match xs with
     Cons x8 x9 -> Cons (Pair x4 x8) (zip x5 x9)
 
 toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
-toNat = \xs . map (\x6 . if (>=) x6 0
-  then x6
-  else neg x6) xs
+toNat = \xs . map (\x4 . if (>=) x4 0
+  then x4
+  else neg x4) xs
 
 product :: <b> . <a> . (la:List (a) -> (lb:List (b) -> {List (Pair (a) (b))|len _v == len la * len lb}))
 product = \la . \lb . match la with
   Nil -> Nil
-  Cons x4 x5 -> append (map (\x28 . Pair x4 x28) lb) (product x5 lb)
+  Cons x4 x5 -> append (map (\x13 . Pair x4 x13) lb) (product x5 lb)
 
 insert :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) + ([x])}))
 insert = \x . \xs . match xs with
   UNil -> UCons x UNil
-  UCons x9 x10 -> if (==) x9 x
+  UCons x7 x8 -> if (==) x7 x
     then xs
-    else UCons x9 (insert x x10)
+    else UCons x7 (insert x x8)
 
 delete :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -169,9 +164,9 @@ compress = \xs . match xs with
   Nil -> CNil
   Cons x3 x4 -> match compress x4 with
     CNil -> CCons x3 CNil
-    CCons x15 x16 -> if (==) x3 x15
-      then CCons x15 x16
-      else CCons x3 (CCons x15 x16)
+    CCons x13 x14 -> if (==) x3 x13
+      then CCons x13 x14
+      else CCons x3 (CCons x13 x14)
 
 elem :: <a> . (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
 elem = \x . \t . match t with
@@ -188,11 +183,11 @@ flatten = \t . match t with
 insert :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
 insert = \x . \xs . match xs with
   INil -> ICons x INil
-  ICons x9 x10 -> if (&&) ((<=) x x9) ((<=) x9 x)
+  ICons x7 x8 -> if (&&) ((<=) x x7) ((<=) x7 x)
     then xs
-    else if (<=) x9 x
-      then ICons x9 (insert x x10)
-      else ICons x (ICons x9 x10)
+    else if (<=) x7 x
+      then ICons x7 (insert x x8)
+      else ICons x (ICons x7 x8)
 
 insertSort :: <a> . (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 insertSort = \xs . match xs with
@@ -212,25 +207,25 @@ merge = \xs . \ys . match ys with
   INil -> xs
   ICons x4 x5 -> match xs with
     INil -> ICons x4 x5
-    ICons x14 x15 -> if (<) x14 x4
-      then ICons x14 (merge x15 (ICons x4 x5))
-      else ICons x4 (merge (ICons x14 x15) x5)
+    ICons x12 x13 -> if (<) x12 x4
+      then ICons x12 (merge x13 (ICons x4 x5))
+      else ICons x4 (merge (ICons x12 x13) x5)
 
 mergeSort :: <a> . (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 mergeSort = \xs . match xs with
   Nil -> INil
   Cons x3 x4 -> match x4 with
     Nil -> ICons x3 INil
-    Cons x17 x18 -> match split xs with
-      Pair x24 x25 -> merge (mergeSort x24) (mergeSort x25)
+    Cons x11 x12 -> match split xs with
+      Pair x17 x18 -> merge (mergeSort x17) (mergeSort x18)
 
 partition :: <a> . (p:a -> (xs:List (a) -> {Pair (List ({a|_v <= p})) (List ({a|_v > p}))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
 partition = \p . \xs . match xs with
   Nil -> Pair Nil Nil
   Cons x7 x8 -> match partition p x8 with
-    Pair x19 x20 -> if (<=) x7 p
-      then Pair (Cons x7 x19) x20
-      else Pair x19 (Cons x7 x20)
+    Pair x15 x16 -> if (<=) x7 p
+      then Pair (Cons x7 x15) x16
+      else Pair x15 (Cons x7 x16)
 
 pivotAppend :: <a> . (p:a -> (xs:IList ({a|_v <= p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
@@ -241,7 +236,7 @@ quickSort :: <a> . (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == 
 quickSort = \xs . match xs with
   Nil -> INil
   Cons x3 x4 -> match partition x3 x4 with
-    Pair x17 x18 -> pivotAppend x3 (quickSort x17) (quickSort x18)
+    Pair x11 x12 -> pivotAppend x3 (quickSort x11) (quickSort x12)
 
 member :: <a> . (x:a -> (t:BST (a) -> {Bool|_v == (x) in (telems t)}))
 member = \x . \t . match t with
@@ -278,7 +273,7 @@ toBST = \xs . match xs with
 pivotAppend :: <a> . (p:a -> (xs:IList ({a|_v < p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
   INil -> ICons p ys
-  ICons x12 x13 -> ICons x12 (pivotAppend p x13 ys)
+  ICons x8 x9 -> ICons x8 (pivotAppend p x9 ys)
 
 flatten :: <a> . (t:BST (a) -> {IList (a)|ielems _v == telems t})
 flatten = \t . match t with
@@ -310,4 +305,18 @@ member = \x . \t . match t with
   Node x4 x5 x6 -> if (==) x4 x
     then not false
     else or (member x x5) (member x x6)
+
+max :: <P :: Int -> Bool> . (x:{Int|P _v} -> (y:{Int|P _v} -> {Int|(P _v && _v >= x) && _v >= y}))
+max = \x . \y . if (>=) x y
+  then x
+  else y
+
+insert :: <a> . (x:a -> (xs:List (a) <_0 <= _1> -> {List (a) <_0 <= _1>|elems _v == (elems xs) + ([x])}))
+insert = \x . \xs . match xs with
+  Nil -> Cons x Nil
+  Cons x7 x8 -> if (&&) ((<=) x x7) ((<=) x7 x)
+    then xs
+    else if (<=) x7 x
+      then Cons x7 (insert x x8)
+      else Cons x (Cons x7 x8)
 
