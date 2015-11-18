@@ -4,6 +4,8 @@ max2 = \x . \y . if (>=) x y
   else y
 (Size: 11)
 (Spec size: 7)
+(#measures: 0)
+(#components: 0)
 
 max3 :: (x:Int -> (y:Int -> (z:Int -> {Int|(_v >= x && _v >= y) && _v >= z})))
 max3 = \x . \y . \z . if (&&) ((>=) x y) ((>=) x z)
@@ -13,6 +15,8 @@ max3 = \x . \y . \z . if (&&) ((>=) x y) ((>=) x z)
     else z
 (Size: 27)
 (Spec size: 11)
+(#measures: 0)
+(#components: 0)
 
 max4 :: (w:Int -> (x:Int -> (y:Int -> (z:Int -> {Int|((_v >= w && _v >= x) && _v >= y) && _v >= z}))))
 max4 = \w . \x . \y . \z . if (&&) ((>=) w x) ((&&) ((>=) w y) ((>=) w z))
@@ -24,6 +28,8 @@ max4 = \w . \x . \y . \z . if (&&) ((>=) w x) ((&&) ((>=) w y) ((>=) w z))
       else z
 (Size: 51)
 (Spec size: 15)
+(#measures: 0)
+(#components: 0)
 
 max5 :: (v:Int -> (w:Int -> (x:Int -> (y:Int -> (z:Int -> {Int|(((_v >= v && _v >= w) && _v >= x) && _v >= y) && _v >= z})))))
 max5 = \v . \w . \x . \y . \z . if (&&) ((>=) v w) ((&&) ((>=) v x) ((&&) ((>=) v y) ((>=) v z)))
@@ -37,6 +43,8 @@ max5 = \v . \w . \x . \y . \z . if (&&) ((>=) v w) ((&&) ((>=) v x) ((&&) ((>=) 
         else z
 (Size: 83)
 (Spec size: 19)
+(#measures: 0)
+(#components: 0)
 
 add :: (x:{Int|_v >= 0} -> (y:{Int|_v >= 0} -> {Int|_v == x + y}))
 add = \x . \y . if (>=) 0 y
@@ -46,6 +54,8 @@ add = \x . \y . if (>=) 0 y
     else inc (add x (dec y))
 (Size: 26)
 (Spec size: 11)
+(#measures: 0)
+(#components: 2)
 
 null :: <a> . (xs:List (a) -> {Bool|_v == (len xs == 0)})
 null = \xs . match xs with
@@ -53,6 +63,8 @@ null = \xs . match xs with
   Cons x3 x4 -> false
 (Size: 6)
 (Spec size: 6)
+(#measures: 1)
+(#components: 2)
 
 elem :: <a> . (x:a -> (xs:List (a) -> {Bool|_v == (x) in (elems xs)}))
 elem = \x . \xs . match xs with
@@ -62,6 +74,8 @@ elem = \x . \xs . match xs with
     else elem x x4
 (Size: 18)
 (Spec size: 6)
+(#measures: 2)
+(#components: 1)
 
 stutter :: <a> . (xs:List (a) -> {List (a)|len _v == 2 * len xs})
 stutter = \xs . match xs with
@@ -69,6 +83,8 @@ stutter = \xs . match xs with
   Cons x3 x4 -> Cons x3 (Cons x3 (stutter x4))
 (Size: 16)
 (Spec size: 7)
+(#measures: 1)
+(#components: 2)
 
 replicate :: <a> . (n:{Int|_v >= 0} -> (x:a -> {List (a)|len _v == n}))
 replicate = \n . \x . if (>=) 0 n
@@ -76,6 +92,8 @@ replicate = \n . \x . if (>=) 0 n
   else Cons x (replicate (dec n) x)
 (Size: 21)
 (Spec size: 7)
+(#measures: 1)
+(#components: 2)
 
 append :: <a> . (xs:List (a) -> (ys:List (a) -> {List (a)|len _v == len xs + len ys}))
 append = \xs . \ys . match ys with
@@ -83,6 +101,8 @@ append = \xs . \ys . match ys with
   Cons x4 x5 -> Cons x4 (append xs x5)
 (Size: 15)
 (Spec size: 8)
+(#measures: 1)
+(#components: 1)
 
 concat :: <a> . (xss:ListOfLists (a) -> {List (a)|len _v == sumLen xss})
 concat = \xss . match xss with
@@ -90,6 +110,8 @@ concat = \xss . match xss with
   Cons2 x3 x4 -> append x3 (concat x4)
 (Size: 12)
 (Spec size: 5)
+(#measures: 3)
+(#components: 2)
 
 take :: <a> . (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == n}))
 take = \n . \xs . match xs with
@@ -99,6 +121,8 @@ take = \n . \xs . match xs with
     else Cons x4 (take (dec n) x5)
 (Size: 24)
 (Spec size: 11)
+(#measures: 1)
+(#components: 2)
 
 drop :: <a> . (n:{Int|_v >= 0} -> (xs:{List (a)|len _v >= n} -> {List (a)|len _v == len xs - n}))
 drop = \n . \xs . if (<=) n 0
@@ -108,6 +132,8 @@ drop = \n . \xs . if (<=) n 0
     Cons x4 x5 -> drop (dec n) x5
 (Size: 20)
 (Spec size: 14)
+(#measures: 1)
+(#components: 2)
 
 delete :: <a> . (x:a -> (xs:List (a) -> {List (a)|elems _v == (elems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -117,6 +143,8 @@ delete = \x . \xs . match xs with
     else Cons x3 (delete x x4)
 (Size: 26)
 (Spec size: 8)
+(#measures: 2)
+(#components: 1)
 
 map :: <b> . <a> . (f:(_:a -> b) -> (xs:List (a) -> {List (b)|len _v == len xs}))
 map = \f . \xs . match xs with
@@ -124,6 +152,8 @@ map = \f . \xs . match xs with
   Cons x3 x4 -> Cons (f x3) (map (\x14 . f x14) x4)
 (Size: 20)
 (Spec size: 5)
+(#measures: 1)
+(#components: 1)
 
 zipWith :: <c> . <b> . <a> . (f:(_:a -> (_:b -> c)) -> (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (c)|len _v == len xs})))
 zipWith = \f . \xs . \ys . match xs with
@@ -133,6 +163,8 @@ zipWith = \f . \xs . \ys . match xs with
     Cons x8 x9 -> Cons (f x4 x8) (zipWith (\x22 . \x23 . f x22 x23) x5 x9)
 (Size: 31)
 (Spec size: 10)
+(#measures: 1)
+(#components: 2)
 
 zip :: <b> . <a> . (xs:List (a) -> (ys:{List (b)|len _v == len xs} -> {List (Pair (a) (b))|len _v == len xs}))
 zip = \xs . \ys . match xs with
@@ -142,6 +174,8 @@ zip = \xs . \ys . match xs with
     Cons x8 x9 -> Cons (Pair x4 x8) (zip x5 x9)
 (Size: 22)
 (Spec size: 10)
+(#measures: 3)
+(#components: 1)
 
 toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
 toNat = \xs . map (\x4 . if (>=) x4 0
@@ -149,6 +183,8 @@ toNat = \xs . map (\x4 . if (>=) x4 0
   else neg x4) xs
 (Size: 17)
 (Spec size: 8)
+(#measures: 1)
+(#components: 2)
 
 product :: <b> . <a> . (la:List (a) -> (lb:List (b) -> {List (Pair (a) (b))|len _v == len la * len lb}))
 product = \la . \lb . match la with
@@ -156,6 +192,8 @@ product = \la . \lb . match la with
   Cons x4 x5 -> append (map (\x13 . Pair x4 x13) lb) (product x5 lb)
 (Size: 24)
 (Spec size: 8)
+(#measures: 3)
+(#components: 1)
 
 insert :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -165,6 +203,8 @@ insert = \x . \xs . match xs with
     else UCons x7 (insert x x8)
 (Size: 26)
 (Spec size: 8)
+(#measures: 2)
+(#components: 1)
 
 delete :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -174,6 +214,8 @@ delete = \x . \xs . match xs with
     else UCons x3 (delete x x4)
 (Size: 22)
 (Spec size: 8)
+(#measures: 2)
+(#components: 1)
 
 delete :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
 delete = \x . \xs . match xs with
@@ -183,6 +225,8 @@ delete = \x . \xs . match xs with
     else UCons x3 (delete x x4)
 (Size: 22)
 (Spec size: 8)
+(#measures: 2)
+(#components: 1)
 
 elem :: <a> . (x:a -> (xs:UList (a) -> {Bool|_v == (x) in (uelems xs)}))
 elem = \x . \xs . match xs with
@@ -192,6 +236,8 @@ elem = \x . \xs . match xs with
     else elem x x4
 (Size: 18)
 (Spec size: 6)
+(#measures: 4)
+(#components: 1)
 
 strengthen :: <a> . (x:a -> (xs:{UList (a)|!(x) in (uelems _v)} -> {UList ({a|_v /= x})|uelems _v == uelems xs && ulen _v == ulen xs}))
 strengthen = \x . \xs . match xs with
@@ -199,6 +245,8 @@ strengthen = \x . \xs . match xs with
   UCons x3 x4 -> UCons x3 (strengthen x x4)
 (Size: 15)
 (Spec size: 19)
+(#measures: 4)
+(#components: 1)
 
 nub' :: <a> . (xs:List (a) -> (acc:UList (a) -> {UList (a)|uelems _v == (uelems acc) + (elems xs)}))
 nub' = \xs . \acc . match xs with
@@ -208,6 +256,8 @@ nub' = \xs . \acc . match xs with
     else nub' x4 (UCons x3 (strengthen x3 acc))
 (Size: 30)
 (Spec size: 8)
+(#measures: 4)
+(#components: 1)
 
 compress :: <a> . (xs:List (a) -> {CList (a)|celems _v == elems xs})
 compress = \xs . match xs with
@@ -219,6 +269,8 @@ compress = \xs . match xs with
       else CCons x3 (CCons x13 x14)
 (Size: 34)
 (Spec size: 5)
+(#measures: 5)
+(#components: 2)
 
 elem :: <a> . (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
 elem = \x . \t . match t with
@@ -228,6 +280,8 @@ elem = \x . \t . match t with
     else or (elem x x5) (elem x x6)
 (Size: 28)
 (Spec size: 6)
+(#measures: 2)
+(#components: 3)
 
 flatten :: <a> . (t:Tree (a) -> {List (a)|len _v == size t})
 flatten = \t . match t with
@@ -235,6 +289,8 @@ flatten = \t . match t with
   Node x4 x5 x6 -> Cons x4 (append (flatten x5) (flatten x6))
 (Size: 18)
 (Spec size: 5)
+(#measures: 2)
+(#components: 3)
 
 insert :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -246,6 +302,8 @@ insert = \x . \xs . match xs with
       else ICons x (ICons x7 x8)
 (Size: 49)
 (Spec size: 8)
+(#measures: 2)
+(#components: 1)
 
 insertSort :: <a> . (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 insertSort = \xs . match xs with
@@ -253,6 +311,8 @@ insertSort = \xs . match xs with
   Cons x3 x4 -> insert x3 (insertSort x4)
 (Size: 12)
 (Spec size: 5)
+(#measures: 4)
+(#components: 2)
 
 split :: <a> . (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
 split = \xs . match xs with
@@ -263,6 +323,8 @@ split = \xs . match xs with
       Pair x21 x22 -> Pair (Cons x15 x21) (Cons x7 x22)
 (Size: 33)
 (Spec size: 31)
+(#measures: 4)
+(#components: 2)
 
 merge :: <a> . (xs:IList (a) -> (ys:IList (a) -> {IList (a)|ilen _v == ilen xs + ilen ys && ielems _v == (ielems xs) + (ielems ys)}))
 merge = \xs . \ys . match ys with
@@ -274,6 +336,8 @@ merge = \xs . \ys . match ys with
       else ICons x4 (merge (ICons x12 x13) x5)
 (Size: 45)
 (Spec size: 17)
+(#measures: 2)
+(#components: 1)
 
 mergeSort :: <a> . (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 mergeSort = \xs . match xs with
@@ -284,6 +348,8 @@ mergeSort = \xs . match xs with
       Pair x17 x18 -> merge (mergeSort x17) (mergeSort x18)
 (Size: 25)
 (Spec size: 11)
+(#measures: 6)
+(#components: 2)
 
 partition :: <a> . (p:a -> (xs:List (a) -> {Pair (List ({a|_v <= p})) (List ({a|_v > p}))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs}))
 partition = \p . \xs . match xs with
@@ -294,6 +360,8 @@ partition = \p . \xs . match xs with
       else Pair x15 (Cons x7 x16)
 (Size: 40)
 (Spec size: 27)
+(#measures: 4)
+(#components: 1)
 
 pivotAppend :: <a> . (p:a -> (xs:IList ({a|_v <= p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
@@ -301,6 +369,8 @@ pivotAppend = \p . \xs . \ys . match xs with
   ICons x8 x9 -> ICons x8 (pivotAppend p x9 ys)
 (Size: 22)
 (Spec size: 28)
+(#measures: 2)
+(#components: 2)
 
 quickSort :: <a> . (xs:List (a) -> {IList (a)|ilen _v == len xs && ielems _v == elems xs})
 quickSort = \xs . match xs with
@@ -309,6 +379,8 @@ quickSort = \xs . match xs with
     Pair x11 x12 -> pivotAppend x3 (quickSort x11) (quickSort x12)
 (Size: 22)
 (Spec size: 11)
+(#measures: 6)
+(#components: 3)
 
 member :: <a> . (x:a -> (t:BST (a) -> {Bool|_v == (x) in (telems t)}))
 member = \x . \t . match t with
@@ -320,6 +392,8 @@ member = \x . \t . match t with
       else member x x6
 (Size: 37)
 (Spec size: 6)
+(#measures: 2)
+(#components: 2)
 
 insert :: <a> . (x:a -> (t:BST (a) -> {BST (a)|elems _v == (elems t) + ([x])}))
 insert = \x . \t . match t with
@@ -331,6 +405,8 @@ insert = \x . \t . match t with
       else Node x10 (insert x x11) x12
 (Size: 55)
 (Spec size: 8)
+(#measures: 2)
+(#components: 2)
 
 insert :: <a> . (x:a -> (t:BST (a) -> {BST (a)|telems _v == (telems t) + ([x])}))
 insert = \x . \t . match t with
@@ -342,6 +418,8 @@ insert = \x . \t . match t with
       else Node x10 (insert x x11) x12
 (Size: 55)
 (Spec size: 8)
+(#measures: 6)
+(#components: 3)
 
 toBST :: <a> . (xs:List (a) -> {BST (a)|telems _v == elems xs})
 toBST = \xs . match xs with
@@ -349,6 +427,8 @@ toBST = \xs . match xs with
   Cons x3 x4 -> insert x3 (toBST x4)
 (Size: 12)
 (Spec size: 5)
+(#measures: 6)
+(#components: 3)
 
 pivotAppend :: <a> . (p:a -> (xs:IList ({a|_v < p}) -> (ys:IList ({a|_v > p}) -> {IList (a)|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == ((ielems xs) + (ielems ys)) + ([p])})))
 pivotAppend = \p . \xs . \ys . match xs with
@@ -356,6 +436,8 @@ pivotAppend = \p . \xs . \ys . match xs with
   ICons x8 x9 -> ICons x8 (pivotAppend p x9 ys)
 (Size: 22)
 (Spec size: 28)
+(#measures: 6)
+(#components: 3)
 
 flatten :: <a> . (t:BST (a) -> {IList (a)|ielems _v == telems t})
 flatten = \t . match t with
@@ -363,6 +445,8 @@ flatten = \t . match t with
   Node x4 x5 x6 -> pivotAppend x4 (flatten x5) (flatten x6)
 (Size: 16)
 (Spec size: 5)
+(#measures: 6)
+(#components: 3)
 
 sort :: <a> . (xs:List (a) -> {IList (a)|ielems _v == elems xs})
 sort = \xs . match xs with
@@ -370,6 +454,8 @@ sort = \xs . match xs with
   Cons x3 x4 -> flatten (toBST xs)
 (Size: 10)
 (Spec size: 5)
+(#measures: 6)
+(#components: 3)
 
 mergePivot :: <a> . (p:a -> (t1:BST ({a|_v < p}) -> (t2:BST ({a|_v > p}) -> {BST (a)|elems _v == (elems t1) + (elems t2)})))
 mergePivot = \p . \t1 . \t2 . match t1 with
@@ -377,6 +463,8 @@ mergePivot = \p . \t1 . \t2 . match t1 with
   Node x5 x6 x7 -> Node x5 x6 (mergePivot p x7 t2)
 (Size: 20)
 (Spec size: 14)
+(#measures: 2)
+(#components: 2)
 
 delete :: <a> . (t:BST (a) -> (x:a -> {BST (a)|elems _v == (elems t) - ([x])}))
 delete = \t . \x . match t with
@@ -388,6 +476,8 @@ delete = \t . \x . match t with
       else Node x4 (delete x5 x) x6
 (Size: 47)
 (Spec size: 8)
+(#measures: 2)
+(#components: 2)
 
 member :: <a> . (x:a -> (t:Heap (a) -> {Bool|_v == (x) in (elems t)}))
 member = \x . \t . match t with
@@ -397,6 +487,8 @@ member = \x . \t . match t with
     else or (member x x5) (member x x6)
 (Size: 28)
 (Spec size: 6)
+(#measures: 2)
+(#components: 3)
 
 transform :: (x:AST -> {PAST|result2 _v == result x})
 transform = \x . match x with
@@ -408,6 +500,8 @@ transform = \x . match x with
   ProductNode x37 x38 -> OpNode two (transform x37) (transform x38)
 (Size: 46)
 (Spec size: 5)
+(#measures: 4)
+(#components: 3)
 
 transform :: (x:AST -> {PAST|result2 _v == result x && elems2 _v == elems x})
 transform = \x . match x with
@@ -420,6 +514,8 @@ transform = \x . match x with
   ProductNode x41 x42 -> OpNode two (transform x41) (transform x42)
 (Size: 49)
 (Spec size: 11)
+(#measures: 6)
+(#components: 3)
 
 max :: <P :: Int -> Bool> . (x:{Int|P _v} -> (y:{Int|P _v} -> {Int|(P _v && _v >= x) && _v >= y}))
 max = \x . \y . if (>=) x y
@@ -427,6 +523,8 @@ max = \x . \y . if (>=) x y
   else y
 (Size: 11)
 (Spec size: 14)
+(#measures: 0)
+(#components: 0)
 
 insert :: <a> . (x:a -> (xs:List (a) <_0 <= _1> -> {List (a) <_0 <= _1>|elems _v == (elems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -438,4 +536,6 @@ insert = \x . \xs . match xs with
       else Cons x (Cons x7 x8)
 (Size: 49)
 (Spec size: 14)
+(#measures: 2)
+(#components: 1)
 
