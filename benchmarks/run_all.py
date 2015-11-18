@@ -80,6 +80,13 @@ ABS_BENCHMARKS = [
     ('IncList-Insert', []),
 ]
 
+RBT_BENCHMARKS = [
+    ('RBT-Constructors', ['-m=0', '-a=2']),
+    ('RBT-BalanceL', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
+    ('RBT-BalanceR', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
+    ('RBT-Balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
+]
+
 class SynthesisResult:
     def __init__(self, name, time, size, specSize, nMeasures, nComponents):
         self.name = name
@@ -154,6 +161,9 @@ if __name__ == '__main__':
     print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Abstract refinements' + Style.RESET_ALL
     for (name, args) in ABS_BENCHMARKS:
         run_benchmark(name, args, 'abstract/')
+    print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Red-Black-Trees' + Style.RESET_ALL
+    for (name, args) in RBT_BENCHMARKS:
+        run_benchmark(name, args, 'abstract/')        
 
     postprocess()
 

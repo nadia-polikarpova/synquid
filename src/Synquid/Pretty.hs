@@ -357,7 +357,6 @@ fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Pred _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (All _ e) = 1 + fmlNodeCount e
-fmlNodeCount (All _ e) = 1 + fmlNodeCount e
 fmlNodeCount _ = 1
 
 fmlNodeCount' :: Formula -> Int
