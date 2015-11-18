@@ -1,4 +1,4 @@
-qualifier {x < y, x == y}
+qualifier {x == 0}
 
 red   :: {Int | _v == 0}
 black :: {Int | _v == 1}
@@ -21,18 +21,25 @@ data RBT a <P :: Int -> Bool> decreases size where
 						  elems _v == elems left + elems right + [x] && 
                           (blackHeight _v == blackHeight left + color)         		-- black-height is black-height of sub + 1 in case the current node is black
                       }
+					  
+measure welems :: WeakRBT a -> Set a
+measure wheight :: WeakRBT a -> Int					  
+					  					  
+data WeakRBT a where
+	WeakRBT :: x: a -> 
+			   lc: {Int | _v == 0 || _v == 1 } -> 
+			   left:    RBT {a | _v < x} <{_0 == lc}> ->
+			   right:   { RBT {a | x < _v} <{_0 != lc}> | blackHeight _v == blackHeight left} ->
+			   { WeakRBT a | (welems _v == [x] + elems left + elems right) && (wheight _v == blackHeight left) }
 
---============================================================================
--- Constructors taking 1, 2, 3 nodes.
---
--- args used: -a=2
---============================================================================
-
-singleton :: x: a -> {RBT a <{_0 == 0}> | elems _v == [x] && blackHeight _v == 0 }
-singleton = ??
-
-dupleton :: x: a -> y: a -> {RBT a <{True}> | elems _v == [x, y]}
-dupleton = ??
-
-tripleton :: x: a -> y: a -> z: a -> {RBT a <{True}> | elems _v == [x, y, z]}
-tripleton = ??
+balanceL :: x: a ->
+            l: WeakRBT {a | _v < x} ->
+            r: {RBT {a | x < _v} <{True}> | blackHeight _v == wheight l} ->
+            {RBT a <{_0 == 0}> | elems _v == [x] + welems l + elems r && blackHeight _v == blackHeight r + 1}
+balanceL = ??
+			
+balanceR :: x: a ->
+            l: RBT {a | _v < x} <{True}> ->			
+            r: {WeakRBT {a | x < _v} | wheight _v == blackHeight l} ->
+            {RBT a <{_0 == 0}> | elems _v == [x] + elems l + welems r && blackHeight _v == blackHeight l + 1}
+balanceR = ??			

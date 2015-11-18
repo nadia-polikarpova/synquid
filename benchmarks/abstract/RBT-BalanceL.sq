@@ -5,7 +5,7 @@ black :: {Int | _v == 1}
 
 measure size        :: RBT a -> {Int | _v >= 0}
 measure elems       :: RBT a -> Set a
-measure blackHeight :: RBT a -> Int
+measure blackHeight :: RBT a -> {Int | _v >= 0}
 
 data RBT a <P :: Int -> Bool> decreases size where
     Empty :: color: {Int | _v == 1 && P _v} ->  
@@ -15,7 +15,7 @@ data RBT a <P :: Int -> Bool> decreases size where
     Node  :: x: a -> 
              color: {Int | (_v == 0 || _v == 1) && P _v} -> 
              left:    RBT {a | _v < x} <{ color == 1 || _0 == 1 }> ->               -- left keys are less than this key; a red node must have black children
-             right: { RBT {a | _v > x} <{ color == 1 || _0 == 1 }> |               	-- right keys are greater than this key; a red node must have black children 
+             right: { RBT {a | x < _v} <{ color == 1 || _0 == 1 }> |               	-- right keys are greater than this key; a red node must have black children 
                                         (blackHeight _v == blackHeight left)} ->    -- blackHeight the same as of left
              {RBT a <P> | size _v == size left + size right + 1 && 
 						  elems _v == elems left + elems right + [x] && 
@@ -39,7 +39,7 @@ balanceL :: x: a ->
             lx: {a | _v < x} ->
 			llc: {Int | _v == 0 || _v == 1} ->
 			ll: RBT {a | _v < lx} <{_0 == llc}> ->
-            lr: {RBT {a | _v > lx && _v < x}  <{_0 != llc}> | blackHeight _v == blackHeight ll} -> 
-            r: {RBT {a | _v > x} <{True}>            		| blackHeight _v == blackHeight ll} ->
+            lr: {RBT {a | lx < _v && _v < x}  <{_0 != llc}> | blackHeight _v == blackHeight ll} -> 
+            r: {RBT {a | x < _v} <{True}>            		| blackHeight _v == blackHeight ll} ->
             {RBT a <{_0 == 0}> | elems _v == [x, lx] + elems ll + elems lr + elems r && blackHeight _v == blackHeight r + 1}								
 balanceL = ??
