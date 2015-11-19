@@ -71,29 +71,31 @@ synthesize explorerParams solverParams goal cquals tquals = do
     putMemo = put
 
     -- | Qualifier generator for conditionals
+    condQuals :: QualsGen
     condQuals = toSpace . foldl (|++|) (const []) 
-      (map (extractCondQGen $ gEnvironment goal) cquals ++
-       map (extractCondFromType (gEnvironment goal)) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal))
+      (map extractCondQGen cquals ++
+       map extractCondFromType (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal))
 
-    matchQuals = let env = gEnvironment goal
-      in toSpace . foldl (|++|) (const []) (map (extractMatchQGen env) (Map.toList $ env ^. datatypes))
+    matchQuals :: QualsGen
+    matchQuals = toSpace . foldl (|++|) (const []) (map extractMatchQGen (Map.toList $ (gEnvironment goal) ^. datatypes))
 
     -- | Qualifier generator for types
+    typeQuals :: QualsGen
     typeQuals = toSpace . foldl (|++|)
-      (extractQGenFromType (gEnvironment goal) (toMonotype $ gSpec goal)) -- extract from spec
-      (map (extractTypeQGen $ gEnvironment goal) tquals ++ -- extract from given qualifiers
-      map (extractQGenFromType (gEnvironment goal)) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
+      (extractQGenFromType (toMonotype $ gSpec goal)) -- extract from spec
+      (map extractTypeQGen tquals ++ -- extract from given qualifiers
+      map extractQGenFromType (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
 
 {- Qualifier Generators -}
 
-(|++|) gen gen' = \symbs -> nub $ gen symbs ++ gen' symbs
+(|++|) gen gen' = \(env, symbs) -> nub $ gen (env, symbs) ++ gen' (env, symbs)
 infixr 5  |++|
 
 toSpace quals = QSpace quals (length quals)
 
 -- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
-extractTypeQGen env (BoolLit True) _ = []
-extractTypeQGen env qual (val@(Var s valName) : syms) =
+extractTypeQGen (BoolLit True) _ = []
+extractTypeQGen qual (env, (val@(Var s valName) : syms)) =
   let (vals, other) = Set.partition (\v -> varName v == valueVarName) (varsOf qual)
   in if Set.null vals
       then [] -- No _v in a refinement, happens sometimes
@@ -105,16 +107,16 @@ extractTypeQGen env qual (val@(Var s valName) : syms) =
                 else []
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
-extractCondQGen env qual syms = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
+extractCondQGen qual (env, syms) = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
 
-extractMatchQGen env (dtName, (DatatypeDef _ _ ctors _)) syms = let baseCaseCtor = head ctors
+extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = let baseCaseCtor = head ctors
   in case toMonotype $ allSymbols env Map.! baseCaseCtor of
     FunctionT _ _ _ -> [] -- not supported
     ScalarT baseT fml -> let s = toSort baseT in concatMap (\qual -> allSubstitutions env qual s [Var s valueVarName] syms) $ Set.toList (conjunctsOf fml)
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
-extractQGenFromType :: Environment -> RType -> [Formula] -> [Formula]
-extractQGenFromType env (ScalarT baseT fml) syms =
+extractQGenFromType :: RType -> (Environment, [Formula]) -> [Formula]
+extractQGenFromType (ScalarT baseT fml) (env, syms) =
   let
     -- fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
     -- fs = map (sortSubstituteFml subst) $ Set.toList $ conjunctsOf fml
@@ -124,17 +126,18 @@ extractQGenFromType env (ScalarT baseT fml) syms =
     extractFromBase (DatatypeT _ tArgs pArgs) = 
       let
         ps = Set.toList $ Set.unions (map (conjunctsOf . replaceWithValueVar) pArgs)
-      in concatMap (flip (extractQGenFromType env) syms) tArgs ++ concatMap (flip (extractTypeQGen env) syms) ps
+        res = concatMap (flip extractTypeQGen (env, syms)) ps
+      in concatMap (flip extractQGenFromType (env, syms)) tArgs ++ res
     extractFromBase _ = []
-  in concatMap (flip (extractTypeQGen env) syms) fs ++ extractFromBase baseT
-extractQGenFromType env (FunctionT _ tArg tRes) syms = extractQGenFromType env tArg syms ++ extractQGenFromType env tRes syms
+  in concatMap (flip extractTypeQGen (env, syms)) fs ++ extractFromBase baseT
+extractQGenFromType (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType tArg (env, syms) ++ extractQGenFromType tRes (env, syms)
     
 -- | Extract conditional qualifiers from the types of Boolean functions    
-extractCondFromType :: Environment -> RType -> [Formula] -> [Formula]
-extractCondFromType env t@(FunctionT _ _ _) syms = case lastType t of
+extractCondFromType :: RType -> (Environment, [Formula]) -> [Formula]
+extractCondFromType t@(FunctionT _ _ _) (env, syms) = case lastType t of
   ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName -> allSubstitutions env fml UnknownS (Set.toList $ varsOf fml) syms
   _ -> []
-extractCondFromType _ _ _ = []  
+extractCondFromType _ _ = []  
 
 -- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
 allSubstitutions :: Environment -> Formula -> Sort -> [Formula] -> [Formula] -> [Formula]

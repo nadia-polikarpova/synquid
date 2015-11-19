@@ -266,16 +266,31 @@ resolveFormula targetSort valueSort (Measure UnknownS name argFml) = do
         then return $ Measure outSort' name argFml'
         else throwError $ unwords ["Enountered measure", name, "where", show targetSort, "was expected"]
         
-resolveFormula targetSort valueSort (Pred name argFmls) = 
-  if complies targetSort BoolS
-    then do
-      ps <- use $ environment . boundPredicates
-      case Map.lookup name ps of
-        Nothing -> throwError $ unwords ["Predicate", name, "is undefined"]
-        Just argSorts -> if length argFmls /= length argSorts
-                          then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate", name, "and got", show (length argFmls)]
-                          else Pred name <$> zipWithM (flip resolveFormula valueSort) argSorts argFmls
-    else throwError $ unwords ["Enountered a predicate where", show targetSort, "was expected"]
+resolveFormula targetSort valueSort (Cons UnknownS name argFmls) = do
+  syms <- uses environment allSymbols
+  case Map.lookup name syms of
+    Nothing -> throwError $ unwords ["Predicate or constructor", name, "is undefined"]
+    Just consSch -> do
+      let consT = toMonotype consSch
+      let argSorts = map (toSort . baseTypeOf) $ allArgTypes consT
+      let resSort = toSort $ baseTypeOf $ lastType consT
+      -- let typeVars = Set.toList $ typeVarsOf consT -- ToDo: order!
+      -- let consT' = sortSubstitute (Map.fromList $ zip typeVars (repreat UnknownS)) consT
+      if complies targetSort resSort -- ToDo: substitute type variables
+        then if length argSorts /= length argFmls
+                then throwError $ unwords ["Constructor", name, "expected", show (length argSorts), "arguments and got", show (length argFmls)]
+                else Cons resSort name <$> zipWithM (flip resolveFormula valueSort) argSorts argFmls
+        else throwError $ unwords ["Enountered constructor", name, "where", show targetSort, "was expected"]
+        
+resolveFormula targetSort valueSort (Pred name argFmls) = do
+  ps <- use $ environment . boundPredicates
+  case Map.lookup name ps of
+    Nothing -> resolveFormula targetSort valueSort (Cons UnknownS name argFmls)
+    Just argSorts -> if length argFmls /= length argSorts
+                      then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate", name, "and got", show (length argFmls)]
+                      else if complies targetSort BoolS 
+                        then Pred name <$> zipWithM (flip resolveFormula valueSort) argSorts argFmls
+                        else throwError $ unwords ["Enountered a predicate where", show targetSort, "was expected"]
     
 resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type: check
   in if complies targetSort s

@@ -181,6 +181,7 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
     Measure b name arg -> text name <+> pretty arg -- text name <> text ":" <> pretty  b <+> pretty arg
+    Cons b name args -> parens (text name <+> hsep (map pretty args))
     Pred name args -> text name <+> hsep (map pretty args)
     All x e -> parens (text "forall" <+> pretty x <+> text "." <+> pretty e)
   )
@@ -355,6 +356,7 @@ fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
+fmlNodeCount (Cons _ _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Pred _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (All _ e) = 1 + fmlNodeCount e
 fmlNodeCount _ = 1
