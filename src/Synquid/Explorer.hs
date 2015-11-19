@@ -146,22 +146,24 @@ explore params solver goal = observeManyT 1 $ do
     initCand <- lift $ csInit solver
     runReaderT (evalStateT go (ExplorerState Map.empty [] Map.empty [] [] Map.empty Map.empty [initCand] [] (gEnvironment goal) Map.empty)) (params, solver)
   where
-    go :: Monad s => Explorer s RProgram
     go = do
       pMain <- generateTopLevel goal
-      p <- generateAuxGoals pMain
+      pAuxs <- generateAuxGoals
       tass <- use typeAssignment
       sol <- uses candidates (solution . head)
-      return $ programApplySolution sol $ programSubstituteTypes tass p
+      let resMain = (programApplySolution sol . programSubstituteTypes tass) pMain 
+      let resAuxs = map (over _2 (programApplySolution sol . programSubstituteTypes tass)) pAuxs
+      return (Program (PLet resAuxs resMain) (typeOf resMain))
 
-    generateAuxGoals p = do
+    generateAuxGoals = do
       goals <- use auxGoals
       case goals of
-        [] -> return p
+        [] -> return []
         (Goal name env (Monotype spec)) : gs -> do
           auxGoals .= gs
-          subterm <- generateI env spec
-          generateAuxGoals $ programSubstituteSymbol name subterm p      
+          p <- generateI env spec
+          rest <- generateAuxGoals
+          return $ (name, p) : rest
 
 {- AST exploration -}
 
