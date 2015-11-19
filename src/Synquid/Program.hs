@@ -59,10 +59,12 @@ arity _ = 0
 lastType t@(ScalarT _ _) = t
 lastType (FunctionT _ _ tRes) = lastType tRes
 
-allArgs (ScalarT _ _) = Set.empty
-allArgs (FunctionT x tArg tRes) = case tArg of
-  ScalarT baseT _ -> Set.insert (Var (toSort baseT) x) $ allArgs tRes 
-  _ -> allArgs tRes
+allArgTypes (ScalarT _ _) = []
+allArgTypes (FunctionT x tArg tRes) = tArg : (allArgTypes tRes)
+
+allArgs (ScalarT _ _) = []
+allArgs (FunctionT x (ScalarT baseT _) tRes) = (Var (toSort baseT) x) : (allArgs tRes)
+allArgs (FunctionT x _ tRes) = (allArgs tRes)
   
 varRefinement x s = Var s valueVarName |=| Var s x
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName
@@ -113,6 +115,7 @@ sortSubstituteFml subst fml = case fml of
   Unary op e -> Unary op (sortSubstituteFml subst e)
   Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
   Measure s name e -> Measure (sortSubstitute subst s) name (sortSubstituteFml subst e)
+  Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
   Pred name es -> Pred name (map (sortSubstituteFml subst) es)
   All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   _ -> fml
@@ -190,6 +193,8 @@ addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
 addRefinement t (BoolLit True) = t
 addRefinement t _ = error $ "addRefinement: applied to function type"
 
+addRefinementToLast t@(ScalarT _ _) fml = addRefinement t fml
+addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinementToLast tRes fml)
       
 -- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
 renameVar :: Id -> Id -> RType -> RType -> RType

@@ -27,7 +27,7 @@ import Debug.Trace
 {- Interface -}
 
 -- | State space generator (returns a state space for a list of symbols in scope)
-type QualsGen = [Formula] -> QSpace
+type QualsGen = (Environment, [Formula]) -> QSpace
 
 -- | Empty state space generator
 emptyGen = const emptyQSpace
@@ -478,7 +478,7 @@ checkE env typ p = do
   if arity typ == 0
     then addConstraint $ Subtype env (typeOf p) typ False
     else do
-      addConstraint $ Subtype env (removeDependentRefinements (allArgs (typeOf p)) (lastType (typeOf p))) (lastType typ) False
+      addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs $ typeOf p) (lastType (typeOf p))) (lastType typ) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
   solveConstraints p
   where
@@ -514,10 +514,16 @@ enumerateAt env typ 0 = do
           solveConstraints p
       return (env, p)
         
+    symbolType x (ScalarT b@(DatatypeT dtName _ _) fml)
+      | x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors = ScalarT b (fml |&| varRefinement x (toSort b))
     symbolType x t@(ScalarT b _)
       | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
       | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
-    symbolType _ t = t        
+    symbolType x t = case lastType t of
+      (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
+                                                  then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
+                                                  else t
+      _ -> t
 
     freshInstance sch = if arity (toMonotype sch) == 0
       then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
@@ -733,14 +739,15 @@ processWFPredicate c@(WellFormedPredicate env sorts p)
         then return ()
         else let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
              in if any (isFreeVariable tass) typeVars
-                then addConstraint c -- Still has type variables: cannot determine shape
+                then return () -- Throw away, shouldn't happen?
+                -- then addConstraint c -- Still has type variables: cannot determine shape
                 else do
                   u <- freshId "u"
                   addPredAssignment p (Unknown Map.empty u)
                   let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
                   let vars = zipWith Var sorts' deBrujns
                   tq <- asks $ _typeQualsGen . fst
-                  addQuals u (tq $ last vars : (init vars ++ allScalars env tass))
+                  addQuals u (tq (env, last vars : (init vars ++ allScalars env tass)))
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processWFPredicate c = addConstraint c  
@@ -764,7 +771,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
           then do
             let lhss = embedding env tass pass `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             addHornClause $ conjunction lhss |=>| r'
-          else -- One of the sides contains free predicates: nothing can be done yet
+          else -- One of the sides contains free predicates: nothing can be done yet            
             addConstraint c
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
@@ -780,18 +787,18 @@ processConstraint (WellFormed env (ScalarT baseT fml))
       Unknown _ u -> do
         tass <- use typeAssignment
         tq <- asks $ _typeQualsGen . fst
-        addQuals u (tq $ Var (toSort baseT) valueVarName : allScalars env tass)
+        addQuals u (tq (env, Var (toSort baseT) valueVarName : allScalars env tass))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       cq <- asks $ _condQualsGen . fst
-      addQuals u (cq $ allScalars env tass)
+      addQuals u (cq (env, allScalars env tass))
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       mq <- asks $ _matchQualsGen . fst
-      addQuals u (mq $ allPotentialScrutinees env tass)
+      addQuals u (mq (env, allPotentialScrutinees env tass))
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@

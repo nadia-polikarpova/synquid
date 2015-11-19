@@ -32,8 +32,7 @@ data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
   _sorts :: Map Sort Z3.Sort,                 -- ^ Sort for integer sets
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
-  _measures :: Map Id FuncDecl,               -- ^ Function declarations for measures
-  _predicates :: Map Id FuncDecl,             -- ^ Funstion declarations for abstract refinements
+  _functions :: Map Id FuncDecl,              -- ^ Function declarations for measures, predicates, and constructors
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
   _boolSortAux :: Maybe Z3.Sort,              -- ^ Boolean sort in the auxiliary solver  
@@ -51,8 +50,8 @@ initZ3Data env env' = Z3Data {
   _mainEnv = env,
   _sorts = Map.empty,
   _vars = Map.empty,
-  _measures = Map.empty,
-  _predicates = Map.empty,
+  _functions = Map.empty,
+  -- _predicates = Map.empty,
   _controlLiterals = Bimap.empty,
   _auxEnv = env',
   _boolSortAux = Nothing,
@@ -136,11 +135,15 @@ toAST expr = case expr of
   Measure s name arg -> do
     let tArg = sortOf arg
     -- decl <- measure b (name ++ show tArg ++ show b) tArg
-    decl <- measure s name tArg
+    decl <- function s name [tArg]
     mapM toAST [arg] >>= mkApp decl
+  Cons s name args -> do
+    let tArgs = map sortOf args
+    decl <- function s name tArgs
+    mapM toAST args >>= mkApp decl    
   Pred name args -> do
     let tArgs = map sortOf args
-    decl <- predicate name tArgs
+    decl <- function BoolS name tArgs
     mapM toAST args >>= mkApp decl
   All (Var s x) e -> do
     const <- var s x
@@ -196,30 +199,19 @@ toAST expr = case expr of
           v <- mkConst symb z3s
           vars %= Map.insert ident v
           return v 
-      
-    -- | Lookup or create a measure declaration with name `ident', type `baseT', and argument type `argType'
-    measure s name argType = do
-      declMb <- uses measures (Map.lookup name)
-      case declMb of
-        Just d -> return d
-        Nothing -> do
-          symb <- mkStringSymbol name
-          argSort <- toZ3Sort argType
-          decl <- toZ3Sort s >>= mkFuncDecl symb [argSort]
-          measures %= Map.insert name decl
-          return decl
-          
-    -- | Lookup or create a measure declaration with name `ident', type `baseT', and argument type `argType'
-    predicate name argTypes = do
+
+    -- | Lookup or create a function declaration with name `ident', type `baseT', and argument type `argType'
+    function s name argTypes = do
       -- let name' = name -- ++ show argType
-      declMb <- uses predicates (Map.lookup name)
+      declMb <- uses functions (Map.lookup name)
       case declMb of
         Just d -> return d
         Nothing -> do
           symb <- mkStringSymbol name
           argSorts <- mapM toZ3Sort argTypes
-          decl <- mkBoolSort >>= mkFuncDecl symb argSorts
-          predicates %= Map.insert name decl
+          resSort <- toZ3Sort s
+          decl <- mkFuncDecl symb argSorts resSort
+          functions %= Map.insert name decl
           return decl          
           
 instance SMTSolver Z3State where

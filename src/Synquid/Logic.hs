@@ -57,6 +57,7 @@ data Formula =
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
   Measure Sort Id Formula |           -- ^ Measure application
+  Cons Sort Id [Formula] |            -- ^ Constructor application
   Pred Id [Formula] |                 -- ^ Abstract refinement application
   All Formula Formula                 -- ^ Universal quantification
   deriving (Eq, Ord)
@@ -117,6 +118,7 @@ varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
 varsOf (Measure _ _ e) = varsOf e
+varsOf (Cons _ _ es) = Set.unions $ map varsOf es
 varsOf (Pred _ es) = Set.unions $ map varsOf es
 varsOf (All x e) = Set.delete x (varsOf e)
 varsOf _ = Set.empty
@@ -171,6 +173,7 @@ sortOf (Binary op e1 e2)
   | op == Union || op == Intersect || op == Diff = sortOf e1
   | otherwise                                    = BoolS
 sortOf (Measure s _ _)                           = s
+sortOf (Cons s _ _)                              = s
 sortOf (Pred _ _)                                = BoolS
 sortOf (All x e)                                 = BoolS
 
@@ -194,6 +197,7 @@ substitute subst fml = case fml of
   Unary op fml' -> Unary op (substitute subst fml')
   Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
   Measure b name arg -> Measure b name (substitute subst arg)
+  Cons b name args -> Cons b name $ map (substitute subst) args
   Pred name args -> Pred name $ map (substitute subst) args
   All v@(Var _ x) e -> if x `Map.member` subst
                             then error $ unwords ["Scoped variable clashes with substitution variable", x]
@@ -218,7 +222,7 @@ substitutePredicate :: Substitution -> Formula -> Formula
 substitutePredicate pSubst fml = case fml of
   Pred name args -> case Map.lookup name pSubst of
                       Nothing -> Pred name (map (substitutePredicate pSubst) args)
-                      Just value -> substitute (Map.fromList $ zip deBrujns args) value
+                      Just value -> substitute (Map.fromList $ zip deBrujns args) (substitutePredicate pSubst value)
   Unary op fml' -> Unary op (substitutePredicate pSubst fml')
   Binary op fml1 fml2 -> Binary op (substitutePredicate pSubst fml1) (substitutePredicate pSubst fml2)
   All v@(Var _ x) e -> All v (substitutePredicate pSubst e)
