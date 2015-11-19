@@ -1,0 +1,49 @@
+qualifier {x <= b}
+
+measure len :: List a -> {Int | _v >= 0}
+measure elems :: List a -> Set a
+measure heads :: List a -> a
+
+data List a decreases len where
+  Nil :: {List a | len _v == 0 && elems _v == []}
+  Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x] && heads _v == x}
+
+measure ilen :: IList a -> {Int | _v >= 0}
+measure ielems :: IList a -> Set a
+
+data IList a decreases ilen where
+  INil :: {IList a | ilen _v == 0 && ielems _v == []}
+  ICons :: x: a -> xs: IList {a | x <= _v} -> {IList a | ilen _v == ilen xs + 1 && ielems _v == ielems xs + [x]}
+
+measure sumLen :: ListOfLists a -> {Int | _v >= 0}
+measure len2 :: ListOfLists a -> {Int | _v >= 0}
+measure elems2 :: ListOfLists a -> Set a
+measure firstSet :: ListOfLists a -> {Int | _v >= 0}
+
+data ListOfLists a decreases len2 where
+  Nil2 :: {ListOfLists a | sumLen _v == 0 && len2 _v == 0 && elems2 _v == [] && firstSet _v == 0}
+  Cons2 :: x: IList a -> xs: ListOfLists a -> {ListOfLists a | sumLen _v == sumLen xs + ilen x && len2 _v == len2 xs +1 && elems2 _v == elems2 xs + ielems x && firstSet _v == ilen x}
+
+measure dlen :: DList a -> {Int | _v >= 0}
+measure delems :: DList a -> Set a
+
+data DList a decreases dlen where
+  DNil :: {DList a | dlen _v == 0 && delems _v == []}
+  DCons :: x: a -> xs: DList {a | _v <= x} -> {DList a | dlen _v == dlen xs + 1 && delems _v == delems xs + [x]}
+
+--merge :: xs: IList a -> ys: {IList a | ~(ilen _v - ilen xs) <= 1 } -> {IList a | ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
+
+sequences :: x: List a -> {ListOfLists a | elems x == elems2 _v && sumLen _v == len x}
+
+reverse :: x: Int -> xs : DList { Int | _v < x } -> { IList Int | ielems _v == delems xs + [x] && ilen _v == dlen xs + 1 }
+--reverse :: xs : DList Int -> { IList Int | ielems _v == delems xs && ilen _v == dlen xs }
+toList :: x: Int -> y: Int -> { ListOfLists Int | elems2 _v == [x, y] && len2 _v == 2 && firstSet _v == 2 && sumLen _v == 2 }
+
+--ascending :: x: Int -> b: Int -> bs: List Int -> as: DList { Int | _v < x } -> { ListOfLists Int | elems2 _v == delems as + elems bs + [x] + [b] && sumLen _v == dlen as + len bs + 1 + 1 && firstSet _v >= 1 + dlen as && ((x <= b) ==> firstSet _v > 1 + dlen as) }
+ascending :: x: Int -> bs: List Int -> as: DList { Int | _v < x } -> { ListOfLists Int | elems2 _v == delems as + elems bs + [x] && sumLen _v == dlen as + len bs + 1 && firstSet _v >= 1 + dlen as && ((x <= heads bs) ==> firstSet _v > 1 + dlen as) }
+ascending = ??
+
+--ascending
+--ascending a as (b:bs)
+--      | a `compare` b /= GT = ascending b (\ys -> as (a:ys)) --bs
+--    ascending a as bs       = as [a]: sequences --bs
