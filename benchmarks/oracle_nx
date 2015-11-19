@@ -149,8 +149,10 @@ delete = \x . \xs . match xs with
 map :: <b> . <a> . (f:(_:a -> b) -> (xs:List (a) -> {List (b)|len _v == len xs}))
 map = \f . \xs . match xs with
   Nil -> Nil
-  Cons x3 x4 -> Cons (f x3) (map (\x14 . f x14) x4)
-(Size: 20)
+  Cons x3 x4 -> Cons (f x3) (map f0 x4)
+  where
+    f0 = \x14 . f x14
+(Size: 22)
 (Spec size: 5)
 (#measures: 1)
 (#components: 0)
@@ -160,8 +162,10 @@ zipWith = \f . \xs . \ys . match xs with
   Nil -> Nil
   Cons x4 x5 -> match ys with
     Nil -> error
-    Cons x8 x9 -> Cons (f x4 x8) (zipWith (\x22 . \x23 . f x22 x23) x5 x9)
-(Size: 31)
+    Cons x8 x9 -> Cons (f x4 x8) (zipWith f0 x5 x9)
+  where
+    f0 = \x22 . \x23 . f x22 x23
+(Size: 33)
 (Spec size: 10)
 (#measures: 1)
 (#components: 0)
@@ -178,10 +182,12 @@ zip = \xs . \ys . match xs with
 (#components: 0)
 
 toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
-toNat = \xs . map (\x4 . if (>=) x4 0
-  then x4
-  else neg x4) xs
-(Size: 17)
+toNat = \xs . map f0 xs
+  where
+    f0 = \x4 . if (>=) x4 0
+        then x4
+        else neg x4
+(Size: 19)
 (Spec size: 8)
 (#measures: 1)
 (#components: 2)
@@ -189,8 +195,10 @@ toNat = \xs . map (\x4 . if (>=) x4 0
 product :: <b> . <a> . (la:List (a) -> (lb:List (b) -> {List (Pair (a) (b))|len _v == len la * len lb}))
 product = \la . \lb . match la with
   Nil -> Nil
-  Cons x4 x5 -> append (map (\x13 . Pair x4 x13) lb) (product x5 lb)
-(Size: 24)
+  Cons x4 x5 -> append (map f0 lb) (product x5 lb)
+  where
+    f0 = \x13 . Pair x4 x13
+(Size: 26)
 (Spec size: 8)
 (#measures: 3)
 (#components: 2)
@@ -548,6 +556,53 @@ max = \x . \y . if (>=) x y
 (Spec size: 14)
 (#measures: 0)
 (#components: 0)
+
+snoc :: <a> . <P :: a -> a -> Bool> . (x:a -> (xs:List ({a|P _v x}) <P _0 _1> -> {List (a) <P _0 _1>|len _v == len xs + 1}))
+snoc = \x . \xs . match xs with
+  Nil -> Cons x Nil
+  Cons x7 x8 -> Cons x7 (snoc x x8)
+(Size: 19)
+(Spec size: 16)
+(#measures: 2)
+(#components: 0)
+
+reverse :: <a> . <P :: a -> a -> Bool> . (xs:List (a) <P _0 _1> -> {List (a) <P _1 _0>|len _v == len xs})
+reverse = \xs . match xs with
+  Nil -> Nil
+  Cons x3 x4 -> snoc x3 (reverse x4)
+(Size: 12)
+(Spec size: 11)
+(#measures: 2)
+(#components: 1)
+
+foldr :: <b> . <a> . <P :: List (a) -> b -> Bool> . (f:(xs:List (a) -> (x:a -> (acc:{b|P xs _v} -> {b|P (Cons x xs) _v}))) -> (seed:{b|P (Nil) _v} -> (ys:List (a) -> {b|P ys _v})))
+foldr = \f . \seed . \ys . match ys with
+  Nil -> seed
+  Cons x3 x4 -> f x4 x3 (foldr f0 seed x4)
+  where
+    f0 = \x15 . \x16 . \x17 . f x15 x16 x17
+(Size: 32)
+(Spec size: 14)
+(#measures: 2)
+(#components: 2)
+
+length :: <a> . (zs:List (a) -> {Int|_v == len zs})
+length = \zs . foldr f0 zero zs
+  where
+    f0 = \x5 . \x6 . \x7 . inc x7
+(Size: 17)
+(Spec size: 4)
+(#measures: 2)
+(#components: 3)
+
+append :: <a> . (xs:List (a) -> (ys:List (a) -> {List (a)|len _v == len xs + len ys}))
+append = \xs . \ys . foldr f0 xs ys
+  where
+    f0 = \x6 . \x7 . \x8 . Cons x7 x8
+(Size: 20)
+(Spec size: 8)
+(#measures: 2)
+(#components: 4)
 
 insert :: <a> . (x:a -> (xs:List (a) <_0 <= _1> -> {List (a) <_0 <= _1>|elems _v == (elems xs) + ([x])}))
 insert = \x . \xs . match xs with
