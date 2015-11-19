@@ -55,6 +55,9 @@ BENCHMARKS = [
     # Insertion Sort
         [('IncList-Insert', 'insertion', []),
         ('IncList-InsertSort', 'insertion sort', []),
+        ('StrictIncList-Insert', 'insertion (strict order)', []),
+        ('StrictIncList-Delete', 'deletion (strict order)', []),
+        # Merge sort
         # Merge sort
         ('List-Split', 'balanced split', ['-s=1', '-m=3']),
         ('IncList-Merge', 'sorted merge', ['-h']),
