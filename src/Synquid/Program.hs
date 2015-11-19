@@ -269,7 +269,8 @@ data BareProgram r =
   PFun Id (Program r) |                   -- ^ Lambda abstraction
   PIf (Program r) (Program r) (Program r) |   -- ^ Conditional
   PMatch (Program r) [Case r] |           -- ^ Pattern match on datatypes
-  PFix [Id] (Program r)                   -- ^ Fixpoint  
+  PFix [Id] (Program r) |                 -- ^ Fixpoint
+  PLet [(Id, Program r)] (Program r)
   deriving (Eq, Ord)
   
 -- | Programs annotated with types  
