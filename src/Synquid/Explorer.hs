@@ -51,6 +51,7 @@ data ExplorerParams = ExplorerParams {
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _hideScrutinees :: Bool,
   _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
+  _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
   _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
   _matchQualsGen :: QualsGen,
@@ -159,11 +160,13 @@ explore params solver goal = observeManyT 1 $ do
       goals <- use auxGoals
       case goals of
         [] -> return []
-        (Goal name env (Monotype spec)) : gs -> do
+        (g : gs) -> do
           auxGoals .= gs
-          p <- generateI env spec
+          let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
+          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'
+          p <- generateTopLevel g'
           rest <- generateAuxGoals
-          return $ (name, p) : rest
+          return $ (gName g, p) : rest
 
 {- AST exploration -}
 
@@ -422,7 +425,9 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
 generateE :: Monad s => Environment -> RType -> Explorer s (Environment, RProgram)
 generateE env typ = do
   d <- asks $ _eGuessDepth . fst
-  generateEUpTo env typ d
+  (finalEnv, p) <- generateEUpTo env typ d
+  ifM (asks $ _incrementalChecking . fst) (return ()) (solveConstraints p)
+  return (finalEnv, p)
 
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
 generateEUpTo :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
@@ -483,7 +488,7 @@ checkE env typ p = do
     else do
       addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs $ typeOf p) (lastType (typeOf p))) (lastType typ) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-  solveConstraints p
+  ifM (asks $ _incrementalChecking . fst) (solveConstraints p) (return ())
   where
     removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
       ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
@@ -512,11 +517,9 @@ enumerateAt env typ 0 = do
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sh -> do
-          addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
-          solveConstraints p
+        Just sh -> solveLocally p $ Subtype env (refineBot $ shape t) (refineTop sh) False
       return (env, p)
-
+      
     freshInstance sch = if arity (toMonotype sch) == 0
       then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
       else instantiate env sch ftrue
@@ -564,6 +567,13 @@ toSymbol p env = do
 
 enqueueGoal env typ = do
   g <- freshId "f"
+  
+  -- polymorphic <- asks $ _polyRecursion . fst
+  -- let tvs = env ^. boundTypeVars
+  -- if not (null tvs)
+  -- let env' = if polymorphic && not (null tvs)
+                -- then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
+                -- else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize  
   auxGoals %= ((Goal g env $ Monotype typ) :)
   return $ Program (PSymbol g) typ
 
@@ -634,9 +644,8 @@ solveConstraints p = do
 
 isEnvironmentInconsistent env env' t = do
   cUnknown <- Unknown Map.empty <$> freshId "u"
-  addConstraint $ WellFormedCond env cUnknown
-  solveConstraints (Program (PSymbol "error") t)
-
+  solveLocally (Program (PSymbol "error") t) $ WellFormedCond env cUnknown 
+  
   tass <- use typeAssignment
   pass <- use predAssignment
   qmap <- use qualifierMap
@@ -650,6 +659,13 @@ isEnvironmentInconsistent env env' t = do
   if null cands'
     then return Nothing
     else return $ Just $ (conjunction . flip valuation cUnknown . solution . head) cands'
+    
+solveLocally p c = do
+  oldCs <- use typingConstraints
+  typingConstraints .= []
+  addConstraint c
+  solveConstraints p
+  typingConstraints .= oldCs    
 
 simplifyConstraint :: Monad s => Constraint -> Explorer s ()
 simplifyConstraint c = do
