@@ -55,6 +55,16 @@ balR :: x: a ->
 singleton :: x: a -> c: Color -> {WeakRBT a | welems _v == [x] && wheight _v == c}
 --singleton = ??
 
+ins :: t: RBT a <{True}> -> x: a -> {WeakRBT a | welems _v == elems t + [x] && wheight _v == blackHeight t}
+ins = ??
+
+mkBlack :: t: WeakRBT a -> {RBT a <{True}> | elems _v == welems t}
+mkBlack = ??
+
+add :: t: RBT a <{True}> -> x: a -> {RBT a <{True}> | elems _v == elems t + [x]}
+add = ??
+
+--=====================================================================================================================
 -- time cabal run benchmarks/abstract/RBT-Ins.sq -- -a=2 -m=1 -e
 -- Preprocessing executable 'synquid' for synquid-0.1.0.0...
 -- Running synquid...
@@ -66,5 +76,19 @@ singleton :: x: a -> c: Color -> {WeakRBT a | welems _v == [x] && wheight _v == 
 --     else if (<) x11 x
 --       then balR x11 x12 x13 (ins x14 x)
 --       else balL x11 x12 (ins x13 x) x14
-ins :: t: RBT a <{True}> -> x: a -> {WeakRBT a | welems _v == elems t + [x] && wheight _v == blackHeight t}
-ins = ??
+
+-- mkBlack :: <a> . (t:WeakRBT (a) -> {RBT (a) <True>|elems _v == welems t})
+-- mkBlack = \t . match t with
+--   Ok x1 -> x1
+--   Bad x6 x7 x8 x9 -> if (<) 0 x7
+--     then Node x6 x7 x8 x9
+--     else Node x6 black x8 x9
+
+-- add :: <a> . (t:RBT (a) <True> -> (x:a -> {RBT (a) <True>|elems _v == (elems t) + ([x])}))
+-- add = \t . \x . mkBlack (ins t x)
+
+
+-- real	0m45.579s
+-- user	0m45.125s
+-- sys	0m0.468s
+--=====================================================================================================================
