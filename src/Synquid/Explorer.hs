@@ -73,8 +73,9 @@ data ExplorerState = ExplorerState {
   _predAssignment :: Substitution,              -- ^ Current assignment to free predicate variables
   _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
   _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
+  _initEnv :: Environment,
   _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
-} deriving Show
+}
 
 makeLenses ''ExplorerState
 
@@ -120,7 +121,7 @@ type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 -- | Incremental second-order constraint solver
 data ConstraintSolver s = ConstraintSolver {
   csInit :: s Candidate,                                                      -- ^ Initial candidate solution
-  csRefine :: [Formula] -> QMap -> RProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
+  csRefine :: [Formula] -> QMap -> ExtractAssumptions -> RProgram -> [Candidate] -> s [Candidate],  -- ^ Refine current list of candidates to satisfy new constraints
   csPruneQuals :: QSpace -> s QSpace,                                         -- ^ Prune redundant qualifiers
   csCheckConsistency :: [Formula] -> [Candidate] -> s [Candidate],            -- ^ Check consistency of formulas under candidates
   csClearMemo :: s (),                                                        -- ^ Clear the memoization store
@@ -143,7 +144,7 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, ConstraintSolve
 explore :: Monad s => ExplorerParams -> ConstraintSolver s -> Goal -> s [RProgram]
 explore params solver goal = observeManyT 1 $ do
     initCand <- lift $ csInit solver
-    runReaderT (evalStateT go (ExplorerState Map.empty [] Map.empty [] [] Map.empty Map.empty [initCand] [] Map.empty)) (params, solver)
+    runReaderT (evalStateT go (ExplorerState Map.empty [] Map.empty [] [] Map.empty Map.empty [initCand] [] (gEnvironment goal) Map.empty)) (params, solver)
   where
     go :: Monad s => Explorer s RProgram
     go = do
@@ -160,7 +161,7 @@ explore params solver goal = observeManyT 1 $ do
         (Goal name env (Monotype spec)) : gs -> do
           auxGoals .= gs
           subterm <- generateI env spec
-          generateAuxGoals $ programSubstituteSymbol name subterm p
+          generateAuxGoals $ programSubstituteSymbol name subterm p      
 
 {- AST exploration -}
 
@@ -318,7 +319,7 @@ generateFirstCase env scrName pScrutinee t consName = do
       consT <- instantiate env consSch ftrue
       matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)
-      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) consT
+      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
       
       deadBranchCond <- isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
       case deadBranchCond of
@@ -340,7 +341,7 @@ generateCase env scrName pScrutinee t consName = do
       consT <- instantiate env consSch ftrue
       matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)
-      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) consT
+      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
       pCaseExpr <- local (
                            over (_1 . matchDepth) (-1 +)
@@ -504,7 +505,7 @@ enumerateAt env typ 0 = do
   where
     pickSymbol (name, sch) = do
       t <- freshInstance sch
-      let p = Program (PSymbol name) (symbolType name t)
+      let p = Program (PSymbol name) (symbolType env name t)
       ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
@@ -513,17 +514,6 @@ enumerateAt env typ 0 = do
           addConstraint $ Subtype env (refineBot $ shape t) (refineTop sh) False -- It's a polymorphic recursive call and has additional shape constraints
           solveConstraints p
       return (env, p)
-        
-    symbolType x (ScalarT b@(DatatypeT dtName _ _) fml)
-      | x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors = ScalarT b (fml |&| varRefinement x (toSort b))
-    symbolType x t@(ScalarT b _)
-      | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
-      | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
-    symbolType x t = case lastType t of
-      (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
-                                                  then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
-                                                  else t
-      _ -> t
 
     freshInstance sch = if arity (toMonotype sch) == 0
       then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
@@ -534,7 +524,7 @@ enumerateAt env typ 0 = do
           then Just (head ctors, allSymbols env Map.! (head ctors))
           else Nothing
     soleConstructor _ = Nothing
-
+    
 enumerateAt env typ d = do
   let maxArity = fst $ Map.findMax (env ^. symbols)
   guard $ arity typ < maxArity
@@ -625,7 +615,8 @@ solveConstraints p = do
       qmap <- use qualifierMap
       clauses <- use hornClauses
       cands <- use candidates
-      cands' <- lift . lift . lift $ csRefine solv clauses qmap (programSubstituteTypes tass p) cands
+      env <- use initEnv
+      cands' <- lift . lift . lift $ csRefine solv clauses qmap (instantiateConsAxioms env) (programSubstituteTypes tass p) cands
       when (null cands') $ writeLog 1 (text "FAIL: horn clauses have no solutions") >> mzero
       candidates .= cands'
       hornClauses .= []
@@ -651,7 +642,8 @@ isEnvironmentInconsistent env env' t = do
   let fml' = conjunction $ embedding env' tass pass
   solv <- asks snd
   cands <- use candidates
-  cands' <- lift . lift . lift $ csRefine solv [(cUnknown |&| fml) |=>| fnot fml'] qmap (Program (PSymbol "error") t) cands
+  env <- use initEnv
+  cands' <- lift . lift . lift $ csRefine solv [(cUnknown |&| fml) |=>| fnot fml'] qmap (instantiateConsAxioms env) (Program (PSymbol "error") t) cands
   
   if null cands'
     then return Nothing
@@ -739,8 +731,7 @@ processWFPredicate c@(WellFormedPredicate env sorts p)
         then return ()
         else let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
              in if any (isFreeVariable tass) typeVars
-                then return () -- Throw away, shouldn't happen?
-                -- then addConstraint c -- Still has type variables: cannot determine shape
+                then addConstraint c -- Still has type variables: cannot determine shape
                 else do
                   u <- freshId "u"
                   addPredAssignment p (Unknown Map.empty u)
@@ -799,6 +790,7 @@ processConstraint (WellFormedMatchCond env (Unknown _ u))
       tass <- use typeAssignment
       mq <- asks $ _matchQualsGen . fst
       addQuals u (mq (env, allPotentialScrutinees env tass))
+processConstraint c@(WellFormedPredicate env sorts p) = addConstraint c
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
@@ -875,6 +867,17 @@ freshPred fml = do
   p' <- freshId "P"  
   let args = Set.toList $ varsOf fml -- ToDo: relying on the fact that we always use deBrujns and they will be ordered properly: is that true?
   return $ Pred p' args
+  
+symbolType env x (ScalarT b@(DatatypeT dtName _ _) fml)
+  | x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors = ScalarT b (fml |&| (Var (toSort b) valueVarName) |=| Cons (toSort b) x [])
+symbolType env x t@(ScalarT b _)
+  | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
+  | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
+symbolType env x t = case lastType t of
+  (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
+                                              then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
+                                              else t
+  _ -> t  
 
 matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args pArgs) _) | d == d' 
   = do
@@ -908,6 +911,22 @@ fmlToProgram fml@(Binary op e1 e2) = let
     opRes 
       | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
       | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
+      
+instantiateConsAxioms :: Environment -> Formula -> Set Formula      
+instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
+  case fml of
+    Cons (DataS dtName _) ctor args -> constructorAxioms args [] ctor (toMonotype $ allSymbols env Map.! ctor)
+    Measure m _ arg -> inst arg
+    Unary op e -> inst e
+    Binary op e1 e2 -> inst e1 `Set.union` inst e2
+    -- SetLit s elems -> ?
+    Pred p args -> Set.unions $ map inst args
+    -- All x e -> ?
+    _ -> Set.empty  
+  where
+    constructorAxioms args vars ctor (ScalarT baseT fml) = let subst = Map.fromList $ (valueVarName, (Cons (toSort baseT) ctor args)) : zip vars args
+      in conjunctsOf (substitute subst fml)
+    constructorAxioms args vars ctor (FunctionT x tArg tRes) = constructorAxioms args (vars ++ [x]) ctor tRes
 
 writeLog level msg = do
   maxLevel <- asks $ _explorerLogLevel . fst

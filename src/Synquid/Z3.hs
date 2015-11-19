@@ -84,6 +84,7 @@ toZ3Sort s = do
         IntS -> mkIntSort
         -- VarS name -> mkStringSymbol name >>= mkUninterpretedSort
         VarS name -> mkIntSort
+        -- DataS name args -> mkStringSymbol name >>= mkUninterpretedSort
         DataS name args -> mkIntSort
         SetS el -> toZ3Sort el >>= mkSetSort
         -- UnknownS -> mkIntSort
@@ -145,16 +146,29 @@ toAST expr = case expr of
     let tArgs = map sortOf args
     decl <- function BoolS name tArgs
     mapM toAST args >>= mkApp decl
-  All (Var s x) e -> do
-    const <- var s x
-    app <- toApp const
-    body <- toAST e
-    mkForallConst [] [app] body
+  All v e -> accumAll [v] e
   where
     setLiteral el xs = do
       emp <- toZ3Sort el >>= mkEmptySet
       elems <- mapM toAST xs
       foldM mkSetAdd emp elems
+      
+    accumAll :: [Formula] -> Formula -> Z3State AST
+    accumAll xs (All y e) = accumAll (xs ++ [y]) e
+    accumAll xs e@(Binary Eq (Measure s1 m c@(Cons _ _ _)) rhs) =  do
+      boundVars <- mapM toAST xs
+      boundApps <- mapM toApp boundVars
+      body <- toAST e
+      trigger <- toAST c
+      pats <- mkPattern [trigger]
+      res <- mkForallConst [pats] boundApps body
+      str <- astToString res
+      debug 1 str $ return res
+    accumAll xs e =  do
+      boundVars <- mapM toAST xs
+      boundApps <- mapM toApp boundVars
+      body <- toAST e
+      mkForallConst [] boundApps body      
   
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus

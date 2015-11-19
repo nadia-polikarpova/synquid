@@ -320,7 +320,7 @@ instance Show Candidate where
   show = show . pretty
 
 candidateDoc :: RProgram -> Candidate -> Doc
-candidateDoc prog (Candidate sol _ _ label) = text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
+candidateDoc prog c@(Candidate sol _ _ label) = pretty c -- text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
 
 instance Pretty Goal where
   pretty (Goal name env spec) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec

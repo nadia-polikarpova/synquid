@@ -52,8 +52,8 @@ synthesize explorerParams solverParams goal cquals tquals = do
     init :: Z3Memo Candidate
     init = lift $ initialCandidate
 
-    refine :: [Formula] -> QMap -> RProgram -> [Candidate] -> Z3Memo [Candidate]
-    refine fmls qmap p cands = lift $ refineCandidates (solverParams { candDoc = candidateDoc p }) qmap fmls cands
+    refine :: [Formula] -> QMap -> ExtractAssumptions -> RProgram -> [Candidate] -> Z3Memo [Candidate]
+    refine fmls qmap ea p cands = lift $ refineCandidates (solverParams { candDoc = candidateDoc p }) qmap ea fmls cands
 
     prune :: QSpace -> Z3Memo QSpace
     prune quals = lift $ pruneQualifiers solverParams quals
