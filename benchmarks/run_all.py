@@ -31,7 +31,7 @@ BENCHMARKS = [
     ["List",
         [('List-Null', 'is list empty', []),
         ('List-Elem', 'contains an element', []),
-        ('List-Stutter', 'addition', []),
+        ('List-Stutter', 'duplicate each element', []),
         ('List-Replicate', 'list of element repetitions', []),
         ('List-Append', 'append two lists', ['-m=1']),
         ('List-Concat', 'concatenate list of lists', []),
