@@ -1,0 +1,49 @@
+qualifier {x > y}
+
+measure fst :: Pair a b -> a
+measure snd :: Pair a b -> b
+
+data Pair a b where
+  Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
+
+measure len :: List a -> {Int | _v >= 0}
+measure elems :: List a -> Set a
+
+data List a decreases len where
+  Nil :: {List a | len _v == 0 && elems _v == []}
+  Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+
+measure ilen :: IList a -> {Int | _v >= 0}
+measure ielems :: IList a -> Set a
+
+data IList a decreases ilen where
+  INil :: {IList a | ilen _v == 0 && ielems _v == []}
+  ICons :: x: a -> xs: IList {a | x <= _v} -> {IList a | ilen _v == ilen xs + 1 && ielems _v == ielems xs + [x]}
+
+measure sumLen :: ListOfLists a -> {Int | _v >= 0}
+measure len2 :: ListOfLists a -> {Int | _v >= 0}
+measure elems2 :: ListOfLists a -> Set a
+measure firstLen :: ListOfLists a -> {Int | _v >= 0}
+
+data ListOfLists a decreases len2 where
+  Nil2 :: {ListOfLists a | sumLen _v == 0 && len2 _v == 0 && elems2 _v == [] && firstLen _v == 0}
+  Cons2 :: x: IList a -> xs: ListOfLists a -> {ListOfLists a | sumLen _v == sumLen xs + ilen x && len2 _v == len2 xs +1 && elems2 _v == elems2 xs + ielems x && firstLen _v == ilen x}
+
+measure dlen :: DList a -> {Int | _v >= 0}
+measure delems :: DList a -> Set a
+
+data DList a decreases dlen where
+  DNil :: {DList a | dlen _v == 0 && delems _v == []}
+  DCons :: x: a -> xs: DList {a | _v <= x} -> {DList a | dlen _v == dlen xs + 1 && delems _v == delems xs + [x]}
+
+--merge :: xs: IList a -> ys: {IList a | ~(ilen _v - ilen xs) <= 1 } -> {IList a | ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
+merge :: xs: IList a -> ys: IList a -> {IList a | ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
+
+mergeAll :: xs: ListOfLists a -> {IList a | ilen _v == sumLen xs}
+
+descending :: x: a -> bs: List a -> as: { IList { a | _v >= x } | ilen _v > 0 } -> { ListOfLists a | elems2 _v == ielems as + elems bs + [x] && sumLen _v == ilen as + len bs + 1 && firstLen _v > ilen as && firstLen _v > 1}
+
+ascending :: x: a -> bs: List a -> as: { DList { a | _v <= x } | dlen _v > 0 } -> { ListOfLists a | elems2 _v == delems as + elems bs + [x] && sumLen _v == dlen as + len bs + 1  && firstLen _v > dlen as && firstLen _v > 1}
+
+sequences :: x: { List a | len _v > 1 } -> {ListOfLists a | elems x == elems2 _v && sumLen _v == len x && firstLen _v > 1}
+sequences = ??
