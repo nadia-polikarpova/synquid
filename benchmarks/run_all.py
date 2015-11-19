@@ -92,6 +92,9 @@ BENCHMARKS = [
 ABS_BENCHMARKS = [
     # Integers
     ('Int-Max', []),
+    # Lists
+    ('List-Reverse', []),
+    ('List-Fold', ['-e']),
     # Insertion Sort
     ('IncList-Insert', []),
 ]

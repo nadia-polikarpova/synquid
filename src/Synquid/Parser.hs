@@ -294,17 +294,21 @@ parseTerm = try parseAppTerm <|> parseAtomTerm
       , parseBoolLit
       , parseIntLit
       , parseSetLit
-      , Var UnknownS <$> identifier ]
+      , parseNullaryCons
+      , parseVariable
+      ]
       
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
     parseSetLit = SetLit UnknownS <$> brackets (commaSep parseFormula)
+    parseNullaryCons = flip (Cons UnknownS) [] <$> parseTypeName
+    parseVariable = Var UnknownS <$> parseIdentifier 
     parsePredApp = do
       name <- parseTypeName
       args <- many1 parseAtomTerm
       return $ Pred name args
     parseMeasureApp = do
-      name <- identifier
+      name <- parseIdentifier
       parseAtomTerm >>= return . Measure UnknownS name
       
 {- Misc -}
@@ -324,4 +328,4 @@ parseIdentifier = try $ do
 parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
-  if isLower $ head name then unexpected ("non-capitalized " ++ show name) else return name
+  if not (isUpper $ head name) then unexpected ("non-capitalized " ++ show name) else return name

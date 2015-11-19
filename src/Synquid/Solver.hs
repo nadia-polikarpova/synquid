@@ -43,8 +43,8 @@ initialCandidate = do
 
 -- | 'refineCandidates' @params quals constraints cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
-refineCandidates :: SMTSolver s => SolverParams -> QMap -> [Formula] -> [Candidate] -> s [Candidate]
-refineCandidates params quals constraints cands = evalFixPointSolver go params
+refineCandidates :: SMTSolver s => SolverParams -> QMap -> ExtractAssumptions -> [Formula] -> [Candidate] -> s [Candidate]
+refineCandidates params quals extractAssumptions constraints cands = evalFixPointSolver go params
   where
     go = do
       writeLog 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
@@ -52,7 +52,7 @@ refineCandidates params quals constraints cands = evalFixPointSolver go params
       cands' <- mapM (addConstraints constraints') cands
       case find (Set.null . invalidConstraints) cands' of
         Just c -> return $ c : delete c cands'
-        Nothing -> greatestFixPoint quals cands'
+        Nothing -> greatestFixPoint quals extractAssumptions cands'
         
     isNew c = not (c `Set.member` validConstraints (head cands)) && not (c `Set.member` invalidConstraints (head cands))
       
@@ -101,9 +101,9 @@ type FixPointSolver s a = ReaderT SolverParams s a
 evalFixPointSolver = runReaderT
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
-greatestFixPoint :: SMTSolver s => QMap -> [Candidate] -> FixPointSolver s [Candidate]
-greatestFixPoint _ [] = return []
-greatestFixPoint quals candidates = do
+greatestFixPoint :: SMTSolver s => QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
+greatestFixPoint _ _ [] = return []
+greatestFixPoint quals extractAssumptions candidates = do
     (cand@(Candidate sol _ _ _), rest) <- pickCandidate candidates <$> asks candidatePickStrategy
     fml <- asks constraintPickStrategy >>= pickConstraint cand
     let modifiedConstraint = instantiateRhs sol fml 
@@ -120,11 +120,14 @@ greatestFixPoint quals candidates = do
         return (nc, rest)
     case find (Set.null . invalidConstraints) newCandidates of
       Just cand' -> return $ cand' : (delete cand' newCandidates ++ rest')  -- Solution found
-      Nothing -> greatestFixPoint quals (newCandidates ++ rest')
+      Nothing -> greatestFixPoint quals extractAssumptions (newCandidates ++ rest')
 
   where
     instantiateRhs sol fml = case fml of
-      Binary Implies lhs rhs -> Binary Implies lhs (applySolution sol rhs)
+      Binary Implies lhs rhs -> let
+         rhs' = applySolution sol rhs
+         assumptions = extractAssumptions rhs'
+        in Binary Implies (lhs |&| conjunction assumptions) rhs'
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@

@@ -254,7 +254,8 @@ lookupQualsSubst quals u@(Unknown s _) = concatMap go $ lookupQuals quals (to (o
   where
     go u@(Unknown _ _) = lookupQualsSubst quals u
     go fml = [fml]
-  
+    
+type ExtractAssumptions = Formula -> Set Formula
   
 {- Solutions -}  
 
