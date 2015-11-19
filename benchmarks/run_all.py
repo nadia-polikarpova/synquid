@@ -49,7 +49,7 @@ BENCHMARKS = [
         [('UniqueList-Insert', 'insertion', []),
         ('UniqueList-Delete', 'deletion', []),
         ('List-Nub', 'deduplication', ['-f=FirstArgument', '-m=1']),
-        ('List-Compress', 'merge consequtive equal elements', ['-h'])]
+        ('List-Compress', 'dedup subsequences', ['-h'])]
     ],
     ["Sorting",
     # Insertion Sort
@@ -66,21 +66,24 @@ BENCHMARKS = [
     ],
     # Trees
     ["Trees",
-        [('Tree-Elem', 'contains an element',[]),
+        [('Tree-Elem', 'membership',[]),
         ('Tree-Flatten', 'flatten to a list', []),
         ('Tree-HBal', 'create balanced tree', [])]
     ],
     ["BST",
         [# Binary search tree
-        ('BST-Member', 'contains an element', []),
+        ('BST-Member', 'membership', []),
         ('BST-Insert', 'insertion', []),
-        ('BST-Delete', 'deletion', ['-m=1', '-e', '-a=2'])],
-        ('BST-Sort', 'BST sort', [])
-    ],
         # works with: -m=2 -e (fast), -m=2 slower
+        ('BST-Delete', 'deletion', ['-m=1', '-e', '-a=2']),
+        ('BST-Sort', 'BST sort', [])]
+    ],
     ["Heap",
         # Binary heap
-        [('BinHeap-Member', 'addition', [])]
+        [('BinHeap-Member', 'membership', []),
+        ('BinHeap-Insert', 'insertion', []),
+        ('BinHeap-Singleton', 'constructor', []),
+        ('BinHeap-Tripleton', 'constructor, 3 args', [])]
     ],
     ["User",
         # Evaluation
@@ -122,8 +125,10 @@ COMPONENTS = {
    "Tree-HBal": "integer",
    "IncList-InsertSort": "insert",
    "IncList-MergeSort": "split, merge",
-   "IncList-QuickSort": "partition, pivotAppend",
+   "IncList-QuickSort": "partition, pivot append",
    "BST-Member": "bool",
+   "BST-Sort": "toBST, flatten, insert, merge",
+   "BST-Delete": "merge",
    "Evaluator": "integer",
    "Evaluator-Vars": "integer",
 }
@@ -177,7 +182,9 @@ def postprocess():
                     outfile.write (' & ')
                     outfile.write (tableName)
                     outfile.write (' & ')
-                    row = ' & ' + res.nMeasures + '& ' + res.nComponents + \
+                    row = \
+                    res.specSize + \
+                    ' & ' + res.nMeasures + '& ' + res.nComponents + \
                     ' & ' + COMPONENTS.get(name, '') + \
                     ' & ' + res.size + '& ' + '{0:0.2f}'.format(res.time) + \
                     ' & ' + '{0:0.2f}'.format(res.time)  + '& ' + '{0:0.2f}'.format(res.time) + \
@@ -224,7 +231,7 @@ if __name__ == '__main__':
         run_benchmark(name, args, 'abstract/')
     print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Red-Black-Trees' + Style.RESET_ALL
     for (name, args) in RBT_BENCHMARKS:
-        run_benchmark(name, args, 'abstract/')        
+        run_benchmark(name, args, 'abstract/')
 
     postprocess()
 
