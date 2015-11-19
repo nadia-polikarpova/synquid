@@ -23,8 +23,20 @@ releaseDate = fromGregorian 2015 11 20
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file appMax scrutineeMax matchMax fix hideScr explicitMatch
-    consistency log_ useMemoization print_solution_size print_spec_info) <- cmdArgs cla
+  (CommandLineArgs file 
+                   appMax 
+                   scrutineeMax 
+                   matchMax 
+                   fix 
+                   hideScr 
+                   explicitMatch
+                   incremental
+                   consistency 
+                   log_ 
+                   useMemoization 
+                   print_solution_size 
+                   print_spec_info
+                   bfs) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -32,11 +44,13 @@ main = do
     _fixStrategy = fix,
     _hideScrutinees = hideScr,
     _abduceScrutinees = not explicitMatch,
+    _incrementalChecking = incremental,
     _consistencyChecking = consistency,
     _explorerLogLevel = log_,
     _useMemoization = useMemoization
     }
   let solverParams = defaultSolverParams {
+    optimalValuationsStrategy = if bfs then BFSValuations else MarcoValuations,
     solverLogLevel = log_
     }
   let synquidParams = defaultSynquidParams {
@@ -63,11 +77,14 @@ data CommandLineArgs
         fix :: FixpointStrategy,
         hide_scrutinees :: Bool,
         explicit_match :: Bool,
+        incremental :: Bool,
         consistency :: Bool,
         log_ :: Int,
         use_memoization :: Bool,
         print_solution_size :: Bool,
-        print_spec_info :: Bool
+        print_spec_info :: Bool,
+        -- | Solver params
+        bfs_solver :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
 
@@ -79,11 +96,13 @@ cla = CommandLineArgs {
   fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
   hide_scrutinees = False           &= help ("Hide scrutinized expressions from the evironment (default: False)"),
   explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
+  incremental     = True            &= help ("Subtyping checks during bottom-up fase (default: True)"),
   consistency     = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
   use_memoization = False           &= help ("Use memoization (default: False)"),
   print_solution_size = False       &= help ("Show size of the synthesized solution (default: False)"),
-  print_spec_info = False       &= help ("Show information about the given synthesis problem (default: False)")
+  print_spec_info = False           &= help ("Show information about the given synthesis problem (default: False)"),
+  bfs_solver      = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
@@ -96,6 +115,7 @@ defaultExplorerParams = ExplorerParams {
   _polyRecursion = True,
   _hideScrutinees = False,
   _abduceScrutinees = True,
+  _incrementalChecking = True,
   _consistencyChecking = True,
   _condQualsGen = undefined,
   _matchQualsGen = undefined,
