@@ -230,8 +230,8 @@ if __name__ == '__main__':
         #print(str(name) + str(args))
         run_benchmark(name, args)
     print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Abstract refinements' + Style.RESET_ALL
-    for (name, args) in ABS_BENCHMARKS:
-        run_benchmark(name, args, 'abstract/')
+    #for (name, args) in ABS_BENCHMARKS:
+    #    run_benchmark(name, args, 'abstract/')
     print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Red-Black-Trees' + Style.RESET_ALL
     for (name, args) in RBT_BENCHMARKS:
         run_benchmark(name, args, 'abstract/')
