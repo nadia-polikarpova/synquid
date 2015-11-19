@@ -489,12 +489,12 @@ checkE env typ p = do
 
 enumerateAt :: Monad s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
-  case soleConstructor (lastType typ) of
-    Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
-      guard $ arity (toMonotype sch) == arity typ
-      pickSymbol (name, sch)
+  -- case soleConstructor (lastType typ) of
+    -- Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
+      -- guard $ arity (toMonotype sch) == arity typ
+      -- pickSymbol (name, sch)
 
-    Nothing -> do
+    -- Nothing -> do
       let symbols = Map.toList $ symbolsOfArity (arity typ) env
       useCounts <- use symbolUseCount
       let symbols' = if arity typ == 0

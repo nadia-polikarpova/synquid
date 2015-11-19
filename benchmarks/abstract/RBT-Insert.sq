@@ -1,0 +1,54 @@
+------------------------------------------------------------
+-- This version is not working: specs have to be tweaked! --
+------------------------------------------------------------
+
+qualifier {x < y, x == y}
+
+red   :: {Int | _v == 0}
+black :: {Int | _v == 1}
+
+measure size        :: RBT a -> {Int | _v >= 0}
+measure elems       :: RBT a -> Set a
+measure blackHeight :: RBT a -> {Int | _v >= 0}
+
+data RBT a <P :: Int -> Bool> decreases size where
+    Empty :: color: {Int | _v == 1 && P _v} ->  
+			{RBT a <P> | size _v == 0 && 
+              elems _v == [] && 
+              blackHeight _v == 0}        										 	-- black-height of nils is 0
+    Node  :: x: a -> 
+             color: {Int | (_v == 0 || _v == 1) && P _v} -> 
+             left:    RBT {a | _v < x} <{ color == 1 || _0 == 1 }> ->               -- left keys are less than this key; a red node must have black children
+             right: { RBT {a | x < _v} <{ color == 1 || _0 == 1 }> |               	-- right keys are greater than this key; a red node must have black children 
+                                        (blackHeight _v == blackHeight left)} ->    -- blackHeight the same as of left
+             {RBT a <P> | size _v == size left + size right + 1 && 
+						  elems _v == elems left + elems right + [x] && 
+                          (blackHeight _v == blackHeight left + color)         		-- black-height is black-height of sub + 1 in case the current node is black
+                      }
+					  
+empty :: { RBT a <{_0 == 1}> | size _v == 0 && elems _v == [] && blackHeight _v == 0 }
+empty = ??
+					  
+measure welems :: WeakRBT a -> Set a
+measure wheight :: WeakRBT a -> Int					  
+					  					  
+data WeakRBT a where
+	Ok :: t: RBT a <{True}> -> { WeakRBT a | welems _v == elems t && wheight _v == blackHeight t }
+	Bad :: x: a -> 
+		   lc: {Int | _v == 0 || _v == 1 } -> 
+		   left:    RBT {a | _v < x} <{_0 == lc}> ->
+		   right:   { RBT {a | x < _v} <{_0 != lc}> | blackHeight _v == blackHeight left} ->
+		   { WeakRBT a | (welems _v == [x] + elems left + elems right) && (wheight _v == blackHeight left) }
+			   
+balanceL :: x: a ->
+            l: WeakRBT {a | _v < x} ->
+            r: {RBT {a | x < _v} <{True}> | blackHeight _v == wheight l} ->
+            {WeakRBT a | welems _v == [x] + welems l + elems r && wheight _v == blackHeight r + 1}
+			
+balanceR :: x: a ->
+            l: RBT {a | _v < x} <{True}> ->			
+            r: {WeakRBT {a | x < _v} | wheight _v == blackHeight l} ->
+            {WeakRBT a | welems _v == [x] + elems l + welems r && wheight _v == blackHeight l + 1}
+			   
+insert :: x: a -> t: RBT a <{True}> -> { WeakRBT a | welems _v == [x] + elems t && wheight _v == blackHeight t }
+insert = ??
