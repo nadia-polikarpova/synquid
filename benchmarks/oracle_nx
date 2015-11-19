@@ -291,6 +291,32 @@ insertSort = \xs . match xs with
 (#measures: 4)
 (#components: 1)
 
+insert :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
+insert = \x . \xs . match xs with
+  INil -> ICons x INil
+  ICons x7 x8 -> if (&&) ((<=) x x7) ((<=) x7 x)
+    then xs
+    else if (<=) x7 x
+      then ICons x7 (insert x x8)
+      else ICons x (ICons x7 x8)
+(Size: 49)
+(Spec size: 8)
+(#measures: 2)
+(#components: 0)
+
+delete :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) - ([x])}))
+delete = \x . \xs . match xs with
+  INil -> xs
+  ICons x3 x4 -> if (&&) ((<=) x x3) ((<=) x3 x)
+    then x4
+    else if (<=) x x3
+      then xs
+      else ICons x3 (delete x x4)
+(Size: 37)
+(Spec size: 8)
+(#measures: 2)
+(#components: 0)
+
 split :: <a> . (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
 split = \xs . match xs with
   Nil -> Pair xs xs
