@@ -25,38 +25,38 @@ TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
 
 BENCHMARKS = [
-    # # Integers
-    # ["Integer", [],
-    #     [('Int-Max2', 'maximum of 2 elements', []),
-    #     ('Int-Max3', 'maximum of 3 elements', []),
-    #     ('Int-Max4', 'maximum of 4 elements', []),
-    #     ('Int-Max5', 'maximum of 5 elements', []),
-    #     ('Int-Add', 'addition', [])]
-    # ],
-    # # Lists
-    # ["List", [],
-    #     [('List-Null', 'is list empty', []),
-    #     ('List-Elem', 'contains an element', []),
-    #     ('List-Stutter', 'duplicate each element', []),
-    #     ('List-Replicate', 'list of element repetitions', []),
-    #     ('List-Append', 'append two lists', ['-m=1']),
-    #     ('List-Concat', 'concatenate list of lists', []),
-    #     ('List-Take', 'take first n elements', []),
-    #     ('List-Drop', 'drop last n elements', []),
-    #     ('List-Delete', 'delete given element', []),
-    #     ('List-Map', 'list map', []),
-    #     ('List-ZipWith', 'list zip with', []),
-    #     ('List-Zip', 'zip two lists', []),
-    #     ('List-ToNat', 'list of integers to nats', []),
-    #     ('List-Product', 'Cartesian product', [])]
-    # ],
-    # # Unique lists
-    # ["Unique list",  ['-f=FirstArgument'],
-    #     [('UniqueList-Insert', 'insertion', []),
-    #     ('UniqueList-Delete', 'deletion', []),
-    #     ('List-Nub', 'deduplication', ['-f=FirstArgument', '-m=1']),
-    #     ('List-Compress', 'dedup subsequences', ['-h'])]
-    # ],
+    # Integers
+    ["Integer", [],
+        [('Int-Max2', 'maximum of 2 elements', []),
+        ('Int-Max3', 'maximum of 3 elements', []),
+        ('Int-Max4', 'maximum of 4 elements', []),
+        ('Int-Max5', 'maximum of 5 elements', []),
+        ('Int-Add', 'addition', [])]
+    ],
+    # Lists
+    ["List", [],
+        [('List-Null', 'is list empty', []),
+        ('List-Elem', 'contains an element', []),
+        ('List-Stutter', 'duplicate each element', []),
+        ('List-Replicate', 'list of element repetitions', []),
+        ('List-Append', 'append two lists', ['-m=1']),
+        ('List-Concat', 'concatenate list of lists', []),
+        ('List-Take', 'take first n elements', []),
+        ('List-Drop', 'drop first n elements', []),
+        ('List-Delete', 'delete given element', []),
+        ('List-Map', 'list map', []),
+        ('List-ZipWith', 'list zip with', []),
+        ('List-Zip', 'zip two lists', []),
+        ('List-ToNat', 'list of integers to nats', []),
+        ('List-Product', 'Cartesian product', [])]
+    ],
+    # Unique lists
+    ["Unique list",  ['-f=FirstArgument'],
+        [('UniqueList-Insert', 'insertion', []),
+        ('UniqueList-Delete', 'deletion', []),
+        ('List-Nub', 'deduplication', ['-f=FirstArgument', '-m=1']),
+        ('List-Compress', 'dedup subsequences', ['-h'])]
+    ],
     ["Sorting",  ['-a=2', '-m=3', '-s=1'],
     # Insertion Sort
         [('IncList-Insert', 'insertion', []),
@@ -73,13 +73,13 @@ BENCHMARKS = [
         ('IncList-PivotAppend', 'append pivot', []),
         ('IncList-QuickSort', 'quick sort', ['-a=2', '-s=1'])]
     ],
-    # # Trees
-    # ["Trees",  [],
-    #     [('Tree-Elem', 'membership',[]),
-    #     ('Tree-Flatten', 'flatten to a list', []),
-    #     ('Tree-HBal', 'create balanced tree', [])]
-    # ],
-    ["BST", ['-e', '-a=2'],
+    # Trees
+    ["Trees",  [],
+        [('Tree-Elem', 'membership',[]),
+        ('Tree-Flatten', 'flatten to a list', []),
+        ('Tree-HBal', 'create balanced tree', [])]
+    ],
+    ["BST", ['-m=1', '-e', '-a=2'],
         [# Binary search tree
         ('BST-Member', 'membership', []),
         ('BST-Insert', 'insertion', []),
@@ -87,18 +87,18 @@ BENCHMARKS = [
         ('BST-Delete', 'deletion', ['-m=1', '-e', '-a=2']),
         ('BST-Sort', 'BST sort', [])]
     ],
-    # ["Heap", [],
-    #     # Binary heap
-    #     [('BinHeap-Member', 'membership', []),
-    #     ('BinHeap-Insert', 'insertion', []),
-    #     ('BinHeap-Singleton', 'constructor', []),
-    #     ('BinHeap-Tripleton', 'constructor, 3 args', [])]
-    # ],
-    # ["User", [],
-    #     # Evaluation
-    #     [('Evaluator', 'desugar AST', []),
-    #     ('Evaluator-Vars', 'desugar AST with variables', [])]
-    # ]
+    ["Heap", [],
+        # Binary heap
+        [('BinHeap-Member', 'membership', []),
+        ('BinHeap-Insert', 'insertion', []),
+        ('BinHeap-Singleton', 'constructor', []),
+        ('BinHeap-Tripleton', 'constructor, 3 args', [])]
+    ],
+    ["User", [],
+        # Evaluation
+        [('Evaluator', 'desugar AST', []),
+        ('Evaluator-Vars', 'desugar AST with variables', [])]
+    ]
 ]
 
 ABS_BENCHMARKS = [
@@ -277,8 +277,8 @@ def postprocess():
                     ' & ' + res.nMeasures + '& ' + res.nComponents + \
                     ' & ' + COMPONENTS.get(name, '') + \
                     ' & ' + res.size + '& ' + '{0:0.2f}'.format(res.time) + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[0])  + '& ' + '{0:0.2f}'.format(res.otherTimes[1]) + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[2])  + '& ' + '{0:0.2f}'.format(res.otherTimes[3]) + ' \\\\'
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[1])  + '& ' + '{0:0.2f}'.format(res.otherTimes[2]) + \
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[0])  + '& ' + '{0:0.2f}'.format(res.otherTimes[3]) + ' \\\\'
                     outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')
