@@ -17,6 +17,12 @@ ORACLE_NAME_WINDOWS = 'oracle'
 ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
 COMMON_OPTS = ['--print-solution-size=True', '--print-spec-info=True']
+BFS_ON_OPT = ['--bfs=1']
+INCREMENTAL_OFF_OPT = ['--incremental=0']
+CONSISTENCY_OFF_OPT = ['--consistency=0']
+MEMOIZATION_ON_OPT = ['--use-memoization=1']
+TIMEOUT_COMMAND = 'timeout'
+TIMEOUT= '120'
 
 BENCHMARKS = [
     # Integers
@@ -144,6 +150,7 @@ class SynthesisResult:
         self.specSize = specSize
         self.nMeasures = nMeasures
         self.nComponents = nComponents
+        self.otherTimes = [0.0, 0.0, 0.0, 0.0]
 
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', ' + self.nMeasures + ', ' + self.nComponents
@@ -159,7 +166,7 @@ def run_benchmark(name, opts, path=''):
 
       print '{0:0.2f}'.format(end - start),
       if return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
       else:
           lastLines = os.popen("tail -n 5 %s" % LOGFILE_NAME).read().split('\n')
           solutionSize = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
@@ -167,6 +174,68 @@ def run_benchmark(name, opts, path=''):
           measures = re.match("\(#measures: (\d+)\).*$", lastLines[2]).group(1)
           components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
           results [name] = SynthesisResult(name, (end - start), solutionSize, specSize, measures, components)
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+
+      start = time.time()
+      logfile.seek(0, os.SEEK_END)
+      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + BFS_ON_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
+      end = time.time()
+
+      print '{0:0.2f}'.format(end - start),
+      if return_code == 124:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
+          results[name].otherTimes[0] = -1
+      elif return_code:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+      else:
+          results[name].otherTimes[0] = (end - start)
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+
+      start = time.time()
+      logfile.seek(0, os.SEEK_END)
+      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + INCREMENTAL_OFF_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
+      end = time.time()
+
+      print '{0:0.2f}'.format(end - start),
+      if return_code == 124:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
+          results[name].otherTimes[1] = -1
+      elif return_code:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+      else:
+          results[name].otherTimes[1] = (end - start)
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+
+
+      start = time.time()
+      logfile.seek(0, os.SEEK_END)
+      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + CONSISTENCY_OFF_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
+      end = time.time()
+
+      print '{0:0.2f}'.format(end - start),
+      if return_code == 124:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
+          results[name].otherTimes[2] = -1
+      elif return_code:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+      else:
+          results[name].otherTimes[2] = (end - start)
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+
+
+      start = time.time()
+      logfile.seek(0, os.SEEK_END)
+      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + MEMOIZATION_ON_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
+      end = time.time()
+
+      print '{0:0.2f}'.format(end - start),
+      if return_code == 124:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL
+          results[name].otherTimes[3] = -1
+      elif return_code:
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
+      else:
+          results[name].otherTimes[3] = (end - start)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
 
 def postprocess():
@@ -190,8 +259,8 @@ def postprocess():
                     ' & ' + res.nMeasures + '& ' + res.nComponents + \
                     ' & ' + COMPONENTS.get(name, '') + \
                     ' & ' + res.size + '& ' + '{0:0.2f}'.format(res.time) + \
-                    ' & ' + '{0:0.2f}'.format(res.time)  + '& ' + '{0:0.2f}'.format(res.time) + \
-                    ' & ' + '{0:0.2f}'.format(res.time) + ' \\\\'
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[0])  + '& ' + '{0:0.2f}'.format(res.otherTimes[1]) + \
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[2])  + '& ' + '{0:0.2f}'.format(res.otherTimes[3]) + ' \\\\'
                     outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')
