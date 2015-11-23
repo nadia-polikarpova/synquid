@@ -55,32 +55,57 @@ balL :: --x: a ->
         x: a ->
         c: Color ->
         l: { WeakRBT {a | _v < x } |
-          --(wrootColor _v == 0 && wsize _v == 1) ==> isGood _v == True -- && wrootColor _v == 1)
-          (wrootColor _v == 0 && c == 0 && wsize _v == 1 && isGood _v == True) ||
-          ((wrootColor _v == 1 || c == 1) && isGood _v == True) ||
-          (isGood _v == False && c == 1)
+          (
+        isGood _v == False --&& c == 1
+        ||
+        (wrootColor _v == 1 && isGood _v == True) ||
+        (wrootColor _v == 0 && isGood _v == True && wsize _v == 1)
+          )
         } ->
         r: {RBT {a | _v > x} <{c == 0 ==> _0 == 1}> | blackHeight _v == wheight l} ->
-        {WeakRBT a | welems _v == [x] + welems l + elems r && wheight _v == blackHeight r + c && wsize _v <= 1 + size l + wsize r && wsize _v >= size l + wsize r
+        {WeakRBT a | welems _v == [x] + welems l + elems r && wheight _v == blackHeight r + c && wsize _v == 1 + wsize l + size r &&
+
+        (
+        isGood _v == False && c == 1
+        ||
+        (wrootColor _v == 1 && isGood _v == True) ||
+        (wrootColor _v == 0 && isGood _v == True && wsize _v == 1)
+        )
         --&& (wrootColor _v == 1 ==> isGood _v == True)
         }
 
 balR :: x: a ->
         c: Color ->
         l: RBT {a | _v < x} <{c == 0 ==> _0 == 1}> ->
-        r: {WeakRBT {a | _v > x} | wheight _v == blackHeight l} ->
-        {WeakRBT a | welems _v == [x] + elems l + welems r && wheight _v == blackHeight l + c && wsize _v <= 1 + size l + wsize r && wsize _v >= size l + wsize r
-        --&& (wrootColor _v == 1 ==> isGood _v == True)
+        r: {WeakRBT {a | _v > x} | wheight _v == blackHeight l &&
+          (
+        isGood _v == False --&& c == 1
+        ||
+        (wrootColor _v == 1 && isGood _v == True) ||
+        (wrootColor _v == 0 && isGood _v == True && wsize _v == 1)
+          )
+        } ->
+        {WeakRBT a | welems _v == [x] + elems l + welems r && wheight _v == blackHeight l + c && wsize _v == 1 + size l + wsize r &&
+        (
+        isGood _v == False && c == 1 ||
+        (wrootColor _v == 1 && isGood _v == True) ||
+        (wrootColor _v == 0 && isGood _v == True && wsize _v == 1)
+        )
         }
 
 -- easy, but requires -a3
 singleton :: x: a -> {WeakRBT a | welems _v == [x] && wheight _v == 0 && wsize _v == 1 && wrootColor _v == 0 && isGood _v == True}
 --singleton = ??
 
-ins :: t: RBT a <{True}> -> x: a -> {WeakRBT a | welems _v == elems t + [x] && wheight _v == blackHeight t &&
-      (wsize _v >= 1 && wsize _v <= 1 + size t && wsize _v >= size t) &&
-      (size t == 0 ==> wsize _v == 1) &&
-      ((wrootColor _v == 0 && wsize _v == 1) ==> isGood _v == True)
+ins :: x: a ->  t: { RBT a <{True}> | !(x in elems _v) } -> {WeakRBT a |
+      welems _v == elems t + [x] &&
+      wheight _v == blackHeight t &&
+      wsize _v == 1 + size t  &&
+      (
+        isGood _v == False && rootColor t == 1 ||
+        (wrootColor _v == 1 && isGood _v == True) ||
+        (wrootColor _v == 0 && isGood _v == True && wsize _v == 1)
+      )
       --&& ((wrootColor _v == 1) ==> isGood _v == True)
       }
 ins = ??
@@ -88,7 +113,7 @@ ins = ??
 mkBlack :: t: WeakRBT a -> {RBT a <{True}> | elems _v == welems t}
 mkBlack = ??
 
-add :: t: RBT a <{True}> -> x: a -> {RBT a <{True}> | elems _v == elems t + [x]}
+add ::x: a ->  t: { RBT a <{True}> | !(x in elems _v) } -> {RBT a <{True}> | elems _v == elems t + [x]}
 add = ??
 
 --=====================================================================================================================

@@ -149,8 +149,10 @@ delete = \x . \xs . match xs with
 map :: <b> . <a> . (f:(_:a -> b) -> (xs:List (a) -> {List (b)|len _v == len xs}))
 map = \f . \xs . match xs with
   Nil -> Nil
-  Cons x3 x4 -> Cons (f x3) (map (\x14 . f x14) x4)
-(Size: 20)
+  Cons x3 x4 -> Cons (f x3) (map f0 x4)
+  where
+    f0 = \x14 . f x14
+(Size: 22)
 (Spec size: 5)
 (#measures: 1)
 (#components: 0)
@@ -160,8 +162,10 @@ zipWith = \f . \xs . \ys . match xs with
   Nil -> Nil
   Cons x4 x5 -> match ys with
     Nil -> error
-    Cons x8 x9 -> Cons (f x4 x8) (zipWith (\x22 . \x23 . f x22 x23) x5 x9)
-(Size: 31)
+    Cons x8 x9 -> Cons (f x4 x8) (zipWith f0 x5 x9)
+  where
+    f0 = \x22 . \x23 . f x22 x23
+(Size: 33)
 (Spec size: 10)
 (#measures: 1)
 (#components: 0)
@@ -178,10 +182,12 @@ zip = \xs . \ys . match xs with
 (#components: 0)
 
 toNat :: (xs:List (Int) -> {List ({Int|_v >= 0})|len _v == len xs})
-toNat = \xs . map (\x4 . if (>=) x4 0
-  then x4
-  else neg x4) xs
-(Size: 17)
+toNat = \xs . map f0 xs
+  where
+    f0 = \x4 . if (>=) x4 0
+        then x4
+        else neg x4
+(Size: 19)
 (Spec size: 8)
 (#measures: 1)
 (#components: 2)
@@ -189,8 +195,10 @@ toNat = \xs . map (\x4 . if (>=) x4 0
 product :: <b> . <a> . (la:List (a) -> (lb:List (b) -> {List (Pair (a) (b))|len _v == len la * len lb}))
 product = \la . \lb . match la with
   Nil -> Nil
-  Cons x4 x5 -> append (map (\x13 . Pair x4 x13) lb) (product x5 lb)
-(Size: 24)
+  Cons x4 x5 -> append (map f0 lb) (product x5 lb)
+  where
+    f0 = \x13 . Pair x4 x13
+(Size: 26)
 (Spec size: 8)
 (#measures: 3)
 (#components: 2)
@@ -282,6 +290,32 @@ insertSort = \xs . match xs with
 (Spec size: 5)
 (#measures: 4)
 (#components: 1)
+
+insert :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
+insert = \x . \xs . match xs with
+  INil -> ICons x INil
+  ICons x7 x8 -> if (&&) ((<=) x x7) ((<=) x7 x)
+    then xs
+    else if (<=) x7 x
+      then ICons x7 (insert x x8)
+      else ICons x (ICons x7 x8)
+(Size: 49)
+(Spec size: 8)
+(#measures: 2)
+(#components: 0)
+
+delete :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) - ([x])}))
+delete = \x . \xs . match xs with
+  INil -> xs
+  ICons x3 x4 -> if (&&) ((<=) x x3) ((<=) x3 x)
+    then x4
+    else if (<=) x x3
+      then xs
+      else ICons x3 (delete x x4)
+(Size: 37)
+(Spec size: 8)
+(#measures: 2)
+(#components: 0)
 
 split :: <a> . (xs:List (a) -> {Pair ({List (a)|abs(len xs - len _v * 2) <= 1}) (List (a))|len fst _v + len snd _v == len xs && (elems fst _v) + (elems snd _v) == elems xs})
 split = \xs . match xs with
@@ -539,28 +573,6 @@ transform = \x . match x with
 (Spec size: 11)
 (#measures: 6)
 (#components: 3)
-
-max :: <P :: Int -> Bool> . (x:{Int|P _v} -> (y:{Int|P _v} -> {Int|(P _v && _v >= x) && _v >= y}))
-max = \x . \y . if (>=) x y
-  then x
-  else y
-(Size: 11)
-(Spec size: 14)
-(#measures: 0)
-(#components: 0)
-
-insert :: <a> . (x:a -> (xs:List (a) <_0 <= _1> -> {List (a) <_0 <= _1>|elems _v == (elems xs) + ([x])}))
-insert = \x . \xs . match xs with
-  Nil -> Cons x Nil
-  Cons x7 x8 -> if (&&) ((<=) x x7) ((<=) x7 x)
-    then xs
-    else if (<=) x7 x
-      then Cons x7 (insert x x8)
-      else Cons x (Cons x7 x8)
-(Size: 49)
-(Spec size: 14)
-(#measures: 2)
-(#components: 0)
 
 singleton :: <a> . (x:a -> {RBT (a) <_0 == 0>|elems _v == [x] && blackHeight _v == 0})
 singleton = \x . Node x red (Empty black) (Empty black)
