@@ -217,17 +217,6 @@ delete = \x . \xs . match xs with
 (#measures: 2)
 (#components: 0)
 
-delete :: <a> . (x:a -> (xs:UList (a) -> {UList (a)|uelems _v == (uelems xs) - ([x])}))
-delete = \x . \xs . match xs with
-  UNil -> xs
-  UCons x3 x4 -> if (==) x3 x
-    then x4
-    else UCons x3 (delete x x4)
-(Size: 22)
-(Spec size: 8)
-(#measures: 2)
-(#components: 0)
-
 elem :: <a> . (x:a -> (xs:UList (a) -> {Bool|_v == (x) in (uelems xs)}))
 elem = \x . \xs . match xs with
   UNil -> false
@@ -271,35 +260,6 @@ compress = \xs . match xs with
 (Spec size: 5)
 (#measures: 5)
 (#components: 0)
-
-elem :: <a> . (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
-elem = \x . \t . match t with
-  Empty -> false
-  Node x4 x5 x6 -> if (==) x4 x
-    then not false
-    else or (elem x x5) (elem x x6)
-(Size: 28)
-(Spec size: 6)
-(#measures: 2)
-(#components: 3)
-
-flatten :: <a> . (t:Tree (a) -> {List (a)|len _v == size t})
-flatten = \t . match t with
-  Empty -> Nil
-  Node x4 x5 x6 -> Cons x4 (append (flatten x5) (flatten x6))
-(Size: 18)
-(Spec size: 5)
-(#measures: 2)
-(#components: 1)
-
-hbal :: <a> . (h:{Int|_v >= 0} -> {Tree (a)|height _v == h})
-hbal = \h . if (==) h 0
-  then Empty
-  else Node (hbal (dec h)) (hbal (dec h))
-(Size: 22)
-(Spec size: 7)
-(#measures: 2)
-(#components: 2)
 
 insert :: <a> . (x:a -> (xs:IList (a) -> {IList (a)|ielems _v == (ielems xs) + ([x])}))
 insert = \x . \xs . match xs with
@@ -391,6 +351,35 @@ quickSort = \xs . match xs with
 (#measures: 6)
 (#components: 2)
 
+elem :: <a> . (x:a -> (t:Tree (a) -> {Bool|_v == (x) in (telems t)}))
+elem = \x . \t . match t with
+  Empty -> false
+  Node x4 x5 x6 -> if (==) x4 x
+    then not false
+    else or (elem x x5) (elem x x6)
+(Size: 28)
+(Spec size: 6)
+(#measures: 2)
+(#components: 3)
+
+flatten :: <a> . (t:Tree (a) -> {List (a)|len _v == size t})
+flatten = \t . match t with
+  Empty -> Nil
+  Node x4 x5 x6 -> Cons x4 (append (flatten x5) (flatten x6))
+(Size: 18)
+(Spec size: 5)
+(#measures: 2)
+(#components: 1)
+
+hbal :: <a> . (h:{Int|_v >= 0} -> {Tree (a)|height _v == h})
+hbal = \h . if (==) h 0
+  then Empty
+  else Node (hbal (dec h)) (hbal (dec h))
+(Size: 22)
+(Spec size: 7)
+(#measures: 2)
+(#components: 2)
+
 member :: <a> . (x:a -> (t:BST (a) -> {Bool|_v == (x) in (telems t)}))
 member = \x . \t . match t with
   Empty -> false
@@ -416,6 +405,28 @@ insert = \x . \t . match t with
 (Spec size: 8)
 (#measures: 2)
 (#components: 0)
+
+mergePivot :: <a> . (p:a -> (t1:BST ({a|_v < p}) -> (t2:BST ({a|_v > p}) -> {BST (a)|elems _v == (elems t1) + (elems t2)})))
+mergePivot = \p . \t1 . \t2 . match t1 with
+  Empty -> t2
+  Node x5 x6 x7 -> Node x5 x6 (mergePivot p x7 t2)
+(Size: 20)
+(Spec size: 14)
+(#measures: 2)
+(#components: 0)
+
+delete :: <a> . (t:BST (a) -> (x:a -> {BST (a)|elems _v == (elems t) - ([x])}))
+delete = \t . \x . match t with
+  Empty -> t
+  Node x4 x5 x6 -> if (==) x4 x
+    then mergePivot x x5 x6
+    else if (<) x4 x
+      then Node x4 x5 (delete x6 x)
+      else Node x4 (delete x5 x) x6
+(Size: 47)
+(Spec size: 8)
+(#measures: 2)
+(#components: 1)
 
 insert :: <a> . (x:a -> (t:BST (a) -> {BST (a)|telems _v == (telems t) + ([x])}))
 insert = \x . \t . match t with
@@ -466,28 +477,6 @@ sort = \xs . match xs with
 (#measures: 6)
 (#components: 4)
 
-mergePivot :: <a> . (p:a -> (t1:BST ({a|_v < p}) -> (t2:BST ({a|_v > p}) -> {BST (a)|elems _v == (elems t1) + (elems t2)})))
-mergePivot = \p . \t1 . \t2 . match t1 with
-  Empty -> t2
-  Node x5 x6 x7 -> Node x5 x6 (mergePivot p x7 t2)
-(Size: 20)
-(Spec size: 14)
-(#measures: 2)
-(#components: 0)
-
-delete :: <a> . (t:BST (a) -> (x:a -> {BST (a)|elems _v == (elems t) - ([x])}))
-delete = \t . \x . match t with
-  Empty -> t
-  Node x4 x5 x6 -> if (==) x4 x
-    then mergePivot x x5 x6
-    else if (<) x4 x
-      then Node x4 x5 (delete x6 x)
-      else Node x4 (delete x5 x) x6
-(Size: 47)
-(Spec size: 8)
-(#measures: 2)
-(#components: 1)
-
 member :: <a> . (x:a -> (t:Heap (a) -> {Bool|_v == (x) in (elems t)}))
 member = \x . \t . match t with
   Empty -> false
@@ -498,6 +487,31 @@ member = \x . \t . match t with
 (Spec size: 6)
 (#measures: 2)
 (#components: 3)
+
+tripleton :: <a> . (x:a -> (y:a -> (z:a -> {Heap (a)|elems _v == [x, y, z]})))
+tripleton = \x . \y . \z . if (&&) ((==) z x) ((==) z y)
+  then Node x Empty Empty
+  else if (&&) ((==) z x) ((<) y z)
+    then Node y Empty (Node z Empty Empty)
+    else if (&&) ((==) z y) ((<) x y)
+      then Node x Empty (Node y Empty Empty)
+      else if (&&) ((==) z y) ((<) z x)
+        then Node z Empty (Node x Empty Empty)
+        else if (&&) ((==) y x) ((<) y z)
+          then Node y Empty (Node z Empty Empty)
+          else if (&&) ((==) z x) ((<) x y)
+            then Node x Empty (Node y Empty Empty)
+            else if (&&) ((==) y x) ((<) z x)
+              then Node z Empty (Node x Empty Empty)
+              else if (&&) ((<) y x) ((<) y z)
+                then Node y (Node z Empty Empty) (Node x Empty Empty)
+                else if (&&) ((<) z x) ((<) z y)
+                  then Node z (Node y Empty Empty) (Node x Empty Empty)
+                  else Node x (Node y Empty Empty) (Node z Empty Empty)
+(Size: 271)
+(Spec size: 7)
+(#measures: 2)
+(#components: 0)
 
 transform :: (x:AST -> {PAST|result2 _v == result x})
 transform = \x . match x with
@@ -547,4 +561,101 @@ insert = \x . \xs . match xs with
 (Spec size: 14)
 (#measures: 2)
 (#components: 0)
+
+singleton :: <a> . (x:a -> {RBT (a) <_0 == 0>|elems _v == [x] && blackHeight _v == 0})
+singleton = \x . Node x red (Empty black) (Empty black)
+(Size: 14)
+(Spec size: 13)
+(#measures: 3)
+(#components: 2)
+
+dupleton :: <a> . (x:a -> (y:a -> {RBT (a) <True>|elems _v == [x, y]}))
+dupleton = \x . \y . if (==) y x
+  then singleton x
+  else if (<) y x
+    then Node y black (Empty black) (singleton x)
+    else Node y black (singleton x) (Empty black)
+(Size: 43)
+(Spec size: 6)
+(#measures: 3)
+(#components: 3)
+
+tripleton :: <a> . (x:a -> (y:a -> (z:a -> {RBT (a) <True>|elems _v == [x, y, z]})))
+tripleton = \x . \y . \z . if (&&) ((==) z x) ((==) z y)
+  then singleton x
+  else if (==) z x
+    then dupleton y z
+    else if (==) z y
+      then dupleton x y
+      else if (==) y x
+        then dupleton z x
+        else if (&&) ((<) y x) ((<) z y)
+          then Node y black (singleton z) (singleton x)
+          else if (&&) ((<) x y) ((<) y z)
+            then Node y black (singleton x) (singleton z)
+            else if (&&) ((<) y z) ((<) z x)
+              then Node z black (singleton y) (singleton x)
+              else if (&&) ((<) x z) ((<) z y)
+                then Node z black (singleton x) (singleton y)
+                else if (<) y z
+                  then Node x black (singleton y) (singleton z)
+                  else Node x black (singleton z) (singleton y)
+(Size: 193)
+(Spec size: 7)
+(#measures: 3)
+(#components: 4)
+
+balanceL :: <a> . (x:a -> (lx:{a|_v < x} -> (llc:{Int|_v == 0 || _v == 1} -> (ll:RBT ({a|_v < lx}) <_0 == llc> -> (lr:{RBT ({a|lx < _v && _v < x}) <_0 /= llc>|blackHeight _v == blackHeight ll} -> (r:{RBT ({a|x < _v}) <True>|blackHeight _v == blackHeight ll} -> {RBT (a) <_0 == 0>|elems _v == ((([x, lx]) + (elems ll)) + (elems lr)) + (elems r) && blackHeight _v == blackHeight r + 1}))))))
+balanceL = \x . \lx . \llc . \ll . \lr . \r . if (==) llc 0
+  then match ll with
+    Empty x1 -> error
+    Node x6 x7 x8 x9 -> Node lx llc (Node x6 black x8 x9) (Node x black lr r)
+  else match lr with
+    Empty x35 -> error
+    Node x40 x41 x42 x43 -> Node x40 x41 (Node lx llc ll x42) (Node x llc x43 r)
+(Size: 68)
+(Spec size: 65)
+(#measures: 3)
+(#components: 2)
+
+balanceR :: <a> . (x:a -> (l:RBT ({a|_v < x}) <True> -> (rx:{a|x < _v} -> (rlc:{Int|_v == 0 || _v == 1} -> (rl:{RBT ({a|x < _v && _v < rx}) <_0 == rlc>|blackHeight _v == blackHeight l} -> (rr:{RBT ({a|rx < _v}) <_0 /= rlc>|blackHeight _v == blackHeight l} -> {RBT (a) <_0 == 0>|elems _v == ((([x, rx]) + (elems l)) + (elems rl)) + (elems rr) && blackHeight _v == blackHeight l + 1}))))))
+balanceR = \x . \l . \rx . \rlc . \rl . \rr . if (==) rlc 0
+  then match rl with
+    Empty x1 -> error
+    Node x6 x7 x8 x9 -> Node x6 rlc (Node x black l x8) (Node rx black x9 rr)
+  else match rr with
+    Empty x35 -> error
+    Node x40 x41 x42 x43 -> Node rx x41 (Node x rlc l rl) (Node x40 rlc x42 x43)
+(Size: 68)
+(Spec size: 65)
+(#measures: 3)
+(#components: 2)
+
+balanceL :: <a> . (x:a -> (l:WeakRBT ({a|_v < x}) -> (r:{RBT ({a|x < _v}) <True>|blackHeight _v == wheight l} -> {RBT (a) <_0 == 0>|elems _v == (([x]) + (welems l)) + (elems r) && blackHeight _v == blackHeight r + 1})))
+balanceL = \x . \l . \r . match l with
+  WeakRBT x4 x5 x6 x7 -> if (==) x5 0
+    then match x6 with
+      Empty x9 -> error
+      Node x14 x15 x16 x17 -> Node x4 x15 (Node x14 black x16 x17) (Node x black x7 r)
+    else match x7 with
+      Empty x43 -> error
+      Node x48 x49 x50 x51 -> Node x48 x49 (Node x4 x5 x6 x50) (Node x x5 x51 r)
+(Size: 67)
+(Spec size: 33)
+(#measures: 5)
+(#components: 2)
+
+balanceR :: <a> . (x:a -> (l:RBT ({a|_v < x}) <True> -> (r:{WeakRBT ({a|x < _v})|wheight _v == blackHeight l} -> {RBT (a) <_0 == 0>|elems _v == (([x]) + (elems l)) + (welems r) && blackHeight _v == blackHeight l + 1})))
+balanceR = \x . \l . \r . match r with
+  WeakRBT x4 x5 x6 x7 -> if (==) x5 0
+    then match x6 with
+      Empty x9 -> error
+      Node x14 x15 x16 x17 -> Node x14 x15 (Node x black l x16) (Node x4 black x17 x7)
+    else match x7 with
+      Empty x43 -> error
+      Node x48 x49 x50 x51 -> Node x4 x49 (Node x x5 l x6) (Node x48 x5 x50 x51)
+(Size: 67)
+(Spec size: 33)
+(#measures: 5)
+(#components: 3)
 
