@@ -35,7 +35,7 @@ data Z3Data = Z3Data {
   _functions :: Map Id FuncDecl,              -- ^ Function declarations for measures, predicates, and constructors
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
-  _boolSortAux :: Maybe Z3.Sort,              -- ^ Boolean sort in the auxiliary solver  
+  _boolSortAux :: Maybe Z3.Sort,              -- ^ Boolean sort in the auxiliary solver
   _controlLiteralsAux :: Bimap Formula AST    -- ^ Control literals for computing UNSAT cores in the auxiliary solver
 }
 
@@ -55,8 +55,8 @@ initZ3Data env env' = Z3Data {
   _controlLiterals = Bimap.empty,
   _auxEnv = env',
   _boolSortAux = Nothing,
-  _controlLiteralsAux = Bimap.empty  
-} 
+  _controlLiteralsAux = Bimap.empty
+}
 
 type Z3State = StateT Z3Data IO
 
@@ -66,12 +66,12 @@ litToAux lit = do
   fml <- uses controlLiterals (Bimap.!> lit)
   uses controlLiteralsAux (Bimap.! fml)
 
--- | Get the literal in the main solver that corresponds to a given literal in the auxiliary solver  
+-- | Get the literal in the main solver that corresponds to a given literal in the auxiliary solver
 litFromAux :: AST -> Z3State AST
 litFromAux lit = do
   fml <- uses controlLiteralsAux (Bimap.!> lit)
   uses controlLiterals (Bimap.! fml)
-  
+
 -- | Lookup Z3 sort for a Synquid sort
 toZ3Sort :: Sort -> Z3State Z3.Sort
 toZ3Sort s = do
@@ -87,10 +87,10 @@ toZ3Sort s = do
         -- DataS name args -> mkStringSymbol name >>= mkUninterpretedSort
         DataS name args -> mkIntSort
         SetS el -> toZ3Sort el >>= mkSetSort
-        -- UnknownS -> mkIntSort
+        --UnknownS -> mkIntSort
       sorts %= Map.insert s z3s
-      return z3s  
-  
+      return z3s
+
 instance MonadZ3 Z3State where
   getSolver = gets (envSolver . _mainEnv)
   getContext = gets (envContext . _mainEnv)
@@ -119,20 +119,20 @@ evalZ3State f = do
   -- env <- newEnv (Just QF_AUFLIA) stdOpts
   -- env' <- newEnv (Just QF_AUFLIA) stdOpts
   env <- newEnv Nothing stdOpts
-  env' <- newEnv Nothing stdOpts  
+  env' <- newEnv Nothing stdOpts
   evalStateT f $ initZ3Data env env'
-                
+
 -- | Convert a first-order constraint to a Z3 AST.
 toAST :: Formula -> Z3State AST
 toAST expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
   SetLit el xs -> setLiteral el xs
-  IntLit i -> mkIntNum i  
+  IntLit i -> mkIntNum i
   Var s name -> var s name
   Unknown _ name -> error $ unwords ["toAST: encountered a second-order unknown", name]
   Unary op e -> toAST e >>= unOp op
-  Binary op e1 e2 -> join (binOp op <$> toAST e1 <*> toAST e2)  
+  Binary op e1 e2 -> join (binOp op <$> toAST e1 <*> toAST e2)
   Measure s name arg -> do
     let tArg = sortOf arg
     -- decl <- measure b (name ++ show tArg ++ show b) tArg
@@ -141,7 +141,7 @@ toAST expr = case expr of
   Cons s name args -> do
     let tArgs = map sortOf args
     decl <- function s name tArgs
-    mapM toAST args >>= mkApp decl    
+    mapM toAST args >>= mkApp decl
   Pred name args -> do
     let tArgs = map sortOf args
     decl <- function BoolS name tArgs
@@ -152,7 +152,7 @@ toAST expr = case expr of
       emp <- toZ3Sort el >>= mkEmptySet
       elems <- mapM toAST xs
       foldM mkSetAdd emp elems
-      
+
     accumAll :: [Formula] -> Formula -> Z3State AST
     accumAll xs (All y e) = accumAll (xs ++ [y]) e
     accumAll xs e@(Binary Eq (Measure s1 m c@(Cons _ _ _)) rhs) =  do
@@ -168,8 +168,8 @@ toAST expr = case expr of
       boundVars <- mapM toAST xs
       boundApps <- mapM toApp boundVars
       body <- toAST e
-      mkForallConst [] boundApps body      
-  
+      mkForallConst [] boundApps body
+
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
     unOp Abs = \arg -> do
@@ -185,7 +185,7 @@ toAST expr = case expr of
         Gt -> mkGt
         Lt -> mkLt
         Le -> mkLe
-        Ge -> mkGe  
+        Ge -> mkGe
         Times -> list2 mkMul
         Plus -> list2 mkAdd
         Minus -> list2 mkSub
@@ -199,20 +199,20 @@ toAST expr = case expr of
         Member -> mkSetMember
         Subset -> mkSetSubset
     list2 o x y = o [x, y]
-      
-    -- | Lookup or create a variable with name `ident' and sort `s' 
+
+    -- | Lookup or create a variable with name `ident' and sort `s'
     var s ident = do
       z3s <- toZ3Sort s
       let ident' = ident ++ show s
       varMb <- uses vars (Map.lookup ident')
-            
+
       case varMb of
         Just v -> return v
         Nothing -> do
           symb <- mkStringSymbol ident
           v <- mkConst symb z3s
           vars %= Map.insert ident v
-          return v 
+          return v
 
     -- | Lookup or create a function declaration with name `ident', type `baseT', and argument type `argType'
     function s name argTypes = do
@@ -226,8 +226,8 @@ toAST expr = case expr of
           resSort <- toZ3Sort s
           decl <- mkFuncDecl symb argSorts resSort
           functions %= Map.insert name decl
-          return decl          
-          
+          return decl
+
 instance SMTSolver Z3State where
   initSolver = do
     boolAux <- withAuxSolver mkBoolSort
@@ -235,50 +235,50 @@ instance SMTSolver Z3State where
 
   isValid fml = do
       res <- local $ (toAST >=> assert) (fnot fml) >> check
-      
+
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
-        Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False    
+        Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False
         _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
 
   -- isValid fml = do
       -- ast <- toAST $ fnot fml
       -- (res, modelMb) <- local $ assert ast >> getModel
-      
+
       -- case res of
         -- Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         -- Sat -> do
           -- modelStr <- modelToString (fromJust modelMb)
           -- astStr <- astToString ast
-          -- debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID" $+$ text "AST:" $+$ text astStr $+$ text "MODEL:" $+$ text modelStr) $ return False    
+          -- debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID" $+$ text "AST:" $+$ text astStr $+$ text "MODEL:" $+$ text modelStr) $ return False
         -- _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
-        
-  allUnsatCores = getAllMUSs  
-    
-        
+
+  allUnsatCores = getAllMUSs
+
+
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
 getAllMUSs :: Formula -> Formula -> [Formula] -> Z3State [[Formula]]
 getAllMUSs assumption mustHave fmls = do
   push
   withAuxSolver push
-  
-  let allFmls = mustHave : fmls  
+
+  let allFmls = mustHave : fmls
   (controlLits, controlLitsAux) <- unzip <$> mapM getControlLits allFmls
-  
-  toAST assumption >>= assert 
-  condAssumptions <- mapM toAST allFmls >>= zipWithM mkImplies controlLits  
+
+  toAST assumption >>= assert
+  condAssumptions <- mapM toAST allFmls >>= zipWithM mkImplies controlLits
   mapM_ assert $ condAssumptions
   withAuxSolver $ assert $ head controlLitsAux
-    
+
   res <- getAllMUSs' controlLitsAux (head controlLits) []
   withAuxSolver $ pop 1
-  pop 1  
+  pop 1
   return res
-  
+
   where
     getControlLits fml = do
-      litMb <- uses controlLiterals (Bimap.lookup fml)      
+      litMb <- uses controlLiterals (Bimap.lookup fml)
       case litMb of
         Just lit -> do
           litAux <- uses controlLiteralsAux (Bimap.! fml)
@@ -288,12 +288,12 @@ getAllMUSs assumption mustHave fmls = do
           boolAux <- fromJust <$> use boolSortAux
           name <- ((++ "lit") . show . Bimap.size) <$> use controlLiterals
           lit <- mkStringSymbol name >>= flip mkConst bool
-          litAux <- withAuxSolver $ mkStringSymbol name >>= flip mkConst boolAux          
+          litAux <- withAuxSolver $ mkStringSymbol name >>= flip mkConst boolAux
           controlLiterals %= Bimap.insert fml lit
           controlLiteralsAux %= Bimap.insert fml litAux
-          return (lit, litAux)          
-                    
-getAllMUSs' controlLitsAux mustHave cores = do      
+          return (lit, litAux)
+
+getAllMUSs' controlLitsAux mustHave cores = do
   seedMb <- getNextSeed
   case seedMb of
     Nothing -> return cores -- No uncovered subsets left, return the cores accumulated so far
@@ -314,32 +314,32 @@ getAllMUSs' controlLitsAux mustHave cores = do
                   debugOutput "MUSeless" unsatFmls
                   getAllMUSs' controlLitsAux mustHave cores
         Sat -> do
-          mss <- maximize seed rest  -- Satisfiable: expand to MSS                    
+          mss <- maximize seed rest  -- Satisfiable: expand to MSS
           blockDown mss
           mapM litToFml mss >>= debugOutput "MSS"
           getAllMUSs' controlLitsAux mustHave cores
         _ -> do
           fmls <- mapM litToFml seed
           error $ unwords $ ["getAllMUSs: Z3 returned Unknown for"] ++ map show fmls
-              
+
   where
     -- | Get the formula mapped to a given control literal in the main solver
     litToFml = uses controlLiterals . flip (Bimap.!>)
-    
+
     -- | Get an unexplored subset of control literals inside the auxiliary solver
     getNextSeed = withAuxSolver $ do
       (res, modelMb) <- getModel
       case res of
         Unsat -> return Nothing -- No unexplored subsets left
         Sat -> Just <$> partitionM (getCtrlLitModel True (fromJust modelMb)) controlLitsAux -- Found unexplored subset: partition @controlLitsAux@ according to the model
-    
+
     -- | Extract the Boolean value for literal @lit@ from the model @m@ with default @bias@
     getCtrlLitModel bias m lit = do
       resMb <- fromJust <$> eval m lit >>= getBoolValue
       case resMb of
         Nothing -> return bias
-        Just b -> return b        
-        
+        Just b -> return b
+
     -- | Mark all supersets of @mus@ explored
     blockUp mus = withAuxSolver $ mapM (litToAux >=> mkNot) mus >>= mkOr >>= assert
 
@@ -347,8 +347,8 @@ getAllMUSs' controlLitsAux mustHave cores = do
     blockDown mss = withAuxSolver $ do
       mss' <- mapM litToAux mss
       let rest = controlLitsAux \\ mss'
-      (if null rest then mkFalse else mkOr rest) >>= assert        
-                  
+      (if null rest then mkFalse else mkOr rest) >>= assert
+
     -- | Shrink unsatisfiable set @lits@ to some MUS
     minimize lits = local $ minimize' [] lits
     minimize' checked [] = return checked
@@ -356,10 +356,10 @@ getAllMUSs' controlLitsAux mustHave cores = do
       res <- checkAssumptions lits
       case res of
         Sat -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
-        Unsat -> minimize' checked lits -- lit can be omitted    
-        
+        Unsat -> minimize' checked lits -- lit can be omitted
+
     -- | Grow satisfiable set @checked@ with literals from @rest@ to some MSS
-    maximize checked rest = local $ mapM_ assert checked >> maximize' checked rest    
+    maximize checked rest = local $ mapM_ assert checked >> maximize' checked rest
     maximize' checked [] = return checked -- checked includes all literals and thus must be maximal
     maximize' checked rest = do
       mkOr rest >>= assert
@@ -370,6 +370,5 @@ getAllMUSs' controlLitsAux mustHave cores = do
           (setRest, unsetRest) <- partitionM (getCtrlLitModel True (fromJust modelMb)) rest
           mapM_ assert setRest
           maximize' (checked ++ setRest) unsetRest
-          
+
     debugOutput label fmls = debug 2 (text label <+> pretty fmls) $ return ()
-        
