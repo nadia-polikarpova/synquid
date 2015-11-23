@@ -381,4 +381,5 @@ programNodeCount (Program p _) = case p of
   PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
   PFix _ e -> 1 + programNodeCount e
+  PLet defs p -> programNodeCount p + sum (map (\(_, p) -> programNodeCount p) defs)
 

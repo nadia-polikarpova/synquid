@@ -163,7 +163,7 @@ explore params solver goal = observeManyT 1 $ do
         (g : gs) -> do
           auxGoals .= gs
           let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
-          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'
+          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'          
           p <- generateTopLevel g'
           rest <- generateAuxGoals
           return $ (gName g, p) : rest
@@ -176,7 +176,7 @@ generateTopLevel (Goal funName env (ForallT a sch)) = generateTopLevel (Goal fun
 generateTopLevel (Goal funName env (ForallP pName pSorts sch)) = generateTopLevel (Goal funName (addPredicate pName pSorts env) sch)
 generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
   where
-    generateFix = do
+    generateFix = do    
       recCalls <- recursiveCalls t
       polymorphic <- asks $ _polyRecursion . fst
       let tvs = env ^. boundTypeVars
@@ -513,11 +513,11 @@ enumerateAt env typ 0 = do
     pickSymbol (name, sch) = do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
+      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())      
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sh -> solveLocally p $ Subtype env (refineBot $ shape t) (refineTop sh) False
+        Just sch -> solveLocally p $ Subtype env (refineBot $ shape t) (refineTop sch) False
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -567,13 +567,6 @@ toSymbol p env = do
 
 enqueueGoal env typ = do
   g <- freshId "f"
-  
-  -- polymorphic <- asks $ _polyRecursion . fst
-  -- let tvs = env ^. boundTypeVars
-  -- if not (null tvs)
-  -- let env' = if polymorphic && not (null tvs)
-                -- then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
-                -- else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize  
   auxGoals %= ((Goal g env $ Monotype typ) :)
   return $ Program (PSymbol g) typ
 
@@ -749,7 +742,9 @@ processWFPredicate c@(WellFormedPredicate env sorts p)
         then return ()
         else let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
              in if any (isFreeVariable tass) typeVars
-                then addConstraint c -- Still has type variables: cannot determine shape
+                then do
+                  writeLog 1 $ text "WARNING: free vars in predicate" <+> pretty c
+                  addConstraint c -- Still has type variables: cannot determine shape
                 else do
                   u <- freshId "u"
                   addPredAssignment p (Unknown Map.empty u)
@@ -781,7 +776,8 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
             let lhss = embedding env tass pass `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             addHornClause $ conjunction lhss |=>| r'
           else -- One of the sides contains free predicates: nothing can be done yet            
-            addConstraint c
+            -- mzero
+            addHornClause $ ftrue |=>| ffalse
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
       tass <- use typeAssignment

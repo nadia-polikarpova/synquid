@@ -58,7 +58,7 @@ refineCandidates params quals extractAssumptions constraints cands = evalFixPoin
       
     addConstraints constraints (Candidate sol valids invalids label) = do
       let sol' = merge (topSolution quals) sol  -- Add new unknowns
-      (valids', invalids') <- partitionM (isValidFml . applySolution sol') constraints -- Evaluate new constraints
+      (valids', invalids') <- partitionM (isValidFml . hornApplySolution extractAssumptions sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
       
 -- | 'pruneQualifiers' @params quals@ : remove reducdant and trivial qualifiers from @quals@
@@ -127,7 +127,7 @@ greatestFixPoint quals extractAssumptions candidates = do
       Binary Implies lhs rhs -> let
          rhs' = applySolution sol rhs
          assumptions = extractAssumptions rhs'
-        in Binary Implies (lhs |&| conjunction assumptions) rhs'
+        in Binary Implies (lhs `andClean` conjunction assumptions) rhs'
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
@@ -136,7 +136,7 @@ greatestFixPoint quals extractAssumptions candidates = do
       let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) diff
       let (unaffectedValids, affectedValids) = Set.partition (\fml -> posUnknowns fml `disjoint` modifiedUnknowns) valids
       let (unaffectedInvalids, affectedInvalids) = Set.partition (\fml -> negUnknowns fml `disjoint` modifiedUnknowns) (Set.delete fml invalids)
-      (newValids, newInvalids) <- setPartitionM (isValidFml . applySolution sol') $ affectedValids `Set.union` affectedInvalids
+      (newValids, newInvalids) <- setPartitionM (isValidFml . hornApplySolution extractAssumptions sol') $ affectedValids `Set.union` affectedInvalids
       let newLabel = if length diffs == 1 then label else label ++ "." ++ show (fromJust $ elemIndex diff diffs)
       return $ Candidate sol' (Set.insert fml $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) newLabel
       
@@ -165,6 +165,13 @@ greatestFixPoint quals extractAssumptions candidates = do
         text "Chosen candidate:" <+> candidateDoc cand,
         text "Invalid Constraint:" <+> pretty inv,
         text "Strengthening:" <+> pretty modified])
+        
+hornApplySolution extractAssumptions sol fml = case fml of
+  Binary Implies lhs rhs -> let
+     rhs' = applySolution sol rhs
+     assumptions = extractAssumptions rhs'
+    in Binary Implies (applySolution sol lhs `andClean` conjunction assumptions) rhs'
+  _ -> error $ unwords ["hornApplySolution: encountered ill-formed constraint", show fml]        
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
