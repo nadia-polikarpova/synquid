@@ -81,9 +81,10 @@ resolveDeclaration (DataDecl dataName typeParams predParams wfMetricMb construct
   let addPreds sch = foldl (\s (PredSig p sorts) -> ForallP p sorts s) sch predParams
   mapM_ (\(ConstructorSig name schema) -> resolveSignature name $ addPreds schema) constructors
 resolveDeclaration (MeasureDecl measureName inSort outSort post) = do
-  post' <- resolveFormula BoolS outSort post
-  environment %= addMeasure measureName (MeasureDef inSort outSort post')
-resolveDeclaration (PredDecl (PredSig name sorts)) = resolvePredSignature name sorts
+  outSort' <- resolveSort outSort
+  post' <- resolveFormula BoolS outSort' post
+  environment %= addMeasure measureName (MeasureDef inSort outSort' post')
+resolveDeclaration (PredDecl (PredSig name sorts)) = void $ resolvePredSignature name sorts
 resolveDeclaration (SynthesisGoal name) = do
   syms <- uses environment allSymbols
   if Map.member name syms
@@ -104,10 +105,10 @@ resolveSchema sch = do
   where
     resolveSchema' (ForallP predName sorts sch) = do
       oldEnv <- use environment
-      resolvePredSignature predName sorts
+      sorts' <- resolvePredSignature predName sorts
       sch' <- resolveSchema' sch
       environment .= oldEnv
-      return $ ForallP predName sorts sch'
+      return $ ForallP predName sorts' sch'
     resolveSchema' (Monotype t) = Monotype <$> resolveType t
 
 resolveType :: RType -> Resolver RType
@@ -307,5 +308,11 @@ resolveSignature name sch = do
   
 resolvePredSignature name sorts = do
   ifM (Map.member name <$> use (environment . boundPredicates)) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
-  environment %= addPredicate name sorts
-    
+  sorts' <- mapM resolveSort sorts
+  environment %= addPredicate name sorts'
+  return sorts'
+  
+resolveSort (SetS elSort) = SetS <$> resolveSort elSort        
+resolveSort s = do
+  t <- resolveType $ fromSort s
+  return $ toSort $ baseTypeOf t

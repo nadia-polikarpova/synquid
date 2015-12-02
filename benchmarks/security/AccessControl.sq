@@ -20,10 +20,10 @@ loginFailed :: p: {Principal | !(IsAuth _v)} -> a
 type File = Int
 type Content = Int
 
-predicate IsContent :: Int -> Int -> Bool  
+predicate IsContent :: File -> Content -> Bool  
   
-predicate CanRead :: Principal -> Int -> Bool   
-predicate CanWrite :: Principal -> Int -> Bool
+predicate CanRead :: Principal -> File -> Bool   
+predicate CanWrite :: Principal -> File -> Bool
 
 -- Access permission axioms
 wImpliesR :: p: Principal -> f: {File | CanWrite p _v} -> {File | _v == f && CanRead p _v}
