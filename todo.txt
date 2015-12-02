@@ -1,5 +1,7 @@
 - Type classes (to help instantiate qualifiers)	
 
+- Do something with datatype equality: does it make everything slower? Eq?
+
 - Memoization: remove subsumed components?
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction

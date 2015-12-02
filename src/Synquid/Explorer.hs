@@ -296,7 +296,8 @@ generateMatch env t = do
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
 
           let scrutineeSymbols = symbolList pScrutinee
-          let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
+          let isGoodScrutinee = not (null ctors) &&                                               -- Datatype is not abstract
+                                (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
                                 (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
                                 (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
           guard isGoodScrutinee

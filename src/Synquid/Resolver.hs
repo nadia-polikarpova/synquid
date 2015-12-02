@@ -62,7 +62,7 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
   let extraTypeVars = typeVarsOf typeBody' Set.\\ Set.fromList typeVars
   if Set.null extraTypeVars
     then environment %= addTypeSynonym typeName typeVars typeBody'
-    else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the defintion of type synonym", typeName, "are undefined"]
+    else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the definition of type synonym", typeName, "are undefined"]
 resolveDeclaration (FuncDecl funcName typeSchema) = resolveSignature funcName typeSchema
 resolveDeclaration (DataDecl dataName typeParams predParams wfMetricMb constructors) = do
   case wfMetricMb of
@@ -169,7 +169,7 @@ resolveFormula targetSort valueSort (SetLit UnknownS memberFmls) =
         let newElemSort = sortOf fml'
         fmls' <- mapM (resolveFormula newElemSort valueSort) fmls
         return $ SetLit newElemSort (fml':fmls')
-    else throwError $ unwords ["Enountered set literal where", show targetSort, "was expected"]
+    else throwError $ unwords ["Encountered set literal where", show targetSort, "was expected"]
   where
     elemSort (SetS s) = s
     elemSort UnknownS = UnknownS  
@@ -178,7 +178,7 @@ resolveFormula targetSort valueSort (Var UnknownS varName) =
   if varName == valueVarName
     then if complies targetSort valueSort 
           then return $ Var valueSort varName
-          else throwError $ unwords ["Enountered value variable of sort", show valueSort, "where", show targetSort, "was expected"]
+          else throwError $ unwords ["Encountered value variable of sort", show valueSort, "where", show targetSort, "was expected"]
     else do
       env <- use environment
       case Map.lookup varName (symbolsOfArity 0 env) of
@@ -187,14 +187,14 @@ resolveFormula targetSort valueSort (Var UnknownS varName) =
             ScalarT baseType _ -> let s = toSort baseType in 
               if complies targetSort s  
                 then return $ Var s varName
-                else throwError $ unwords ["Enountered variable of sort", show s, "where", show targetSort, "was expected"]
+                else throwError $ unwords ["Encountered variable of sort", show s, "where", show targetSort, "was expected"]
             FunctionT _ _ _ -> error "The impossible happened: function in a formula"
         Nothing -> throwError $ printf "Var `%s` is not in scope." varName
       
 resolveFormula targetSort valueSort (Unary op fml) = fmap (Unary op) $ 
     if complies resSort targetSort
       then resolveFormula operandSort valueSort fml
-      else throwError $ unwords ["Enountered unary operation", show op, "where", show targetSort, "was expected"]
+      else throwError $ unwords ["Encountered unary operation", show op, "where", show targetSort, "was expected"]
   where
     resSort = case op of
       Not -> BoolS
@@ -211,7 +211,7 @@ resolveFormula targetSort valueSort (Binary op l r) = do
   r' <- resolveFormula rS valueSort r
   if complies resS targetSort
     then return $ Binary op' l' r'
-    else throwError $ unwords ["Enountered binary operation", show op, "where", show targetSort, "was expected"]
+    else throwError $ unwords ["Encountered binary operation", show op, "where", show targetSort, "was expected"]
   where
     leftSort op
       | op == Times || op == Plus || op == Minus            = UnknownS
@@ -237,7 +237,7 @@ resolveFormula targetSort valueSort (Binary op l r) = do
                                                             VarS _  -> return op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Eq  || op == Neq                    = case lSort of
-                                                            DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+                                                            -- DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
                                                             _ -> return op
       | otherwise                                 = return op
       
@@ -266,7 +266,7 @@ resolveFormula targetSort valueSort (Measure UnknownS name argFml) = do
       let outSort' = sortSubstitute (Map.fromList $ zip (map (\(VarS a) -> a) tVars) tArgs) outSort
       if complies outSort' targetSort
         then return $ Measure outSort' name argFml'
-        else throwError $ unwords ["Enountered measure", name, "where", show targetSort, "was expected"]
+        else throwError $ unwords ["Encountered measure", name, "where", show targetSort, "was expected"]
         
 resolveFormula targetSort valueSort (Cons UnknownS name argFmls) = do
   syms <- uses environment allSymbols
@@ -282,7 +282,7 @@ resolveFormula targetSort valueSort (Cons UnknownS name argFmls) = do
         then if length argSorts /= length argFmls
                 then throwError $ unwords ["Constructor", name, "expected", show (length argSorts), "arguments and got", show (length argFmls)]
                 else Cons resSort name <$> zipWithM (flip resolveFormula valueSort) argSorts argFmls
-        else throwError $ unwords ["Enountered constructor", name, "where", show targetSort, "was expected"]
+        else throwError $ unwords ["Encountered constructor", name, "where", show targetSort, "was expected"]
         
 resolveFormula targetSort valueSort (Pred name argFmls) = do
   ps <- use $ environment . boundPredicates
@@ -292,12 +292,12 @@ resolveFormula targetSort valueSort (Pred name argFmls) = do
                       then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate", name, "and got", show (length argFmls)]
                       else if complies targetSort BoolS 
                         then Pred name <$> zipWithM (flip resolveFormula valueSort) argSorts argFmls
-                        else throwError $ unwords ["Enountered a predicate where", show targetSort, "was expected"]
+                        else throwError $ unwords ["Encountered a predicate where", show targetSort, "was expected"]
     
 resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type: check
   in if complies targetSort s
     then return fml
-    else throwError $ unwords ["Enountered", show s, "where", show targetSort, "was expected"]
+    else throwError $ unwords ["Encountered", show s, "where", show targetSort, "was expected"]
 
 {- Misc -}
 
