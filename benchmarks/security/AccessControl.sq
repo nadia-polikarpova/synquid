@@ -1,38 +1,47 @@
 {- module Authentication -}
 
-type UId = Int
-type Password = Int
+-- | User IDs
+data UId
 
-measure isAdmin :: Principal -> Bool
+-- | Passwords
+data Password
 
+-- | Principals
 data Principal where
-  Admin :: { Principal | isAdmin _v }
-  User :: UId -> { Principal | !(isAdmin _v) }
+  Admin :: (Principal)
+  User :: UId -> (Principal)
   
+-- | Is principal authenticated?  
 predicate IsAuth :: Principal -> Bool
 
+-- | Constructor for @IsAuth@: checks @pw@ validity and authenticates @p@
 login :: p: Principal -> pw: Password -> { Bool | _v == IsAuth p }
 
 loginFailed :: p: {Principal | !(IsAuth _v)} -> a
 
 {- module FileRM -}
 
-type File = Int
-type Content = Int
+-- | File handles
+data File
 
+-- | File content
+data Content
+
+-- | Connect file handles to their content
 predicate IsContent :: File -> Content -> Bool  
   
-predicate CanRead :: Principal -> File -> Bool   
+-- | Abstract predicates to express access permissions
+predicate CanRead :: Principal -> File -> Bool
 predicate CanWrite :: Principal -> File -> Bool
 
--- Access permission axioms
+-- | Access permission "axioms" (constructors for @CanRead@ and @CanWrite@)
 wImpliesR :: p: Principal -> f: {File | CanWrite p _v} -> {File | _v == f && CanRead p _v}
-adminW :: p: {Principal | isAdmin _v} -> f: File -> {File | _v == f && CanWrite p _v}
+adminW :: f: File -> {File | _v == f && CanWrite Admin _v}
 
--- Public interface
+-- | Read file
 freadSimple :: p: {Principal | IsAuth _v} -> f: {File | CanRead p _v} -> {Content | IsContent f _v}
 
 {- client -}
 
-sudo :: p: {Principal | isAdmin _v} -> pw: Password -> f: File -> {Content | IsContent f _v}
+sudo :: pw: Password -> f: File -> {Content | IsContent f _v}
 sudo = ??

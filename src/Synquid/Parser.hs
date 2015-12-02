@@ -99,8 +99,7 @@ parseDataDef = do
   typeParams <- many parseIdentifier
   predParams <- many $ angles parsePredSig
   wfMetricName <- optionMaybe $ reserved "decreases" >> parseIdentifier
-  reserved "where"
-  constructors <- many1 parseConstructorSig
+  constructors <- option [] (reserved "where" >> many1 parseConstructorSig) 
   return $ DataDecl typeName typeParams predParams wfMetricName constructors  
 
 parseConstructorSig :: Parser ConstructorSig

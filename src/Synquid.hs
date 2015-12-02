@@ -171,21 +171,14 @@ runOnFile synquidParams explorerParams solverParams file = do
             solutionSizeDoc $+$
             specSizeDoc
           where
-            solutionSizeDoc =
-              if (showSolutionSize synquidParams) then parens (text "Size:" <+> pretty (programNodeCount prog))
-              else empty
-            specSizeDoc =
-              if (showSpecInfo synquidParams)
-              then
+            solutionSizeDoc = if showSolutionSize synquidParams 
+                                then parens (text "Size:" <+> pretty (programNodeCount prog))
+                                else empty
+            specSizeDoc = if showSpecInfo synquidParams
+              then let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
                 parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
                   parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
                   parens (text "#components:" <+>
-                    pretty (
-                      --(size $ _symbols $ gEnvironment goal) -
-                      let
-                        constructors = concat $ map (\dt -> (_constructors dt)) $ elems $ _datatypes $ gEnvironment goal
-                      in
-                        (sum $ map (\inMap -> length $ filter (\k -> not(k `elem` constructors)) $ keys inMap)
-                          (elems $ _symbols $ gEnvironment goal)))) -- we only solve one goal
+                    pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
               else empty
       print empty
