@@ -81,7 +81,7 @@ dot = Token.dot lexer
 {- Declarations -}      
 
 parseDeclaration :: Parser Declaration
-parseDeclaration = choice [parseTypeDef, parseDataDef, parseMeasureDef, parseQualifierDef, try parseSynthesisGoal, parseFuncDef] <?> "declaration"
+parseDeclaration = choice [parseTypeDef, parseDataDef, parseMeasureDef, parsePredDef, parseQualifierDef, try parseSynthesisGoal, parseFuncDef] <?> "declaration"
 
 parseTypeDef :: Parser Declaration
 parseTypeDef = do
@@ -97,18 +97,18 @@ parseDataDef = do
   reserved "data"
   typeName <- parseTypeName
   typeParams <- many parseIdentifier
-  predParams <- many $ angles parsePredDecl
+  predParams <- many $ angles parsePredSig
   wfMetricName <- optionMaybe $ reserved "decreases" >> parseIdentifier
   reserved "where"
-  constructors <- many1 parseConstructorDef
+  constructors <- many1 parseConstructorSig
   return $ DataDecl typeName typeParams predParams wfMetricName constructors  
 
-parseConstructorDef :: Parser ConstructorDef
-parseConstructorDef = do
+parseConstructorSig :: Parser ConstructorSig
+parseConstructorSig = do
   ctorName <- parseTypeName
   reservedOp "::"
   ctorType <- parseSchema
-  return $ ConstructorDef ctorName ctorType
+  return $ ConstructorSig ctorName ctorType
 
 parseMeasureDef :: Parser Declaration
 parseMeasureDef = do
@@ -119,6 +119,12 @@ parseMeasureDef = do
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
   return $ MeasureDecl measureName inSort outSort post
+  
+parsePredDef :: Parser Declaration
+parsePredDef = do
+  reserved "predicate"
+  sig <- parsePredSig
+  return $ PredDecl sig
   
 parseQualifierDef :: Parser Declaration
 parseQualifierDef = do
@@ -145,7 +151,7 @@ parseSchema = parseForall <|> (Monotype <$> parseType)
 
 parseForall :: Parser RSchema
 parseForall = do
-  (PredDecl p sorts) <- angles parsePredDecl
+  (PredSig p sorts) <- angles parsePredSig
   dot
   sch <- parseSchema
   return $ ForallP p sorts sch
@@ -270,12 +276,12 @@ parseTerm = try parseAppTerm <|> parseAtomTerm
       
 {- Misc -}
 
-parsePredDecl :: Parser PredDecl
-parsePredDecl = do
+parsePredSig :: Parser PredSig
+parsePredSig = do
   predName <- parseTypeName
   reservedOp "::"
   sorts <- parseSort `sepBy1` reservedOp "->"
-  return $ PredDecl predName (init sorts)
+  return $ PredSig predName (init sorts)
 
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do

@@ -322,11 +322,11 @@ instance Show Goal where
 
 {- Input language -}
 
-instance Pretty ConstructorDef where
-  pretty (ConstructorDef name t) = text name <+> text "::" <+> pretty t
+instance Pretty ConstructorSig where
+  pretty (ConstructorSig name t) = text name <+> text "::" <+> pretty t
 
-instance Pretty PredDecl where
-  pretty (PredDecl p sorts) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
+instance Pretty PredSig where
+  pretty (PredSig p sorts) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
 
 instance Pretty Declaration where
   pretty (TypeDecl name tvs t) = text "type" <+> text name <+> hsep (map text tvs) <+> text "=" <+> pretty t

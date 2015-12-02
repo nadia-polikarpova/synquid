@@ -73,16 +73,17 @@ resolveDeclaration (DataDecl dataName typeParams predParams wfMetricMb construct
   let
     datatype = DatatypeDef {
       _typeArgCount = length typeParams,
-      _predArgs = map (\(PredDecl _ sorts) -> sorts) predParams,
+      _predArgs = map (\(PredSig _ sorts) -> sorts) predParams,
       _constructors = map constructorName constructors,
       _wfMetric = wfMetricMb
     }
   environment %= addDatatype dataName datatype
-  let addPreds sch = foldl (\s (PredDecl p sorts) -> ForallP p sorts s) sch predParams
-  mapM_ (\(ConstructorDef name schema) -> resolveSignature name $ addPreds schema) constructors
+  let addPreds sch = foldl (\s (PredSig p sorts) -> ForallP p sorts s) sch predParams
+  mapM_ (\(ConstructorSig name schema) -> resolveSignature name $ addPreds schema) constructors
 resolveDeclaration (MeasureDecl measureName inSort outSort post) = do
   post' <- resolveFormula BoolS outSort post
   environment %= addMeasure measureName (MeasureDef inSort outSort post')
+resolveDeclaration (PredDecl (PredSig name sorts)) = resolvePredSignature name sorts
 resolveDeclaration (SynthesisGoal name) = do
   syms <- uses environment allSymbols
   if Map.member name syms
@@ -103,7 +104,7 @@ resolveSchema sch = do
   where
     resolveSchema' (ForallP predName sorts sch) = do
       oldEnv <- use environment
-      environment %= addPredicate predName sorts
+      resolvePredSignature predName sorts
       sch' <- resolveSchema' sch
       environment .= oldEnv
       return $ ForallP predName sorts sch'
@@ -300,6 +301,11 @@ resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type:
 {- Misc -}
 
 resolveSignature name sch = do
-  ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of funtion", name]) (return ())
+  ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of function", name]) (return ())
   sch' <- resolveSchema sch
   environment %= addPolyConstant name sch'
+  
+resolvePredSignature name sorts = do
+  ifM (Map.member name <$> use (environment . boundPredicates)) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
+  environment %= addPredicate name sorts
+    
