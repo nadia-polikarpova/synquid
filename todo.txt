@@ -1,20 +1,13 @@
-- Abstract refinements	
 - Type classes (to help instantiate qualifiers)	
-- Multisets and sequences
-- Memoization: remove subsumed components?
 
-- LFP solver for when CA is not required?
-- Bring symbolic search back? (Just for scalars?)
+- Memoization: remove subsumed components?
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
 - Check that the first constructor is the base case
 - When a measure is not mentioned in the goal spec, remove it from the componenets?
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
-- When generating E-terms: if a type of a later term (argument, result) does not depend on the type, no need to reconsider it when the later terms fails
 
 Front-end
-	- Move tokens into a separate file and reuse in pretty pritner
 	- Make resolver multi-pass so that order of declarations doesn't matter
 	- Check if wf-metric is defined
-	- Type synonym arguments
 	- Attach positions to AST nodes?

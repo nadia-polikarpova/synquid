@@ -47,6 +47,7 @@ module Synquid.Pretty (
 
 import Synquid.Logic
 import Synquid.Program
+import Synquid.Tokens
 import Synquid.SMTSolver
 import Synquid.Util
 
@@ -123,32 +124,13 @@ instance Show Sort where
   show = show . pretty
 
 instance Pretty UnOp where
-  pretty Neg = text "-"
-  pretty Abs = text "abs"
-  pretty Not = text "!"
+  pretty op = text $ unOpTokens Map.! op
 
 instance Show UnOp where
   show = show . pretty
 
 instance Pretty BinOp where
-  pretty Times = text "*"
-  pretty Plus = text "+"
-  pretty Minus = text "-"
-  pretty Eq = text "=="
-  pretty Neq = text "/="
-  pretty Lt = text "<"
-  pretty Le = text "<="
-  pretty Gt = text ">"
-  pretty Ge = text ">="
-  pretty And = text "&&"
-  pretty Or = text "||"
-  pretty Implies = text "==>"
-  pretty Iff = text "<==>"
-  pretty Union = text "+"
-  pretty Intersect = text "*"
-  pretty Diff = text "-"
-  pretty Member = text "in"
-  pretty Subset = text "<="
+  pretty op = text $ binOpTokens Map.! op
 
 instance Show BinOp where
   show = show . pretty
@@ -232,9 +214,18 @@ programDoc tdoc (Program p typ) = let
     withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
   in case p of
     PSymbol s -> withType $ text s
-    PApp f x -> case x of
-      Program (PSymbol _) _ -> pDoc f <+> pDoc x
-      _ -> pDoc f <+> parens (pDoc x)
+    PApp f x -> let
+      optParens p = case p of
+        Program (PSymbol _) _ -> pDoc p
+        _ -> parens (pDoc p)
+      prefix = pDoc f <+> optParens x
+      in case content f of
+          PApp g y -> case content g of
+            PSymbol name -> if name `elem` Map.elems binOpTokens
+                              then optParens y <+> text name <+> optParens x -- Binary operator: use infix notation
+                              else prefix
+            _ -> prefix
+          _ -> prefix
     PFun x e -> withType (text "\\" <> text x <+> text ".") <+> pDoc e
     PIf c t e -> nest 2 $ withType (text "if" <+> pDoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
