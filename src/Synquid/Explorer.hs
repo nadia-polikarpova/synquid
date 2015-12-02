@@ -900,31 +900,6 @@ matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args p
       -- pass' <- use predAssignment
       -- writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')        
 matchConsType _ _ = mzero
-
-fmlToProgram :: Formula -> RProgram
-fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
-fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
-fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
-fmlToProgram fml@(Unary op e) = let 
-    s = sortOf fml 
-    p = fmlToProgram e
-    fun = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p) opRes)
-  in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  where    
-    opRes 
-      | op == Not = bool $ valBool |=| fnot (intVar "x")
-      | otherwise = int $ valInt |=| Unary op (intVar "x")    
-fmlToProgram fml@(Binary op e1 e2) = let 
-    s = sortOf fml 
-    p1 = fmlToProgram e1
-    p2 = fmlToProgram e2
-    fun1 = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
-    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
-  in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  where
-    opRes 
-      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
-      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
       
 instantiateConsAxioms :: Environment -> Formula -> Set Formula      
 instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in

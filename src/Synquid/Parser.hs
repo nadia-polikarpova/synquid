@@ -4,6 +4,7 @@
 module Synquid.Parser where
 
 import Synquid.Logic
+import Synquid.Tokens
 import Synquid.Program
 import Synquid.Util
 
@@ -34,50 +35,6 @@ testParse :: Parser a -> String -> Either String a
 testParse parser str = case parse parser "" str of
   Left err -> Left $ show err
   Right parsed -> Right parsed
-      
-{- Tokens -}
-
--- | Keywords
-keywords :: [String]
-keywords = ["Bool", "data", "decreases", "False", "in", "Int", "match", "measure", "qualifier", "Set", "True", "type", "where"]
-
--- | Names of unary operators    
-unOpTokens :: Map UnOp String
-unOpTokens = fromList [(Neg, "-")
-                      ,(Not, "!")
-                      ,(Abs, "~")]
-                           
--- | Names of binary operators             
-binOpTokens :: Map BinOp String
-binOpTokens = fromList [(Times,     "*")
-                       ,(Plus,      "+")
-                       ,(Minus,     "-")
-                       ,(Eq,        "==")
-                       ,(Neq,       "!=")
-                       ,(Lt,        "<")
-                       ,(Le,        "<=")
-                       ,(Gt,        ">")
-                       ,(Ge,        ">=")                       
-                       ,(And,       "&&")
-                       ,(Or,        "||")
-                       ,(Implies,   "==>")
-                       ,(Iff,       "<==>")
-                       ,(Member,    "in")
-                      ]
-                        
--- | Other operators         
-otherOps :: [String]
-otherOps = ["::", ":", "->", "|", "=", "??", ",", "."] 
-
--- | Characters allowed in identifiers (in addition to letters and digits)
-identifierChars = "_'"
--- | Start of a multi-line comment
-commentStart = "{-"
--- | End of a multi-line comment
-commentEnd = "-}"
--- | Start of a single-line comment
-commentLine = "--"
-
 
 {- Lexical analysis -}
 

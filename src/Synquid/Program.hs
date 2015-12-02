@@ -4,6 +4,7 @@
 module Synquid.Program where
 
 import Synquid.Logic
+import Synquid.Tokens
 import Synquid.Util
 
 import Data.Maybe
@@ -264,13 +265,13 @@ data Case r = Case {
     
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram r =
-  PSymbol Id |                            -- ^ Symbol (variable or constant)
-  PApp (Program r) (Program r) |          -- ^ Function application
-  PFun Id (Program r) |                   -- ^ Lambda abstraction
+  PSymbol Id |                                -- ^ Symbol (variable or constant)
+  PApp (Program r) (Program r) |              -- ^ Function application
+  PFun Id (Program r) |                       -- ^ Lambda abstraction
   PIf (Program r) (Program r) (Program r) |   -- ^ Conditional
-  PMatch (Program r) [Case r] |           -- ^ Pattern match on datatypes
-  PFix [Id] (Program r) |                 -- ^ Fixpoint
-  PLet [(Id, Program r)] (Program r)
+  PMatch (Program r) [Case r] |               -- ^ Pattern match on datatypes
+  PFix [Id] (Program r) |                     -- ^ Fixpoint
+  PLet [(Id, Program r)] (Program r)          -- ^ Let binding
   deriving (Eq, Ord)
   
 -- | Programs annotated with types  
@@ -331,6 +332,32 @@ programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteS
     programSubstituteSymbol' (PIf c p1 p2) = PIf (pss c) (pss p1) (pss p2)
     programSubstituteSymbol' (PMatch scr cases) = PMatch (pss scr) (map (\(Case ctr args pBody) -> Case ctr args (pss pBody)) cases)
     programSubstituteSymbol' (PFix args pBody) = PFix args (pss pBody)
+
+-- | Convert an executable formula into a program    
+fmlToProgram :: Formula -> RProgram
+fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
+fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
+fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
+fmlToProgram fml@(Unary op e) = let 
+    s = sortOf fml 
+    p = fmlToProgram e
+    fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "x" (typeOf p) opRes)
+  in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
+  where    
+    opRes 
+      | op == Not = bool $ valBool |=| fnot (intVar "x")
+      | otherwise = int $ valInt |=| Unary op (intVar "x")    
+fmlToProgram fml@(Binary op e1 e2) = let 
+    s = sortOf fml 
+    p1 = fmlToProgram e1
+    p2 = fmlToProgram e2
+    fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
+    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
+  in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
+  where
+    opRes 
+      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
+      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")    
 
 {- Evaluation environment -}
 
