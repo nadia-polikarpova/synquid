@@ -46,19 +46,19 @@ data ExplorerParams = ExplorerParams {
   _eGuessDepth :: Int,                    -- ^ Maximum depth of application trees
   _scrutineeDepth :: Int,                 -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,                     -- ^ Maximum nesting level of matches
-  _condDepth :: Int,                      -- ^ Maximum nesting level of conditionals
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
-  _hideScrutinees :: Bool,
+  _hideScrutinees :: Bool,                -- ^ Should scrutinized variables be removed from the environment?
   _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
+  _partialSolution :: Bool,                -- ^ Should implementations that only cover part of the input space be accepted?
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
-  _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
+  _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
-  _matchQualsGen :: QualsGen,
+  _matchQualsGen :: QualsGen,             -- ^ Qualifier generator for match scrutinees
   _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
-  _explorerLogLevel :: Int,               -- ^ How verbose logging is
-  _useMemoization :: Bool                 -- ^ Should we memoize enumerated terms (and corresponding environments)
+  _useMemoization :: Bool,                -- ^ Should we memoize enumerated terms (and corresponding environments)
+  _explorerLogLevel :: Int                -- ^ How verbose logging is
 }
 
 makeLenses ''ExplorerParams
@@ -271,15 +271,18 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
     generateElse (cond, pThen) = if cond == ftrue
       then return pThen -- @pThen@ is valid under no assumptions: return it
       else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
-            pCond <- generateCondition env cond
-            pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
-                        generateMaybeIf (addAssumption (fnot cond) env) t            
-            return $ Program (PIf pCond pThen pElse) t
+        pCond <- generateCondition env cond        
+        pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $ generateMaybeIf (addAssumption (fnot cond) env) t
+        return $ Program (PIf pCond pThen pElse) t
             
 generateCondition env fml = if isExecutable fml
-                              then return $ fmlToProgram fml 
-                              else snd <$> once (generateE env (ScalarT BoolT $ valBool |=| fml))            
-
+                              then return $ fmlToProgram fml
+                              else snd <$> once (generateE env (ScalarT BoolT $ valBool |=| fml))
+                
+-- | If partial solutions are accepted, try @gen@, and if it fails, just leave a hole of type @t@; otherwise @gen@
+optionalInPartial :: Monad s => RType -> Explorer s RProgram -> Explorer s RProgram
+optionalInPartial t gen = ifM (asks $ _partialSolution . fst) (ifte gen return (return $ hole t)) gen
+  
 -- | Generate a match term of type @t@
 generateMatch env t = do
   d <- asks $ _matchDepth . fst
@@ -309,10 +312,10 @@ generateMatch env t = do
               pCases <- mapM (once . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
               return $ Program (PMatch pScrutinee (pCase : pCases)) t
             else do -- First case is valid under a condition
-              pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the asumption
+              pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
               let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
               pCond <- generateCondition env cond
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $               -- Gnereate the else branch
+              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $               -- Generate the else branch
                           generateI (addAssumption (fnot cond) env) t            
               return $ Program (PIf pCond pThen pElse) t
 
@@ -349,7 +352,7 @@ generateCase env scrName pScrutinee t consName = do
       let ScalarT baseT _ = (typeOf pScrutinee)
       (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      pCaseExpr <- local (
+      pCaseExpr <- optionalInPartial t $ local (
                            over (_1 . matchDepth) (-1 +)
                          . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
                         $ generateI caseEnv t
@@ -390,15 +393,14 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
         then return p0 -- @p0@ is valid under no assumptions: return it
         else do -- @p0@ is valid under a nontrivial assumption, but no need to match
               pCond <- generateCondition env cond
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond p0 p) t)) $
-                          generateMaybeMatchIf (addAssumption (fnot cond) env) t
+              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond p0 p) t)) $ generateMaybeMatchIf (addAssumption (fnot cond) env) t                          
               return $ Program (PIf pCond p0 pElse) t
       _ -> if cond == ftrue
         then generateMatchesFor env matchConds p0 t
         else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
               pCond <- generateCondition env cond
               pThen <- once $ generateMatchesFor (addAssumption cond env) matchConds p0 t
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
+              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
                           generateMaybeMatchIf (addAssumption (fnot cond) env) t
               return $ Program (PIf pCond pThen pElse) t
 
