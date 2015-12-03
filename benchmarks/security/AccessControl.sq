@@ -1,7 +1,7 @@
 {- module Authentication -}
 
 -- | User IDs
-data UId
+type UId = Int
 
 -- | Passwords
 data Password
@@ -16,8 +16,6 @@ predicate IsAuth :: Principal -> Bool
 
 -- | Constructor for @IsAuth@: checks @pw@ validity and authenticates @p@
 login :: p: Principal -> pw: Password -> { Bool | _v == IsAuth p }
-
-loginFailed :: p: {Principal | !(IsAuth _v)} -> a
 
 {- module FileRM -}
 
@@ -43,5 +41,5 @@ freadSimple :: p: {Principal | IsAuth _v} -> f: {File | CanRead p _v} -> {Conten
 
 {- client -}
 
-sudo :: pw: Password -> f: File -> {Content | IsContent f _v}
-sudo = ??
+readFile :: p: Principal -> pw: Password -> f: {File | CanRead p _v} -> {Content | IsContent f _v}
+readFile = ??
