@@ -1,6 +1,3 @@
--- data Unit where
-  -- Unit :: Unit
-
 {- module Authentication -}
 
 -- | User IDs
