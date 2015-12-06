@@ -1,4 +1,4 @@
-qualifier {x == y}
+qualifier {x == y, x != y}
 
 measure len :: List a -> {Int | _v >= 0}
 measure elems :: List a -> Set a

@@ -1,4 +1,4 @@
-qualifier {x < y}
+qualifier {x <= y, x != y}
 
 measure ilen :: IList a -> {Int | _v >= 0}
 measure ielems :: IList a -> Set a

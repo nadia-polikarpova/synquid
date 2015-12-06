@@ -1,4 +1,4 @@
-qualifier {x == y}
+qualifier {x == y, x != y}
 
 false :: {Bool | !_v}
 not :: x: Bool -> {Bool | _v == !x}

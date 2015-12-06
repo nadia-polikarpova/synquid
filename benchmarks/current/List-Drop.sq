@@ -1,9 +1,9 @@
-qualifier {x <= y , x <= y, x != y}
+qualifier {x <= y , x != y}
 
 type Nat = {Int | _v >= 0}
 
 zero :: {Int | _v == 0}
--- inc :: x:Int -> {Int | _v == x + 1}
+inc :: x:Int -> {Int | _v == x + 1}
 dec :: x:Int -> {Int | _v == x - 1}
 
 measure len :: List a -> {Int | _v >= 0}

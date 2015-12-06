@@ -1,4 +1,4 @@
-qualifier {x <= y, x >= y, x != y}
+qualifier {x <= y, x != y}
 
 measure size :: BST a -> {Int | _v >= 0}
 measure elems :: BST a -> Set a

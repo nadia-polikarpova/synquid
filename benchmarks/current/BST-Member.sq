@@ -1,5 +1,4 @@
-qualifier {x <= y, x >= y, x != y}
--- solution without == is kind of weird here
+qualifier {x <= y, x != y}
 
 true :: {Bool | _v}
 false :: {Bool | !_v}

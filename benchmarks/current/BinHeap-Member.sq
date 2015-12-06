@@ -1,4 +1,4 @@
-qualifier {x == y}
+qualifier {x <= y, x != y}
 
 false :: {Bool | !_v}
 not :: x: Bool -> {Bool | _v == !x}
@@ -9,7 +9,8 @@ measure elems :: Heap a -> Set a
 
 data Heap a decreases size where
 	Empty :: {Heap a | size _v == 0 && elems _v == []}
-	Node :: x: a -> l: Heap {a | _v > x} -> r: Heap {a | _v > x} -> {Heap a | size _v == size l + size r + 1 && elems _v == elems l + elems r + [x]}
+	Node :: x: a -> l: Heap {a | _v > x} -> r: Heap {a | _v > x} -> {Heap a | size _v == size l + size r + 1 && 
+                                                                            elems _v == elems l + elems r + [x]}
 
 member :: x: a -> t: Heap a -> {Bool | _v == (x in elems t)}
 member = ??

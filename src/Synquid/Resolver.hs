@@ -237,7 +237,7 @@ resolveFormula targetSort valueSort (Binary op l r) = do
                                                             VarS _  -> return op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Eq  || op == Neq                    = case lSort of
-                                                            -- DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+                                                            DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
                                                             _ -> return op
       | otherwise                                 = return op
       

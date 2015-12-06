@@ -1,4 +1,4 @@
-qualifier {x <= 0, x >= 0, x != 0}
+qualifier {x <= 0, x != 0}
 
 type Nat = {Int | _v >= 0}
 
