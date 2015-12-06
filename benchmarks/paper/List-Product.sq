@@ -1,0 +1,18 @@
+measure fst :: Pair a b -> a
+measure snd :: Pair a b -> b
+
+data Pair a b where
+  Pair :: x: a -> y: b -> {Pair a b | fst _v == x && snd _v == y}
+
+measure len :: List a -> {Int | _v >= 0}
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0}
+	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1}
+
+map :: f: (a -> b) -> xs: List a -> { List b | len _v == len xs }
+
+append :: la: List a -> lb: List a -> { List a | len _v == len la + len lb }
+
+product :: la: List a -> lb: List b -> {List (Pair (a) (b)) | len _v == len la * len lb}
+product = ??

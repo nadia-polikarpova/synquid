@@ -1,0 +1,121 @@
+------------------------------------------------------------
+-- This version is not working: specs have to be tweaked! --
+------------------------------------------------------------
+
+qualifier {x < y, x == y}
+
+type Color = {Int | _v == 0 || _v == 1}
+
+red   :: {Int | _v == 0}
+black :: {Int | _v == 1}
+
+measure size        :: RBT a -> {Int | _v >= 0}
+measure elems       :: RBT a -> Set a
+measure blackHeight :: RBT a -> {Int | _v >= 0}
+measure rootColor :: RBT a -> {Int | _v >= 0 && _v <= 1}
+
+data RBT a <P :: Int -> Bool> decreases size where
+    Empty :: color: {Int | _v == 1 && P _v} ->
+                    {RBT a <P> | size _v == 0 &&
+                                 elems _v == [] &&
+                                 blackHeight _v == 0 &&
+                                 rootColor _v == color}                               -- black-height of nils is 0
+    Node  :: x: a ->
+             color: {Int | (_v == 0 || _v == 1) && P _v} ->
+             left:  RBT {a | _v < x} <{ color == 1 || _0 == 1 }> ->                 -- left keys are less than this key; a red node must have black children
+             right: { RBT {a | x < _v} <{ color == 1 || _0 == 1 }> |                -- right keys are greater than this key; a red node must have black children
+                      (blackHeight _v == blackHeight left)} ->                      -- blackHeight the same as of left
+             {RBT a <P> | size _v == size left + size right + 1 &&
+                          elems _v == elems left + elems right + [x] &&
+                          (blackHeight _v == blackHeight left + color) &&             -- black-height is black-height of sub + 1 in case the current node is black
+                          rootColor _v == color
+                      }
+
+measure welems :: WeakRBT a -> Set a
+measure wsize        :: WeakRBT a -> {Int | _v >= 0}
+measure wheight :: WeakRBT a -> Int
+measure isGood :: WeakRBT a -> Bool
+measure wrootColor :: WeakRBT a -> {Int | _v >= 0 && _v <= 1}
+
+data WeakRBT a  decreases wsize where
+    Ok :: t: RBT a <{True}> -> { WeakRBT a | welems _v == elems t && wheight _v == blackHeight t &&
+                                 wrootColor _v == rootColor t && wsize _v == size t && isGood _v == True }
+    Bad :: x: a ->
+              lc:    {Int | _v == 0 || _v == 1 } ->
+              left:  RBT {a | _v < x} <{ True }> ->
+              right: { RBT {a | x < _v} <{ (lc == 0 && rootColor left == 0) ==> _0 == 1 }> | blackHeight _v == blackHeight left} ->
+              { WeakRBT a | (welems _v == [x] + elems left + elems right) && (wheight _v == blackHeight left)  &&
+                                 wsize _v == size left + size right + 1  && isGood _v == False}
+
+balL :: --x: a ->
+        --c: Color ->
+        --l: WeakRBT {a | _v < x} ->
+        --r: {RBT {a | _v > x} <{c == 0 ==> _0 == 1}> | blackHeight _v == wheight l} ->
+        --{WeakRBT a | welems _v == [x] + welems l + elems r && wheight _v == blackHeight r + c}
+        x: a ->
+        c: Color ->
+        l: { WeakRBT {a | _v < x } |
+          --(wrootColor _v == 0 && wsize _v == 1) ==> isGood _v == True -- && wrootColor _v == 1)
+          (wrootColor _v == 0 && c == 0 && wsize _v == 1 && isGood _v == True) ||
+          ((wrootColor _v == 1 || c == 1) && isGood _v == True) ||
+          (isGood _v == False && c == 1)
+        } ->
+        r: {RBT {a | _v > x} <{c == 0 ==> _0 == 1}> | blackHeight _v == wheight l} ->
+        {WeakRBT a | welems _v == [x] + welems l + elems r && wheight _v == blackHeight r + c && wsize _v <= 1 + size l + wsize r && wsize _v >= size l + wsize r
+        --&& (wrootColor _v == 1 ==> isGood _v == True)
+        }
+
+balR :: x: a ->
+        c: Color ->
+        l: RBT {a | _v < x} <{c == 0 ==> _0 == 1}> ->
+        r: {WeakRBT {a | _v > x} | wheight _v == blackHeight l} ->
+        {WeakRBT a | welems _v == [x] + elems l + welems r && wheight _v == blackHeight l + c && wsize _v <= 1 + size l + wsize r && wsize _v >= size l + wsize r
+        --&& (wrootColor _v == 1 ==> isGood _v == True)
+        }
+
+-- easy, but requires -a3
+singleton :: x: a -> {WeakRBT a | welems _v == [x] && wheight _v == 0 && wsize _v == 1 && wrootColor _v == 0 && isGood _v == True}
+--singleton = ??
+
+ins :: t: RBT a <{True}> -> x: a -> {WeakRBT a | welems _v == elems t + [x] && wheight _v == blackHeight t &&
+      (wsize _v >= 1 && wsize _v <= 1 + size t && wsize _v >= size t) &&
+      (size t == 0 ==> wsize _v == 1) &&
+      ((wrootColor _v == 0 && wsize _v == 1) ==> isGood _v == True)
+      --&& ((wrootColor _v == 1) ==> isGood _v == True)
+      }
+ins = ??
+
+mkBlack :: t: WeakRBT a -> {RBT a <{True}> | elems _v == welems t}
+mkBlack = ??
+
+add :: t: RBT a <{True}> -> x: a -> {RBT a <{True}> | elems _v == elems t + [x]}
+add = ??
+
+--=====================================================================================================================
+-- time cabal run benchmarks/abstract/RBT-Ins.sq -- -a=2 -m=1 -e
+-- Preprocessing executable 'synquid' for synquid-0.1.0.0...
+-- Running synquid...
+-- ins :: <a> . (t:RBT (a) <True> -> (x:a -> {WeakRBT (a)|welems _v == (elems t) + ([x]) && wheight _v == blackHeight t}))
+-- ins = \t . \x . match t with
+--   Empty x2 -> singleton x red
+--   Node x11 x12 x13 x14 -> if (==) x11 x
+--     then Ok t
+--     else if (<) x11 x
+--       then balR x11 x12 x13 (ins x14 x)
+--       else balL x11 x12 (ins x13 x) x14
+
+-- mkBlack :: <a> . (t:WeakRBT (a) -> {RBT (a) <True>|elems _v == welems t})
+-- mkBlack = \t . match t with
+--   Ok x1 -> x1
+--   Bad x6 x7 x8 x9 -> if (<) 0 x7
+--     then Node x6 x7 x8 x9
+--     else Node x6 black x8 x9
+
+-- add :: <a> . (t:RBT (a) <True> -> (x:a -> {RBT (a) <True>|elems _v == (elems t) + ([x])}))
+-- add = \t . \x . mkBlack (ins t x)
+
+
+-- real	0m45.579s
+-- user	0m45.125s
+-- sys	0m0.468s
+--=====================================================================================================================

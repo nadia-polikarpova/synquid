@@ -1,0 +1,11 @@
+qualifier {x <= y, x >= y, x != y}
+
+measure size :: BST a -> {Int | _v >= 0}
+measure elems :: BST a -> Set a
+
+data BST a decreases size where
+	Empty :: {BST a | size _v == 0 && elems _v == []}
+	Node :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> {BST a | size _v == size l + size r + 1 && elems _v == elems l + elems r + [x]}
+	
+insert :: x: a -> t: BST a -> {BST a | elems _v == elems t + [x]}
+insert = ??

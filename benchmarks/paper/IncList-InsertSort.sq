@@ -1,0 +1,22 @@
+measure len :: List a -> {Int | _v >= 0}
+measure elems :: List a -> Set a
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0 && elems _v == []}
+	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+
+measure ilen :: IList a -> {Int | _v >= 0}
+measure ielems :: IList a -> Set a
+
+data IList a decreases ilen where
+	INil :: {IList a | ilen _v == 0 && ielems _v == []}
+	ICons :: x: a -> xs: IList {a | x <= _v} -> {IList a | ilen _v == ilen xs + 1 && ielems _v == ielems xs + [x]}
+	
+insert :: x: a -> xs: IList a -> {IList a | ielems _v == ielems xs + [x]}
+
+insertSort :: xs: List a -> {IList a | ielems _v == elems xs}
+insertSort = ??
+
+
+
+	
