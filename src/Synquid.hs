@@ -30,13 +30,14 @@ main = do
                    fix 
                    hideScr 
                    explicitMatch
+                   partial
                    incremental
                    consistency 
                    log_ 
                    useMemoization 
+                   bfs
                    print_solution_size 
-                   print_spec_info
-                   bfs) <- cmdArgs cla
+                   print_spec_info) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -44,6 +45,7 @@ main = do
     _fixStrategy = fix,
     _hideScrutinees = hideScr,
     _abduceScrutinees = not explicitMatch,
+    _partialSolution = partial,
     _incrementalChecking = incremental,
     _consistencyChecking = consistency,
     _explorerLogLevel = log_,
@@ -77,14 +79,16 @@ data CommandLineArgs
         fix :: FixpointStrategy,
         hide_scrutinees :: Bool,
         explicit_match :: Bool,
+        partial :: Bool,
         incremental :: Bool,
         consistency :: Bool,
         log_ :: Int,
         use_memoization :: Bool,
-        print_solution_size :: Bool,
-        print_spec_info :: Bool,
         -- | Solver params
-        bfs_solver :: Bool
+        bfs_solver :: Bool,
+        -- | Output
+        print_solution_size :: Bool,
+        print_spec_info :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
 
@@ -94,15 +98,16 @@ cla = CommandLineArgs {
   scrutinee_max   = 1               &= help ("Maximum depth of a match scrutinee (default: 0)"),
   match_max       = 2               &= help ("Maximum number of a matches (default: 2)"),
   fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
-  hide_scrutinees = False           &= help ("Hide scrutinized expressions from the evironment (default: False)"),
+  hide_scrutinees = False           &= help ("Hide scrutinized expressions from the environment (default: False)"),
   explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
-  incremental     = True            &= help ("Subtyping checks during bottom-up fase (default: True)"),
+  partial         = False           &= help ("Generate best-effort partial solutions (default: False)"),
+  incremental     = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
   consistency     = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
   use_memoization = False           &= help ("Use memoization (default: False)"),
+  bfs_solver      = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   print_solution_size = False       &= help ("Show size of the synthesized solution (default: False)"),
-  print_spec_info = False           &= help ("Show information about the given synthesis problem (default: False)"),
-  bfs_solver      = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)")
+  print_spec_info = False           &= help ("Show information about the given synthesis problem (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
@@ -110,11 +115,11 @@ defaultExplorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 1,
   _matchDepth = 2,
-  _condDepth = 1,
   _fixStrategy = AllArguments,
   _polyRecursion = True,
   _hideScrutinees = False,
   _abduceScrutinees = True,
+  _partialSolution = False,
   _incrementalChecking = True,
   _consistencyChecking = True,
   _condQualsGen = undefined,
@@ -140,7 +145,7 @@ defaultSolverParams = SolverParams {
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
   showSolutionSize :: Bool,                    -- ^ Print synthesized term size
-  showSpecInfo :: Bool                         -- ^ Print information about speficiation
+  showSpecInfo :: Bool                         -- ^ Print information about specification
 }
 
 defaultSynquidParams = SynquidParams {
@@ -171,21 +176,14 @@ runOnFile synquidParams explorerParams solverParams file = do
             solutionSizeDoc $+$
             specSizeDoc
           where
-            solutionSizeDoc =
-              if (showSolutionSize synquidParams) then parens (text "Size:" <+> pretty (programNodeCount prog))
-              else empty
-            specSizeDoc =
-              if (showSpecInfo synquidParams)
-              then
+            solutionSizeDoc = if showSolutionSize synquidParams 
+                                then parens (text "Size:" <+> pretty (programNodeCount prog))
+                                else empty
+            specSizeDoc = if showSpecInfo synquidParams
+              then let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
                 parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
                   parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
                   parens (text "#components:" <+>
-                    pretty (
-                      --(size $ _symbols $ gEnvironment goal) -
-                      let
-                        constructors = concat $ map (\dt -> (_constructors dt)) $ elems $ _datatypes $ gEnvironment goal
-                      in
-                        (sum $ map (\inMap -> length $ filter (\k -> not(k `elem` constructors)) $ keys inMap)
-                          (elems $ _symbols $ gEnvironment goal)))) -- we only solve one goal
+                    pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
               else empty
       print empty

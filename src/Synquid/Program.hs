@@ -528,17 +528,18 @@ data Goal = Goal {
 } deriving (Eq, Ord)
   
 type ProgramAst = [Declaration]
-data ConstructorDef = ConstructorDef Id RSchema
+data ConstructorSig = ConstructorSig Id RSchema
   deriving (Eq)
-data PredDecl = PredDecl Id [Sort]  
+data PredSig = PredSig Id [Sort]  
   deriving (Eq)
 data Declaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature
-  DataDecl Id [Id] [PredDecl] (Maybe Id) [ConstructorDef] | -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
+  DataDecl Id [Id] [PredSig] (Maybe Id) [ConstructorSig] |  -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
   MeasureDecl Id Sort Sort Formula |                        -- ^ Measure name, input sort, output sort, postcondition
+  PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
   SynthesisGoal Id                                          -- ^ Name of the function to synthesize
   deriving (Eq)
 
-constructorName (ConstructorDef name _) = name
+constructorName (ConstructorSig name _) = name
