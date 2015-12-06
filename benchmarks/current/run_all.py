@@ -44,35 +44,31 @@ BENCHMARKS = [
     ('List-Product',    []),
     # Unique lists
     ('UniqueList-Insert',   []),
-    ('UniqueList-Delete',   []),
     ('List-Nub',            ['-f=FirstArgument', '-m=1']),
     ('List-Compress',       ['-h']),
-    # Insertion Sort
-    ('IncList-Insert',      []),
-    ('IncList-InsertSort',  []),
+    # Insertion sort
+    ('List-InsertSort',  []),
     # Merge sort
-    ('List-Split',          ['-s=1', '-m=3']),
-    ('IncList-Merge',       ['-h']),
-    ('IncList-MergeSort',   ['-a=2', '-s=1', '-m=3']),
+    ('List-Split',          ['-m=3']),
+    ('IncList-Merge',       []),
+    ('IncList-MergeSort',   ['-a=2', '-m=3']),
     # Quick sort
-    ('List-Partition',      ['-s=1']),
+    ('List-Partition',      []),
     ('IncList-PivotAppend', []),
-    ('IncList-QuickSort',   ['-a=2', '-s=1']),
+    ('IncList-QuickSort',   ['-a=2']),
     # Trees
     ('Tree-Elem',           []),
     ('Tree-Flatten',        []),
-    ('Tree-HBal',           []),
     # Binary search tree
     ('BST-Member',          []),
     ('BST-Insert',          []),
-    ('BST-Delete',          ['-m=1', '-e', '-a=2']),
+    ('BST-Delete',          ['-e']),
     ('BST-Sort',            []),
     # Binary heap
     ('BinHeap-Member',      []),
     ('BinHeap-Insert',      []),
     # Evaluation
     ('Evaluator',           []),
-    ('Evaluator-Vars',      [])
 ]
 
 class SynthesisResult:

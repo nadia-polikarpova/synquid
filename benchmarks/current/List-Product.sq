@@ -12,7 +12,7 @@ data List a decreases len where
 
 map :: f: (a -> b) -> xs: List a -> { List b | len _v == len xs }
 
-append :: la: List a -> lb: List a -> { List a | len _v == len la + len lb }
+append :: xs: List a -> ys: List a -> { List a | len _v == len xs + len ys }
 
-product :: la: List a -> lb: List b -> {List (Pair (a) (b)) | len _v == len la * len lb}
+product :: xs: List a -> ys: List b -> {List (Pair (a) (b)) | len _v == len xs * len ys}
 product = ??
