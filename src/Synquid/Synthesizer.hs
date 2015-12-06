@@ -109,6 +109,7 @@ extractTypeQGen qual (env, (val@(Var s valName) : syms)) =
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 extractCondQGen qual (env, syms) = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
 
+extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
 extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = let baseCaseCtor = head ctors
   in case toMonotype $ allSymbols env Map.! baseCaseCtor of
     FunctionT _ _ _ -> [] -- not supported
