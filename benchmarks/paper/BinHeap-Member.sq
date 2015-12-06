@@ -1,0 +1,15 @@
+qualifier {x == y}
+
+false :: {Bool | !_v}
+not :: x: Bool -> {Bool | _v == !x}
+or :: x: Bool -> y: Bool -> {Bool | _v == (x || y)}
+
+measure size :: Heap a -> {Int | _v >= 0}
+measure elems :: Heap a -> Set a
+
+data Heap a decreases size where
+	Empty :: {Heap a | size _v == 0 && elems _v == []}
+	Node :: x: a -> l: Heap {a | _v > x} -> r: Heap {a | _v > x} -> {Heap a | size _v == size l + size r + 1 && elems _v == elems l + elems r + [x]}
+
+member :: x: a -> t: Heap a -> {Bool | _v == (x in elems t)}
+member = ??
