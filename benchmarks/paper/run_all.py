@@ -9,8 +9,8 @@ from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
 # Parameters
-SYNQUID_PATH_LINUX = '../dist/build/synquid/synquid'
-SYNQUID_PATH_WINDOWS = '../src/Synquid.exe'
+SYNQUID_PATH_LINUX = '../../dist/build/synquid/synquid'
+SYNQUID_PATH_WINDOWS = '../../src/Synquid.exe'
 BENCH_PATH = '.'
 LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME_WINDOWS = 'oracle'
