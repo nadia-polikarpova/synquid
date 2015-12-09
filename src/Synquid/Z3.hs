@@ -4,7 +4,7 @@
 module Synquid.Z3 (Z3State, evalZ3State) where
 
 import Synquid.Logic
-import Synquid.SMTSolver
+import Synquid.SolverMonad
 import Synquid.Util
 import Synquid.Pretty
 import Z3.Monad hiding (Z3Env, newEnv, Sort)
@@ -59,6 +59,21 @@ initZ3Data env env' = Z3Data {
 }
 
 type Z3State = StateT Z3Data IO
+
+instance MonadSMT Z3State where
+  initSolver = do
+    boolAux <- withAuxSolver mkBoolSort
+    boolSortAux .= Just boolAux
+
+  isValid fml = do
+      res <- local $ (toAST >=> assert) (fnot fml) >> check
+
+      case res of
+        Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
+        Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False
+        _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
+
+  allUnsatCores = getAllMUSs
 
 -- | Get the literal in the auxiliary solver that corresponds to a given literal in the main solver
 litToAux :: AST -> Z3State AST
@@ -227,34 +242,6 @@ toAST expr = case expr of
           decl <- mkFuncDecl symb argSorts resSort
           functions %= Map.insert name decl
           return decl
-
-instance SMTSolver Z3State where
-  initSolver = do
-    boolAux <- withAuxSolver mkBoolSort
-    boolSortAux .= Just boolAux
-
-  isValid fml = do
-      res <- local $ (toAST >=> assert) (fnot fml) >> check
-
-      case res of
-        Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
-        Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False
-        _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
-
-  -- isValid fml = do
-      -- ast <- toAST $ fnot fml
-      -- (res, modelMb) <- local $ assert ast >> getModel
-
-      -- case res of
-        -- Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
-        -- Sat -> do
-          -- modelStr <- modelToString (fromJust modelMb)
-          -- astStr <- astToString ast
-          -- debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID" $+$ text "AST:" $+$ text astStr $+$ text "MODEL:" $+$ text modelStr) $ return False
-        -- _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
-
-  allUnsatCores = getAllMUSs
-
 
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
