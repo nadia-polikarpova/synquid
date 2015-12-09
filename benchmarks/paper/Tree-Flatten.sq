@@ -1,0 +1,18 @@
+measure len :: List a -> {Int | _v >= 0}
+
+data List a decreases len where
+	Nil :: {List a | len _v == 0}
+	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1}
+	
+measure size :: Tree a -> {Int | _v >= 0}
+
+data Tree a decreases size where
+	Empty :: {Tree a | size _v == 0}
+	Node :: x: a -> l: Tree a -> r: Tree a -> {Tree a | size _v == size l + size r + 1}
+
+append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}	
+	
+flatten :: t: Tree a -> {List a | len _v == size t}
+flatten = ??
+
+	
