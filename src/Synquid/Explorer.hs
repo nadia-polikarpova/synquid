@@ -46,19 +46,19 @@ data ExplorerParams = ExplorerParams {
   _eGuessDepth :: Int,                    -- ^ Maximum depth of application trees
   _scrutineeDepth :: Int,                 -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,                     -- ^ Maximum nesting level of matches
-  _condDepth :: Int,                      -- ^ Maximum nesting level of conditionals
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
-  _hideScrutinees :: Bool,
+  _hideScrutinees :: Bool,                -- ^ Should scrutinized variables be removed from the environment?
   _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
+  _partialSolution :: Bool,                -- ^ Should implementations that only cover part of the input space be accepted?
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
-  _consistencyChecking :: Bool,           -- ^ Check consistency of fucntion's type with the goal before exploring arguments?
+  _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
-  _matchQualsGen :: QualsGen,
+  _matchQualsGen :: QualsGen,             -- ^ Qualifier generator for match scrutinees
   _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
-  _explorerLogLevel :: Int,               -- ^ How verbose logging is
-  _useMemoization :: Bool                 -- ^ Should we memoize enumerated terms (and corresponding environments)
+  _useMemoization :: Bool,                -- ^ Should we memoize enumerated terms (and corresponding environments)
+  _explorerLogLevel :: Int                -- ^ How verbose logging is
 }
 
 makeLenses ''ExplorerParams
@@ -163,7 +163,7 @@ explore params solver goal = observeManyT 1 $ do
         (g : gs) -> do
           auxGoals .= gs
           let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
-          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'
+          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'          
           p <- generateTopLevel g'
           rest <- generateAuxGoals
           return $ (gName g, p) : rest
@@ -176,7 +176,7 @@ generateTopLevel (Goal funName env (ForallT a sch)) = generateTopLevel (Goal fun
 generateTopLevel (Goal funName env (ForallP pName pSorts sch)) = generateTopLevel (Goal funName (addPredicate pName pSorts env) sch)
 generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
   where
-    generateFix = do
+    generateFix = do    
       recCalls <- recursiveCalls t
       polymorphic <- asks $ _polyRecursion . fst
       let tvs = env ^. boundTypeVars
@@ -271,15 +271,18 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
     generateElse (cond, pThen) = if cond == ftrue
       then return pThen -- @pThen@ is valid under no assumptions: return it
       else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
-            pCond <- generateCondition env cond
-            pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
-                        generateMaybeIf (addAssumption (fnot cond) env) t            
-            return $ Program (PIf pCond pThen pElse) t
+        pCond <- generateCondition env cond        
+        pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $ generateMaybeIf (addAssumption (fnot cond) env) t
+        return $ Program (PIf pCond pThen pElse) t
             
 generateCondition env fml = if isExecutable fml
-                              then return $ fmlToProgram fml 
-                              else snd <$> once (generateE env (ScalarT BoolT $ valBool |=| fml))            
-
+                              then return $ fmlToProgram fml
+                              else snd <$> once (generateE env (ScalarT BoolT $ valBool |=| fml))
+                
+-- | If partial solutions are accepted, try @gen@, and if it fails, just leave a hole of type @t@; otherwise @gen@
+optionalInPartial :: Monad s => RType -> Explorer s RProgram -> Explorer s RProgram
+optionalInPartial t gen = ifM (asks $ _partialSolution . fst) (ifte gen return (return $ hole t)) gen
+  
 -- | Generate a match term of type @t@
 generateMatch env t = do
   d <- asks $ _matchDepth . fst
@@ -296,7 +299,8 @@ generateMatch env t = do
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
 
           let scrutineeSymbols = symbolList pScrutinee
-          let isGoodScrutinee = (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
+          let isGoodScrutinee = not (null ctors) &&                                               -- Datatype is not abstract
+                                (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
                                 (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
                                 (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
           guard isGoodScrutinee
@@ -308,10 +312,10 @@ generateMatch env t = do
               pCases <- mapM (once . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
               return $ Program (PMatch pScrutinee (pCase : pCases)) t
             else do -- First case is valid under a condition
-              pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the asumption
+              pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
               let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
               pCond <- generateCondition env cond
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $               -- Gnereate the else branch
+              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $               -- Generate the else branch
                           generateI (addAssumption (fnot cond) env) t            
               return $ Program (PIf pCond pThen pElse) t
 
@@ -348,7 +352,7 @@ generateCase env scrName pScrutinee t consName = do
       let ScalarT baseT _ = (typeOf pScrutinee)
       (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      pCaseExpr <- local (
+      pCaseExpr <- optionalInPartial t $ local (
                            over (_1 . matchDepth) (-1 +)
                          . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
                         $ generateI caseEnv t
@@ -389,15 +393,14 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
         then return p0 -- @p0@ is valid under no assumptions: return it
         else do -- @p0@ is valid under a nontrivial assumption, but no need to match
               pCond <- generateCondition env cond
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond p0 p) t)) $
-                          generateMaybeMatchIf (addAssumption (fnot cond) env) t
+              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond p0 p) t)) $ generateMaybeMatchIf (addAssumption (fnot cond) env) t                          
               return $ Program (PIf pCond p0 pElse) t
       _ -> if cond == ftrue
         then generateMatchesFor env matchConds p0 t
         else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
               pCond <- generateCondition env cond
               pThen <- once $ generateMatchesFor (addAssumption cond env) matchConds p0 t
-              pElse <- local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
+              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
                           generateMaybeMatchIf (addAssumption (fnot cond) env) t
               return $ Program (PIf pCond pThen pElse) t
 
@@ -513,11 +516,11 @@ enumerateAt env typ 0 = do
     pickSymbol (name, sch) = do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
+      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())      
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sh -> solveLocally p $ Subtype env (refineBot $ shape t) (refineTop sh) False
+        Just sch -> solveLocally p $ Subtype env (refineBot $ shape t) (refineTop sch) False
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -567,13 +570,6 @@ toSymbol p env = do
 
 enqueueGoal env typ = do
   g <- freshId "f"
-  
-  -- polymorphic <- asks $ _polyRecursion . fst
-  -- let tvs = env ^. boundTypeVars
-  -- if not (null tvs)
-  -- let env' = if polymorphic && not (null tvs)
-                -- then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
-                -- else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize  
   auxGoals %= ((Goal g env $ Monotype typ) :)
   return $ Program (PSymbol g) typ
 
@@ -749,7 +745,9 @@ processWFPredicate c@(WellFormedPredicate env sorts p)
         then return ()
         else let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
              in if any (isFreeVariable tass) typeVars
-                then addConstraint c -- Still has type variables: cannot determine shape
+                then do
+                  writeLog 1 $ text "WARNING: free vars in predicate" <+> pretty c
+                  addConstraint c -- Still has type variables: cannot determine shape
                 else do
                   u <- freshId "u"
                   addPredAssignment p (Unknown Map.empty u)
@@ -781,7 +779,8 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
             let lhss = embedding env tass pass `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             addHornClause $ conjunction lhss |=>| r'
           else -- One of the sides contains free predicates: nothing can be done yet            
-            addConstraint c
+            -- mzero
+            addHornClause $ ftrue |=>| ffalse
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
       tass <- use typeAssignment
@@ -904,31 +903,6 @@ matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args p
       -- pass' <- use predAssignment
       -- writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')        
 matchConsType _ _ = mzero
-
-fmlToProgram :: Formula -> RProgram
-fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
-fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
-fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
-fmlToProgram fml@(Unary op e) = let 
-    s = sortOf fml 
-    p = fmlToProgram e
-    fun = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p) opRes)
-  in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  where    
-    opRes 
-      | op == Not = bool $ valBool |=| fnot (intVar "x")
-      | otherwise = int $ valInt |=| Unary op (intVar "x")    
-fmlToProgram fml@(Binary op e1 e2) = let 
-    s = sortOf fml 
-    p1 = fmlToProgram e1
-    p2 = fmlToProgram e2
-    fun1 = Program (PSymbol (show $ parens (pretty op))) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
-    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
-  in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  where
-    opRes 
-      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
-      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
       
 instantiateConsAxioms :: Environment -> Formula -> Set Formula      
 instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
