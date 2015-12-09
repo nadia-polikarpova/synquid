@@ -39,7 +39,6 @@ module Synquid.Pretty (
   vMapDoc,
   -- * Other
   programDoc,
-  candidateDoc,
   -- * Counting
   typeNodeCount,
   programNodeCount
@@ -48,7 +47,6 @@ module Synquid.Pretty (
 import Synquid.Logic
 import Synquid.Program
 import Synquid.Tokens
-import Synquid.SMTSolver
 import Synquid.Util
 
 import Text.PrettyPrint.ANSI.Leijen hiding ((<+>), (<$>), hsep, vsep)
@@ -311,8 +309,8 @@ instance Pretty Candidate where
 instance Show Candidate where
   show = show . pretty
 
-candidateDoc :: RProgram -> Candidate -> Doc
-candidateDoc prog c@(Candidate sol _ _ label) = pretty c -- text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
+-- candidateDoc :: RProgram -> Candidate -> Doc
+-- candidateDoc prog c@(Candidate sol _ _ label) = pretty c -- text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
 
 instance Pretty Goal where
   pretty (Goal name env spec) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec

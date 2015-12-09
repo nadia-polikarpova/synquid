@@ -6,12 +6,13 @@ module Synquid.Synthesizer (
 
 import Synquid.Util
 import Synquid.Logic
-import Synquid.Solver
-import Synquid.SMTSolver
+import Synquid.SolverMonad
+import Synquid.HornSolver
 import Synquid.Z3
 import Synquid.Program
 import Synquid.Pretty
 import Synquid.Resolver
+import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 
 import Data.Maybe
@@ -25,50 +26,53 @@ import Control.Monad.State
 import Control.Lens
 import Control.Applicative ((<$>))
 
-type Z3Memo = StateT Memo Z3State
+-- type Z3Memo = StateT Memo Z3State  
+
+type HornSolver = FixPointSolver Z3State
 
 -- | 'synthesize' @templGenParam consGenParams solverParams env typ templ cq tq@ : synthesize a program that has a type @typ@
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams -> SolverParams -> Goal -> [Formula] -> [Formula] -> IO (Maybe RProgram)
+synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Maybe RProgram)
 synthesize explorerParams solverParams goal cquals tquals = do
-  ps <- evalZ3State $ evalStateT programs Map.empty
+  ps <- evalZ3State $ evalFixPointSolver programs solverParams
   case ps of
     [] -> return Nothing
     p : _ -> return $ Just p
 
   where
     -- | Stream of programs that satisfy the specification
-    programs :: Z3Memo [RProgram]
+    programs :: HornSolver [RProgram]
     programs = let
-        -- Initialize missing explorer parameters
-        explorerParams' =  set condQualsGen condQuals .
-                           set matchQualsGen matchQuals .
-                           set typeQualsGen typeQuals
-                           $ explorerParams
-      in explore explorerParams' (ConstraintSolver init refine prune check clearMemo getMemo putMemo) goal
+        typingParams = TypingParams { 
+                        _condQualsGen = condQuals,
+                        _matchQualsGen = matchQuals,
+                        _typeQualsGen = typeQuals,
+                        _tcSolverLogLevel = _explorerLogLevel explorerParams
+                      }
+      in explore explorerParams typingParams goal
 
-    init :: Z3Memo Candidate
-    init = lift $ initialCandidate
+    -- init :: Z3Memo Candidate
+    -- init = lift $ initialCandidate
 
-    refine :: [Formula] -> QMap -> ExtractAssumptions -> RProgram -> [Candidate] -> Z3Memo [Candidate]
-    refine fmls qmap ea p cands = lift $ refineCandidates (solverParams { candDoc = candidateDoc p }) qmap ea fmls cands
+    -- refine :: [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> Z3Memo [Candidate]
+    -- refine fmls qmap ea cands = lift $ refineCandidates solverParams qmap ea fmls cands
 
-    prune :: QSpace -> Z3Memo QSpace
-    prune quals = lift $ pruneQualifiers solverParams quals
+    -- prune :: QSpace -> Z3Memo QSpace
+    -- prune quals = lift $ pruneQualifiers solverParams quals
 
-    check :: [Formula] -> [Candidate] -> Z3Memo [Candidate]
-    check fml c = lift $ checkConsistency fml c
+    -- check :: [Formula] -> [Candidate] -> Z3Memo [Candidate]
+    -- check fml c = lift $ checkConsistency fml c
 
-    clearMemo :: Z3Memo ()
-    clearMemo = put Map.empty
+    -- clearMemo :: Z3Memo ()
+    -- clearMemo = put Map.empty
     
-    getMemo :: Z3Memo Memo
-    getMemo = get
+    -- getMemo :: Z3Memo Memo
+    -- getMemo = get
     
-    putMemo :: Memo -> Z3Memo ()
-    putMemo = put
+    -- putMemo :: Memo -> Z3Memo ()
+    -- putMemo = put
 
     -- | Qualifier generator for conditionals
     condQuals :: QualsGen

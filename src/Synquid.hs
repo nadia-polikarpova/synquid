@@ -5,9 +5,11 @@ module Main where
 import Synquid.Logic
 import Synquid.Program
 import Synquid.Pretty
-import qualified Synquid.Parser as Parser (parseProgram)
-import qualified Synquid.Resolver as Resolver (resolveProgramAst)
-import Synquid.Solver
+import Synquid.Parser (parseProgram)
+import Synquid.Resolver (resolveProgramAst)
+import Synquid.SolverMonad
+import Synquid.HornSolver
+import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.Synthesizer
 
@@ -48,10 +50,10 @@ main = do
     _partialSolution = partial,
     _incrementalChecking = incremental,
     _consistencyChecking = consistency,
-    _explorerLogLevel = log_,
-    _useMemoization = useMemoization
+    _useMemoization = useMemoization,
+    _explorerLogLevel = log_
     }
-  let solverParams = defaultSolverParams {
+  let solverParams = defaultHornSolverParams {
     optimalValuationsStrategy = if bfs then BFSValuations else MarcoValuations,
     solverLogLevel = log_
     }
@@ -122,24 +124,20 @@ defaultExplorerParams = ExplorerParams {
   _partialSolution = False,
   _incrementalChecking = True,
   _consistencyChecking = True,
-  _condQualsGen = undefined,
-  _matchQualsGen = undefined,
-  _typeQualsGen = undefined,
+  _useMemoization = False,
   _context = id,
-  _explorerLogLevel = 1,
-  _useMemoization = False
+  _explorerLogLevel = 0
 }
 
 -- | Parameters for constraint solving
-defaultSolverParams = SolverParams {
+defaultHornSolverParams = HornSolverParams {
   pruneQuals = True,
   optimalValuationsStrategy = MarcoValuations,
   semanticPrune = True,
   agressivePrune = True,
   candidatePickStrategy = InitializedWeakCandidate,
   constraintPickStrategy = SmallSpaceConstraint,
-  candDoc = const empty,
-  solverLogLevel = 1
+  solverLogLevel = 0
 }
 
 -- | Parameters of the synthesis
@@ -154,13 +152,13 @@ defaultSynquidParams = SynquidParams {
 }
 
 -- | Parse and resolve file, then synthesize the specified goals
-runOnFile :: SynquidParams -> ExplorerParams -> SolverParams -> String -> IO ()
+runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> String -> IO ()
 runOnFile synquidParams explorerParams solverParams file = do
-  parseResult <- parseFromFile Parser.parseProgram file
+  parseResult <- parseFromFile parseProgram file
   case parseResult of
     Left parseErr -> (putStr $ show parseErr) >> exitFailure
     -- Right ast -> print $ vsep $ map pretty ast
-    Right ast -> case Resolver.resolveProgramAst ast of
+    Right ast -> case resolveProgramAst ast of
       Left resolutionError -> (putStr resolutionError) >> exitFailure
       Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
   where
