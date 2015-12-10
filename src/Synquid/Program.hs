@@ -498,8 +498,8 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
 allMeasurePostconditions _ _ = []        
 
 -- | Assumptions encoded in an environment    
-embedding :: Environment -> TypeSubstitution -> Substitution -> Set Formula
-embedding env subst pSubst = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
+embedding :: Environment -> TypeSubstitution -> Substitution -> Bool -> Set Formula
+embedding env subst pSubst includePost = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
   where
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
@@ -507,9 +507,9 @@ embedding env subst pSubst = (env ^. assumptions) `Set.union` (Map.foldlWithKey 
       else Set.empty
     embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
-      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) ((substitutePredicate pSubst fml) : allMeasurePostconditions baseT env)
+      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants    
-        
+            
 {- Misc -}
           
 -- | Typing constraints
