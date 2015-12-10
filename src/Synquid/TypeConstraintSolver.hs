@@ -43,6 +43,7 @@ type QualsGen = (Environment, [Formula]) -> QSpace
 -- | Empty state space generator
 emptyGen = const emptyQSpace
 
+-- | Parameters of type constraint solving
 data TypingParams = TypingParams {
   _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
   _matchQualsGen :: QualsGen,             -- ^ Qualifier generator for match scrutinees
@@ -52,28 +53,30 @@ data TypingParams = TypingParams {
 
 makeLenses ''TypingParams
 
+-- | State of type constraint solving
 data TypingState = TypingState {
   -- Persistent state:
-  _typeAssignment :: TypeSubstitution,
-  _predAssignment :: Substitution,
-  _qualifierMap :: QMap,
-  _candidates :: [Candidate],
-  _initEnv :: Environment,
+  _typeAssignment :: TypeSubstitution,          -- ^ Current assignment to free type variables
+  _predAssignment :: Substitution,              -- ^ Current assignment to free predicate variables  _qualifierMap :: QMap,
+  _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
+  _initEnv :: Environment,                      -- ^ Initial environment
   _idCount :: Map String Int,                   -- ^ Number of unique identifiers issued so far
   -- Temporary state:
-  _simpleConstraints :: Set Constraint,
-  _shapelessConstraints :: Set Constraint,
-  _hornClauses :: [Formula],
-  _consistencyChecks :: [Formula]
+  _simpleConstraints :: Set Constraint,         -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
+  _shapelessConstraints :: Set Constraint,      -- ^ Type constraints that do not have effect yet because their shape is unknown
+  _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints
+  _consistencyChecks :: [Formula]               -- ^ Formulas generated from type consistency constraints
 }
 
 makeLenses ''TypingState
 
+-- | Computations that solve type constraints, parametrized by the the horn solver @s@
 type TCSolver s = StateT TypingState (ReaderT TypingParams (MaybeT s))
 
 runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Maybe (a, TypingState))
 runTCSolver params st go = runMaybeT $ runReaderT (runStateT go st) params  
 
+-- | Initial typing state in the initial environment @env@
 initTypingState :: MonadHorn s => Environment -> s TypingState
 initTypingState env = do
   initCand <- initHornSolver
@@ -143,6 +146,7 @@ solveHornClauses = do
   when (null cands') $ writeLog 1 (text "FAIL: horn clauses have no solutions") >> fail ""
   candidates .= cands'
 
+-- | Filter out liquid assignments that are too strong for current consistency checks  
 checkTypeConsistency :: MonadHorn s => TCSolver s ()  
 checkTypeConsistency = do
   clauses <- use consistencyChecks
@@ -151,6 +155,7 @@ checkTypeConsistency = do
   when (null cands') $ writeLog 1 (text "FAIL: inconsistent types") >> fail ""
   candidates .= cands'
 
+-- | Simplify @c@ into a set of simple and shapeless constraints, possibly extended the current type assignment or predicate assignment
 simplifyConstraint :: MonadHorn s => Constraint -> TCSolver s ()
 simplifyConstraint c = do
   tass <- use typeAssignment
@@ -343,6 +348,7 @@ addQuals name quals = do
   quals' <- lift . lift . lift $ pruneQualifiers quals
   qualifierMap %= Map.insert name quals'  
   
+-- | 'instantiateConsAxioms' @env fml@ : If @fml@ contains constructor applications, return the set of instantiations of constructor axioms for those applications in the environment @env@ 
 instantiateConsAxioms :: Environment -> Formula -> Set Formula      
 instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
   case fml of
@@ -359,14 +365,14 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
       in conjunctsOf (substitute subst fml)
     constructorAxioms args vars ctor (FunctionT x tArg tRes) = constructorAxioms args (vars ++ [x]) ctor tRes  
     
+-- | 'matchConsType' @actual@ @formal@ : unify constructor return type @formal@ with @actual@
 matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args pArgs) _) | d == d' 
   = do
       zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred p _) fml -> addPredAssignment p fml) pVars pArgs
-      -- pass' <- use predAssignment
-      -- writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass')        
 matchConsType _ _ = mzero    
 
+-- | If additional bindings of @env'@ compared to @env@ make it inconsistent under some condition, return that condition
 isEnvironmentInconsistent env env' t = do
   cUnknown <- Unknown Map.empty <$> freshId "u"
   [] <- solveTypeConstraints [WellFormedCond env cUnknown]
@@ -382,7 +388,8 @@ isEnvironmentInconsistent env env' t = do
   if null cands'
     then return Nothing
     else return $ Just $ (conjunction . flip valuation cUnknown . solution . head) cands'
-    
+
+-- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    
 clearTempState = do
   simpleConstraints .= Set.empty
@@ -390,7 +397,6 @@ clearTempState = do
   hornClauses .= []
   consistencyChecks .= []    
   
--- writeLog :: (MonadHorn s, Show m) => Int -> m -> TCSolver s ()
 writeLog level msg = do
   maxLevel <- asks _tcSolverLogLevel
   if level <= maxLevel then traceShow msg $ return () else return ()
