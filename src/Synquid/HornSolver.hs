@@ -91,7 +91,11 @@ refineCandidates constraints quals extractAssumptions cands = do
 
 -- | 'check' @fmls cands@ : return those candidates from @cands@ under which all @fmls@ are satisfiable
 check :: MonadSMT s => [Formula] -> [Candidate] -> FixPointSolver s [Candidate]
-check fmls cands = filterM checkCand cands
+check fmls cands = do
+    writeLog 1 (vsep [nest 2 $ text "Consistency" $+$ vsep (map pretty fmls), nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
+    cands' <- filterM checkCand cands
+    writeLog 1 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
+    return cands'
   where
     checkCand (Candidate sol valids invalids label) = let fmls' = map (applySolution sol) fmls 
       in not <$> anyM isValidFml (map fnot fmls')

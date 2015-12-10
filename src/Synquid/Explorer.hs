@@ -569,7 +569,9 @@ solveConstraints p = do
   typingConstraints .= tcs'
   
 solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
-solveLocally c = void $ runInSolver $ solveTypeConstraints [c]
+solveLocally c = do
+  writeLog 1 (text "Solving Locally" $+$ pretty c)
+  void $ runInSolver $ solveTypeConstraints [c]
 
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
