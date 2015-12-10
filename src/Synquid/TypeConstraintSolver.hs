@@ -6,11 +6,13 @@ module Synquid.TypeConstraintSolver (
   emptyGen,
   TypingParams (..),
   TypingState,
+  typingConstraints,
   typeAssignment,
   candidates,
   TCSolver,
   runTCSolver,
   initTypingState,
+  addTypingConstraint,
   solveTypeConstraints,
   matchConsType,
   isEnvironmentInconsistent,
@@ -24,6 +26,7 @@ import Synquid.SolverMonad
 import Synquid.Util
 
 import Data.Maybe
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -56,6 +59,7 @@ makeLenses ''TypingParams
 -- | State of type constraint solving
 data TypingState = TypingState {
   -- Persistent state:
+  _typingConstraints :: [Constraint],           -- ^ Typing constraints yet to be converted to horn clauses
   _typeAssignment :: TypeSubstitution,          -- ^ Current assignment to free type variables
   _predAssignment :: Substitution,              -- ^ Current assignment to free predicate variables  _qualifierMap :: QMap,
   _qualifierMap :: QMap,                        -- ^ Current state space for predicate unknowns
@@ -63,8 +67,7 @@ data TypingState = TypingState {
   _initEnv :: Environment,                      -- ^ Initial environment
   _idCount :: Map String Int,                   -- ^ Number of unique identifiers issued so far
   -- Temporary state:
-  _simpleConstraints :: Set Constraint,         -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
-  _shapelessConstraints :: Set Constraint,      -- ^ Type constraints that do not have effect yet because their shape is unknown
+  _simpleConstraints :: [Constraint],         -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints
   _consistencyChecks :: [Formula]               -- ^ Formulas generated from type consistency constraints
 }
@@ -82,23 +85,25 @@ initTypingState :: MonadHorn s => Environment -> s TypingState
 initTypingState env = do
   initCand <- initHornSolver
   return $ TypingState {
+    _typingConstraints = [],
     _typeAssignment = Map.empty,
     _predAssignment = Map.empty,
     _qualifierMap = Map.empty,
     _candidates = [initCand],
     _initEnv = env,
     _idCount = Map.empty,
-    _simpleConstraints = Set.empty,
-    _shapelessConstraints = Set.empty,
+    _simpleConstraints = [],
     _hornClauses = [],
     _consistencyChecks = []    
-  }    
+  }
 
--- | Solve @typeConstraints@: either strengthen the current candidates and return shapeless type constraints or fail
-solveTypeConstraints :: MonadHorn s => [Constraint] -> TCSolver s [Constraint]
-solveTypeConstraints typeConstraints = do
-  writeLog 1 (text "Typing Constraints" $+$ (vsep $ map pretty typeConstraints))
-  simplifyAllConstraints typeConstraints
+-- | Impose typing constraint @c@ on the programs
+addTypingConstraint c = over typingConstraints (c :)  
+
+-- | Solve @typingConstraints@: either strengthen the current candidates and return shapeless type constraints or fail
+solveTypeConstraints :: MonadHorn s => TCSolver s ()
+solveTypeConstraints = do
+  simplifyAllConstraints
         
   tass <- use typeAssignment
   writeLog 1 (text "Type assignment" $+$ vMapDoc text pretty tass)        
@@ -107,32 +112,29 @@ solveTypeConstraints typeConstraints = do
   
   processAllConstraints
   solveHornClauses
-  checkTypeConsistency
-  
-  shapeless <- uses shapelessConstraints Set.toList
+  checkTypeConsistency  
   clearTempState
-  return shapeless
       
 {- Implementation -}      
       
 -- | Decompose and unify typing constraints; 
 -- return shapeless type constraints: constraints involving only free type variables, which impose no restrictions yet, but might in the future
-simplifyAllConstraints :: MonadHorn s => [Constraint] -> TCSolver s () 
-simplifyAllConstraints tcs = do
+simplifyAllConstraints :: MonadHorn s => TCSolver s () 
+simplifyAllConstraints = do
+  tcs <- use typingConstraints
+  writeLog 1 (text "Typing Constraints" $+$ (vsep $ map pretty tcs))
+  typingConstraints .= []
   tass <- use typeAssignment
   mapM_ simplifyConstraint tcs  
   
   -- If type assignment has changed, we might be able to process more shapeless constraints:
   tass' <- use typeAssignment
-  when (Map.size tass' > Map.size tass) $ do
-    shapeless <- uses shapelessConstraints Set.toList
-    shapelessConstraints .= Set.empty
-    simplifyAllConstraints shapeless
+  when (Map.size tass' > Map.size tass) simplifyAllConstraints
     
 -- | Convert simple typing constraints into horn clauses and qualifier maps
 processAllConstraints :: MonadHorn s => TCSolver s ()
 processAllConstraints = do
-  tcs <- use simpleConstraints
+  tcs <- uses simpleConstraints nub
   mapM_ processConstraint tcs
 
 -- | Refine the current liquid assignments using the horn clauses
@@ -182,9 +184,9 @@ simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT a) _)) | a `Map
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) | not (isBound a env) && not (isBound b env)
   = if a == b
       then writeLog 1 "simplifyConstraint: equal type variables on both sides" >> fail ""
-      else shapelessConstraints %= Set.insert c
+      else typingConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) 
-  = shapelessConstraints %= Set.insert c
+  = typingConstraints %= (c :)
   
 -- Predicate well-formedness: shapeless or simple depending on type variables  
 simplifyConstraint' tass _ c@(WellFormedPredicate env sorts p) =
@@ -192,7 +194,7 @@ simplifyConstraint' tass _ c@(WellFormedPredicate env sorts p) =
   in if any (isFreeVariable tass) typeVars
     then do
       writeLog 1 $ text "WARNING: free vars in predicate" <+> pretty c
-      shapelessConstraints %= Set.insert c -- Still has type variables: cannot determine shape
+      typingConstraints %= (c :) -- Still has type variables: cannot determine shape
     else  do                 
       u <- freshId "u"
       addPredAssignment p (Unknown Map.empty u)
@@ -237,10 +239,10 @@ simplifyConstraint' _ _ (WellFormed env (FunctionT x tArg tRes))
       simplifyConstraint (WellFormed (addVariable x tArg env) tRes)
 
 -- Simple constraint: return
-simplifyConstraint' _ _ c@(Subtype _ (ScalarT baseT _) (ScalarT baseT' _) _) | baseT == baseT' = simpleConstraints %= Set.insert c
-simplifyConstraint' _ _ c@(WellFormed _ (ScalarT baseT _)) = simpleConstraints %= Set.insert c
-simplifyConstraint' _ _ c@(WellFormedCond _ _) = simpleConstraints %= Set.insert c
-simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= Set.insert c
+simplifyConstraint' _ _ c@(Subtype _ (ScalarT baseT _) (ScalarT baseT' _) _) | baseT == baseT' = simpleConstraints %= (c :)
+simplifyConstraint' _ _ c@(WellFormed _ (ScalarT baseT _)) = simpleConstraints %= (c :)
+simplifyConstraint' _ _ c@(WellFormedCond _ _) = simpleConstraints %= (c :)
+simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= (c :)
 -- Otherwise (shape mismatch): fail
 simplifyConstraint' _ _ _ = writeLog 1 (text "FAIL: shape mismatch") >> fail ""
 
@@ -376,7 +378,8 @@ matchConsType _ _ = mzero
 -- | If additional bindings of @env'@ compared to @env@ make it inconsistent under some condition, return that condition
 isEnvironmentInconsistent env env' t = do
   cUnknown <- Unknown Map.empty <$> freshId "u"
-  [] <- solveTypeConstraints [WellFormedCond env cUnknown]
+  modify (addTypingConstraint $ WellFormedCond env cUnknown)
+  solveTypeConstraints
   
   tass <- use typeAssignment
   pass <- use predAssignment
@@ -393,8 +396,7 @@ isEnvironmentInconsistent env env' t = do
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    
 clearTempState = do
-  simpleConstraints .= Set.empty
-  shapelessConstraints .= Set.empty
+  simpleConstraints .= []
   hornClauses .= []
   consistencyChecks .= []    
   

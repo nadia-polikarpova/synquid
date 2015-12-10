@@ -203,10 +203,10 @@ instance Pretty RBaseType where
 instance Show RBaseType where
   show = show . pretty
 
-caseDoc :: (TypeSkeleton r -> Doc) -> Case r -> Doc
+caseDoc :: (t -> Doc) -> Case t -> Doc
 caseDoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc tdoc (expr cas)
 
-programDoc :: (TypeSkeleton r -> Doc) -> Program r -> Doc
+programDoc :: (t -> Doc) -> Program t -> Doc
 programDoc tdoc (Program p typ) = let
     pDoc = programDoc tdoc
     withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
@@ -228,12 +228,14 @@ programDoc tdoc (Program p typ) = let
     PIf c t e -> nest 2 $ withType (text "if" <+> pDoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
     PFix fs e -> pDoc e -- nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
-    PLet defs p -> pDoc p $+$ option (not $ null defs) (indent 2 (nest 2 (text "where" $+$ vsep (map (\(name, p) -> nest 2 (text name <+> text "=" <+> pDoc p)) defs))))
+    PLet x e e' -> nest 2 (text "let" <+> text x <+> text "=" <+> pDoc e) $+$ nest 2 (text "in" <+> pDoc e')
+    -- pDoc p $+$ option (not $ null defs) (indent 2 (nest 2 (text "where" $+$ vsep (map (\(name, p) -> nest 2 (text name <+> text "=" <+> pDoc p)) defs))))
+    PHole -> text "??"
 
-instance (Pretty (TypeSkeleton r)) => Pretty (Program r) where
+instance (Pretty t) => Pretty (Program t) where
   pretty = programDoc pretty
 
-instance (Pretty (TypeSkeleton r)) => Show (Program r) where
+instance (Pretty t) => Show (Program t) where
   show = show . pretty
 
 prettySType :: SType -> Doc
@@ -313,7 +315,7 @@ instance Show Candidate where
 -- candidateDoc prog c@(Candidate sol _ _ label) = pretty c -- text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
 
 instance Pretty Goal where
-  pretty (Goal name env spec) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec
+  pretty (Goal name env spec _) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec
 
 instance Show Goal where
   show = show. pretty
@@ -370,7 +372,5 @@ programNodeCount (Program p _) = case p of
   PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
   PFix _ e -> 1 + programNodeCount e
-  PLet defs p ->
-    defsCount + programNodeCount p
-      where
-        defsCount = sum $ map (\(i, d) -> programNodeCount d + 1) defs
+  PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
+  PHole -> 0

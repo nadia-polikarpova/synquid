@@ -257,39 +257,42 @@ vartAll n = vart n ftrue
 {- Program terms -}    
     
 -- | One case inside a pattern match expression
-data Case r = Case {
+data Case t = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
-  expr :: Program r       -- ^ Result of the match in this case
+  expr :: Program t       -- ^ Result of the match in this case
 }  deriving (Eq, Ord)
     
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
-data BareProgram r =
+data BareProgram t =
   PSymbol Id |                                -- ^ Symbol (variable or constant)
-  PApp (Program r) (Program r) |              -- ^ Function application
-  PFun Id (Program r) |                       -- ^ Lambda abstraction
-  PIf (Program r) (Program r) (Program r) |   -- ^ Conditional
-  PMatch (Program r) [Case r] |               -- ^ Pattern match on datatypes
-  PFix [Id] (Program r) |                     -- ^ Fixpoint
-  PLet [(Id, Program r)] (Program r)          -- ^ Let binding
+  PApp (Program t) (Program t) |              -- ^ Function application
+  PFun Id (Program t) |                       -- ^ Lambda abstraction
+  PIf (Program t) (Program t) (Program t) |   -- ^ Conditional
+  PMatch (Program t) [Case t] |               -- ^ Pattern match on datatypes
+  PFix [Id] (Program t) |                     -- ^ Fixpoint
+  PLet Id (Program t) (Program t) |           -- ^ Let binding
+  PHole
   deriving (Eq, Ord)
   
 -- | Programs annotated with types  
-data Program r = Program {
-  content :: BareProgram r,
-  typeOf :: TypeSkeleton r
+data Program t = Program {
+  content :: BareProgram t,
+  typeOf :: t
 }
 
-instance Eq (Program r) where
+instance Eq (Program t) where
   (==) (Program l _) (Program r _) = l == r
   
-instance Ord (Program r) where
+instance Ord (Program t) where
   (<=) (Program l _) (Program r _) = l <= r  
+  
+-- | Untyped programs  
+type UProgram = Program ()  
+-- | Refinement-typed programs
+type RProgram = Program (TypeSkeleton Formula)
 
--- | Fully defined programs 
-type RProgram = Program Formula
-
-hole t = Program (PSymbol "??") t
+untyped c = Program c ()
 
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
@@ -524,7 +527,8 @@ data Constraint = Subtype Environment RType RType Bool
 data Goal = Goal {
   gName :: Id, 
   gEnvironment :: Environment, 
-  gSpec :: RSchema
+  gSpec :: RSchema,
+  gImpl :: UProgram
 } deriving (Eq, Ord)
   
 type ProgramAst = [Declaration]
