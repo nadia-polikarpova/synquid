@@ -45,7 +45,7 @@ resolveProgramAst declarations =
         spec = allSymbols env Map.! name
         toRemove = drop (fromJust $ elemIndex name allNames) allNames -- All goals after and including @name@
         env' = foldr removeVariable env toRemove
-      in Goal name env' spec
+      in Goal name env' spec (untyped PHole)
       
 resolveRefinement :: Environment -> Sort -> Formula -> Maybe Formula
 resolveRefinement env valueSort fml = case runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] [])) of

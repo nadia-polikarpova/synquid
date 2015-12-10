@@ -57,10 +57,9 @@ makeLenses ''ExplorerParams
 
 -- | State of program exploration
 data ExplorerState = ExplorerState {
-  _typingConstraints :: [Constraint],           -- ^ Typing constraints yet to be converted to horn clauses
-  _typingState :: TypingState,
-  _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
-  _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
+  _typingState :: TypingState,    -- ^ Type-checking state
+  _auxGoals :: [Goal],            -- ^ Subterms to be synthesized independently
+  _symbolUseCount :: Map Id Int   -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
 makeLenses ''ExplorerState
@@ -89,7 +88,7 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (
 explore :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s [RProgram]
 explore eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
-    evalStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState [] initTS [] Map.empty)) (eParams, tParams)) Map.empty
+    evalStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) Map.empty
   where
     go = do
       pMain <- generateTopLevel goal
@@ -97,8 +96,8 @@ explore eParams tParams goal = do
       tass <- use (typingState . typeAssignment)
       sol <- uses (typingState . candidates) (solution . head)
       let resMain = (programApplySolution sol . programSubstituteTypes tass) pMain 
-      let resAuxs = map (over _2 (programApplySolution sol . programSubstituteTypes tass)) pAuxs
-      return (Program (PLet resAuxs resMain) (typeOf resMain))
+      let resAuxs = map (over _2 (programApplySolution sol . programSubstituteTypes tass)) pAuxs      
+      return $ foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) resMain resAuxs
 
     generateAuxGoals = do
       goals <- use auxGoals
@@ -116,9 +115,9 @@ explore eParams tParams goal = do
 
 -- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@
 generateTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
-generateTopLevel (Goal funName env (ForallT a sch)) = generateTopLevel (Goal funName (addTypeVar a env) sch)
-generateTopLevel (Goal funName env (ForallP pName pSorts sch)) = generateTopLevel (Goal funName (addPredicate pName pSorts env) sch)
-generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
+generateTopLevel (Goal funName env (ForallT a sch) _) = generateTopLevel (Goal funName (addTypeVar a env) sch (untyped PHole))
+generateTopLevel (Goal funName env (ForallP pName pSorts sch) _) = generateTopLevel (Goal funName (addPredicate pName pSorts env) sch (untyped PHole))
+generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) _) = generateFix
   where
     generateFix = do    
       recCalls <- recursiveCalls t
@@ -183,7 +182,7 @@ generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _))) = generateFix
     terminationRefinement _ _ = Nothing
 
 
-generateTopLevel (Goal _ env (Monotype t)) = generateI env t
+generateTopLevel (Goal _ env (Monotype t) _) = generateI env t
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
@@ -225,7 +224,7 @@ generateCondition env fml = if isExecutable fml
                 
 -- | If partial solutions are accepted, try @gen@, and if it fails, just leave a hole of type @t@; otherwise @gen@
 optionalInPartial :: MonadHorn s => RType -> Explorer s RProgram -> Explorer s RProgram
-optionalInPartial t gen = ifM (asks $ _partialSolution . fst) (ifte gen return (return $ hole t)) gen
+optionalInPartial t gen = ifM (asks $ _partialSolution . fst) (ifte gen return (return $ Program PHole t)) gen
   
 -- | Generate a match term of type @t@
 generateMatch env t = do
@@ -489,7 +488,7 @@ enumerateAt env typ d = do
 
     generateApp genFun genArg = do
       x <- freshId "x"
-      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (hole $ vartAll dontCare)) typ))
+      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (Program PHole $ vartAll dontCare)) typ))
                             $ genFun env (FunctionT x (vartAll dontCare) typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
@@ -515,13 +514,13 @@ toSymbol p env = do
 
 enqueueGoal env typ = do
   g <- freshId "f"
-  auxGoals %= ((Goal g env $ Monotype typ) :)
+  auxGoals %= ((Goal g env (Monotype typ) (untyped PHole)) :)
   return $ Program (PSymbol g) typ
 
 {- Utility -}
 
 -- | Impose typing constraint @c@ on the programs
-addConstraint c = typingConstraints %= (c :)
+addConstraint c = typingState %= addTypingConstraint c
 
 runInSolver :: MonadHorn s => TCSolver s a -> Explorer s a
 runInSolver f = do
@@ -539,16 +538,16 @@ runInSolver f = do
 solveConstraints :: MonadHorn s => RProgram -> Explorer s ()
 solveConstraints p = do
   ctx <- asks $ _context . fst
-  writeLog 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p))
-  
-  tcs <- use typingConstraints
-  tcs' <- runInSolver $ solveTypeConstraints tcs
-  typingConstraints .= tcs'
+  writeLog 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p))  
+  runInSolver solveTypeConstraints
   
 solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
 solveLocally c = do
   writeLog 1 (text "Solving Locally" $+$ pretty c)
-  void $ runInSolver $ solveTypeConstraints [c]
+  oldTC <- use $ typingState . typingConstraints
+  addConstraint c
+  runInSolver $ solveTypeConstraints
+  typingState . typingConstraints .= oldTC
 
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
