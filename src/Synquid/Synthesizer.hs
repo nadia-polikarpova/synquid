@@ -52,28 +52,7 @@ synthesize explorerParams solverParams goal cquals tquals = do
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
       in explore explorerParams typingParams goal
-
-    -- init :: Z3Memo Candidate
-    -- init = lift $ initialCandidate
-
-    -- refine :: [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> Z3Memo [Candidate]
-    -- refine fmls qmap ea cands = lift $ refineCandidates solverParams qmap ea fmls cands
-
-    -- prune :: QSpace -> Z3Memo QSpace
-    -- prune quals = lift $ pruneQualifiers solverParams quals
-
-    -- check :: [Formula] -> [Candidate] -> Z3Memo [Candidate]
-    -- check fml c = lift $ checkConsistency fml c
-
-    -- clearMemo :: Z3Memo ()
-    -- clearMemo = put Map.empty
-    
-    -- getMemo :: Z3Memo Memo
-    -- getMemo = get
-    
-    -- putMemo :: Memo -> Z3Memo ()
-    -- putMemo = put
-
+      
     -- | Qualifier generator for conditionals
     condQuals :: QualsGen
     condQuals = toSpace . foldl (|++|) (const []) 

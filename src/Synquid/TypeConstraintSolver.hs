@@ -58,6 +58,7 @@ data TypingState = TypingState {
   -- Persistent state:
   _typeAssignment :: TypeSubstitution,          -- ^ Current assignment to free type variables
   _predAssignment :: Substitution,              -- ^ Current assignment to free predicate variables  _qualifierMap :: QMap,
+  _qualifierMap :: QMap,                        -- ^ Current state space for predicate unknowns
   _candidates :: [Candidate],                   -- ^ Current set of candidate liquid assignments to unknowns
   _initEnv :: Environment,                      -- ^ Initial environment
   _idCount :: Map String Int,                   -- ^ Number of unique identifiers issued so far
@@ -396,6 +397,16 @@ clearTempState = do
   shapelessConstraints .= Set.empty
   hornClauses .= []
   consistencyChecks .= []    
+  
+instance Eq TypingState where
+  (==) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) == restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
+                  _typeAssignment st1 == _typeAssignment st2 &&
+                  _candidates st1 == _candidates st2
+
+instance Ord TypingState where
+  (<=) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) <= restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
+                _typeAssignment st1 <= _typeAssignment st2 &&
+                _candidates st1 <= _candidates st2  
   
 writeLog level msg = do
   maxLevel <- asks _tcSolverLogLevel
