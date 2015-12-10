@@ -51,7 +51,7 @@ data ExplorerParams = ExplorerParams {
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
   _useMemoization :: Bool,                -- ^ Should we memoize enumerated terms (and corresponding environments)
   _explorerLogLevel :: Int                -- ^ How verbose logging is
-}
+} 
 
 makeLenses ''ExplorerParams
 
@@ -61,58 +61,35 @@ data ExplorerState = ExplorerState {
   _typingState :: TypingState,
   _auxGoals :: [Goal],                          -- ^ Subterms to be synthesized independently
   _symbolUseCount :: Map Id Int                 -- ^ Number of times each symbol has been used in the program so far
-}
+} deriving (Eq, Ord)
 
 makeLenses ''ExplorerState
 
--- instance Eq ExplorerState where
-  -- (==) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) == restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
-                  -- -- _typingConstraints st1 == _typingConstraints st2 &&
-                  -- -- _qualifierMap st1 == _qualifierMap st2 &&
-                  -- -- _hornClauses st1 == _hornClauses st2 &&
-                  -- -- _consistencyChecks st1 == _consistencyChecks st2 &&
-                  -- _typeAssignment st1 == _typeAssignment st2 &&
-                  -- _candidates st1 == _candidates st2
-                  -- -- _auxGoals st1 == _auxGoals st2
+-- | Key in the memoization store
+data MemoKey = MemoKey {
+  keyEnv :: Environment,
+  keyTypeArity :: Int,
+  keyLastShape :: SType,
+  keyState :: ExplorerState,
+  keyDepth :: Int
+} deriving (Eq, Ord)
 
--- instance Ord ExplorerState where
-  -- (<=) st1 st2 = (restrictDomain (Set.fromList ["a", "u"]) (_idCount st1) <= restrictDomain (Set.fromList ["a", "u"]) (_idCount st2)) &&
-                -- -- _typingConstraints st1 <= _typingConstraints st2 &&
-                -- -- _qualifierMap st1 <= _qualifierMap st2 &&
-                -- -- _hornClauses st1 <= _hornClauses st2 &&
-                -- -- _consistencyChecks st1 <= _consistencyChecks st2 &&
-                -- _typeAssignment st1 <= _typeAssignment st2 &&
-                -- _candidates st1 <= _candidates st2
-                -- -- _auxGoals st1 <= _auxGoals st2
+instance Pretty MemoKey where
+  -- pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
+  pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (st ^. typingState . candidates))
 
--- instance Pretty ExplorerState where
-  -- pretty st = hMapDoc pretty pretty $ _idCount st
-
--- -- | Key in the memoization store
--- data MemoKey = MemoKey {
-  -- keyEnv :: Environment,
-  -- keyTypeArity :: Int,
-  -- keyLastShape :: SType,
-  -- keyState :: ExplorerState,
-  -- keyDepth :: Int
--- } deriving (Eq, Ord)
-
--- instance Pretty MemoKey where
-  -- -- pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
-  -- pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (_candidates st))
-
--- -- | Memoization store
--- type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
+-- | Memoization store
+type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 
 -- | Computations that explore program space, parametrized by the the horn solver @s@
-type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT s))
+type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT Memo s)))
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
 explore :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s [RProgram]
 explore eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
-    observeManyT 1 $ runReaderT (evalStateT go (ExplorerState [] initTS [] Map.empty)) (eParams, tParams)
+    evalStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState [] initTS [] Map.empty)) (eParams, tParams)) Map.empty
   where
     go = do
       pMain <- generateTopLevel goal
@@ -408,46 +385,46 @@ generateEUpTo env typ d = msum $ map (generateEAt env typ) [0..d]
 generateEAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 generateEAt _ _ d | d < 0 = mzero
 generateEAt env typ d = do
-  -- useMem <- asks $ (_useMemoization . fst)
-  -- if not useMem || d == 0
-    -- then do -- Do not use memoization
+  useMem <- asks $ (_useMemoization . fst)
+  if not useMem || d == 0
+    then do -- Do not use memoization
       (envFinal, p) <- enumerateAt env typ d
       checkE envFinal typ p
       return (envFinal, p)
-    -- else do -- Try to fetch from memoization store
-      -- startState <- get
-      -- let tass = startState ^. typeAssignment
-      -- let memoKey = MemoKey env (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
-      -- startMemo <- getMemo
-      -- case Map.lookup memoKey startMemo of
-        -- Just results -> do -- Found memoizaed results: fetch
-          -- writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$
-                      -- text "Result:" $+$ vsep (map (\(env', p, _) -> programDoc (const Synquid.Pretty.empty) p) results))
-          -- msum $ map applyMemoized results
-        -- Nothing -> do -- Nothing found: enumerate and memoize
-          -- writeLog 1 (text "Nothing found for:" <+> pretty memoKey)
-          -- (envFinal, p) <- enumerateAt env typ d
+    else do -- Try to fetch from memoization store
+      startState <- get
+      let tass = startState ^. typingState . typeAssignment
+      let memoKey = MemoKey env (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
+      startMemo <- getMemo
+      case Map.lookup memoKey startMemo of
+        Just results -> do -- Found memoizaed results: fetch
+          writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$
+                      text "Result:" $+$ vsep (map (\(env', p, _) -> programDoc (const Synquid.Pretty.empty) p) results))
+          msum $ map applyMemoized results
+        Nothing -> do -- Nothing found: enumerate and memoize
+          writeLog 1 (text "Nothing found for:" <+> pretty memoKey)
+          (envFinal, p) <- enumerateAt env typ d
 
-          -- memo <- getMemo
-          -- finalState <- get
-          -- let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
-          -- writeLog 1 (text "Memoizing for:" <+> pretty memoKey <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty (typeOf p))
+          memo <- getMemo
+          finalState <- get
+          let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
+          writeLog 1 (text "Memoizing for:" <+> pretty memoKey <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty (typeOf p))
 
-          -- putMemo memo'
+          putMemo memo'
 
-          -- checkE envFinal typ p
-          -- return (envFinal, p)
-  -- where
-    -- getMemo = asks snd >>= lift . lift . lift . csGetMemo
-    -- putMemo memo = asks snd >>= lift . lift . lift . (flip csPutMemo memo)
+          checkE envFinal typ p
+          return (envFinal, p)
+  where
+    getMemo = lift . lift . lift $ get
+    putMemo memo = lift . lift . lift $ put memo
 
-    -- applyMemoized (finalEnv, p, finalState) = do
-      -- put finalState
-      -- let env' = joinEnv env finalEnv
-      -- checkE env' typ p
-      -- return (env', p)
+    applyMemoized (finalEnv, p, finalState) = do
+      put finalState
+      let env' = joinEnv env finalEnv
+      checkE env' typ p
+      return (env', p)
 
-    -- joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
+    joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
 
 -- | Perform a gradual check that @p@ has type @typ@ in @env@:
 -- if @p@ is a scalar, perform a full subtyping check;
@@ -550,7 +527,7 @@ runInSolver :: MonadHorn s => TCSolver s a -> Explorer s a
 runInSolver f = do
   tParams <- asks snd
   tState <- use typingState  
-  mRes <- lift . lift . lift $ runTCSolver tParams tState f
+  mRes <- lift . lift . lift . lift $ runTCSolver tParams tState f
   case mRes of
     Nothing -> mzero
     Just (res, st) -> do

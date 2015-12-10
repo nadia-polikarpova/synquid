@@ -2,6 +2,8 @@
 
 - Do something with datatype equality: does it make everything slower? Eq?
 
+- Forget unknowns between branches
+- Try to reduce the size of environment embedding? 
 - Memoization: remove subsumed components?
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
