@@ -104,7 +104,7 @@ makeLenses ''ExplorerState
 -- -- | Memoization store
 -- type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 
--- | Computations that explore programs, parametrized by the the constraint solver and the backtracking monad
+-- | Computations that explore program space, parametrized by the the horn solver @s@
 type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT s))
 
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
