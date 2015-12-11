@@ -5,7 +5,7 @@ import shutil
 import time
 import re
 import difflib
-from subprocess import call, check_output
+from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
 # Parameters
@@ -23,6 +23,7 @@ CONSISTENCY_OFF_OPT = ['--consistency=0']
 MEMOIZATION_ON_OPT = ['--use-memoization=1']
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
+FNULL = open(os.devnull, 'w')
 
 BENCHMARKS = [
     # Integers
@@ -160,6 +161,25 @@ class SynthesisResult:
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', ' + self.nMeasures + ', ' + self.nComponents
 
+def run_version(name, opts, path, logfile, versionInd, versionParameter):
+  start = time.time()
+  logfile.seek(0, os.SEEK_END)
+  # execute but mute output
+  return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS +
+    versionParameter + [path + name + '.sq'], stdout=FNULL, stderr=STDOUT)
+  end = time.time()
+
+  print '{0:0.2f}'.format(end - start),
+  if return_code == 124:
+      print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
+      results[name].otherTimes[versionInd] = -1
+  elif return_code:
+      print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+      results[name].otherTimes[versionInd] = -2
+  else:
+      results[name].otherTimes[versionInd] = (end - start)
+      print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+
 def run_benchmark(name, opts, defOpts, path=''):
     print name,
 
@@ -181,83 +201,13 @@ def run_benchmark(name, opts, defOpts, path=''):
           results [name] = SynthesisResult(name, (end - start), solutionSize, specSize, measures, components)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + defOpts + [path + name + '.sq'])
-      end = time.time()
+      versions = [(defOpts, 4), (BFS_ON_OPT, 0), (INCREMENTAL_OFF_OPT, 1),
+        (CONSISTENCY_OFF_OPT, 2), (MEMOIZATION_ON_OPT, 3)]
 
-      print '{0:0.2f}'.format(end - start),
-      if return_code == 124:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-          results[name].otherTimes[4] = -1
-      elif return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-          results[name].otherTimes[4] = -2
-      else:
-          results[name].otherTimes[4] = (end - start)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+      for (opts, versionInd) in versions:
+        run_version(name, opts, path, logfile, versionInd, opts)
 
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + BFS_ON_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
-
-      print '{0:0.2f}'.format(end - start),
-      if return_code == 124:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-          results[name].otherTimes[0] = -1
-      elif return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      else:
-          results[name].otherTimes[0] = (end - start)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + INCREMENTAL_OFF_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
-
-      print '{0:0.2f}'.format(end - start),
-      if return_code == 124:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-          results[name].otherTimes[1] = -1
-      elif return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      else:
-          results[name].otherTimes[1] = (end - start)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + CONSISTENCY_OFF_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
-
-      print '{0:0.2f}'.format(end - start),
-      if return_code == 124:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-          results[name].otherTimes[2] = -1
-      elif return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      else:
-          results[name].otherTimes[2] = (end - start)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + MEMOIZATION_ON_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
-
-      print '{0:0.2f}'.format(end - start),
-      if return_code == 124:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL
-          results[name].otherTimes[3] = -1
-      elif return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
-      else:
-          results[name].otherTimes[3] = (end - start)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
+      print
 
 def postprocess(benchmarks):
     with open(OUTFILE_NAME, 'w') as outfile:
@@ -288,20 +238,6 @@ def postprocess(benchmarks):
                 outfile.write ('\n')
             outfile.write ('\\hline')
 
-        # for (short_name, args) in ABS_BENCHMARKS:
-        #     name = short_name + '-Abs'
-        #     if name in results:
-        #         res = results [name]
-        #         outfile.write (res.str())
-        #     outfile.write ('\n')
-
-    if os.path.isfile(oracle_name):
-        fromlines = open(oracle_name).readlines()
-        tolines = open(LOGFILE_NAME, 'U').readlines()
-        diff = difflib.unified_diff(fromlines, tolines, n=0)
-        print
-        sys.stdout.writelines(diff)
-
 if __name__ == '__main__':
     init()
     results = {}
@@ -325,5 +261,11 @@ if __name__ == '__main__':
       for ((name, _, args), defOpts) in benchmarkArray:
           #print(str(name) + str(args))
           run_benchmark(name, args, defOpts, dirPrefix)
+      postprocess(benchmarks)
 
-    postprocess(ABS_BENCHMARKS)
+    if os.path.isfile(oracle_name):
+        fromlines = open(oracle_name).readlines()
+        tolines = open(LOGFILE_NAME, 'U').readlines()
+        diff = difflib.unified_diff(fromlines, tolines, n=0)
+        print
+        sys.stdout.writelines(diff)
