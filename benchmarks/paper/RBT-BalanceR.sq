@@ -1,0 +1,45 @@
+qualifier {x == 0}
+
+red   :: {Int | _v == 0}
+black :: {Int | _v == 1}
+
+measure size        :: RBT a -> {Int | _v >= 0}
+measure elems       :: RBT a -> Set a
+measure blackHeight :: RBT a -> {Int | _v >= 0}
+
+data RBT a <P :: Int -> Bool> decreases size where
+    Empty :: color: {Int | _v == 1 && P _v} ->  
+			{RBT a <P> | size _v == 0 && 
+              elems _v == [] && 
+              blackHeight _v == 0}        										 	-- black-height of nils is 0
+    Node  :: x: a -> 
+             color: {Int | (_v == 0 || _v == 1) && P _v} -> 
+             left:    RBT {a | _v < x} <{ color == 1 || _0 == 1 }> ->               -- left keys are less than this key; a red node must have black children
+             right: { RBT {a | x < _v} <{ color == 1 || _0 == 1 }> |               	-- right keys are greater than this key; a red node must have black children 
+                                        (blackHeight _v == blackHeight left)} ->    -- blackHeight the same as of left
+             {RBT a <P> | size _v == size left + size right + 1 && 
+						  elems _v == elems left + elems right + [x] && 
+                          (blackHeight _v == blackHeight left + color)         		-- black-height is black-height of sub + 1 in case the current node is black
+                      }
+
+--==========================================================================================
+-- Does the second two cases:
+--
+--       B                R         |       B                R
+--      / \             /   \       |      / \             /   \
+--     l   R           B     B      |     l   R           B     B
+--        / \ --->    / \   / \     |        / \ --->    / \   / \
+--       R   rr     l rll rlr  rr   |      rl   R      l  rl rrl rrr
+--      / \                         |          / \
+--   rll  rlr                       |        rrl rrr
+--
+--==========================================================================================
+
+balanceR :: x: a ->
+			l: RBT {a | _v < x} <{True}> ->
+            rx: {a | x < _v} ->
+			rlc: {Int | _v == 0 || _v == 1} ->
+			rl: {RBT {a | x < _v &&_v < rx} <{_0 == rlc}>  	| blackHeight _v == blackHeight l} ->
+            rr: {RBT {a | rx < _v}  <{_0 != rlc}> 				| blackHeight _v == blackHeight l} ->             
+            {RBT a <{_0 == 0}> | elems _v == [x, rx] + elems l + elems rl + elems rr && blackHeight _v == blackHeight l + 1}								
+balanceR = ??
