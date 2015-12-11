@@ -1,0 +1,13 @@
+qualifier {x <= y, x >= y, x != y}
+
+measure ilen :: IList a -> {Int | _v >= 0}
+measure ielems :: IList a -> Set a
+
+data IList a decreases ilen where
+	INil :: {IList a | ilen _v == 0 && ielems _v == []}
+	ICons :: x: a -> xs: IList {a | x < _v} -> {IList a | ilen _v == ilen xs + 1 && ielems _v == ielems xs + [x]}
+
+insert :: x: a -> xs: IList a -> {IList a | ielems _v == ielems xs + [x]}
+insert = ??
+
+
