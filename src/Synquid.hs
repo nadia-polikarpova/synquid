@@ -157,31 +157,31 @@ runOnFile synquidParams explorerParams solverParams file = do
   parseResult <- parseFromFile parseProgram file
   case parseResult of
     Left parseErr -> (putStr $ show parseErr) >> exitFailure
-    -- Right ast -> print $ vsep $ map pretty ast
-    Right ast -> case resolveProgramAst ast of
-      Left resolutionError -> (putStr resolutionError) >> exitFailure
-      Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
-  where
-    synthesizeGoal cquals tquals goal = do
-      print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
+    Right ast -> print $ vsep $ map pretty ast
+    -- Right ast -> case resolveProgramAst ast of
+      -- Left resolutionError -> (putStr resolutionError) >> exitFailure
+      -- Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
+  -- where
+    -- synthesizeGoal cquals tquals goal = do
+      -- print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
+      -- -- print empty
+      -- -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
+      -- mProg <- synthesize explorerParams solverParams goal cquals tquals
+      -- case mProg of
+        -- Nothing -> putStr "No Solution" >> exitFailure
+        -- Just prog ->
+          -- print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog $+$
+            -- solutionSizeDoc $+$
+            -- specSizeDoc
+          -- where
+            -- solutionSizeDoc = if showSolutionSize synquidParams 
+                                -- then parens (text "Size:" <+> pretty (programNodeCount prog))
+                                -- else empty
+            -- specSizeDoc = if showSpecInfo synquidParams
+              -- then let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
+                -- parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
+                  -- parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
+                  -- parens (text "#components:" <+>
+                    -- pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
+              -- else empty
       -- print empty
-      -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
-      mProg <- synthesize explorerParams solverParams goal cquals tquals
-      case mProg of
-        Nothing -> putStr "No Solution" >> exitFailure
-        Just prog ->
-          print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog $+$
-            solutionSizeDoc $+$
-            specSizeDoc
-          where
-            solutionSizeDoc = if showSolutionSize synquidParams 
-                                then parens (text "Size:" <+> pretty (programNodeCount prog))
-                                else empty
-            specSizeDoc = if showSpecInfo synquidParams
-              then let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
-                parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
-                  parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
-                  parens (text "#components:" <+>
-                    pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
-              else empty
-      print empty

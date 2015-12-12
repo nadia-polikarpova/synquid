@@ -10,19 +10,17 @@ import Synquid.TypeConstraintSolver hiding (freshId)
 import qualified Synquid.TypeConstraintSolver as TCSolver (freshId)
 import Synquid.Util
 import Synquid.Pretty
-import Data.Maybe
+
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import qualified Data.Traversable as T
 import Control.Monad.Logic
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative
 import Control.Lens
-import Control.Monad.Trans.Maybe
 import Debug.Trace
 
 {- Interface -}
@@ -83,12 +81,15 @@ type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 -- | Computations that explore program space, parametrized by the the horn solver @s@
 type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT Memo s)))
 
+runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s [a]
+runExplorer eParams tParams initTS go = evalStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) Map.empty
+
 -- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
 -- exploration is driven by @params@
 explore :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s [RProgram]
 explore eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
-    evalStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) Map.empty
+    runExplorer eParams tParams initTS go
   where
     go = do
       pMain <- generateTopLevel goal

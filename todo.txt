@@ -1,3 +1,6 @@
+- Type checking errors
+- Finish type checker
+
 - Type classes (to help instantiate qualifiers)	
 
 - Do something with datatype equality: does it make everything slower? Eq?
@@ -8,7 +11,7 @@
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
 - Check that the first constructor is the base case
-- When a measure is not mentioned in the goal spec, remove it from the componenets?
+- When a measure is not mentioned in the goal spec, remove it from the components?
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 
 Front-end
