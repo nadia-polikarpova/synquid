@@ -228,6 +228,7 @@ programDoc tdoc (Program p typ) = let
     PIf c t e -> nest 2 $ withType (text "if" <+> pDoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
     PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
     PFix fs e -> pDoc e -- nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
+    PFormula fml -> pretty fml
     PLet x e e' -> nest 2 (text "let" <+> text x <+> text "=" <+> pDoc e) $+$ nest 2 (text "in" <+> pDoc e')
     -- pDoc p $+$ option (not $ null defs) (indent 2 (nest 2 (text "where" $+$ vsep (map (\(name, p) -> nest 2 (text name <+> text "=" <+> pDoc p)) defs))))
     PHole -> text "??"
@@ -311,11 +312,8 @@ instance Pretty Candidate where
 instance Show Candidate where
   show = show . pretty
 
--- candidateDoc :: RProgram -> Candidate -> Doc
--- candidateDoc prog c@(Candidate sol _ _ label) = pretty c -- text label <> text ":" <+> programDoc pretty (programApplySolution sol prog)
-
 instance Pretty Goal where
-  pretty (Goal name env spec _) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec
+  pretty (Goal name env spec impl) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec $+$ text name <+> text "=" <+> programDoc (const empty) impl
 
 instance Show Goal where
   show = show. pretty
@@ -338,7 +336,7 @@ instance Pretty Declaration where
                                                             vsep (map pretty ctors)
   pretty (MeasureDecl name inSort outSort post) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->"
                                                   <+> if post == ftrue then pretty outSort else braces (pretty outSort <+> text "|" <+> pretty post)
-  pretty (SynthesisGoal name) = text name <+> text "= ??"
+  pretty (SynthesisGoal name impl) = text name <+> text "=" <+> programDoc (const empty) impl
 
 {- AST node counting -}
 
@@ -372,5 +370,6 @@ programNodeCount (Program p _) = case p of
   PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
   PFix _ e -> 1 + programNodeCount e
+  PFormula fml -> fmlNodeCount fml
   PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
   PHole -> 0

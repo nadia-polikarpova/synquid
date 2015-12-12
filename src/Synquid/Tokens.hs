@@ -6,7 +6,7 @@ import Data.Map (Map, fromList)
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "decreases", "False", "in", "Int", "match", "measure", "predicate", "qualifier", "Set", "True", "type", "where"]
+keywords = ["Bool", "data", "decreases", "else", "False", "if", "in", "Int", "let", "match", "measure", "predicate", "qualifier", "Set", "then", "True", "type", "where"]
 
 -- | Names of unary operators    
 unOpTokens :: Map UnOp String
@@ -39,7 +39,7 @@ binOpTokens = fromList [ (Times,     "*")
                         
 -- | Other operators         
 otherOps :: [String]
-otherOps = ["::", ":", "->", "|", "=", "??", ",", "."] 
+otherOps = ["::", ":", "->", "|", "=", "??", ",", ".", "\\"] 
 
 -- | Characters allowed in identifiers (in addition to letters and digits)
 identifierChars = "_'"

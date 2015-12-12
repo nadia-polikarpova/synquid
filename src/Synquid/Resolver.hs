@@ -26,7 +26,7 @@ type ErrMsg = String
 
 data ResolverState = ResolverState {
   _environment :: Environment,
-  _goalNames :: [Id],
+  _goals :: [(Id, UProgram)],
   _condQualifiers :: [Formula],
   _typeQualifiers :: [Formula]
 }
@@ -38,14 +38,14 @@ resolveProgramAst :: ProgramAst -> Either ErrMsg ([Goal], [Formula], [Formula])
 resolveProgramAst declarations = 
   case runExcept (execStateT (mapM_ resolveDeclaration declarations) (ResolverState emptyEnv [] [] [])) of
     Left msg -> Left msg
-    Right (ResolverState env gNames cquals tquals) -> Right (map (makeGoal env gNames) gNames, cquals, tquals)
+    Right (ResolverState env goals cquals tquals) -> Right (map (makeGoal env (map fst goals)) goals, cquals, tquals)
   where
-    makeGoal env allNames name = 
+    makeGoal env allNames (name, impl) = 
       let
         spec = allSymbols env Map.! name
         toRemove = drop (fromJust $ elemIndex name allNames) allNames -- All goals after and including @name@
         env' = foldr removeVariable env toRemove
-      in Goal name env' spec (untyped PHole)
+      in Goal name env' spec impl
       
 resolveRefinement :: Environment -> Sort -> Formula -> Maybe Formula
 resolveRefinement env valueSort fml = case runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] [])) of
@@ -85,10 +85,10 @@ resolveDeclaration (MeasureDecl measureName inSort outSort post) = do
   post' <- resolveFormula BoolS outSort' post
   environment %= addMeasure measureName (MeasureDef inSort outSort' post')
 resolveDeclaration (PredDecl (PredSig name sorts)) = void $ resolvePredSignature name sorts
-resolveDeclaration (SynthesisGoal name) = do
+resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols
   if Map.member name syms
-    then goalNames %= (++ [name])
+    then goals %= (++ [(name, impl)])
     else throwError $ unwords ["No specification found for synthesis goal", name]
 resolveDeclaration (QualifierDecl quals) = mapM_ resolveQualifier quals
   where
@@ -237,7 +237,7 @@ resolveFormula targetSort valueSort (Binary op l r) = do
                                                             VarS _  -> return op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Eq  || op == Neq                    = case lSort of
-                                                            DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+                                                            -- DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
                                                             _ -> return op
       | otherwise                                 = return op
       

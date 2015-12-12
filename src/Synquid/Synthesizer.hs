@@ -14,6 +14,7 @@ import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
+import Synquid.TypeChecker
 
 import Data.Maybe
 import Data.List
@@ -25,8 +26,6 @@ import Control.Monad
 import Control.Monad.State
 import Control.Lens
 import Control.Applicative ((<$>))
-
--- type Z3Memo = StateT Memo Z3State  
 
 type HornSolver = FixPointSolver Z3State
 
@@ -51,7 +50,7 @@ synthesize explorerParams solverParams goal cquals tquals = do
                         _typeQualsGen = typeQuals,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
-      in explore explorerParams typingParams goal
+      in reconstruct explorerParams typingParams goal
       
     -- | Qualifier generator for conditionals
     condQuals :: QualsGen

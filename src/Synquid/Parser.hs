@@ -140,8 +140,8 @@ parseSynthesisGoal :: Parser Declaration
 parseSynthesisGoal = do
   goalId <- parseIdentifier
   reservedOp "="
-  reservedOp "??"
-  return $ SynthesisGoal goalId
+  goalImpl <- parseImpl
+  return $ SynthesisGoal goalId goalImpl
   
 {- Types -}
 
@@ -272,6 +272,67 @@ parseTerm = try parseAppTerm <|> parseAtomTerm
     parseMeasureApp = do
       name <- parseIdentifier
       parseAtomTerm >>= return . Measure UnknownS name
+      
+{- Implementations -}
+
+parseImpl :: Parser UProgram
+parseImpl = parseFun <|> parseScalar
+
+parseFun = do
+  reservedOp "\\"
+  x <- parseIdentifier
+  reservedOp "."
+  body <- parseImpl
+  return $ untyped $ PFun x body
+
+parseScalar = parseLet <|> parseIf <|> parseMatch <|> parseETerm
+
+parseLet = do
+  reserved "let"
+  x <- parseIdentifier
+  reservedOp "="
+  e1 <- parseETerm
+  reserved "in"
+  e2 <- parseScalar
+  return $ untyped $ PLet x e1 e2
+  
+parseMatch = do
+  reserved "match"
+  scr <- parseETerm
+  cases <- many1 parseCase
+  return $ untyped $ PMatch scr cases
+  where
+    parseCase = do
+      reservedOp "|"
+      ctor <- parseTypeName
+      args <- many parseIdentifier
+      reservedOp "->"
+      body <- parseScalar
+      return $ Case ctor args body
+
+parseIf = do
+  reserved "if"
+  iCond <- parseETerm
+  reserved "then"
+  iThen <- parseImpl
+  reserved "else"
+  iElse <- parseImpl
+  return $ untyped $ PIf iCond iThen iElse
+
+parseETerm = try parseAppTerm <|> parseFormulaTerm
+  where
+    parseAppTerm = do
+      head <- parseAtomTerm
+      args <- many (try parseAtomTerm <|> parens (parseImpl))
+      return $ foldl1 (\e1 e2 -> untyped $ PApp e1 e2) (head : args)
+    parseAtomTerm = choice [
+        parens parseETerm
+      , parseHole
+      , parseSymbol
+      ]
+    parseHole = reserved "??" >> return (untyped PHole)
+    parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
+    parseFormulaTerm = untyped . PFormula <$> braces parseFormula    
       
 {- Misc -}
 
