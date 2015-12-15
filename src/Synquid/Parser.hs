@@ -13,8 +13,6 @@ import Data.List
 import Data.Map (Map, (!), elems, fromList)
 
 import Control.Applicative hiding ((<|>), many)
-import Control.Monad.Except
-import Control.Monad.Identity
 
 import Text.Parsec
 import qualified Text.Parsec.Token as Token

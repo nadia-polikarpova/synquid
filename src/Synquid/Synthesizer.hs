@@ -33,17 +33,12 @@ type HornSolver = FixPointSolver Z3State
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Maybe RProgram)
-synthesize explorerParams solverParams goal cquals tquals = do
-  ps <- evalZ3State $ evalFixPointSolver programs solverParams
-  case ps of
-    [] -> return Nothing
-    p : _ -> return $ Just p
-
+synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either TypeError RProgram)
+synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFixPointSolver reconstruction solverParams
   where
-    -- | Stream of programs that satisfy the specification
-    programs :: HornSolver [RProgram]
-    programs = let
+    -- | Stream of programs that satisfy the specification or type error
+    reconstruction :: HornSolver (Either TypeError RProgram)
+    reconstruction = let
         typingParams = TypingParams { 
                         _condQualsGen = condQuals,
                         _matchQualsGen = matchQuals,
@@ -129,5 +124,5 @@ allSubstitutions env qual valueSort vars syms = do
   subst <- Map.unions <$> mapM pickSubstForVar vars
   guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)
   case resolveRefinement env valueSort (substitute subst qual) of
-    Nothing -> [] -- Variable sort mismatch
-    Just qual' -> return qual'
+    Left _ -> [] -- Variable sort mismatch
+    Right qual' -> return qual'

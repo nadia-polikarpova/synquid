@@ -108,6 +108,11 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubst
       _ -> ScalarT baseT ftrue
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
 
+schemaSubstitute :: TypeSubstitution -> RSchema -> RSchema
+schemaSubstitute tass (Monotype t) = Monotype $ typeSubstitute tass t
+schemaSubstitute tass (ForallT a sch) = ForallT a $ schemaSubstitute (Map.delete a tass) sch
+schemaSubstitute tass (ForallP p sorts sch) = ForallP p sorts $ schemaSubstitute tass sch
+
 sortSubstituteFml :: SortSubstitution -> Formula -> Formula
 sortSubstituteFml subst fml = case fml of 
   SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
@@ -310,6 +315,23 @@ programSubstituteTypes subst (Program p t) = Program (programSubstituteTypes' p)
     programSubstituteTypes' (PIf c p1 p2) = PIf (pst c) (pst p1) (pst p2)
     programSubstituteTypes' (PMatch scr cases) = PMatch (pst scr) (map (\(Case ctr args p) -> Case ctr args (pst p)) cases)
     programSubstituteTypes' (PFix args p) = PFix args (pst p)
+    programSubstituteTypes' (PLet x def p) = PLet x (pst def) (pst p)
+    programSubstituteTypes' (PFormula fml) = PFormula $ sortSubstituteFml (asSortSubst subst) fml
+    
+-- | Instantiate predicate variables in a program
+programSubstitutePreds :: Substitution -> RProgram -> RProgram
+programSubstitutePreds pSubst (Program p t) = Program (programSubstitutePreds' p) (typeSubstitutePred pSubst t)
+  where
+    psp = programSubstitutePreds pSubst
+    
+    programSubstitutePreds' (PSymbol name) = PSymbol name
+    programSubstitutePreds' (PApp fun arg) = PApp (psp fun) (psp arg)
+    programSubstitutePreds' (PFun name p) = PFun name (psp p)    
+    programSubstitutePreds' (PIf c p1 p2) = PIf (psp c) (psp p1) (psp p2)
+    programSubstitutePreds' (PMatch scr cases) = PMatch (psp scr) (map (\(Case ctr args p) -> Case ctr args (psp p)) cases)
+    programSubstitutePreds' (PFix args p) = PFix args (psp p)
+    programSubstitutePreds' (PLet x def p) = PLet x (psp def) (psp p)
+    programSubstitutePreds' (PFormula fml) = PFormula $ substitutePredicate pSubst fml
 
 -- | Instantiate unknowns in a program
 programApplySolution :: Solution -> RProgram -> RProgram
@@ -323,6 +345,8 @@ programApplySolution sol (Program p t) = Program (programApplySolution' p) (type
     programApplySolution' (PIf c p1 p2) = PIf (pas c) (pas p1) (pas p2)
     programApplySolution' (PMatch scr cases) = PMatch (pas scr) (map (\(Case ctr args p) -> Case ctr args (pas p)) cases)
     programApplySolution' (PFix args p) = PFix args (pas p)
+    programApplySolution' (PLet x def p) = PLet x (pas def) (pas p)
+    programApplySolution' (PFormula fml) = PFormula $ applySolution sol fml
     
 -- | Substitute a symbol for a subterm in a program    
 programSubstituteSymbol :: Id -> RProgram -> RProgram -> RProgram
@@ -500,7 +524,10 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
     elemProperties (mName, MeasureDef _ _ _) = Nothing
     
-allMeasurePostconditions _ _ = []        
+allMeasurePostconditions _ _ = []
+
+typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
+typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute tass))) env
 
 -- | Assumptions encoded in an environment    
 embedding :: Environment -> TypeSubstitution -> Substitution -> Bool -> Set Formula

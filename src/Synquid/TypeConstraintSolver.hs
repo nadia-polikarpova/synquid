@@ -2,6 +2,7 @@
 
 -- | Incremental solving of subtyping and well-formedness constraints
 module Synquid.TypeConstraintSolver (
+  TypeError,
   QualsGen,
   emptyGen,
   TypingParams (..),
@@ -16,7 +17,8 @@ module Synquid.TypeConstraintSolver (
   solveTypeConstraints,
   matchConsType,
   isEnvironmentInconsistent,
-  freshId  
+  freshId,
+  finalize  
 ) where
 
 import Synquid.Logic
@@ -33,12 +35,15 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Except
 import Control.Applicative
 import Control.Lens hiding (both)
 import Debug.Trace
 
 {- Interface -}
+
+-- | Type error description
+type TypeError = Doc
 
 -- | State space generator (returns a state space for a list of symbols in scope)
 type QualsGen = (Environment, [Formula]) -> QSpace
@@ -75,10 +80,11 @@ data TypingState = TypingState {
 makeLenses ''TypingState
 
 -- | Computations that solve type constraints, parametrized by the the horn solver @s@
-type TCSolver s = StateT TypingState (ReaderT TypingParams (MaybeT s))
+type TCSolver s = StateT TypingState (ReaderT TypingParams (ExceptT TypeError s))
 
-runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Maybe (a, TypingState))
-runTCSolver params st go = runMaybeT $ runReaderT (runStateT go st) params  
+-- | 'runTCSolver' @params st go@ : execute a typing computation @go@ with typing parameters @params@ in a typing state @st@
+runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Either TypeError (a, TypingState))
+runTCSolver params st go = runExceptT $ runReaderT (runStateT go st) params  
 
 -- | Initial typing state in the initial environment @env@
 initTypingState :: MonadHorn s => Environment -> s TypingState
@@ -136,6 +142,10 @@ processAllConstraints :: MonadHorn s => TCSolver s ()
 processAllConstraints = do
   tcs <- uses simpleConstraints nub
   mapM_ processConstraint tcs
+  
+-- | Signal type error  
+throwError :: MonadHorn s => TypeError -> TCSolver s ()  
+throwError e = lift $ lift $ throwE e 
 
 -- | Refine the current liquid assignments using the horn clauses
 solveHornClauses :: MonadHorn s => TCSolver s ()
@@ -146,7 +156,7 @@ solveHornClauses = do
   cands <- use candidates
   env <- use initEnv
   cands' <- lift . lift . lift $ refine clauses qmap (instantiateConsAxioms env) cands
-  when (null cands') $ writeLog 1 (text "FAIL: horn clauses have no solutions") >> fail ""
+  when (null cands') $ throwError $ text "Horn clauses have no solutions"
   candidates .= cands'
 
 -- | Filter out liquid assignments that are too strong for current consistency checks  
@@ -155,7 +165,7 @@ checkTypeConsistency = do
   clauses <- use consistencyChecks
   cands <- use candidates
   cands' <- lift . lift . lift $ checkConsistency clauses cands
-  when (null cands') $ writeLog 1 (text "FAIL: inconsistent types") >> fail ""
+  when (null cands') $ throwError $ text "Inconsistent types"
   candidates .= cands'
 
 -- | Simplify @c@ into a set of simple and shapeless constraints, possibly extended the current type assignment or predicate assignment
@@ -183,7 +193,7 @@ simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT a) _)) | a `Map
 -- Two unknown free variables: nothing can be done for now
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) | not (isBound a env) && not (isBound b env)
   = if a == b
-      then writeLog 1 "simplifyConstraint: equal type variables on both sides" >> fail ""
+      then throwError $ text "simplifyConstraint: equal type variables on both sides"
       else typingConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) 
   = typingConstraints %= (c :)
@@ -244,11 +254,11 @@ simplifyConstraint' _ _ c@(WellFormed _ (ScalarT baseT _)) = simpleConstraints %
 simplifyConstraint' _ _ c@(WellFormedCond _ _) = simpleConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= (c :)
 -- Otherwise (shape mismatch): fail
-simplifyConstraint' _ _ _ = writeLog 1 (text "FAIL: shape mismatch") >> fail ""
+simplifyConstraint' _ _ _ = throwError $ text "Shape mismatch"
 
 -- | Unify type variable @a@ with type @t@ or fail if @a@ occurs in @t@
 unify env a t = if a `Set.member` typeVarsOf t
-  then writeLog 1 (text "simplifyConstraint: type variable occurs in the other type") >> fail ""
+  then throwError $ text "simplifyConstraint: type variable occurs in the other type"
   else do
     t' <- fresh env t
     writeLog 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
@@ -268,8 +278,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
           then do
             let lhss = embedding env tass pass True `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             hornClauses %= ((conjunction lhss |=>| r') :)
-          else -- One of the sides contains free predicates: fail (WHY?)
-            fail ""
+          else throwError $ text "Subtyping constraint contains free predicates"
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
       tass <- use typeAssignment
@@ -392,6 +401,15 @@ isEnvironmentInconsistent env env' t = do
   if null cands'
     then return Nothing
     else return $ Just $ (conjunction . flip valuation cUnknown . solution . head) cands'
+    
+-- | Substitute type variables, predicate variables, and predicate unknowns in @p@
+-- using current type assignment, predicate assignment, and liquid assignment
+finalize :: Monad s => RProgram -> TCSolver s RProgram
+finalize p = do
+  tass <- use typeAssignment
+  pass <- use predAssignment
+  sol <- uses candidates (solution . head)      
+  return $ programApplySolution sol $ programSubstitutePreds pass $ programSubstituteTypes tass $ p
 
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    

@@ -79,111 +79,15 @@ instance Pretty MemoKey where
 type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 
 -- | Computations that explore program space, parametrized by the the horn solver @s@
-type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT Memo s)))
+type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT (Memo, [TypeError]) s)))
 
-runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s [a]
-runExplorer eParams tParams initTS go = evalStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) Map.empty
-
--- | 'explore' @params env typ@ : explore all programs that have type @typ@ in the environment @env@;
--- exploration is driven by @params@
-explore :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s [RProgram]
-explore eParams tParams goal = do
-    initTS <- initTypingState $ gEnvironment goal
-    runExplorer eParams tParams initTS go
-  where
-    go = do
-      pMain <- generateTopLevel goal
-      pAuxs <- generateAuxGoals
-      tass <- use (typingState . typeAssignment)
-      sol <- uses (typingState . candidates) (solution . head)
-      let resMain = (programApplySolution sol . programSubstituteTypes tass) pMain 
-      let resAuxs = map (over _2 (programApplySolution sol . programSubstituteTypes tass)) pAuxs      
-      return $ foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) resMain resAuxs
-
-    generateAuxGoals = do
-      goals <- use auxGoals
-      case goals of
-        [] -> return []
-        (g : gs) -> do
-          auxGoals .= gs
-          let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
-          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'          
-          p <- generateTopLevel g'
-          rest <- generateAuxGoals
-          return $ (gName g, p) : rest
-
-{- AST exploration -}
-
--- | 'generateTopLevel' @env t@ : explore all terms that have refined type schema @sch@ in environment @env@
-generateTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
-generateTopLevel (Goal funName env (ForallT a sch) _) = generateTopLevel (Goal funName (addTypeVar a env) sch (untyped PHole))
-generateTopLevel (Goal funName env (ForallP pName pSorts sch) _) = generateTopLevel (Goal funName (addPredicate pName pSorts env) sch (untyped PHole))
-generateTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) _) = generateFix
-  where
-    generateFix = do    
-      recCalls <- recursiveCalls t
-      polymorphic <- asks $ _polyRecursion . fst
-      let tvs = env ^. boundTypeVars
-      let env' = if polymorphic && not (null tvs)
-                    then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
-                    else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
-      let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
-      p <- local (over (_1 . context) (. ctx)) $ generateI env' t
-      return $ ctx p
-
-    -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
-    recursiveCalls t = do
-      fixStrategy <- asks $ _fixStrategy . fst
-      recType <- case fixStrategy of
-        AllArguments -> fst <$> recursiveTypeTuple t ffalse
-        FirstArgument -> recursiveTypeFirst t
-        DisableFixpoint -> return t
-      if recType == t
-        then return []
-        else return $ [(funName, recType)]
-
-    -- | 'recursiveTypeTuple' @t fml@: type of the recursive call to a function of type @t@ when a lexicographic tuple of all recursible arguments decreases;
-    -- @fml@ denotes the disjunction @x1' < x1 || ... || xk' < xk@ of strict termination conditions on all previously seen recursible arguments to be added to the type of the last recursible argument;
-    -- the function returns a tuple of the weakend type @t@ and a flag that indicates if the last recursible argument has already been encountered and modified
-    recursiveTypeTuple (FunctionT x tArg tRes) fml = do
-      case terminationRefinement x tArg of
-        Nothing -> do
-          (tRes', seenLast) <- recursiveTypeTuple tRes fml
-          return (FunctionT x tArg tRes', seenLast)
-        Just (argLt, argLe) -> do
-          y <- freshId "x"
-          let yForVal = Map.singleton valueVarName (Var (toSort $ baseTypeOf tArg) y)
-          (tRes', seenLast) <- recursiveTypeTuple (renameVar x y tArg tRes) (fml `orClean` substitute yForVal argLt)
-          if seenLast
-            then return (FunctionT y (addRefinement tArg argLe) tRes', True) -- already encountered the last recursible argument: add a nonstrict termination refinement to the current one
-            -- else return (FunctionT y (addRefinement tArg (fml `orClean` argLt)) tRes', True) -- this is the last recursible argument: add the disjunction of strict termination refinements
-            else if fml == ffalse
-                  then return (FunctionT y (addRefinement tArg argLt) tRes', True)
-                  else return (FunctionT y (addRefinement tArg (argLe `andClean` (fml `orClean` argLt))) tRes', True) -- TODO: this version in incomplete (does not allow later tuple values to go up), but is much faster
-    recursiveTypeTuple t _ = return (t, False)
-
-    -- | 'recursiveTypeFirst' @t fml@: type of the recursive call to a function of type @t@ when only the first recursible argument decreases
-    recursiveTypeFirst (FunctionT x tArg tRes) = do
-      case terminationRefinement x tArg of
-        Nothing -> FunctionT x tArg <$> recursiveTypeFirst tRes
-        Just (argLt, _) -> do
-          y <- freshId "x"
-          return $ FunctionT y (addRefinement tArg argLt) (renameVar x y tArg tRes)
-    recursiveTypeFirst t = return t
-
-    -- | If argument is recursible, return its strict and non-strict termination refinements, otherwise @Nothing@
-    terminationRefinement argName (ScalarT IntT fml) = Just ( valInt |>=| IntLit 0  |&|  valInt |<| intVar argName,
-                                                              valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
-    terminationRefinement argName (ScalarT dt@(DatatypeT name _ _) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
-      Nothing -> Nothing
-      Just mName -> let MeasureDef inSort outSort _ = (env ^. measures) Map.! mName
-                        metric = Measure outSort mName
-                    in Just ( metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<| metric (Var inSort argName),
-                              metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<=| metric (Var inSort argName))
-    terminationRefinement _ _ = Nothing
-
-
-generateTopLevel (Goal _ env (Monotype t) _) = generateI env t
+-- | 'runExplorer' @eParams tParams initTS go@ : execute exploration @go@ with explorer parameters @eParams@, typing parameters @tParams@ in typing state @initTS@
+runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either TypeError a)
+runExplorer eParams tParams initTS go = do
+  (ress, (_, errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) (Map.empty, [])
+  case ress of
+    [] -> return $ Left $ if null errs then text "No solution" else head errs
+    (res : _) -> return $ Right res
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
@@ -415,9 +319,6 @@ generateEAt env typ d = do
           checkE envFinal typ p
           return (envFinal, p)
   where
-    getMemo = lift . lift . lift $ get
-    putMemo memo = lift . lift . lift $ put memo
-
     applyMemoized (finalEnv, p, finalState) = do
       put finalState
       let env' = joinEnv env finalEnv
@@ -495,7 +396,7 @@ enumerateAt env typ d = do
 
       (envfinal, pApp) <- if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-          arg <- enqueueGoal env' tArg
+          arg <- enqueueGoal env' tArg (untyped PHole)
           return (env', Program (PApp fun arg) tRes)
         else do -- First-order argument: generate now
           (env'', arg) <- local (
@@ -513,26 +414,41 @@ toSymbol p env = do
   g <- freshId "g"
   return (addGhost g (typeOf p) env, g)
 
-enqueueGoal env typ = do
+enqueueGoal env typ impl = do
   g <- freshId "f"
-  auxGoals %= ((Goal g env (Monotype typ) (untyped PHole)) :)
+  auxGoals %= ((Goal g env (Monotype typ) impl) :)
   return $ Program (PSymbol g) typ
 
 {- Utility -}
 
+-- | Get memoization store
+getMemo :: MonadHorn s => Explorer s Memo
+getMemo = lift . lift . lift $ use _1
+
+-- | Set memoization store
+putMemo :: MonadHorn s => Memo -> Explorer s ()
+putMemo memo = lift . lift . lift $ _1 .= memo
+
+-- | Record type error and backtrack
+throwError :: MonadHorn s => TypeError -> Explorer s a  
+throwError e = do
+  lift . lift . lift $ _2 %= (e :)
+  mzero
+  
 -- | Impose typing constraint @c@ on the programs
 addConstraint c = typingState %= addTypingConstraint c
 
+-- | Embed a type-constraint checker computation @f@ in the explorer; on type error, record the error and backtrack
 runInSolver :: MonadHorn s => TCSolver s a -> Explorer s a
 runInSolver f = do
   tParams <- asks snd
   tState <- use typingState  
-  mRes <- lift . lift . lift . lift $ runTCSolver tParams tState f
-  case mRes of
-    Nothing -> mzero
-    Just (res, st) -> do
+  res <- lift . lift . lift . lift $ runTCSolver tParams tState f
+  case res of
+    Left err -> throwError err
+    Right (res, st) -> do
       typingState .= st
-      return res  
+      return res
 
 -- | Solve all currently unsolved constraints
 -- (program @p@ is only used for logging)
@@ -581,7 +497,7 @@ symbolType env x t = case lastType t of
   (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
                                               then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
                                               else t
-  _ -> t  
+  _ -> t    
 
 writeLog level msg = do
   maxLevel <- asks $ _explorerLogLevel . fst
