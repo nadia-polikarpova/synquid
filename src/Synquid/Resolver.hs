@@ -4,7 +4,6 @@
 module Synquid.Resolver (resolveProgramAst, resolveRefinement, resolveType, ResolverState (..)) where
 
 import Synquid.Program
-import Synquid.Explorer
 import Synquid.Logic
 import Synquid.Pretty
 import Synquid.Util
@@ -47,10 +46,8 @@ resolveProgramAst declarations =
         env' = foldr removeVariable env toRemove
       in Goal name env' spec impl
       
-resolveRefinement :: Environment -> Sort -> Formula -> Maybe Formula
-resolveRefinement env valueSort fml = case runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] [])) of
-    Left _ -> Nothing
-    Right fml' -> Just fml'
+resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
+resolveRefinement env valueSort fml = runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] []))
     
 {- Implementation -}    
 

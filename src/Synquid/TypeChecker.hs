@@ -8,6 +8,7 @@ import Synquid.TypeConstraintSolver hiding (freshId)
 import Synquid.Explorer
 import Synquid.Util
 import Synquid.Pretty
+import Synquid.Resolver
 
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -19,10 +20,28 @@ import Control.Monad.Reader
 import Control.Applicative
 import Control.Lens
 
-reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s [RProgram]
+reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either TypeError RProgram)
 reconstruct eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
-    runExplorer eParams tParams initTS (reconstructTopLevel goal)
+    runExplorer eParams tParams initTS go
+  where
+    go = do
+      pMain <- once $ reconstructTopLevel goal
+      pAuxs <- reconstructAuxGoals
+      let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
+      runInSolver $ finalize p      
+
+    reconstructAuxGoals = do
+      goals <- use auxGoals
+      case goals of
+        [] -> return []
+        (g : gs) -> do
+          auxGoals .= gs
+          let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
+          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'          
+          p <- once $ reconstructTopLevel g'
+          rest <- reconstructAuxGoals
+          return $ (gName g, p) : rest    
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl)
@@ -95,30 +114,57 @@ reconstructTopLevel (Goal _ env (Monotype t) impl) = reconstructI env t impl
 
 reconstructI :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructI env t (Program PHole _) = generateI env t
-reconstructI env t (Program (PLet x iDef iBody) _) = do
-  (_, pDef) <- reconstructE env (vartAll dontCare) iDef
-  pBody <- reconstructI (addVariable x (typeOf pDef) env) t iBody
-  return $ Program (PLet x pDef pBody) t
-reconstructI env t@(FunctionT x tArg tRes) (Program (PFun y impl) _) = do
-  let ctx = \p -> Program (PFun y p) t
-  pBody <- local (over (_1 . context) (. ctx)) $ 
-    reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
-  return $ ctx pBody
+reconstructI env t@(FunctionT x tArg tRes) impl = case content impl of 
+  PFun y impl -> do
+    let ctx = \p -> Program (PFun y p) t
+    pBody <- local (over (_1 . context) (. ctx)) $ 
+      reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
+    return $ ctx pBody
+  _ -> throwError $ text "Function type requires abstraction"
 reconstructI env t@(ScalarT _ _) impl = case content impl of
+  PFun _ _ -> throwError $ text "Abstraction of scalar type"
+  PLet x iDef iBody -> do
+    (_, pDef) <- reconstructE env (vartAll dontCare) iDef
+    pBody <- reconstructI (addVariable x (typeOf pDef) env) t iBody
+    return $ Program (PLet x pDef pBody) t
   PIf iCond iThen iElse -> do
     (_, pCond) <- reconstructE env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
     pThen <- once $ reconstructI (addAssumption cond env) t iThen -- ToDo: add context
     pElse <- once $ reconstructI (addAssumption (fnot cond) env) t iElse -- ToDo: add context
     return $ Program (PIf pCond pThen pElse) t
+  PMatch iScr iCases -> do
+    (env', pScrutinee) <- reconstructE env (vartAll dontCare) iScr
+    case typeOf pScrutinee of
+      (ScalarT (DatatypeT _ _ _) _) -> do -- Type of the scrutinee is a datatype
+        (env'', x) <- toSymbol pScrutinee env'
+        pCases <- mapM (reconstructCase env'' x pScrutinee t) iCases
+        return $ Program (PMatch pScrutinee pCases) t
+      _ -> throwError $ text "Type of scrutinee is not a datatype"        
   _ -> snd <$> reconstructE env t impl
-reconstructI _ _ _ = mzero -- TODO: error reporting, check not only beta-normal, eta-long form
+  
+reconstructCase env scrName pScrutinee t (Case consName args iBody) = case Map.lookup consName (allSymbols env) of
+    Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
+    Just consSch -> do
+      consT <- instantiate env consSch ftrue
+      runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
+      let ScalarT baseT _ = (typeOf pScrutinee)
+      (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) args (symbolType env consName consT)
+      let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+      pCaseExpr <- reconstructI caseEnv t iBody
+      return $ Case consName args pCaseExpr
+  where
+    caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
+      return ([], subst fml)
+    caseSymbols x (name : names) (FunctionT y tArg tRes) = do
+      (syms, ass) <- caseSymbols x names (renameVar y name tArg tRes)
+      return ((name, tArg) : syms, ass)
 
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
 reconstructE env typ (Program PHole _) = generateE env typ
 reconstructE env typ (Program (PSymbol name) _) = do
   case Map.lookup name (symbolsOfArity (arity typ) env) of
-    Nothing -> mzero
+    Nothing -> throwError $ text "Symbol" <+> text name <+> text "undefined"
     Just sch -> do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
@@ -139,7 +185,7 @@ reconstructE env typ (Program (PApp iFun iArg) _) = do
 
   (envfinal, pApp) <- if isFunctionType tArg
     then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-      pArg <- reconstructI env' tArg iArg
+      pArg <- enqueueGoal env' tArg iArg
       return (env', Program (PApp pFun pArg) tRes)
     else do -- First-order argument: generate now
       (env'', pArg) <- reconstructE env' tArg iArg
@@ -147,7 +193,13 @@ reconstructE env typ (Program (PApp iFun iArg) _) = do
       return (env''', Program (PApp pFun pArg) (renameVar x y tArg tRes))
   checkE envfinal typ pApp
   return (envfinal, pApp)
-  
-  
-  
+reconstructE env typ (Program (PFormula fml) _) = do
+  tass <- use (typingState . typeAssignment)
+  case resolveRefinement (typeSubstituteEnv tass env) UnknownS fml of
+    Left err -> throwError $ text err
+    Right fml' -> do
+      let typ' = ScalarT BoolT fml'
+      addConstraint $ Subtype env typ' typ False  
+      runInSolver solveTypeConstraints
+      return (env, Program (PFormula fml') typ')  
     
