@@ -5,7 +5,7 @@ import shutil
 import time
 import re
 import difflib
-from subprocess import call, check_output
+from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
 # Parameters
@@ -23,47 +23,47 @@ CONSISTENCY_OFF_OPT = ['--consistency=0']
 MEMOIZATION_ON_OPT = ['--use-memoization=1']
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
+FNULL = open(os.devnull, 'w')
 
 BENCHMARKS = [
-    # # Integers
-    # ["Integer", [],
-    #     [('Int-Max2', 'maximum of 2 elements', []),
-    #     ('Int-Max3', 'maximum of 3 elements', []),
-    #     ('Int-Max4', 'maximum of 4 elements', []),
-    #     ('Int-Max5', 'maximum of 5 elements', []),
-    #     ('Int-Add', 'addition', [])]
-    # ],
-    # # Lists
-    # ["List", [],
-    #     [('List-Null', 'is list empty', []),
-    #     ('List-Elem', 'contains an element', []),
-    #     ('List-Stutter', 'duplicate each element', []),
-    #     ('List-Replicate', 'list of element repetitions', []),
-    #     ('List-Append', 'append two lists', ['-m=1']),
-    #     ('List-Concat', 'concatenate list of lists', []),
-    #     ('List-Take', 'take first n elements', []),
-    #     ('List-Drop', 'drop last n elements', []),
-    #     ('List-Delete', 'delete given element', []),
-    #     ('List-Map', 'list map', []),
-    #     ('List-ZipWith', 'list zip with', []),
-    #     ('List-Zip', 'zip two lists', []),
-    #     ('List-ToNat', 'list of integers to nats', []),
-    #     ('List-Product', 'Cartesian product', [])]
-    # ],
-    # # Unique lists
-    # ["Unique list",  ['-f=FirstArgument'],
-    #     [('UniqueList-Insert', 'insertion', []),
-    #     ('UniqueList-Delete', 'deletion', []),
-    #     ('List-Nub', 'deduplication', ['-f=FirstArgument', '-m=1']),
-    #     ('List-Compress', 'dedup subsequences', ['-h'])]
-    # ],
+    # Integers
+    ["Integer", [],
+        [('Int-Max2', 'maximum of 2 elements', []),
+        ('Int-Max3', 'maximum of 3 elements', []),
+        ('Int-Max4', 'maximum of 4 elements', []),
+        ('Int-Max5', 'maximum of 5 elements', []),
+        ('Int-Add', 'addition', [])]
+    ],
+    # Lists
+    ["List", [],
+        [('List-Null', 'is list empty', []),
+        ('List-Elem', 'contains an element', []),
+        ('List-Stutter', 'duplicate each element', []),
+        ('List-Replicate', 'list of element repetitions', []),
+        ('List-Append', 'append two lists', ['-m=1']),
+        ('List-Concat', 'concatenate list of lists', []),
+        ('List-Take', 'take first n elements', []),
+        ('List-Drop', 'drop first n elements', []),
+        ('List-Delete', 'delete given element', []),
+        ('List-Map', 'list map', []),
+        ('List-ZipWith', 'list zip with', []),
+        ('List-Zip', 'zip two lists', []),
+        ('List-ToNat', 'list of integers to nats', []),
+        ('List-Product', 'Cartesian product', [])]
+    ],
+    # Unique lists
+    ["Unique list",  ['-f=FirstArgument'],
+        [('UniqueList-Insert', 'insertion', []),
+        ('UniqueList-Delete', 'deletion', []),
+        ('List-Nub', 'deduplication', ['-f=FirstArgument', '-m=1']),
+        ('List-Compress', 'dedup subsequences', ['-h'])]
+    ],
     ["Sorting",  ['-a=2', '-m=3', '-s=1'],
-    # Insertion Sort
+        # Insertion Sort
         [('IncList-Insert', 'insertion', []),
         ('IncList-InsertSort', 'insertion sort', []),
         ('StrictIncList-Insert', 'insertion (strict order)', []),
         ('StrictIncList-Delete', 'deletion (strict order)', []),
-        # Merge sort
         # Merge sort
         ('List-Split', 'balanced split', ['-s=1', '-m=3']),
         ('IncList-Merge', 'sorted merge', ['-h']),
@@ -73,13 +73,13 @@ BENCHMARKS = [
         ('IncList-PivotAppend', 'append pivot', []),
         ('IncList-QuickSort', 'quick sort', ['-a=2', '-s=1'])]
     ],
-    # # Trees
-    # ["Trees",  [],
-    #     [('Tree-Elem', 'membership',[]),
-    #     ('Tree-Flatten', 'flatten to a list', []),
-    #     ('Tree-HBal', 'create balanced tree', [])]
-    # ],
-    ["BST", ['-e', '-a=2'],
+    # Trees
+    ["Trees",  [],
+        [('Tree-Elem', 'membership',[]),
+        ('Tree-Flatten', 'flatten to a list', []),
+        ('Tree-HBal', 'create balanced tree', [])]
+    ],
+    ["BST", ['-m=1', '-e', '-a=2'],
         [# Binary search tree
         ('BST-Member', 'membership', []),
         ('BST-Insert', 'insertion', []),
@@ -87,35 +87,41 @@ BENCHMARKS = [
         ('BST-Delete', 'deletion', ['-m=1', '-e', '-a=2']),
         ('BST-Sort', 'BST sort', [])]
     ],
-    # ["Heap", [],
-    #     # Binary heap
-    #     [('BinHeap-Member', 'membership', []),
-    #     ('BinHeap-Insert', 'insertion', []),
-    #     ('BinHeap-Singleton', 'constructor', []),
-    #     ('BinHeap-Tripleton', 'constructor, 3 args', [])]
-    # ],
-    # ["User", [],
-    #     # Evaluation
-    #     [('Evaluator', 'desugar AST', []),
-    #     ('Evaluator-Vars', 'desugar AST with variables', [])]
-    # ]
+    ["RBT", ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'],
+        [('RBT-Constructors', 'constructors', ['-m=0', '-a=2']),
+        ('RBT-BalanceL', 'balance left', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
+        ('RBT-BalanceR', 'balance right', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
+        ('RBT-Balance', 'balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'])]
+        #('RBT-Ins', ['-m=1', '-a=2', '-e'])
+    ],
+    ["Heap", [],
+        # Binary heap
+        [('BinHeap-Member', 'membership', []),
+        ('BinHeap-Insert', 'insertion', []),
+        ('BinHeap-Singleton', 'constructor', []),
+        ('BinHeap-Tripleton', 'constructor, 3 args', [])]
+    ],
+    ["User", [],
+        # Evaluation
+        [('Evaluator', 'desugar AST', []),
+        ('Evaluator-Vars', 'desugar AST with variables', [])]
+    ]
 ]
 
 ABS_BENCHMARKS = [
     # Integers
-    ('Int-Max', []),
+    ["Integer", [],
+      [('Int-Max', 'maximum of 2 elements (abs)', [])]
+    ],
     # Lists
-    ('List-Reverse', []),
-    ('List-Fold', ['-e']),
+    ["List", [],
+      [('List-Reverse', 'reverse a list', []),
+      ('List-Fold', 'length with fold', ['-e'])]
+    ],
     # Insertion Sort
-    ('IncList-Insert', []),
-]
-
-RBT_BENCHMARKS = [
-    ('RBT-Constructors', ['-m=0', '-a=2']),
-    ('RBT-BalanceL', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
-    ('RBT-BalanceR', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
-    ('RBT-Balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
+    ["Sorting", [],
+      [('IncList-Insert', 'insertion sort (abs)', [])]
+    ]
 ]
 
 COMPONENTS = {
@@ -155,6 +161,25 @@ class SynthesisResult:
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', ' + self.nMeasures + ', ' + self.nComponents
 
+def run_version(name, opts, path, logfile, versionInd, versionParameter):
+  start = time.time()
+  logfile.seek(0, os.SEEK_END)
+  # execute but mute output
+  return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS +
+    versionParameter + [path + name + '.sq'], stdout=FNULL, stderr=STDOUT)
+  end = time.time()
+
+  print '{0:0.2f}'.format(end - start),
+  if return_code == 124:
+      print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
+      results[name].otherTimes[versionInd] = -1
+  elif return_code:
+      print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+      results[name].otherTimes[versionInd] = -2
+  else:
+      results[name].otherTimes[versionInd] = (end - start)
+      print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+
 def run_benchmark(name, opts, defOpts, path=''):
     print name,
 
@@ -176,89 +201,17 @@ def run_benchmark(name, opts, defOpts, path=''):
           results [name] = SynthesisResult(name, (end - start), solutionSize, specSize, measures, components)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
-      start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + defOpts + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      end = time.time()
+      versions = [(defOpts, 4), (BFS_ON_OPT, 0), (INCREMENTAL_OFF_OPT, 1),
+        (CONSISTENCY_OFF_OPT, 2), (MEMOIZATION_ON_OPT, 3)]
 
-      print '{0:0.2f}'.format(end - start),
-      if return_code == 124:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-          results[name].otherTimes[4] = -1
-      elif return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-          results[name].otherTimes[4] = -2
-      else:
-          results[name].otherTimes[4] = (end - start)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+      for (opts, versionInd) in versions:
+        run_version(name, opts, path, logfile, versionInd, opts)
 
       print
 
-      # start = time.time()
-      # logfile.seek(0, os.SEEK_END)
-      # return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + BFS_ON_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      # end = time.time()
-
-      # print '{0:0.2f}'.format(end - start),
-      # if return_code == 124:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-      #     results[name].otherTimes[0] = -1
-      # elif return_code:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      # else:
-      #     results[name].otherTimes[0] = (end - start)
-      #     print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-      # start = time.time()
-      # logfile.seek(0, os.SEEK_END)
-      # return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + INCREMENTAL_OFF_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      # end = time.time()
-
-      # print '{0:0.2f}'.format(end - start),
-      # if return_code == 124:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-      #     results[name].otherTimes[1] = -1
-      # elif return_code:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      # else:
-      #     results[name].otherTimes[1] = (end - start)
-      #     print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-
-      # start = time.time()
-      # logfile.seek(0, os.SEEK_END)
-      # return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + CONSISTENCY_OFF_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      # end = time.time()
-
-      # print '{0:0.2f}'.format(end - start),
-      # if return_code == 124:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-      #     results[name].otherTimes[2] = -1
-      # elif return_code:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      # else:
-      #     results[name].otherTimes[2] = (end - start)
-      #     print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
-
-      # start = time.time()
-      # logfile.seek(0, os.SEEK_END)
-      # return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS + opts + MEMOIZATION_ON_OPT + [path + name + '.sq'], stdout=logfile, stderr=logfile)
-      # end = time.time()
-
-      # print '{0:0.2f}'.format(end - start),
-      # if return_code == 124:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL
-      #     results[name].otherTimes[3] = -1
-      # elif return_code:
-      #     print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
-      # else:
-      #     results[name].otherTimes[3] = (end - start)
-      #     print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
-
-def postprocess():
+def postprocess(benchmarks):
     with open(OUTFILE_NAME, 'w') as outfile:
-        for arr in BENCHMARKS:
+        for arr in benchmarks:
             category = arr[0]
             benchArray = arr[2]
             outfile.write ('\multirow{')
@@ -277,25 +230,13 @@ def postprocess():
                     ' & ' + res.nMeasures + '& ' + res.nComponents + \
                     ' & ' + COMPONENTS.get(name, '') + \
                     ' & ' + res.size + '& ' + '{0:0.2f}'.format(res.time) + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[0])  + '& ' + '{0:0.2f}'.format(res.otherTimes[1]) + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[2])  + '& ' + '{0:0.2f}'.format(res.otherTimes[3]) + ' \\\\'
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[3])  + '& ' + '{0:0.2f}'.format(res.otherTimes[2]) + \
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[0]) + '& ' + \
+                    ' & ' + '{0:0.2f}'.format(res.otherTimes[4]) + '& ' + \
+                    '{0:0.2f}'.format(res.otherTimes[1])  + ' \\\\'
                     outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')
-
-        for (short_name, args) in ABS_BENCHMARKS:
-            name = short_name + '-Abs'
-            if name in results:
-                res = results [name]
-                outfile.write (res.str())
-            outfile.write ('\n')
-
-    if os.path.isfile(oracle_name):
-        fromlines = open(oracle_name).readlines()
-        tolines = open(LOGFILE_NAME, 'U').readlines()
-        diff = difflib.unified_diff(fromlines, tolines, n=0)
-        print
-        sys.stdout.writelines(diff)
 
 if __name__ == '__main__':
     init()
@@ -311,17 +252,20 @@ if __name__ == '__main__':
     if os.path.isfile(LOGFILE_NAME):
       os.remove(LOGFILE_NAME)
 
-    benchmarkArray = [ (item, array[1]) for array in BENCHMARKS for item in array[2]]
-    #print([str(item) for item in benchmarkArray])
-    for ((name, _, args), defOpts) in benchmarkArray:
-        #print(str(name) + str(args))
-        run_benchmark(name, args, defOpts)
-    print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Abstract refinements' + Style.RESET_ALL
-    #for (name, args) in ABS_BENCHMARKS:
-    #    run_benchmark(name, args, 'abstract/')
-    # print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'Red-Black-Trees' + Style.RESET_ALL
-    # for (name, args) in RBT_BENCHMARKS:
-    #     run_benchmark(name, args, 'abstract/')
+    allBenchmarks = [('Normal benchmarks', BENCHMARKS, ''), ('Abstract refinements', ABS_BENCHMARKS, '../abstract/')]
 
-    postprocess()
+    for (benchmarkCategory, benchmarks, dirPrefix) in allBenchmarks:
+      print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + benchmarkCategory + Style.RESET_ALL
+      benchmarkArray = [ (item, array[1]) for array in benchmarks for item in array[2]]
+      #print([str(item) for item in benchmarkArray])
+      for ((name, _, args), defOpts) in benchmarkArray:
+          #print(str(name) + str(args))
+          run_benchmark(name, args, defOpts, dirPrefix)
+      postprocess(benchmarks)
 
+    if os.path.isfile(oracle_name):
+        fromlines = open(oracle_name).readlines()
+        tolines = open(LOGFILE_NAME, 'U').readlines()
+        diff = difflib.unified_diff(fromlines, tolines, n=0)
+        print
+        sys.stdout.writelines(diff)
