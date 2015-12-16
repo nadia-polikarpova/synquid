@@ -26,7 +26,7 @@ reconstruct eParams tParams goal = do
     runExplorer eParams tParams initTS go
   where
     go = do
-      pMain <- once $ reconstructTopLevel goal
+      pMain <- reconstructTopLevel goal
       pAuxs <- reconstructAuxGoals
       let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
       runInSolver $ finalize p      
@@ -39,7 +39,7 @@ reconstruct eParams tParams goal = do
           auxGoals .= gs
           let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
           writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'          
-          p <- once $ reconstructTopLevel g'
+          p <- reconstructTopLevel g'
           rest <- reconstructAuxGoals
           return $ (gName g, p) : rest    
     
@@ -130,8 +130,8 @@ reconstructI env t@(ScalarT _ _) impl = case content impl of
   PIf iCond iThen iElse -> do
     (_, pCond) <- reconstructE env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
-    pThen <- once $ reconstructI (addAssumption cond env) t iThen -- ToDo: add context
-    pElse <- once $ reconstructI (addAssumption (fnot cond) env) t iElse -- ToDo: add context
+    pThen <- reconstructI (addAssumption cond env) t iThen -- ToDo: add context
+    pElse <- reconstructI (addAssumption (fnot cond) env) t iElse -- ToDo: add context
     return $ Program (PIf pCond pThen pElse) t
   PMatch iScr iCases -> do
     (env', pScrutinee) <- reconstructE env (vartAll dontCare) iScr
