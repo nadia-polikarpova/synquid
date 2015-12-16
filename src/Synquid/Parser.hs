@@ -317,11 +317,11 @@ parseIf = do
   iElse <- parseImpl
   return $ untyped $ PIf iCond iThen iElse
 
-parseETerm = try parseAppTerm <|> parseFormulaTerm
+parseETerm = parseFormulaTerm <|> parseAppTerm <|> parseAtomTerm
   where
     parseAppTerm = do
-      head <- parseAtomTerm
-      args <- many (try parseAtomTerm <|> parens (parseImpl))
+      head <- parseSymbol
+      args <- many (try parseAtomTerm <|> parens parseImpl)
       return $ foldl1 (\e1 e2 -> untyped $ PApp e1 e2) (head : args)
     parseAtomTerm = choice [
         parens parseETerm
