@@ -95,7 +95,7 @@ generateI :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 generateI env t@(FunctionT x tArg tRes) = do
   x' <- if x == dontCare then freshId "x" else return x
   let ctx = \p -> Program (PFun x' p) t
-  pBody <- local (over (_1 . context) (. ctx)) $ generateI (unfoldAllVariables $ addVariable x' tArg $ env) tRes
+  pBody <- inContext ctx $ generateI (unfoldAllVariables $ addVariable x' tArg $ env) tRes
   return $ ctx pBody
 generateI env t@(ScalarT _ _) = ifM (asks $ _abduceScrutinees . fst)
                                     (generateMaybeMatchIf env t)
@@ -120,7 +120,7 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
       then return pThen -- @pThen@ is valid under no assumptions: return it
       else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
         pCond <- generateCondition env cond        
-        pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $ generateMaybeIf (addAssumption (fnot cond) env) t
+        pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateMaybeIf (addAssumption (fnot cond) env) t
         return $ Program (PIf pCond pThen pElse) t
             
 generateCondition env fml = if isExecutable fml
@@ -137,9 +137,8 @@ generateMatch env t = do
   if d == 0
     then mzero
     else do
-      (env', pScrutinee) <- local (
-                                    over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params)
-                                  . over (_1 . context) (. \p -> Program (PMatch p []) t))
+      (env', pScrutinee) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
+                                  $ inContext (\p -> Program (PMatch p []) t)
                                   $ generateE env (vartAll dontCare) -- Generate a scrutinee of an arbitrary type
 
       case typeOf pScrutinee of
@@ -163,7 +162,7 @@ generateMatch env t = do
               pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
               let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
               pCond <- generateCondition env cond
-              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $               -- Generate the else branch
+              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $               -- Generate the else branch
                           generateI (addAssumption (fnot cond) env) t            
               return $ Program (PIf pCond pThen pElse) t
 
@@ -182,10 +181,9 @@ generateFirstCase env scrName pScrutinee t consName = do
       case deadBranchCond of
         Nothing -> do
                     let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-                    pCaseExpr <- local (
-                                         over (_1 . matchDepth) (-1 +)
-                                       . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
-                                      $ generateI caseEnv t
+                    pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) 
+                                  $ inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t)
+                                  $ generateI caseEnv t
                     return $ (Case consName args pCaseExpr, ftrue)
         
         Just cond -> return $ (Case consName args (Program (PSymbol "error") t), cond)
@@ -200,10 +198,9 @@ generateCase env scrName pScrutinee t consName = do
       let ScalarT baseT _ = (typeOf pScrutinee)
       (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      pCaseExpr <- optionalInPartial t $ local (
-                           over (_1 . matchDepth) (-1 +)
-                         . over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case consName args p]) t))
-                        $ generateI caseEnv t
+      pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
+                                       $ inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t)
+                                       $ generateI caseEnv t
       return $ Case consName args pCaseExpr
 
 caseSymbols x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
@@ -242,14 +239,14 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
         then return p0 -- @p0@ is valid under no assumptions: return it
         else do -- @p0@ is valid under a nontrivial assumption, but no need to match
               pCond <- generateCondition env cond
-              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond p0 p) t)) $ generateMaybeMatchIf (addAssumption (fnot cond) env) t                          
+              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond p0 p) t) $ generateMaybeMatchIf (addAssumption (fnot cond) env) t                          
               return $ Program (PIf pCond p0 pElse) t
       _ -> if cond == ftrue
         then generateMatchesFor env matchConds p0 t
         else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
               pCond <- generateCondition env cond
               pThen <- once $ generateMatchesFor (addAssumption cond env) matchConds p0 t
-              pElse <- optionalInPartial t $ local (over (_1 . context) (. \p -> Program (PIf pCond pThen p) t)) $
+              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $
                           generateMaybeMatchIf (addAssumption (fnot cond) env) t
               return $ Program (PIf pCond pThen pElse) t
 
@@ -259,7 +256,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
-      pBaseCase' <- once $ local (over (_1 . context) (. \p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t)) $
+      pBaseCase' <- once $ inContext (\p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t) $
                             generateMatchesFor (addScrutinee pScrutinee . addAssumption matchCond $ env) rest pBaseCase t -- TODO: if matchCond contains only a subset of case conjuncts, we should add the rest
       generateKnownMatch env matchVar pBaseCase' t
 
@@ -390,7 +387,7 @@ enumerateAt env typ d = do
 
     generateApp genFun genArg = do
       x <- freshId "x"
-      (env', fun) <- local (over (_1 . context) (. \p -> Program (PApp p (Program PHole $ vartAll dontCare)) typ))
+      (env', fun) <- inContext (\p -> Program (PApp p (Program PHole $ vartAll dontCare)) typ)
                             $ genFun env (FunctionT x (vartAll dontCare) typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
@@ -399,10 +396,9 @@ enumerateAt env typ d = do
           arg <- enqueueGoal env' tArg (untyped PHole)
           return (env', Program (PApp fun arg) tRes)
         else do -- First-order argument: generate now
-          (env'', arg) <- local (
-                                  over (_1 . eGuessDepth) (-1 +)
-                                . over (_1 . context) (. \p -> Program (PApp fun p) tRes))
-                                $ genArg env' tArg
+          (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
+                            $ inContext (\p -> Program (PApp fun p) tRes)
+                            $ genArg env' tArg
           (env''', y) <- toSymbol arg env''
           return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
       ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
@@ -468,6 +464,8 @@ solveLocally c = do
 
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
+
+inContext ctx f = local (over (_1 . context) (. ctx)) f
     
 -- | Replace all type variables with fresh identifiers
 instantiate :: MonadHorn s => Environment -> RSchema -> Formula -> Explorer s RType

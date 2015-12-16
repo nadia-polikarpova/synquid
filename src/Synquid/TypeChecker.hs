@@ -56,7 +56,7 @@ reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = rec
                     then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
                     else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
       let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
-      p <- local (over (_1 . context) (. ctx)) $ reconstructI env' t impl
+      p <- inContext ctx  $ reconstructI env' t impl
       return $ ctx p
 
     -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
@@ -117,24 +117,23 @@ reconstructI env t (Program PHole _) = generateI env t
 reconstructI env t@(FunctionT x tArg tRes) impl = case content impl of 
   PFun y impl -> do
     let ctx = \p -> Program (PFun y p) t
-    pBody <- local (over (_1 . context) (. ctx)) $ 
-      reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
+    pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
     return $ ctx pBody
   _ -> throwError $ text "Function type requires abstraction"
 reconstructI env t@(ScalarT _ _) impl = case content impl of
   PFun _ _ -> throwError $ text "Abstraction of scalar type"
   PLet x iDef iBody -> do
-    (_, pDef) <- reconstructE env (vartAll dontCare) iDef
-    pBody <- reconstructI (addVariable x (typeOf pDef) env) t iBody
+    (_, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env (vartAll dontCare) iDef
+    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env) t iBody
     return $ Program (PLet x pDef pBody) t
   PIf iCond iThen iElse -> do
-    (_, pCond) <- reconstructE env (ScalarT BoolT ftrue) iCond
+    (_, pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructE env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
-    pThen <- reconstructI (addAssumption cond env) t iThen -- ToDo: add context
-    pElse <- reconstructI (addAssumption (fnot cond) env) t iElse -- ToDo: add context
+    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption cond env) t iThen -- ToDo: add context
+    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse -- ToDo: add context
     return $ Program (PIf pCond pThen pElse) t
   PMatch iScr iCases -> do
-    (env', pScrutinee) <- reconstructE env (vartAll dontCare) iScr
+    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env (vartAll dontCare) iScr
     case typeOf pScrutinee of
       (ScalarT (DatatypeT _ _ _) _) -> do -- Type of the scrutinee is a datatype
         (env'', x) <- toSymbol pScrutinee env'
@@ -151,7 +150,7 @@ reconstructCase env scrName pScrutinee t (Case consName args iBody) = case Map.l
       let ScalarT baseT _ = (typeOf pScrutinee)
       (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) args (symbolType env consName consT)
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      pCaseExpr <- reconstructI caseEnv t iBody
+      pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
       return $ Case consName args pCaseExpr
   where
     caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
@@ -180,7 +179,7 @@ reconstructE env typ (Program (PSymbol name) _) = do
       else instantiate env sch ftrue
 reconstructE env typ (Program (PApp iFun iArg) _) = do
   x <- freshId "x"
-  (env', pFun) <- reconstructE env (FunctionT x (vartAll dontCare) typ) iFun
+  (env', pFun) <- inContext (\p -> Program (PApp p (Program PHole $ vartAll dontCare)) typ) $ reconstructE env (FunctionT x (vartAll dontCare) typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
 
   (envfinal, pApp) <- if isFunctionType tArg
@@ -188,7 +187,7 @@ reconstructE env typ (Program (PApp iFun iArg) _) = do
       pArg <- enqueueGoal env' tArg iArg
       return (env', Program (PApp pFun pArg) tRes)
     else do -- First-order argument: generate now
-      (env'', pArg) <- reconstructE env' tArg iArg
+      (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toSymbol pArg env''
       return (env''', Program (PApp pFun pArg) (renameVar x y tArg tRes))
   checkE envfinal typ pApp
