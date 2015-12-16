@@ -1,4 +1,3 @@
-- Fix context in type checker
 - Make program a functor
 - Type checking conditionals with hole conditions
 - Type checking match: get scrutinee type from constructors, unify case symbols, check isGoodScrutinee (in case it's a hole)
