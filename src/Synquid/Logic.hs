@@ -18,7 +18,7 @@ import Control.Monad
 type Id = String
 
 -- | Sorts
-data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | UnknownS
+data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | AnyS
   deriving (Eq, Ord)
   
 isSetS (SetS _) = True

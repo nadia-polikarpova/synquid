@@ -260,16 +260,16 @@ parseTerm = try parseAppTerm <|> parseAtomTerm
       
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
-    parseSetLit = SetLit UnknownS <$> brackets (commaSep parseFormula)
-    parseNullaryCons = flip (Cons UnknownS) [] <$> parseTypeName
-    parseVariable = Var UnknownS <$> parseIdentifier 
+    parseSetLit = SetLit AnyS <$> brackets (commaSep parseFormula)
+    parseNullaryCons = flip (Cons AnyS) [] <$> parseTypeName
+    parseVariable = Var AnyS <$> parseIdentifier 
     parsePredApp = do
       name <- parseTypeName
       args <- many1 parseAtomTerm
       return $ Pred name args
     parseMeasureApp = do
       name <- parseIdentifier
-      parseAtomTerm >>= return . Measure UnknownS name
+      parseAtomTerm >>= return . Measure AnyS name
       
 {- Implementations -}
 

@@ -138,8 +138,8 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       let vars = zipWith Var sorts deBrujns
       environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
       res <- case fml of
-                Pred p [] -> resolveFormula BoolS UnknownS (Pred p vars)
-                _ -> resolveFormula BoolS UnknownS fml
+                Pred p [] -> resolveFormula BoolS AnyS (Pred p vars)
+                _ -> resolveFormula BoolS AnyS fml
       environment .= oldEnv      
       return res      
 resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveFormula BoolS (toSort baseT) fml
@@ -157,8 +157,8 @@ resolveType (FunctionT x tArg tRes) = do
 {- Formulas -}  
 
 resolveFormula :: Sort -> Sort -> Formula -> Resolver Formula
-resolveFormula targetSort valueSort (SetLit UnknownS memberFmls) = 
-  if complies targetSort (SetS UnknownS)
+resolveFormula targetSort valueSort (SetLit AnyS memberFmls) = 
+  if complies targetSort (SetS AnyS)
     then case memberFmls of
       [] -> return $ SetLit (elemSort targetSort) []
       (fml:fmls) -> do
@@ -169,9 +169,9 @@ resolveFormula targetSort valueSort (SetLit UnknownS memberFmls) =
     else throwError $ unwords ["Encountered set literal where", show targetSort, "was expected"]
   where
     elemSort (SetS s) = s
-    elemSort UnknownS = UnknownS  
+    elemSort AnyS = AnyS  
       
-resolveFormula targetSort valueSort (Var UnknownS varName) =
+resolveFormula targetSort valueSort (Var AnyS varName) =
   if varName == valueVarName
     then if complies targetSort valueSort 
           then return $ Var valueSort varName
@@ -211,13 +211,13 @@ resolveFormula targetSort valueSort (Binary op l r) = do
     else throwError $ unwords ["Encountered binary operation", show op, "where", show targetSort, "was expected"]
   where
     leftSort op
-      | op == Times || op == Plus || op == Minus            = UnknownS
-      | op == Eq  || op == Neq                              = UnknownS
-      | op == Lt || op == Le || op == Gt || op == Ge        = UnknownS
+      | op == Times || op == Plus || op == Minus            = AnyS
+      | op == Eq  || op == Neq                              = AnyS
+      | op == Lt || op == Le || op == Gt || op == Ge        = AnyS
       | op == And || op == Or || op == Implies || op == Iff = BoolS
-      | op == Member                                        = UnknownS
-      | op == Union || op == Intersect || op == Diff        = SetS UnknownS
-      | op == Subset                                        = SetS UnknownS
+      | op == Member                                        = AnyS
+      | op == Union || op == Intersect || op == Diff        = SetS AnyS
+      | op == Subset                                        = SetS AnyS
       
     newOp op lSort
       | op == Times || op == Plus || op == Minus  = case lSort of
@@ -253,19 +253,19 @@ resolveFormula targetSort valueSort (Binary op l r) = do
       | op == Subset                                        = (lSort, BoolS)
     
   
-resolveFormula targetSort valueSort (Measure UnknownS name argFml) = do
+resolveFormula targetSort valueSort (Measure AnyS name argFml) = do
   ms <- use $ environment . measures
   case Map.lookup name ms of
     Nothing -> throwError $ unwords ["Measure", name, "is undefined"]
     Just (MeasureDef (DataS dtName tVars) outSort _) -> do
-      argFml' <- resolveFormula (DataS dtName $ replicate (length tVars) UnknownS) valueSort argFml
+      argFml' <- resolveFormula (DataS dtName $ replicate (length tVars) AnyS) valueSort argFml
       let (DataS _ tArgs) = sortOf argFml'
       let outSort' = sortSubstitute (Map.fromList $ zip (map (\(VarS a) -> a) tVars) tArgs) outSort
       if complies outSort' targetSort
         then return $ Measure outSort' name argFml'
         else throwError $ unwords ["Encountered measure", name, "where", show targetSort, "was expected"]
         
-resolveFormula targetSort valueSort (Cons UnknownS name argFmls) = do
+resolveFormula targetSort valueSort (Cons AnyS name argFmls) = do
   syms <- uses environment allSymbols
   case Map.lookup name syms of
     Nothing -> throwError $ unwords ["Predicate or constructor", name, "is undefined"]
@@ -274,7 +274,7 @@ resolveFormula targetSort valueSort (Cons UnknownS name argFmls) = do
       let argSorts = map (toSort . baseTypeOf) $ allArgTypes consT
       let resSort = toSort $ baseTypeOf $ lastType consT
       -- let typeVars = Set.toList $ typeVarsOf consT -- ToDo: order!
-      -- let consT' = sortSubstitute (Map.fromList $ zip typeVars (repreat UnknownS)) consT
+      -- let consT' = sortSubstitute (Map.fromList $ zip typeVars (repreat AnyS)) consT
       if complies targetSort resSort -- ToDo: substitute type variables
         then if length argSorts /= length argFmls
                 then throwError $ unwords ["Constructor", name, "expected", show (length argSorts), "arguments and got", show (length argFmls)]
@@ -284,7 +284,7 @@ resolveFormula targetSort valueSort (Cons UnknownS name argFmls) = do
 resolveFormula targetSort valueSort (Pred name argFmls) = do
   ps <- use $ environment . boundPredicates
   case Map.lookup name ps of
-    Nothing -> resolveFormula targetSort valueSort (Cons UnknownS name argFmls)
+    Nothing -> resolveFormula targetSort valueSort (Cons AnyS name argFmls)
     Just argSorts -> if length argFmls /= length argSorts
                       then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate", name, "and got", show (length argFmls)]
                       else if complies targetSort BoolS 
