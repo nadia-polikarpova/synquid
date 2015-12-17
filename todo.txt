@@ -1,3 +1,6 @@
+- Fix non-incremental mode
+- Cut # calls to Z3 when incremental but not exploring
+- Optional types in templates
 - Type checking match: get scrutinee type from constructors, unify case symbols, check isGoodScrutinee (in case it's a hole)
 - Better error messages
 - Resolve formulas with free type variables in conditionals: get rid of formula programs
@@ -16,7 +19,12 @@
 - When a measure is not mentioned in the goal spec, remove it from the components?
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 
-Front-end
+Security:
+- How to make use of the type of strcatFlow to figure out that the label to pass into fwrite should contain J (F fin) (F fout)
+- When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this prdicate is around
+- Try encoding of atomic flow with HO functions
+
+Front-end:
 	- Make resolver multi-pass so that order of declarations doesn't matter
 	- Check if wf-metric is defined
 	- Attach positions to AST nodes?

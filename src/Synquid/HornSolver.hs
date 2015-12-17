@@ -75,7 +75,7 @@ instance MonadSMT s => MonadHorn (FixPointSolver s) where
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
 refineCandidates :: MonadSMT s => [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
 refineCandidates constraints quals extractAssumptions cands = do
-    writeLog 1 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
+    writeLog 2 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
     let constraints' = filter isNew constraints
     cands' <- mapM (addConstraints constraints') cands
     case find (Set.null . invalidConstraints) cands' of
@@ -92,9 +92,9 @@ refineCandidates constraints quals extractAssumptions cands = do
 -- | 'check' @fmls cands@ : return those candidates from @cands@ under which all @fmls@ are satisfiable
 check :: MonadSMT s => [Formula] -> [Candidate] -> FixPointSolver s [Candidate]
 check fmls cands = do
-    writeLog 1 (vsep [nest 2 $ text "Consistency" $+$ vsep (map pretty fmls), nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
+    writeLog 2 (vsep [nest 2 $ text "Consistency" $+$ vsep (map pretty fmls), nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
     cands' <- filterM checkCand cands
-    writeLog 1 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
+    writeLog 2 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
     return cands'
   where
     checkCand (Candidate sol valids invalids label) = let fmls' = map (applySolution sol) fmls 
@@ -159,7 +159,7 @@ greatestFixPoint quals extractAssumptions candidates = do
         return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList invalids)
 
     debugOutput cands cand inv modified =
-      writeLog 1 (vsep [
+      writeLog 2 (vsep [
         nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
         text "Chosen candidate:" <+> pretty cand,
         text "Invalid Constraint:" <+> pretty inv,
@@ -178,7 +178,7 @@ strengthen :: MonadSMT s => QMap -> Formula -> Solution -> FixPointSolver s [Sol
 strengthen quals fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize quals sol unknowns
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) usedLhsQuals rhs -- all minimal valid valuations of the whole antecedent
-    writeLog 1 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))
+    writeLog 2 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
@@ -186,11 +186,11 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
         (do 
           valuations' <- pruneValuations usedLhsQuals (Map.keys splitting) -- TODO: is this dangeorous??? the result might not cover the pruned alternatives in a different context!
           -- valuations' <- pruneValuations Set.empty (Map.keys splitting)
-          writeLog 1 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
+          writeLog 2 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
       (return allSolutions)
-    writeLog 1 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned))
+    writeLog 2 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned))
     return pruned
   where
     unknowns = unknownsOf lhs

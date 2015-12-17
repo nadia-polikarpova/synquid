@@ -275,7 +275,7 @@ generateE :: MonadHorn s => Environment -> RType -> Explorer s (Environment, RPr
 generateE env typ = do
   d <- asks $ _eGuessDepth . fst
   (finalEnv, p) <- generateEUpTo env typ d
-  ifM (asks $ _incrementalChecking . fst) (return ()) (solveConstraints p)
+  ifM (asks $ _incrementalChecking . fst) (return ()) (runInSolver solveTypeConstraints)
   return (finalEnv, p)
 
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
@@ -299,17 +299,17 @@ generateEAt env typ d = do
       startMemo <- getMemo
       case Map.lookup memoKey startMemo of
         Just results -> do -- Found memoizaed results: fetch
-          writeLog 1 (text "Fetching for:" <+> pretty memoKey $+$
+          writeLog 3 (text "Fetching for:" <+> pretty memoKey $+$
                       text "Result:" $+$ vsep (map (\(env', p, _) -> programDoc (const Synquid.Pretty.empty) p) results))
           msum $ map applyMemoized results
         Nothing -> do -- Nothing found: enumerate and memoize
-          writeLog 1 (text "Nothing found for:" <+> pretty memoKey)
+          writeLog 3 (text "Nothing found for:" <+> pretty memoKey)
           (envFinal, p) <- enumerateAt env typ d
 
           memo <- getMemo
           finalState <- get
           let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
-          writeLog 1 (text "Memoizing for:" <+> pretty memoKey <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty (typeOf p))
+          writeLog 3 (text "Memoizing for:" <+> pretty memoKey <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty (typeOf p))
 
           putMemo memo'
 
@@ -329,12 +329,15 @@ generateEAt env typ d = do
 -- if @p@ is a (partially applied) function, check as much as possible with unknown arguments
 checkE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkE env typ p = do
+  ctx <- asks $ _context . fst
+  writeLog 1 $ text "Checking" <+> programDoc (const Synquid.Pretty.empty) p <+> text "::" <+> pretty typ <+> text "in" $+$ programDoc (const Synquid.Pretty.empty) (ctx p)
+                              
   if arity typ == 0
     then addConstraint $ Subtype env (typeOf p) typ False
     else do
       addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs $ typeOf p) (lastType (typeOf p))) (lastType typ) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-  ifM (asks $ _incrementalChecking . fst) (solveConstraints p) (return ())
+  ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
   where
     removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
       ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
@@ -359,11 +362,12 @@ enumerateAt env typ 0 = do
     pickSymbol (name, sch) = do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())      
-      symbolUseCount %= Map.insertWith (+) name 1
+      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
+      writeLog 1 $ text "Trying" <+> programDoc (const Synquid.Pretty.empty) p
+      symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False
+        Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False      
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -428,6 +432,7 @@ putMemo memo = lift . lift . lift $ _1 .= memo
 -- | Record type error and backtrack
 throwError :: MonadHorn s => TypeError -> Explorer s a  
 throwError e = do
+  writeLog 1 $ text "TYPE ERROR:" <+> e
   lift . lift . lift $ _2 %= (e :)
   mzero
   
@@ -446,14 +451,6 @@ runInSolver f = do
       typingState .= st
       return res
 
--- | Solve all currently unsolved constraints
--- (program @p@ is only used for logging)
-solveConstraints :: MonadHorn s => RProgram -> Explorer s ()
-solveConstraints p = do
-  ctx <- asks $ _context . fst
-  writeLog 1 (text "Candidate Program" $+$ programDoc (const Synquid.Pretty.empty) (ctx p))  
-  runInSolver solveTypeConstraints
-  
 solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
 solveLocally c = do
   writeLog 1 (text "Solving Locally" $+$ pretty c)
@@ -469,7 +466,7 @@ inContext ctx f = local (over (_1 . context) (. ctx)) f
     
 -- | Replace all type variables with fresh identifiers
 instantiate :: MonadHorn s => Environment -> RSchema -> Formula -> Explorer s RType
-instantiate env sch fml = writeLog 1 (text "INSTANTIATE" <+> pretty sch) >> instantiate' Map.empty Map.empty sch
+instantiate env sch fml = writeLog 2 (text "INSTANTIATE" <+> pretty sch) >> instantiate' Map.empty Map.empty sch
   where
     instantiate' subst pSubst (ForallT a sch) = do
       a' <- freshId "a"
