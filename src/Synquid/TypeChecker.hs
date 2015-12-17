@@ -124,8 +124,8 @@ reconstructI env t@(ScalarT _ _) impl = case content impl of
   PFun _ _ -> throwError $ text "Abstraction of scalar type"
   
   PLet x iDef iBody -> do
-    (_, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env (vartAll dontCare) iDef
-    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env) t iBody
+    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env (vartAll dontCare) iDef
+    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
     return $ Program (PLet x pDef pBody) t
   
   PIf (Program PHole ()) iThen iElse -> do

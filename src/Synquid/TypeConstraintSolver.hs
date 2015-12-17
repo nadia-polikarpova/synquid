@@ -112,9 +112,9 @@ solveTypeConstraints = do
   simplifyAllConstraints
         
   tass <- use typeAssignment
-  writeLog 1 (text "Type assignment" $+$ vMapDoc text pretty tass)        
+  writeLog 2 (text "Type assignment" $+$ vMapDoc text pretty tass)        
   pass <- use predAssignment
-  writeLog 1 (text "Pred assignment" $+$ vMapDoc text pretty pass)        
+  writeLog 2 (text "Pred assignment" $+$ vMapDoc text pretty pass)        
   
   processAllConstraints
   solveHornClauses
@@ -128,7 +128,7 @@ solveTypeConstraints = do
 simplifyAllConstraints :: MonadHorn s => TCSolver s () 
 simplifyAllConstraints = do
   tcs <- use typingConstraints
-  writeLog 1 (text "Typing Constraints" $+$ (vsep $ map pretty tcs))
+  writeLog 2 (text "Typing Constraints" $+$ (vsep $ map pretty tcs))
   typingConstraints .= []
   tass <- use typeAssignment
   mapM_ simplifyConstraint tcs  
@@ -203,7 +203,7 @@ simplifyConstraint' tass _ c@(WellFormedPredicate env sorts p) =
   let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
   in if any (isFreeVariable tass) typeVars
     then do
-      writeLog 1 $ text "WARNING: free vars in predicate" <+> pretty c
+      writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
       typingConstraints %= (c :) -- Still has type variables: cannot determine shape
     else  do                 
       u <- freshId "u"
@@ -261,7 +261,7 @@ unify env a t = if a `Set.member` typeVarsOf t
   then throwError $ text "simplifyConstraint: type variable occurs in the other type"
   else do
     t' <- fresh env t
-    writeLog 1 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
+    writeLog 2 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
     addTypeAssignment a t'    
 
 -- | Convert simple constraint to horn clauses and consistency checks, and update qualifier maps
