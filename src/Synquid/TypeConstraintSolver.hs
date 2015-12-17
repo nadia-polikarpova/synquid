@@ -175,12 +175,13 @@ simplifyConstraint c = do
   pass <- use predAssignment
   simplifyConstraint' tass pass c
 
--- Dummy type variable: drop
-simplifyConstraint' _ _ (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) | a == dontCare
-  = return ()
+-- Any type on the right: drop
+simplifyConstraint' _ _ (Subtype _ t AnyT _) = return ()
+-- Any type where a definite type should be: error
+simplifyConstraint' _ _ c@(Subtype _ AnyT _ _) = error $ show $ text "Expected definite type:" <+> pretty c
+simplifyConstraint' _ _ c@(WellFormed _ AnyT) = error $ show $ text "Expected definite type:" <+> pretty c
 -- Well-formedness of a known predicate drop  
-simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass 
-  = return ()
+simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass = return ()
   
 -- Type variable with known assignment: substitute
 simplifyConstraint' tass _ (Subtype env tv@(ScalarT (TypeVarT a) _) t consistent) | a `Map.member` tass

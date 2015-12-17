@@ -84,7 +84,7 @@ extractTypeQGen qual (env, (val@(Var s valName) : syms)) =
                 else []
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
-extractCondQGen qual (env, syms) = allSubstitutions env qual UnknownS (Set.toList $ varsOf qual) syms
+extractCondQGen qual (env, syms) = allSubstitutions env qual AnyS (Set.toList $ varsOf qual) syms
 
 extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
 extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = let baseCaseCtor = head ctors
@@ -113,7 +113,7 @@ extractQGenFromType (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType tA
 -- | Extract conditional qualifiers from the types of Boolean functions    
 extractCondFromType :: RType -> (Environment, [Formula]) -> [Formula]
 extractCondFromType t@(FunctionT _ _ _) (env, syms) = case lastType t of
-  ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName -> allSubstitutions env fml UnknownS (Set.toList $ varsOf fml) syms
+  ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName -> allSubstitutions env fml AnyS (Set.toList $ varsOf fml) syms
   _ -> []
 extractCondFromType _ _ = []  
 

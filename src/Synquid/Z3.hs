@@ -102,7 +102,7 @@ toZ3Sort s = do
         -- DataS name args -> mkStringSymbol name >>= mkUninterpretedSort
         DataS name args -> mkIntSort
         SetS el -> toZ3Sort el >>= mkSetSort
-        --UnknownS -> mkIntSort
+        --AnyS -> mkIntSort
       sorts %= Map.insert s z3s
       return z3s
 

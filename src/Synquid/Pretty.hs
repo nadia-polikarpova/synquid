@@ -116,7 +116,7 @@ instance Pretty Sort where
   pretty (SetS el) = text "Set" <+> pretty el
   pretty (VarS name) = text name
   pretty (DataS name args) = text name <+> hsep (map (parens . pretty) args)
-  pretty UnknownS = text "?"
+  pretty AnyS = text "?"
 
 instance Show Sort where
   show = show . pretty

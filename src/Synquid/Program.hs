@@ -24,7 +24,8 @@ data BaseType r = BoolT | IntT | DatatypeT Id [TypeSkeleton r] [r] | TypeVarT Id
 -- | Type skeletons (parametrized by refinements)
 data TypeSkeleton r =
   ScalarT (BaseType r) r |
-  FunctionT Id (TypeSkeleton r) (TypeSkeleton r)  
+  FunctionT Id (TypeSkeleton r) (TypeSkeleton r) |
+  AnyT
   deriving (Eq, Ord)
     
 baseTypeOf (ScalarT baseT _) = baseT
@@ -46,8 +47,8 @@ fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) f
 
 -- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
 complies :: Sort -> Sort -> Bool  
-complies UnknownS s = True  
-complies s UnknownS = True
+complies AnyS s = True  
+complies s AnyS = True
 complies (SetS s) (SetS s') = complies s s'
 complies (VarS name) (VarS name') = name == name'
 complies (DataS name sArgs) (DataS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
@@ -57,11 +58,11 @@ arity :: TypeSkeleton r -> Int
 arity (FunctionT _ _ t) = arity t + 1
 arity _ = 0
 
-lastType t@(ScalarT _ _) = t
 lastType (FunctionT _ _ tRes) = lastType tRes
+lastType t = t
 
-allArgTypes (ScalarT _ _) = []
 allArgTypes (FunctionT x tArg tRes) = tArg : (allArgTypes tRes)
+allArgTypes _ = []
 
 allArgs (ScalarT _ _) = []
 allArgs (FunctionT x (ScalarT baseT _) tRes) = (Var (toSort baseT) x) : (allArgs tRes)
@@ -294,11 +295,11 @@ instance Ord (Program t) where
   (<=) (Program l _) (Program r _) = l <= r
   
 -- | Untyped programs  
-type UProgram = Program ()  
+type UProgram = Program RType
 -- | Refinement-typed programs
-type RProgram = Program (TypeSkeleton Formula)
+type RProgram = Program RType
 
-untyped c = Program c ()
+untyped c = Program c AnyT
 
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg

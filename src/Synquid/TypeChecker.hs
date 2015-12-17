@@ -124,11 +124,11 @@ reconstructI env t@(ScalarT _ _) impl = case content impl of
   PFun _ _ -> throwError $ text "Abstraction of scalar type"
   
   PLet x iDef iBody -> do
-    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env (vartAll dontCare) iDef
+    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env AnyT iDef
     pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
     return $ Program (PLet x pDef pBody) t
   
-  PIf (Program PHole ()) iThen iElse -> do
+  PIf (Program PHole AnyT) iThen iElse -> do
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
@@ -192,7 +192,7 @@ reconstructE env typ (Program (PSymbol name) _) = do
       else instantiate env sch ftrue
 reconstructE env typ (Program (PApp iFun iArg) _) = do
   x <- freshId "x"
-  (env', pFun) <- inContext (\p -> Program (PApp p (Program PHole $ vartAll dontCare)) typ) $ reconstructE env (FunctionT x (vartAll dontCare) typ) iFun
+  (env', pFun) <- inContext (\p -> Program (PApp p (Program PHole AnyT)) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
 
   (envfinal, pApp) <- if isFunctionType tArg
@@ -207,7 +207,7 @@ reconstructE env typ (Program (PApp iFun iArg) _) = do
   return (envfinal, pApp)
 reconstructE env typ (Program (PFormula fml) _) = do
   tass <- use (typingState . typeAssignment)
-  case resolveRefinement (typeSubstituteEnv tass env) UnknownS fml of
+  case resolveRefinement (typeSubstituteEnv tass env) AnyS fml of
     Left err -> throwError $ text err
     Right fml' -> do
       let typ' = ScalarT BoolT fml'

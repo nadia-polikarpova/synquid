@@ -139,7 +139,7 @@ generateMatch env t = do
     else do
       (env', pScrutinee) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
                                   $ inContext (\p -> Program (PMatch p []) t)
-                                  $ generateE env (vartAll dontCare) -- Generate a scrutinee of an arbitrary type
+                                  $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
 
       case typeOf pScrutinee of
         (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
@@ -391,8 +391,8 @@ enumerateAt env typ d = do
 
     generateApp genFun genArg = do
       x <- freshId "x"
-      (env', fun) <- inContext (\p -> Program (PApp p (Program PHole $ vartAll dontCare)) typ)
-                            $ genFun env (FunctionT x (vartAll dontCare) typ) -- Find all functions that unify with (? -> typ)
+      (env', fun) <- inContext (\p -> Program (PApp p (Program PHole AnyT)) typ)
+                            $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
       (envfinal, pApp) <- if isFunctionType tArg

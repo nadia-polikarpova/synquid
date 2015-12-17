@@ -1,9 +1,8 @@
-- Fix non-incremental mode
-- Cut # calls to Z3 when incremental but not exploring
 - Optional types in templates
 - Type checking match: get scrutinee type from constructors, unify case symbols, check isGoodScrutinee (in case it's a hole)
 - Better error messages
 - Resolve formulas with free type variables in conditionals: get rid of formula programs
+- Should let-defs have abstracted types?
 - More principled type substitution
 
 - Type classes (to help instantiate qualifiers)	
