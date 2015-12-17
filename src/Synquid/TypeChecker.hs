@@ -122,16 +122,28 @@ reconstructI env t@(FunctionT x tArg tRes) impl = case content impl of
   _ -> throwError $ text "Function type requires abstraction"
 reconstructI env t@(ScalarT _ _) impl = case content impl of
   PFun _ _ -> throwError $ text "Abstraction of scalar type"
+  
   PLet x iDef iBody -> do
     (_, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env (vartAll dontCare) iDef
     pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env) t iBody
     return $ Program (PLet x pDef pBody) t
+  
+  PIf (Program PHole ()) iThen iElse -> do
+    cUnknown <- Unknown Map.empty <$> freshId "u"
+    addConstraint $ WellFormedCond env cUnknown
+    pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
+    cond <- uses (typingState . candidates) (conjunction . flip valuation cUnknown . solution . head)
+    pCond <- generateCondition env cond
+    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
+    return $ Program (PIf pCond pThen pElse) t
+  
   PIf iCond iThen iElse -> do
     (_, pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructE env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
-    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption cond env) t iThen -- ToDo: add context
-    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse -- ToDo: add context
+    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption cond env) t iThen
+    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse
     return $ Program (PIf pCond pThen pElse) t
+    
   PMatch iScr iCases -> do
     (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env (vartAll dontCare) iScr
     case typeOf pScrutinee of
@@ -139,7 +151,8 @@ reconstructI env t@(ScalarT _ _) impl = case content impl of
         (env'', x) <- toSymbol pScrutinee env'
         pCases <- mapM (reconstructCase env'' x pScrutinee t) iCases
         return $ Program (PMatch pScrutinee pCases) t
-      _ -> throwError $ text "Type of scrutinee is not a datatype"        
+      _ -> throwError $ text "Type of scrutinee is not a datatype"
+      
   _ -> snd <$> reconstructE env t impl
   
 reconstructCase env scrName pScrutinee t (Case consName args iBody) = case Map.lookup consName (allSymbols env) of
