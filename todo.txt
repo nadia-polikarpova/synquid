@@ -1,5 +1,3 @@
-- Make program a functor
-- Type checking conditionals with hole conditions
 - Type checking match: get scrutinee type from constructors, unify case symbols, check isGoodScrutinee (in case it's a hole)
 - Better error messages
 - Resolve formulas with free type variables in conditionals: get rid of formula programs

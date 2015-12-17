@@ -409,7 +409,7 @@ finalize p = do
   tass <- use typeAssignment
   pass <- use predAssignment
   sol <- uses candidates (solution . head)      
-  return $ programApplySolution sol $ programSubstitutePreds pass $ programSubstituteTypes tass $ p
+  return $ fmap (typeApplySolution sol . typeSubstitutePred pass . typeSubstitute tass) p
 
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    

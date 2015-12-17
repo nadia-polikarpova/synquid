@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, DeriveFunctor #-}
 
 -- | Executable programs
 module Synquid.Program where
@@ -266,7 +266,7 @@ data Case t = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
   expr :: Program t       -- ^ Result of the match in this case
-}  deriving (Eq, Ord)
+}  deriving (Eq, Ord, Functor)
     
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram t =
@@ -279,19 +279,19 @@ data BareProgram t =
   PFormula Formula |                          -- ^ Executable formula
   PLet Id (Program t) (Program t) |           -- ^ Let binding
   PHole
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Functor)
   
 -- | Programs annotated with types  
 data Program t = Program {
   content :: BareProgram t,
   typeOf :: t
-}
+} deriving (Functor)
 
 instance Eq (Program t) where
   (==) (Program l _) (Program r _) = l == r
   
 instance Ord (Program t) where
-  (<=) (Program l _) (Program r _) = l <= r  
+  (<=) (Program l _) (Program r _) = l <= r
   
 -- | Untyped programs  
 type UProgram = Program ()  
@@ -302,51 +302,6 @@ untyped c = Program c ()
 
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
-
--- | Instantiate type variables in a program
-programSubstituteTypes :: TypeSubstitution -> RProgram -> RProgram
-programSubstituteTypes subst (Program p t) = Program (programSubstituteTypes' p) (typeSubstitute subst t)
-  where
-    pst = programSubstituteTypes subst
-    
-    programSubstituteTypes' (PSymbol name) = PSymbol name
-    programSubstituteTypes' (PApp fun arg) = PApp (pst fun) (pst arg)
-    programSubstituteTypes' (PFun name p) = PFun name (pst p)    
-    programSubstituteTypes' (PIf c p1 p2) = PIf (pst c) (pst p1) (pst p2)
-    programSubstituteTypes' (PMatch scr cases) = PMatch (pst scr) (map (\(Case ctr args p) -> Case ctr args (pst p)) cases)
-    programSubstituteTypes' (PFix args p) = PFix args (pst p)
-    programSubstituteTypes' (PLet x def p) = PLet x (pst def) (pst p)
-    programSubstituteTypes' (PFormula fml) = PFormula $ sortSubstituteFml (asSortSubst subst) fml
-    
--- | Instantiate predicate variables in a program
-programSubstitutePreds :: Substitution -> RProgram -> RProgram
-programSubstitutePreds pSubst (Program p t) = Program (programSubstitutePreds' p) (typeSubstitutePred pSubst t)
-  where
-    psp = programSubstitutePreds pSubst
-    
-    programSubstitutePreds' (PSymbol name) = PSymbol name
-    programSubstitutePreds' (PApp fun arg) = PApp (psp fun) (psp arg)
-    programSubstitutePreds' (PFun name p) = PFun name (psp p)    
-    programSubstitutePreds' (PIf c p1 p2) = PIf (psp c) (psp p1) (psp p2)
-    programSubstitutePreds' (PMatch scr cases) = PMatch (psp scr) (map (\(Case ctr args p) -> Case ctr args (psp p)) cases)
-    programSubstitutePreds' (PFix args p) = PFix args (psp p)
-    programSubstitutePreds' (PLet x def p) = PLet x (psp def) (psp p)
-    programSubstitutePreds' (PFormula fml) = PFormula $ substitutePredicate pSubst fml
-
--- | Instantiate unknowns in a program
-programApplySolution :: Solution -> RProgram -> RProgram
-programApplySolution sol (Program p t) = Program (programApplySolution' p) (typeApplySolution sol t)
-  where
-    pas = programApplySolution sol
-    
-    programApplySolution' (PSymbol name) = PSymbol name
-    programApplySolution' (PApp fun arg) = PApp (pas fun) (pas arg)
-    programApplySolution' (PFun name p) = PFun name (pas p)    
-    programApplySolution' (PIf c p1 p2) = PIf (pas c) (pas p1) (pas p2)
-    programApplySolution' (PMatch scr cases) = PMatch (pas scr) (map (\(Case ctr args p) -> Case ctr args (pas p)) cases)
-    programApplySolution' (PFix args p) = PFix args (pas p)
-    programApplySolution' (PLet x def p) = PLet x (pas def) (pas p)
-    programApplySolution' (PFormula fml) = PFormula $ applySolution sol fml
     
 -- | Substitute a symbol for a subterm in a program    
 programSubstituteSymbol :: Id -> RProgram -> RProgram -> RProgram
