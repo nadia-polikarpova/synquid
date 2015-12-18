@@ -312,9 +312,9 @@ parseIf = do
   reserved "if"
   iCond <- parseETerm
   reserved "then"
-  iThen <- parseImpl
+  iThen <- parseScalar
   reserved "else"
-  iElse <- parseImpl
+  iElse <- parseScalar
   return $ untyped $ PIf iCond iThen iElse
 
 parseETerm = parseFormulaTerm <|> parseAppTerm <|> parseAtomTerm
@@ -324,13 +324,18 @@ parseETerm = parseFormulaTerm <|> parseAppTerm <|> parseAtomTerm
       args <- many (try parseAtomTerm <|> parens parseImpl)
       return $ foldl1 (\e1 e2 -> untyped $ PApp e1 e2) (head : args)
     parseAtomTerm = choice [
-        parens parseETerm
+        parens (withOptionalType $ parseETerm)
       , parseHole
       , parseSymbol
       ]
     parseHole = reserved "??" >> return (untyped PHole)
     parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
-    parseFormulaTerm = untyped . PFormula <$> braces parseFormula    
+    parseFormulaTerm = untyped . PFormula <$> braces parseFormula
+    
+withOptionalType p = do
+  (Program content _) <- p
+  typ <- option AnyT $ reserved "::" >> parseType
+  return $ Program content typ
       
 {- Misc -}
 

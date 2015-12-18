@@ -170,7 +170,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       case mProg of
         Left err -> print err >> exitFailure
         Right prog ->
-          print $ text (gName goal) <+> text "=" <+> programDoc (const empty) prog $+$
+          print $ text (gName goal) <+> text "=" <+> pretty prog $+$
             solutionSizeDoc $+$
             specSizeDoc
           where

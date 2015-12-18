@@ -37,8 +37,6 @@ module Synquid.Pretty (
   -- * Structures
   hMapDoc,
   vMapDoc,
-  -- * Other
-  programDoc,
   -- * Counting
   typeNodeCount,
   programNodeCount
@@ -203,20 +201,18 @@ instance Pretty RBaseType where
 instance Show RBaseType where
   show = show . pretty
 
-caseDoc :: (t -> Doc) -> Case t -> Doc
-caseDoc tdoc cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> programDoc tdoc (expr cas)
+prettyCase :: (Pretty t) => Case t -> Doc
+prettyCase cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> prettyProgram (expr cas)
 
-programDoc :: (t -> Doc) -> Program t -> Doc
-programDoc tdoc (Program p typ) = let
-    pDoc = programDoc tdoc
-    withType doc = let td = tdoc typ in (option (not $ isEmpty td) $ braces td) <+> doc
-  in case p of
-    PSymbol s -> withType $ text s
+prettyProgram :: (Pretty t) => Program t -> Doc
+prettyProgram (Program p typ) = case p of
+    PSymbol s -> text s
     PApp f x -> let
       optParens p = case p of
-        Program (PSymbol _) _ -> pDoc p
-        _ -> parens (pDoc p)
-      prefix = pDoc f <+> optParens x
+        Program (PSymbol _) _ -> prettyProgram p
+        Program PHole _ -> prettyProgram p
+        _ -> parens (prettyProgram p)
+      prefix = prettyProgram f <+> optParens x
       in case content f of
           PApp g y -> case content g of
             PSymbol name -> if name `elem` Map.elems binOpTokens
@@ -224,17 +220,16 @@ programDoc tdoc (Program p typ) = let
                               else prefix
             _ -> prefix
           _ -> prefix
-    PFun x e -> withType (text "\\" <> text x <+> text ".") <+> pDoc e
-    PIf c t e -> nest 2 $ withType (text "if" <+> pDoc c) $+$ (text "then" <+> pDoc t) $+$ (text "else" <+> pDoc e)
-    PMatch l cases -> nest 2 $ withType (text "match" <+> pDoc l <+> text "with") $+$ vsep (map (caseDoc tdoc) cases)
-    PFix fs e -> pDoc e -- nest 2 $ withType (text "fix" <+> hsep (map text fs) <+> text ".") $+$ pDoc e
+    PFun x e -> text "\\" <> text x <+> text "." <+> prettyProgram e
+    PIf c t e -> nest 2 $ text "if" <+> prettyProgram c $+$ (text "then" <+> prettyProgram t) $+$ (text "else" <+> prettyProgram e)
+    PMatch l cases -> nest 2 $ text "match" <+> prettyProgram l <+> text "with" $+$ vsep (map prettyCase cases)
+    PFix fs e -> prettyProgram e
     PFormula fml -> pretty fml
-    PLet x e e' -> nest 2 (text "let" <+> text x <+> text "=" <+> pDoc e) $+$ nest 2 (text "in" <+> pDoc e')
-    -- pDoc p $+$ option (not $ null defs) (indent 2 (nest 2 (text "where" $+$ vsep (map (\(name, p) -> nest 2 (text name <+> text "=" <+> pDoc p)) defs))))
-    PHole -> text "??"
+    PLet x e e' -> nest 2 (text "let" <+> text x <+> text "=" <+> prettyProgram e) $+$ nest 2 (text "in" <+> prettyProgram e')
+    PHole -> if show (pretty typ) == dontCare then text "??" else parens $ text "?? ::" <+> pretty typ
 
 instance (Pretty t) => Pretty (Program t) where
-  pretty = programDoc pretty
+  pretty = prettyProgram
 
 instance (Pretty t) => Show (Program t) where
   show = show . pretty
@@ -242,6 +237,7 @@ instance (Pretty t) => Show (Program t) where
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
 prettySType (FunctionT _ t1 t2) = parens (pretty t1 <+> text "->" <+> pretty t2)
+prettySType AnyT = text "_"
 
 instance Pretty SType where
   pretty = prettySType
@@ -253,6 +249,7 @@ prettyType :: RType -> Doc
 prettyType (ScalarT base (BoolLit True)) = pretty base
 prettyType (ScalarT base fml) = braces (pretty base <> text "|" <> pretty fml)
 prettyType (FunctionT x t1 t2) = parens (text x <> text ":" <> pretty t1 <+> text "->" <+> pretty t2)
+prettyType AnyT = text "_"
 
 instance Pretty RType where
   pretty = prettyType
@@ -313,7 +310,7 @@ instance Show Candidate where
   show = show . pretty
 
 instance Pretty Goal where
-  pretty (Goal name env spec impl) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec $+$ text name <+> text "=" <+> programDoc (const empty) impl
+  pretty (Goal name env spec impl) = pretty env <+> text "|-" <+> text name <+> text "::" <+> pretty spec $+$ text name <+> text "=" <+> pretty impl
 
 instance Show Goal where
   show = show. pretty
@@ -336,7 +333,7 @@ instance Pretty Declaration where
                                                             vsep (map pretty ctors)
   pretty (MeasureDecl name inSort outSort post) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->"
                                                   <+> if post == ftrue then pretty outSort else braces (pretty outSort <+> text "|" <+> pretty post)
-  pretty (SynthesisGoal name impl) = text name <+> text "=" <+> programDoc (const empty) impl
+  pretty (SynthesisGoal name impl) = text name <+> text "=" <+> pretty impl
 
 {- AST node counting -}
 
