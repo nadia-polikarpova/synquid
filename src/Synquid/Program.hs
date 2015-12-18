@@ -194,12 +194,14 @@ refineBot (ScalarT BoolT _) = ScalarT BoolT ffalse
 refineBot (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ffalse
 refineBot (FunctionT x tArg tFun) = FunctionT x (refineTop tArg) (refineBot tFun)
 
+-- | Conjoin refinement to a type
 addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
   then ScalarT base fml' -- the type of a polymorphic variable does not require any other refinements
   else ScalarT base (fml `andClean` fml')
 addRefinement t (BoolLit True) = t
 addRefinement t _ = error $ "addRefinement: applied to function type"
 
+-- | Conjoin refinement to the return type
 addRefinementToLast t@(ScalarT _ _) fml = addRefinement t fml
 addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinementToLast tRes fml)
       
@@ -213,6 +215,11 @@ renameVar old new t@(ScalarT b _)  (ScalarT baseT fml) =
         DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (renameVar old new t) tArgs) (map subst pArgs)) (subst fml)
         _ -> ScalarT baseT (subst fml)
 renameVar old new t                  (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
+
+-- | Intersection of two types (assuming the types were already checked for consistency)
+intersection t AnyT = t
+intersection t (ScalarT _ fml) = addRefinement t fml
+intersection (FunctionT x tArg tRes) (FunctionT y tArg' tRes') = FunctionT x tArg (intersection tRes (renameVar y x tArg tRes')) 
 
 -- | 'unknownsOfType' @t: all unknowns in @t@
 unknownsOfType :: RType -> Set Formula 

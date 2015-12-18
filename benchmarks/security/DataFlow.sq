@@ -25,21 +25,21 @@ data File
 measure canRead :: File -> Set Principal
 measure canWrite :: File -> Set Principal
 
+-- | Access permission "axioms" (constructors for @CanRead@ and @CanWrite@)
+wImpliesR :: p: Principal -> f: {File | p in canWrite _v} -> {File | _v == f && p in canRead _v}
+adminW :: f: File -> {File | _v == f && Admin in canWrite _v}
+
 -- | File content
 data Content
-
--- | Connect file handles to their content
-predicate IsContent :: File -> Content -> Bool  
-
--- | Access permission "axioms" (constructors for @CanRead@ and @CanWrite@)
--- wImpliesR :: p: Principal -> f: {File | p in canWrite _v} -> {File | _v == f && p in canRead _v}
-adminW :: f: File -> {File | _v == f && Admin in canWrite _v}
 
 data Label where
   F :: File -> (Label)
   J :: Label -> Label -> Label
   
 predicate Tracked :: Content -> Label -> Bool
+
+strcatFlow :: l1: Label -> c1: {Content | Tracked _v l1} -> l2: Label -> c2: {Content | Tracked _v l2} -> {Content | Tracked _v (J l1 l2)}
+-- strcatFlow' :: c1: Content -> c2: Content -> Content -- strcatFlow stripped of security
 
 predicate CanFlow :: Label -> Label -> Bool
 
@@ -49,39 +49,37 @@ flowJoinLeast :: l: Label -> m1: {Label | CanFlow _v l} -> m2: {Label | CanFlow 
 atomicFlowL :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v == F lo && CanFlow _v (F hi)}
 atomicFlowR :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v == F hi && CanFlow (F lo) _v}
 
-fread :: p: {Principal | IsAuth _v} -> f: {File | p in canRead _v} -> {Content | IsContent f _v && Tracked _v (F f)}
--- fwrite :: p: {Principal | IsAuth _v} -> f: {File | p in canWrite _v} -> l: {Label | CanFlow _v (F f)} -> c: {Content | Tracked _v l } -> {File | _v == f && IsContent f c}
-fwrite :: p: {Principal | IsAuth _v} -> f: {File | p in canWrite _v} -> c: Content -> l: {Label | Tracked c _v && CanFlow _v (F f)} -> {File | _v == f && IsContent f c}
+fread :: p: {Principal | IsAuth _v} -> f: {File | p in canRead _v} -> {Content | Tracked _v (F f)}
+-- fread' :: p: Principal -> f: File -> (Content) -- fread stripped of security
+
+fwrite :: p: {Principal | IsAuth _v} -> f: {File | p in canWrite _v} -> l: {Label | CanFlow _v (F f)} -> c: {Content | Tracked _v l} -> {File | _v == f}
+-- fwrite' :: p: Principal -> f: File -> c: Content -> {File | _v == f} -- fwrite stripped of security
+
+exception :: (File)
 
 {- client -}
-
-
--- copy :: p: {Principal | _v == Admin && IsAuth _v} -> 
-        -- fin: {File | canRead _v == [Admin, User 0]} -> 
-        -- c: {Content | IsContent fin _v && Tracked _v (F fin)} ->
-        -- fout: {File | canRead _v == [Admin]} -> 
-        -- {File | _v == fout && IsContent _v c }
--- copy = ??
-
--- unsafeCopy :: p: {Principal | _v == Admin && IsAuth _v} -> 
-        -- fin: {File | canRead _v == [Admin]} -> 
-        -- c: {Content | IsContent fin _v && Tracked _v (F fin)} ->
-        -- fout: {File | canRead _v == [Admin, User 0]} -> 
-        -- {File | _v == fout && IsContent _v c }
--- unsafeCopy = ??
-
-append :: p: {Principal | _v == Admin && IsAuth _v} -> 
-        fin: {File | canRead _v == [Admin, User 0]} -> 
-        fout: {File | canRead _v == [Admin]} -> 
-        c: {Content | Tracked _v (J (F fin) (F fout))} ->
-        {File | _v == fout && IsContent _v c }
-append = ??
-
--- unsafeAppend :: p: {Principal | _v == Admin && IsAuth _v} -> 
-        -- fin: {File | canRead _v == [Admin]} -> 
-        -- fout: {File | canRead _v == [Admin, User 0]} -> 
-        -- c: {Content | Tracked _v (J (F fin) (F fout))} ->
-        -- {File | _v == fout && IsContent _v c }
--- unsafeAppend = ??
-
-
+          
+sudoAppend :: pw: Password -> 
+              fin: {File | canRead _v == [Admin, User 0]} ->         
+              fout: {File | canRead _v == [Admin]} -> 
+              (File)
+sudoAppend = \pw . \fin . \fout . 
+              if ??
+                then
+                  let c1 = fread Admin (?? :: {File | _v == fin}) in
+                  let c2 = fread Admin (?? :: {File | _v == fout}) in
+                  let c = strcatFlow ?? c1 ?? c2 in
+                  fwrite Admin (?? :: {File | _v == fout}) ?? c
+                else exception
+          
+-- ===Solution===
+-- sudoAppend = \pw . \fin . \fout . 
+              -- if login Admin pw
+                -- then
+                  -- let c1 = fread Admin fin in
+                  -- let c2 = fread Admin fout in
+                  -- let c = strcatFlow (F fin) c1 (F fout) c2 in
+                  -- fwrite Admin (adminW fout) (flowJoinLeast (F fout) (atomicFlowL fout fin) (atomicFlowL fout fout)) c
+                -- else exception
+          
+          
