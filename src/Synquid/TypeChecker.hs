@@ -20,6 +20,8 @@ import Control.Monad.Reader
 import Control.Applicative
 import Control.Lens
 
+-- | 'reconstruct' @eParams tParams goal@ : reconstruct missing types and terms in the body of @goal@ so that it represents a valid type judgment;
+-- return a type error if that is impossible
 reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either TypeError RProgram)
 reconstruct eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
@@ -113,14 +115,19 @@ reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = rec
 reconstructTopLevel (Goal _ env (Monotype t) impl) = reconstructI env t impl
 
 reconstructI :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
-reconstructI env t (Program PHole _) = generateI env t
-reconstructI env t@(FunctionT x tArg tRes) impl = case content impl of 
+reconstructI env t (Program p AnyT) = reconstructI' env t p
+reconstructI env t (Program p t') = do
+  t'' <- checkAnnotation env t t' p
+  reconstructI' env t'' p
+
+reconstructI' env t PHole = generateI env t
+reconstructI' env t@(FunctionT x tArg tRes) impl = case impl of 
   PFun y impl -> do
     let ctx = \p -> Program (PFun y p) t
     pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
     return $ ctx pBody
   _ -> throwError $ text "Function type requires abstraction"
-reconstructI env t@(ScalarT _ _) impl = case content impl of
+reconstructI' env t@(ScalarT _ _) impl = case impl of
   PFun _ _ -> throwError $ text "Abstraction of scalar type"
   
   PLet x iDef iBody -> do
@@ -145,7 +152,7 @@ reconstructI env t@(ScalarT _ _) impl = case content impl of
     return $ Program (PIf pCond pThen pElse) t
     
   PMatch iScr iCases -> do
-    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env (vartAll dontCare) iScr
+    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env AnyT iScr
     case typeOf pScrutinee of
       (ScalarT (DatatypeT _ _ _) _) -> do -- Type of the scrutinee is a datatype
         (env'', x) <- toSymbol pScrutinee env'
@@ -153,7 +160,7 @@ reconstructI env t@(ScalarT _ _) impl = case content impl of
         return $ Program (PMatch pScrutinee pCases) t
       _ -> throwError $ text "Type of scrutinee is not a datatype"
       
-  _ -> snd <$> reconstructE env t impl
+  _ -> snd <$> reconstructE env t (untyped impl)
   
 reconstructCase env scrName pScrutinee t (Case consName args iBody) = case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
@@ -173,8 +180,13 @@ reconstructCase env scrName pScrutinee t (Case consName args iBody) = case Map.l
       return ((name, tArg) : syms, ass)
 
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
-reconstructE env typ (Program PHole _) = generateE env typ
-reconstructE env typ (Program (PSymbol name) _) = do
+reconstructE env t (Program p AnyT) = reconstructE' env t p
+reconstructE env t (Program p t') = do
+  t'' <- checkAnnotation env t t' p
+  reconstructE' env t'' p  
+
+reconstructE' env typ PHole = generateE env typ
+reconstructE' env typ (PSymbol name) = do
   case Map.lookup name (symbolsOfArity (arity typ) env) of
     Nothing -> throwError $ text "Symbol" <+> text name <+> text "undefined"
     Just sch -> do
@@ -190,7 +202,7 @@ reconstructE env typ (Program (PSymbol name) _) = do
     freshInstance sch = if arity (toMonotype sch) == 0
       then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
       else instantiate env sch ftrue
-reconstructE env typ (Program (PApp iFun iArg) _) = do
+reconstructE' env typ (PApp iFun iArg) = do
   x <- freshId "x"
   (env', pFun) <- inContext (\p -> Program (PApp p (Program PHole AnyT)) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
@@ -205,13 +217,26 @@ reconstructE env typ (Program (PApp iFun iArg) _) = do
       return (env''', Program (PApp pFun pArg) (renameVar x y tArg tRes))
   checkE envfinal typ pApp
   return (envfinal, pApp)
-reconstructE env typ (Program (PFormula fml) _) = do
+reconstructE' env typ (PFormula fml) = do
   tass <- use (typingState . typeAssignment)
   case resolveRefinement (typeSubstituteEnv tass env) AnyS fml of
     Left err -> throwError $ text err
     Right fml' -> do
       let typ' = ScalarT BoolT fml'
       addConstraint $ Subtype env typ' typ False  
-      runInSolver solveTypeConstraints
-      return (env, Program (PFormula fml') typ')  
+      solveIncrementally
+      return (env, Program (PFormula fml') typ')
+    
+-- | 'checkAnnotation' @env t t' p@ : if user annotation @t'@ for program @p@ is a subtype of the goal type @t@,
+-- return resolved @t'@, otherwise fail
+checkAnnotation env t t' p = do
+  tass <- use (typingState . typeAssignment)
+  case resolveRefinedType (typeSubstituteEnv tass env) t' of
+    Left err -> throwError $ text err
+    Right t'' -> do
+      ctx <- asks $ _context . fst
+      writeLog 1 $ text "Checking type annotation" <+> pretty t'' <+> text "<:" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
+      addConstraint $ Subtype env t'' t False
+      solveIncrementally
+      return t''
     

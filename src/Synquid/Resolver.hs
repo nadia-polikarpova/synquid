@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveProgramAst, resolveRefinement, resolveType, ResolverState (..)) where
+module Synquid.Resolver (resolveProgramAst, resolveRefinement, resolveRefinedType, ResolverState (..)) where
 
 import Synquid.Program
 import Synquid.Logic
@@ -48,6 +48,9 @@ resolveProgramAst declarations =
       
 resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
 resolveRefinement env valueSort fml = runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] []))
+
+resolveRefinedType :: Environment -> RType -> Either ErrMsg RType
+resolveRefinedType env t = runExcept (evalStateT (resolveType t) (ResolverState env [] [] []))
     
 {- Implementation -}    
 
