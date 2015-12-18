@@ -152,32 +152,48 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     return $ Program (PIf pCond pThen pElse) t
     
   PMatch iScr iCases -> do
-    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env AnyT iScr
-    case typeOf pScrutinee of
-      (ScalarT (DatatypeT _ _ _) _) -> do -- Type of the scrutinee is a datatype
-        (env'', x) <- toSymbol pScrutinee env'
-        pCases <- mapM (reconstructCase env'' x pScrutinee t) iCases
-        return $ Program (PMatch pScrutinee pCases) t
-      _ -> throwError $ text "Type of scrutinee is not a datatype"
+    (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
+    let scrT = refineTop $ shape $ lastType $ head consTypes
+    
+    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env scrT iScr
+    let scrutineeSymbols = symbolList pScrutinee
+    let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
+                          (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
+    when (not isGoodScrutinee) $ throwError $ text "Match scrutinee" <+> pretty pScrutinee <+> text "is constant"
+    
+    (env'', x) <- toSymbol pScrutinee env'
+    pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes
+    return $ Program (PMatch pScrutinee pCases) t
       
   _ -> snd <$> reconstructE env t (untyped impl)
   
-reconstructCase env scrName pScrutinee t (Case consName args iBody) = case Map.lookup consName (allSymbols env) of
-    Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
-    Just consSch -> do
-      consT <- instantiate env consSch ftrue
-      runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
-      let ScalarT baseT _ = (typeOf pScrutinee)
-      (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) args (symbolType env consName consT)
-      let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
-      return $ Case consName args pCaseExpr
   where
-    caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
-      return ([], subst fml)
-    caseSymbols x (name : names) (FunctionT y tArg tRes) = do
-      (syms, ass) <- caseSymbols x names (renameVar y name tArg tRes)
-      return ((name, tArg) : syms, ass)
+    -- Check that all constructors are known and belong to the same datatype
+    checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
+      Nothing -> throwError $ text "Datatype constructor" <+> text consName <+> text "undefined"
+      Just consSch -> do
+                        consT <- instantiate env consSch ftrue
+                        case lastType consT of
+                          (ScalarT (DatatypeT dtName _ _) _) -> do
+                            case mName of
+                              Nothing -> return ()                            
+                              Just name -> if dtName == name
+                                             then return ()
+                                             else throwError $ text consName <+> text "is not a constructor of" <+> text name
+                            if arity (toMonotype consSch) /= length args 
+                              then throwError $ text "Datatype constructor" <+> text consName 
+                                            <+> text "expected" <+> pretty (arity (toMonotype consSch)) <+> text "binders and got" <+> pretty (length args)
+                              else ((consName, consT) :) <$> checkCases (Just dtName) cs
+                          _ -> throwError $ text consName <+> text "is not a datatype constructor"
+    checkCases _ [] = return []
+  
+reconstructCase env scrName pScrutinee t (Case consName args iBody) consT = do
+  runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
+  let ScalarT baseT _ = (typeOf pScrutinee)
+  (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) args (symbolType env consName consT)
+  let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+  pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
+  return $ Case consName args pCaseExpr
 
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
 reconstructE env t (Program p AnyT) = reconstructE' env t p

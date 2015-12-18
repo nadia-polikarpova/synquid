@@ -175,18 +175,19 @@ generateFirstCase env scrName pScrutinee t consName = do
       consT <- instantiate env consSch ftrue
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)
-      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
-      
+      let consT' = symbolType env consName consT
+      binders <- replicateM (arity consT') (freshId "x")
+      (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) binders consT'
       deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
       case deadBranchCond of
         Nothing -> do
                     let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
                     pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) 
-                                  $ inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t)
+                                  $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                                   $ generateI caseEnv t
-                    return $ (Case consName args pCaseExpr, ftrue)
+                    return $ (Case consName binders pCaseExpr, ftrue)
         
-        Just cond -> return $ (Case consName args (Program (PSymbol "error") t), cond)
+        Just cond -> return $ (Case consName binders (Program (PSymbol "error") t), cond)
 
 -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
 generateCase env scrName pScrutinee t consName = do
@@ -196,19 +197,20 @@ generateCase env scrName pScrutinee t consName = do
       consT <- instantiate env consSch ftrue
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       let ScalarT baseT _ = (typeOf pScrutinee)
-      (args, syms, ass) <- caseSymbols (Var (toSort baseT) scrName) (symbolType env consName consT)
+      let consT' = symbolType env consName consT
+      binders <- replicateM (arity consT') (freshId "x")
+      (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) binders consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
       pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
-                                       $ inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t)
+                                       $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                                        $ generateI caseEnv t
-      return $ Case consName args pCaseExpr
+      return $ Case consName binders pCaseExpr
 
-caseSymbols x (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
-  return ([], [], subst fml)
-caseSymbols x (FunctionT y tArg tRes) = do
-  argName <- freshId "x"
-  (args, syms, ass) <- caseSymbols x (renameVar y argName tArg tRes)
-  return (argName : args, (argName, tArg) : syms, ass)            
+caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
+  return ([], subst fml)
+caseSymbols x (name : names) (FunctionT y tArg tRes) = do
+  (syms, ass) <- caseSymbols x names (renameVar y name tArg tRes)
+  return ((name, tArg) : syms, ass)  
 
 -- | Generate a possibly conditinal possibly match term, depending on which conditions are abduced
 generateMaybeMatchIf :: MonadHorn s => Environment -> RType -> Explorer s RProgram
