@@ -1,7 +1,7 @@
 - Should we abduce conditions from argument holes? Should if ?? even be allowed?
 - Better error messages
 - Resolve formulas with free type variables in conditionals: get rid of formula programs
-- Should let-defs have abstracted types?
+- Should let-defs and known conditionals have abstracted types?
 - More principled type substitution
 - In matches: instantiate all constructor schemas together with the same free variables
 
@@ -24,6 +24,7 @@ Security:
 - Try encoding of atomic flow with HO functions
 
 Front-end:
+  - Change parser to indentation-based
 	- Make resolver multi-pass so that order of declarations doesn't matter
 	- Check if wf-metric is defined
 	- Attach positions to AST nodes?
