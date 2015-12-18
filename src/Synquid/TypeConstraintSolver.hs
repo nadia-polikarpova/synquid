@@ -175,11 +175,10 @@ simplifyConstraint c = do
   pass <- use predAssignment
   simplifyConstraint' tass pass c
 
--- Any type on the right: drop
+-- Any type: drop
 simplifyConstraint' _ _ (Subtype _ t AnyT _) = return ()
--- Any type where a definite type should be: error
-simplifyConstraint' _ _ c@(Subtype _ AnyT _ _) = error $ show $ text "Expected definite type:" <+> pretty c
-simplifyConstraint' _ _ c@(WellFormed _ AnyT) = error $ show $ text "Expected definite type:" <+> pretty c
+simplifyConstraint' _ _ c@(Subtype _ AnyT _ _) = return () -- error $ show $ text "Expected definite type:" <+> pretty c
+simplifyConstraint' _ _ c@(WellFormed _ AnyT) = return () -- error $ show $ text "Expected definite type:" <+> pretty c
 -- Well-formedness of a known predicate drop  
 simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass = return ()
   
@@ -202,7 +201,7 @@ simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBou
 -- Predicate well-formedness: shapeless or simple depending on type variables  
 simplifyConstraint' tass _ c@(WellFormedPredicate env sorts p) =
   let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
-  in if any (isFreeVariable tass) typeVars
+  in if any (isFreeVariable tass) typeVars -- ToDo: this should be done after the first pass!
     then do
       writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
       typingConstraints %= (c :) -- Still has type variables: cannot determine shape
@@ -236,9 +235,10 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
       simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2 False)
-simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True) -- This is a hack: we assume that arg in t2 is a free tv with no refinements
+simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
   = do -- TODO: rename type vars
-      -- simplifyConstraint (Subtype env tArg2 tArg1 False)
+      simplifyConstraint (Subtype env tArg2 tArg1 False) -- Function types are only consistent if their argument types are the same
+      simplifyConstraint (Subtype env tArg1 tArg2 False)
       simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
 simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
   = do

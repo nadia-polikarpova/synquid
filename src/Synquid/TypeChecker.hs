@@ -145,10 +145,10 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     return $ Program (PIf pCond pThen pElse) t
   
   PIf iCond iThen iElse -> do
-    (_, pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructE env (ScalarT BoolT ftrue) iCond
+    (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructE env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
-    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption cond env) t iThen
-    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse
+    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ftrue) cond) env') t iThen
+    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ffalse) cond) env') t iElse
     return $ Program (PIf pCond pThen pElse) t
     
   PMatch iScr iCases -> do
@@ -251,8 +251,8 @@ checkAnnotation env t t' p = do
     Left err -> throwError $ text err
     Right t'' -> do
       ctx <- asks $ _context . fst
-      writeLog 1 $ text "Checking type annotation" <+> pretty t'' <+> text "<:" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
-      addConstraint $ Subtype env t'' t False
+      writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
+      addConstraint $ Subtype env t'' t True
       solveIncrementally
-      return t''
+      return $ intersection t'' t
     
