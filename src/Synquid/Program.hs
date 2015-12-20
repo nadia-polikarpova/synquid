@@ -218,6 +218,7 @@ renameVar old new t                  (FunctionT x tArg tRes) = FunctionT x (rena
 
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
+intersection AnyT t = t
 intersection t (ScalarT _ fml) = addRefinement t fml
 intersection (FunctionT x tArg tRes) (FunctionT y tArg' tRes') = FunctionT x tArg (intersection tRes (renameVar y x tArg tRes')) 
 

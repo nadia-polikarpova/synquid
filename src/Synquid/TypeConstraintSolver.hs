@@ -18,7 +18,8 @@ module Synquid.TypeConstraintSolver (
   matchConsType,
   isEnvironmentInconsistent,
   freshId,
-  finalize  
+  finalize,
+  currentValuation  
 ) where
 
 import Synquid.Logic
@@ -409,8 +410,12 @@ finalize :: Monad s => RProgram -> TCSolver s RProgram
 finalize p = do
   tass <- use typeAssignment
   pass <- use predAssignment
-  sol <- uses candidates (solution . head)      
+  sol <- uses candidates (solution . head)
   return $ fmap (typeApplySolution sol . typeSubstitutePred pass . typeSubstitute tass) p
+  
+-- | Current valuation of a predicate unknown  
+currentValuation :: Monad s => Formula -> TCSolver s (Set Formula)  
+currentValuation u = uses candidates (flip valuation u . solution . head)  
 
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    

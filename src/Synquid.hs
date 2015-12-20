@@ -169,10 +169,10 @@ runOnFile synquidParams explorerParams solverParams file = do
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left err -> print err >> exitFailure
-        Right prog ->
-          print $ text (gName goal) <+> text "=" <+> pretty prog $+$
-            solutionSizeDoc $+$
-            specSizeDoc
+        Right prog -> do
+          print $ (text (gName goal) <+> text "=" </> pretty prog)
+          print solutionSizeDoc
+          print specSizeDoc
           where
             solutionSizeDoc = if showSolutionSize synquidParams 
                                 then parens (text "Size:" <+> pretty (programNodeCount prog))

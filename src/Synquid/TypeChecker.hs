@@ -114,6 +114,8 @@ reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = rec
 
 reconstructTopLevel (Goal _ env (Monotype t) impl) = reconstructI env t impl
 
+-- | 'reconstructI' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is a (possibly) introduction term
+-- (top-down phase of bidirectional reconstruction)
 reconstructI :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructI env t (Program p AnyT) = reconstructI' env t p
 reconstructI env t (Program p t') = do
@@ -131,41 +133,43 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
   PFun _ _ -> throwError $ text "Abstraction of scalar type"
   
   PLet x iDef iBody -> do
-    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructE env AnyT iDef
+    (env', pathCond, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructECond env AnyT iDef
     pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
-    return $ Program (PLet x pDef pBody) t
+    wrapInConditional env pathCond (Program (PLet x pDef pBody) t) t
   
   PIf (Program PHole AnyT) iThen iElse -> do
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
-    cond <- uses (typingState . candidates) (conjunction . flip valuation cUnknown . solution . head)
+    cond <- conjunction <$> runInSolver (currentValuation cUnknown)
     pCond <- generateCondition env cond
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
     return $ Program (PIf pCond pThen pElse) t
   
   PIf iCond iThen iElse -> do
-    (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructE env (ScalarT BoolT ftrue) iCond
+    (env', pathCond, pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructECond env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
-    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ftrue) cond) env') t iThen
-    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ffalse) cond) env') t iElse
-    return $ Program (PIf pCond pThen pElse) t
+    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ftrue) cond) $ env') t iThen
+    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ffalse) cond) $ env') t iElse
+    wrapInConditional env pathCond (Program (PIf pCond pThen pElse) t) t
     
   PMatch iScr iCases -> do
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
     let scrT = refineTop $ shape $ lastType $ head consTypes
     
-    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructE env scrT iScr
+    (env', pathCond, pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructECond env scrT iScr
     let scrutineeSymbols = symbolList pScrutinee
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
     when (not isGoodScrutinee) $ throwError $ text "Match scrutinee" <+> pretty pScrutinee <+> text "is constant"
-    
+        
     (env'', x) <- toSymbol pScrutinee env'
-    pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes
-    return $ Program (PMatch pScrutinee pCases) t
+    pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
+    wrapInConditional env pathCond (Program (PMatch pScrutinee pCases) t) t
       
-  _ -> snd <$> reconstructE env t (untyped impl)
+  _ -> do
+    (_, pathCond, p) <- reconstructECond env t (untyped impl)
+    wrapInConditional env pathCond p t
   
   where
     -- Check that all constructors are known and belong to the same datatype
@@ -194,7 +198,18 @@ reconstructCase env scrName pScrutinee t (Case consName args iBody) consT = do
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
   pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
   return $ Case consName args pCaseExpr
+  
+-- | 'reconstructECond' @env t impl@ :: conditionally reconstruct the judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
+reconstructECond :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, Formula, RProgram)
+reconstructECond env typ impl = do
+  cUnknown <- Unknown Map.empty <$> freshId "u"
+  addConstraint $ WellFormedCond env cUnknown
+  (env', p) <- reconstructE (addAssumption cUnknown env) typ impl
+  cond <- conjunction <$> runInSolver (currentValuation cUnknown)
+  return (env', cond, p)
 
+-- | 'reconstructE' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
+-- (bottom-up phase of bidirectional reconstruction)  
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
 reconstructE env t (Program p AnyT) = reconstructE' env t p
 reconstructE env t (Program p t') = do
@@ -255,4 +270,13 @@ checkAnnotation env t t' p = do
       addConstraint $ Subtype env t'' t True
       solveIncrementally
       return $ intersection t'' t
-    
+      
+-- | 'wrapInConditional' @env cond p t@ : program that executes @p@ under @cond@ and is undefined otherwise
+wrapInConditional :: MonadHorn s => Environment -> Formula -> RProgram -> RType  
+wrapInConditional env cond p t = if cond == ftrue
+  then return p
+  else do
+    pCond <- generateCondition env cond        
+    let pElse = Program PHole t
+    -- pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond p0 p) t) $ generateI (addAssumption (fnot cond) env) t
+    return $ Program (PIf pCond p pElse) t

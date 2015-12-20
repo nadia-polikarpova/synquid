@@ -1,4 +1,3 @@
-- Should we abduce conditions from argument holes? Should if ?? even be allowed?
 - Better error messages
 - Resolve formulas with free type variables in conditionals: get rid of formula programs
 - Should let-defs and known conditionals have abstracted types?
@@ -9,6 +8,7 @@
 
 - Do something with datatype equality: does it make everything slower? Eq?
 
+- Collect stats: how many candidates? how many active/inactive constraints?
 - Forget unknowns between branches
 - Try to reduce the size of environment embedding? 
 - Memoization: remove subsumed components?
@@ -19,8 +19,13 @@
 - If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 
 Security:
-- How to make use of the type of strcatFlow to figure out that the label to pass into fwrite should contain J (F fin) (F fout)
-- When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this prdicate is around
+- Make use of abstract predicates:
+  - Simple way: when the goal type contains an abstract predicate, either function return type or the argument types should contain that predicate
+  - More complex way: in addition to above, also propagate the information about the arguments of the predicate:
+    if it's in the function return type, unify the arguments and propagate that spec to the argument,
+    otherwise, function must be univalent (~ contain _v = f x), then substitute f _v for _v in the original predicate and propagate that to the argument
+
+When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this prdicate is around
 - Try encoding of atomic flow with HO functions
 
 Front-end:
