@@ -56,19 +56,16 @@ fwrite :: p: {Principal | IsAuth _v} -> f: {File | p in canWrite _v} -> c: Conte
 -- fwrite' :: p: Principal -> f: File -> c: Content -> {File | _v == f} -- fwrite stripped of security
 
 {- client -}
-                          
+
 sudoAppend :: pw: Password -> 
               fin: {File | canRead _v == [Admin, User 0]} ->         
               fout: {File | canRead _v == [Admin]} -> 
               (File)
 sudoAppend = \pw . \fin . \fout . 
-              if ??
-                then
-                  let c1 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fin}) in
-                  let c2 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) in
-                  let c = strcatFlow c1 ?? c2 ?? in
-                  fwrite (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) (?? :: {Content | _v == c}) ??
-                else ??
+                let c1 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fin}) in
+                let c2 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) in
+                let c = strcatFlow c1 ?? c2 ?? in
+                fwrite (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) (?? :: {Content | _v == c}) ??
           
 -- ===Solution===
 -- sudoAppend = \pw . \fin . \fout . 

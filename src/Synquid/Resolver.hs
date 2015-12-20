@@ -157,6 +157,8 @@ resolveType (FunctionT x tArg tRes) = do
   environment .= oldEnv
   return $ FunctionT x tArg' tRes'
   
+resolveType AnyT = return AnyT  
+  
 {- Formulas -}  
 
 resolveFormula :: Sort -> Sort -> Formula -> Resolver Formula

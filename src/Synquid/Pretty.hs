@@ -16,7 +16,7 @@ module Synquid.Pretty (
   -- * Combinators
   option,
   optionMaybe,
-  (<+>), ($+$), (<>),
+  (<+>), ($+$), (<>), (</>),
   hcat,
   vcat,
   hsep,
@@ -202,7 +202,7 @@ instance Show RBaseType where
   show = show . pretty
 
 prettyCase :: (Pretty t) => Case t -> Doc
-prettyCase cas = text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" <+> prettyProgram (expr cas)
+prettyCase cas = hang 2 $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> text "->" </> prettyProgram (expr cas)
 
 prettyProgram :: (Pretty t) => Program t -> Doc
 prettyProgram (Program p typ) = case p of
@@ -212,20 +212,20 @@ prettyProgram (Program p typ) = case p of
         Program (PSymbol _) _ -> prettyProgram p
         Program PHole _ -> prettyProgram p
         _ -> parens (prettyProgram p)
-      prefix = prettyProgram f <+> optParens x
+      prefix = hang 2 $ prettyProgram f </> optParens x
       in case content f of
           PApp g y -> case content g of
             PSymbol name -> if name `elem` Map.elems binOpTokens
-                              then optParens y <+> text name <+> optParens x -- Binary operator: use infix notation
+                              then hang 2 $ optParens y </> text name </> optParens x -- Binary operator: use infix notation
                               else prefix
             _ -> prefix
           _ -> prefix
-    PFun x e -> text "\\" <> text x <+> text "." <+> prettyProgram e
-    PIf c t e -> nest 2 $ text "if" <+> prettyProgram c $+$ (text "then" <+> prettyProgram t) $+$ (text "else" <+> prettyProgram e)
-    PMatch l cases -> nest 2 $ text "match" <+> prettyProgram l <+> text "with" $+$ vsep (map prettyCase cases)
+    PFun x e -> nest 2 $ text "\\" <> text x <+> text "." </> prettyProgram e
+    PIf c t e -> hang 2 $ text "if" <+> prettyProgram c $+$ (text "then" </> prettyProgram t) $+$ (text "else" </> prettyProgram e)
+    PMatch l cases -> hang 2 $ text "match" <+> prettyProgram l <+> text "with" $+$ vsep (map prettyCase cases)
     PFix fs e -> prettyProgram e
     PFormula fml -> pretty fml
-    PLet x e e' -> nest 2 (text "let" <+> text x <+> text "=" <+> prettyProgram e) $+$ nest 2 (text "in" <+> prettyProgram e')
+    PLet x e e' -> align $ hang 2 (text "let" <+> text x <+> text "=" </> prettyProgram e </> text "in") $+$ prettyProgram e'
     PHole -> if show (pretty typ) == dontCare then text "??" else parens $ text "?? ::" <+> pretty typ
 
 instance (Pretty t) => Pretty (Program t) where

@@ -110,9 +110,8 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
     generateThen = do
       cUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env cUnknown
-      (_, pThen) <- once $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it
-      typingState . candidates %= take 1 -- We also stick to the current valuations of unknowns: there should be no reason to reconsider them, since we've closed a top-level goal
-      cond <- uses (typingState . candidates) (conjunction . flip valuation cUnknown . solution . head)
+      (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it      
+      cond <- conjunction <$> runInSolver (currentValuation cUnknown)
       return (cond, pThen)
 
     -- | Proceed after solution @pThen@ has been found under assumption @cond@
@@ -120,12 +119,12 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
       then return pThen -- @pThen@ is valid under no assumptions: return it
       else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
         pCond <- generateCondition env cond        
-        pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateMaybeIf (addAssumption (fnot cond) env) t
+        pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption (fnot cond) env) t
         return $ Program (PIf pCond pThen pElse) t
             
 generateCondition env fml = if isExecutable fml
                               then return $ fmlToProgram fml
-                              else snd <$> once (generateE env (ScalarT BoolT $ valBool |=| fml))
+                              else snd <$> cut (generateE env (ScalarT BoolT $ valBool |=| fml))
                 
 -- | If partial solutions are accepted, try @gen@, and if it fails, just leave a hole of type @t@; otherwise @gen@
 optionalInPartial :: MonadHorn s => RType -> Explorer s RProgram -> Explorer s RProgram
@@ -153,13 +152,13 @@ generateMatch env t = do
           guard isGoodScrutinee
 
           (env'', x) <- toSymbol pScrutinee (addScrutinee pScrutinee env')
-          (pCase, cond) <- once $ generateFirstCase env'' x pScrutinee t (head ctors)             -- First case generated separately in an attempt to abduce a condition for the whole match
+          (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)             -- First case generated separately in an attempt to abduce a condition for the whole match
           if cond == ftrue
             then do -- First case is valid unconditionally
-              pCases <- mapM (once . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
+              pCases <- mapM (cut . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
               return $ Program (PMatch pScrutinee (pCase : pCases)) t
             else do -- First case is valid under a condition
-              pCases <- mapM (once . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
+              pCases <- mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
               let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
               pCond <- generateCondition env cond
               pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $               -- Generate the else branch
@@ -222,17 +221,16 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       addConstraint $ WellFormedMatchCond env matchUnknown
       condUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env condUnknown
-      (matchConds, p0) <- once $ do
+      (matchConds, p0) <- cut $ do
         (_, p0) <- generateE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
-        matchValuation <- uses (typingState . candidates) (Set.toList . flip valuation matchUnknown . solution . head)
+        matchValuation <- Set.toList <$> runInSolver (currentValuation matchUnknown)
         let allVars = Set.toList $ Set.unions (map varsOf matchValuation)
         let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) allVars -- group by vars
         d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer
         guard $ length matchConds <= d
         return (matchConds, p0)
 
-      cond <- uses (typingState . candidates) (conjunction . flip valuation condUnknown . solution . head)
-      typingState . candidates %= take 1
+      cond <- conjunction <$> runInSolver (currentValuation condUnknown)
       return (matchConds, cond, p0)
 
     -- | Proceed after solution @p0@ has been found under assumption @cond@ and match-assumption @matchCond@
@@ -241,15 +239,15 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
         then return p0 -- @p0@ is valid under no assumptions: return it
         else do -- @p0@ is valid under a nontrivial assumption, but no need to match
               pCond <- generateCondition env cond
-              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond p0 p) t) $ generateMaybeMatchIf (addAssumption (fnot cond) env) t                          
+              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond p0 p) t) $ generateI (addAssumption (fnot cond) env) t
               return $ Program (PIf pCond p0 pElse) t
       _ -> if cond == ftrue
         then generateMatchesFor env matchConds p0 t
         else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
               pCond <- generateCondition env cond
-              pThen <- once $ generateMatchesFor (addAssumption cond env) matchConds p0 t
+              pThen <- cut $ generateMatchesFor (addAssumption cond env) matchConds p0 t
               pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $
-                          generateMaybeMatchIf (addAssumption (fnot cond) env) t
+                          generateI (addAssumption (fnot cond) env) t
               return $ Program (PIf pCond pThen pElse) t
 
     generateMatchesFor env [] pBaseCase t = return pBaseCase
@@ -258,7 +256,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
-      pBaseCase' <- once $ inContext (\p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t) $
+      pBaseCase' <- cut $ inContext (\p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t) $
                             generateMatchesFor (addScrutinee pScrutinee . addAssumption matchCond $ env) rest pBaseCase t -- TODO: if matchCond contains only a subset of case conjuncts, we should add the rest
       generateKnownMatch env matchVar pBaseCase' t
 
@@ -268,7 +266,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       let env' = addScrutinee pScrutinee env
-      pCases <- mapM (once . generateCase env' x pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
+      pCases <- mapM (cut . generateCase env' x pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
       return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
 
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
@@ -497,7 +495,14 @@ symbolType env x t = case lastType t of
   (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
                                               then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
                                               else t
-  _ -> t    
+  _ -> t
+  
+-- | Perform an exploration, and once it succeeds, do not backtrack it  
+cut :: MonadHorn s => Explorer s a -> Explorer s a
+cut e = do
+  res <- once e
+  typingState . candidates %= take 1 -- We also stick to the current valuations of unknowns
+  return res
 
 writeLog level msg = do
   maxLevel <- asks $ _explorerLogLevel . fst
