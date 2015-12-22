@@ -10,6 +10,7 @@ module Synquid.TypeConstraintSolver (
   typingConstraints,
   typeAssignment,
   candidates,
+  errorContext,
   TCSolver,
   runTCSolver,
   initTypingState,
@@ -19,7 +20,7 @@ module Synquid.TypeConstraintSolver (
   isEnvironmentInconsistent,
   freshId,
   finalize,
-  currentValuation  
+  currentValuations
 ) where
 
 import Synquid.Logic
@@ -37,7 +38,7 @@ import Data.Map (Map)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Except
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Lens hiding (both)
 import Debug.Trace
 
@@ -73,9 +74,10 @@ data TypingState = TypingState {
   _initEnv :: Environment,                      -- ^ Initial environment
   _idCount :: Map String Int,                   -- ^ Number of unique identifiers issued so far
   -- Temporary state:
-  _simpleConstraints :: [Constraint],         -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
+  _simpleConstraints :: [Constraint],           -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints
-  _consistencyChecks :: [Formula]               -- ^ Formulas generated from type consistency constraints
+  _consistencyChecks :: [Formula],              -- ^ Formulas generated from type consistency constraints
+  _errorContext :: Doc                          -- ^ Information to be added to all type errors
 }
 
 makeLenses ''TypingState
@@ -101,7 +103,8 @@ initTypingState env = do
     _idCount = Map.empty,
     _simpleConstraints = [],
     _hornClauses = [],
-    _consistencyChecks = []    
+    _consistencyChecks = [],
+    _errorContext = empty
   }
 
 -- | Impose typing constraint @c@ on the programs
@@ -152,12 +155,14 @@ throwError e = lift $ lift $ throwE e
 solveHornClauses :: MonadHorn s => TCSolver s ()
 solveHornClauses = do
   clauses <- use hornClauses
-  tass <- use typeAssignment
   qmap <- use qualifierMap
   cands <- use candidates
   env <- use initEnv
   cands' <- lift . lift . lift $ refine clauses qmap (instantiateConsAxioms env) cands
-  when (null cands') $ throwError $ text "Horn clauses have no solutions"
+    
+  when (null cands') $ do
+    ec <- use errorContext
+    throwError $ text "Cannot find sufficiently strong refinements" $+$ ec
   candidates .= cands'
 
 -- | Filter out liquid assignments that are too strong for current consistency checks  
@@ -166,7 +171,9 @@ checkTypeConsistency = do
   clauses <- use consistencyChecks
   cands <- use candidates
   cands' <- lift . lift . lift $ checkConsistency clauses cands
-  when (null cands') $ throwError $ text "Inconsistent types"
+  when (null cands') $ do
+    ec <- use errorContext
+    throwError $ text "Found inconsistent refinements" $+$ ec
   candidates .= cands'
 
 -- | Simplify @c@ into a set of simple and shapeless constraints, possibly extended the current type assignment or predicate assignment
@@ -194,7 +201,7 @@ simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT a) _)) | a `Map
 -- Two unknown free variables: nothing can be done for now
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) | not (isBound a env) && not (isBound b env)
   = if a == b
-      then throwError $ text "simplifyConstraint: equal type variables on both sides"
+      then error $ show $ text "simplifyConstraint: equal type variables on both sides"
       else typingConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) 
   = typingConstraints %= (c :)
@@ -256,11 +263,14 @@ simplifyConstraint' _ _ c@(WellFormed _ (ScalarT baseT _)) = simpleConstraints %
 simplifyConstraint' _ _ c@(WellFormedCond _ _) = simpleConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= (c :)
 -- Otherwise (shape mismatch): fail
-simplifyConstraint' _ _ _ = throwError $ text "Shape mismatch"
+simplifyConstraint' _ _ (Subtype _ t t' _) = do
+  ec <- use errorContext
+  throwError $ text "Cannot match shape" <+> squotes (pretty $ shape t) $+$
+               text "with shape" <+> squotes (pretty $ shape t') $+$ ec
 
 -- | Unify type variable @a@ with type @t@ or fail if @a@ occurs in @t@
 unify env a t = if a `Set.member` typeVarsOf t
-  then throwError $ text "simplifyConstraint: type variable occurs in the other type"
+  then error $ show $ text "simplifyConstraint: type variable occurs in the other type"
   else do
     t' <- fresh env t
     writeLog 2 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
@@ -280,7 +290,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
           then do
             let lhss = embedding env tass pass True `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             hornClauses %= ((conjunction lhss |=>| r') :)
-          else throwError $ text "Subtyping constraint contains free predicates"
+          else error $ show $ text "Subtyping constraint contains free predicates"
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
       tass <- use typeAssignment
@@ -384,7 +394,7 @@ matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args p
   = do
       zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred p _) fml -> addPredAssignment p fml) pVars pArgs
-matchConsType _ _ = mzero    
+matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'
 
 -- | If additional bindings of @env'@ compared to @env@ make it inconsistent under some condition, return that condition
 isEnvironmentInconsistent env env' t = do
@@ -414,8 +424,8 @@ finalize p = do
   return $ fmap (typeApplySolution sol . typeSubstitutePred pass . typeSubstitute tass) p
   
 -- | Current valuation of a predicate unknown  
-currentValuation :: Monad s => Formula -> TCSolver s (Set Formula)  
-currentValuation u = uses candidates (flip valuation u . solution . head)  
+currentValuations :: Monad s => Formula -> TCSolver s [Set Formula]
+currentValuations u = uses candidates (map $ flip valuation u . solution)  
 
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    

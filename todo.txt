@@ -1,4 +1,3 @@
-- Better error messages
 - Resolve formulas with free type variables in conditionals: get rid of formula programs
 - Should let-defs and known conditionals have abstracted types?
 - More principled type substitution
@@ -8,6 +7,7 @@
 
 - Do something with datatype equality: does it make everything slower? Eq?
 
+- Irrefutable type errors (like symbol not in scope)
 - Collect stats: how many candidates? how many active/inactive constraints?
 - Forget unknowns between branches
 - Try to reduce the size of environment embedding? 

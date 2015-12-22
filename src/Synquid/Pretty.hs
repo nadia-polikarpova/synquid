@@ -27,6 +27,7 @@ module Synquid.Pretty (
   commaSep,
   parens,
   condParens,
+  squotes,
   dquotes,
   brackets,
   braces,
@@ -34,6 +35,8 @@ module Synquid.Pretty (
   spaces,
   -- * Indentation
   nest,
+  hang,
+  indent,
   -- * Structures
   hMapDoc,
   vMapDoc,

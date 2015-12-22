@@ -19,7 +19,7 @@ import Data.Map (Map)
 import Control.Monad.Logic
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Lens
 import Debug.Trace
 
@@ -111,7 +111,7 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
       cUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a soution for a nonempty subset of inputs, we go with it      
-      cond <- conjunction <$> runInSolver (currentValuation cUnknown)
+      cond <- conjunction <$> currentValuation cUnknown
       return (cond, pThen)
 
     -- | Proceed after solution @pThen@ has been found under assumption @cond@
@@ -223,14 +223,14 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       addConstraint $ WellFormedCond env condUnknown
       (matchConds, p0) <- cut $ do
         (_, p0) <- generateE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
-        matchValuation <- Set.toList <$> runInSolver (currentValuation matchUnknown)
+        matchValuation <- Set.toList <$> currentValuation matchUnknown
         let allVars = Set.toList $ Set.unions (map varsOf matchValuation)
         let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) allVars -- group by vars
         d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer
         guard $ length matchConds <= d
         return (matchConds, p0)
 
-      cond <- conjunction <$> runInSolver (currentValuation condUnknown)
+      cond <- conjunction <$> currentValuation condUnknown
       return (matchConds, cond, p0)
 
     -- | Proceed after solution @p0@ has been found under assumption @cond@ and match-assumption @matchCond@
@@ -337,7 +337,10 @@ checkE env typ p = do
     else do
       addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs $ typeOf p) (lastType (typeOf p))) (lastType typ) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+      
+  typingState . errorContext .= text "when checking" </> pretty p </> text "::" </> pretty typ </> text "in" $+$ pretty (ctx p)
   solveIncrementally
+  typingState . errorContext .= empty
   where
     removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
       ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
@@ -459,11 +462,16 @@ solveLocally c = do
   writeLog 1 (text "Solving Locally" $+$ pretty c)
   oldTC <- use $ typingState . typingConstraints
   addConstraint c
-  runInSolver $ solveTypeConstraints
+  runInSolver solveTypeConstraints
   typingState . typingConstraints .= oldTC
 
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
+
+currentValuation :: MonadHorn s => Formula -> Explorer s (Set Formula)
+currentValuation u = do
+  results <- runInSolver $ currentValuations u
+  msum $ map return results
 
 inContext ctx f = local (over (_1 . context) (. ctx)) f
     
@@ -499,10 +507,11 @@ symbolType env x t = case lastType t of
   
 -- | Perform an exploration, and once it succeeds, do not backtrack it  
 cut :: MonadHorn s => Explorer s a -> Explorer s a
-cut e = do
-  res <- once e
-  typingState . candidates %= take 1 -- We also stick to the current valuations of unknowns
-  return res
+cut = once
+-- cut e = do
+  -- res <- once e
+  -- typingState . candidates %= take 1 -- We also stick to the current valuations of unknowns
+  -- return res
 
 writeLog level msg = do
   maxLevel <- asks $ _explorerLogLevel . fst
