@@ -14,10 +14,11 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Foldable as F
 import Control.Monad.Logic
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Lens
 
 -- | 'reconstruct' @eParams tParams goal@ : reconstruct missing types and terms in the body of @goal@ so that it represents a valid type judgment;
@@ -128,9 +129,11 @@ reconstructI' env t@(FunctionT x tArg tRes) impl = case impl of
     let ctx = \p -> Program (PFun y p) t
     pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
     return $ ctx pBody
-  _ -> throwError $ text "Function type requires abstraction"
+  _ -> throwError $ text "Cannot assign function type" </> squotes (pretty t) </>
+                    text "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of
-  PFun _ _ -> throwError $ text "Abstraction of scalar type"
+  PFun _ _ -> throwError $ text "Cannot assign non-function type" </> squotes (pretty t) </>
+                           text "to lambda term" </> squotes (pretty $ untyped impl)
   
   PLet x iDef iBody -> do
     (env', pathCond, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructECond env AnyT iDef
@@ -141,7 +144,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
-    cond <- conjunction <$> runInSolver (currentValuation cUnknown)
+    cond <- conjunction <$> currentValuation cUnknown
     pCond <- generateCondition env cond
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
     return $ Program (PIf pCond pThen pElse) t
@@ -161,7 +164,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     let scrutineeSymbols = symbolList pScrutinee
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
-    when (not isGoodScrutinee) $ throwError $ text "Match scrutinee" <+> pretty pScrutinee <+> text "is constant"
+    when (not isGoodScrutinee) $ throwError $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
         
     (env'', x) <- toSymbol pScrutinee env'
     pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
@@ -174,7 +177,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
   where
     -- Check that all constructors are known and belong to the same datatype
     checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
-      Nothing -> throwError $ text "Datatype constructor" <+> text consName <+> text "undefined"
+      Nothing -> throwError $ text "Not in scope: data constructor" </> squotes (text consName)
       Just consSch -> do
                         consT <- instantiate env consSch ftrue
                         case lastType consT of
@@ -183,12 +186,14 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                               Nothing -> return ()                            
                               Just name -> if dtName == name
                                              then return ()
-                                             else throwError $ text consName <+> text "is not a constructor of" <+> text name
+                                             else throwError $ text "Expected constructor of datatype" </> squotes (text name) </> 
+                                                               text "and got constructor" </> squotes (text consName) </> 
+                                                               text "of datatype" </> squotes (text dtName)
                             if arity (toMonotype consSch) /= length args 
-                              then throwError $ text "Datatype constructor" <+> text consName 
-                                            <+> text "expected" <+> pretty (arity (toMonotype consSch)) <+> text "binders and got" <+> pretty (length args)
+                              then throwError $ text "Constructor" </> squotes (text consName)
+                                            </> text "expected" </> pretty (arity (toMonotype consSch)) </> text "binder(s) and got" <+> pretty (length args)
                               else ((consName, consT) :) <$> checkCases (Just dtName) cs
-                          _ -> throwError $ text consName <+> text "is not a datatype constructor"
+                          _ -> throwError $ text "Not in scope: data constructor" </> squotes (text consName)
     checkCases _ [] = return []
   
 reconstructCase env scrName pScrutinee t (Case consName args iBody) consT = do
@@ -201,12 +206,19 @@ reconstructCase env scrName pScrutinee t (Case consName args iBody) consT = do
   
 -- | 'reconstructECond' @env t impl@ :: conditionally reconstruct the judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
 reconstructECond :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, Formula, RProgram)
-reconstructECond env typ impl = do
-  cUnknown <- Unknown Map.empty <$> freshId "u"
-  addConstraint $ WellFormedCond env cUnknown
-  (env', p) <- reconstructE (addAssumption cUnknown env) typ impl
-  cond <- conjunction <$> runInSolver (currentValuation cUnknown)
-  return (env', cond, p)
+reconstructECond env typ impl = if hasUnknownAssumptions
+  then do  -- @env@ already contains an unknown assumption to be abduced
+    (env', p) <- reconstructE env typ impl
+    return (env', ftrue, p)
+  else do -- create a fresh unknown assumption to be abduced
+    cUnknown <- Unknown Map.empty <$> freshId "u"
+    addConstraint $ WellFormedCond env cUnknown
+    (env', p) <- reconstructE (addAssumption cUnknown env) typ impl
+    cond <- conjunction <$> currentValuation cUnknown
+    let env'' = over assumptions (Set.delete cUnknown . Set.insert cond) env' -- Replace @cUnknown@ with its valuation: it's not allowed to be strngthened anymore
+    return (env'', cond, p)
+  where
+    hasUnknownAssumptions = F.any (not . Set.null . unknownsOf) (env ^. assumptions)
 
 -- | 'reconstructE' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
 -- (bottom-up phase of bidirectional reconstruction)  
@@ -219,7 +231,7 @@ reconstructE env t (Program p t') = do
 reconstructE' env typ PHole = generateE env typ
 reconstructE' env typ (PSymbol name) = do
   case Map.lookup name (symbolsOfArity (arity typ) env) of
-    Nothing -> throwError $ text "Symbol" <+> text name <+> text "undefined"
+    Nothing -> throwError $ text "Not in scope:" </> text name
     Just sch -> do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
@@ -260,6 +272,7 @@ reconstructE' env typ (PFormula fml) = do
     
 -- | 'checkAnnotation' @env t t' p@ : if user annotation @t'@ for program @p@ is a subtype of the goal type @t@,
 -- return resolved @t'@, otherwise fail
+checkAnnotation :: MonadHorn s => Environment -> RType -> RType -> BareProgram RType -> Explorer s RType  
 checkAnnotation env t t' p = do
   tass <- use (typingState . typeAssignment)
   case resolveRefinedType (typeSubstituteEnv tass env) t' of
@@ -268,11 +281,15 @@ checkAnnotation env t t' p = do
       ctx <- asks $ _context . fst
       writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
       addConstraint $ Subtype env t'' t True
+      
+      typingState . errorContext .= text "when checking consistency of type annotation" </> pretty t'' </> text "with" </> pretty t </> text "in" $+$ pretty (ctx (Program p t''))
       solveIncrementally
+      typingState . errorContext .= empty
+      
       return $ intersection t'' t
       
 -- | 'wrapInConditional' @env cond p t@ : program that executes @p@ under @cond@ and is undefined otherwise
-wrapInConditional :: MonadHorn s => Environment -> Formula -> RProgram -> RType  
+wrapInConditional :: MonadHorn s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram
 wrapInConditional env cond p t = if cond == ftrue
   then return p
   else do

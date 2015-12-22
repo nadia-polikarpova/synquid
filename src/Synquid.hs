@@ -168,7 +168,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> print err >> exitFailure
+        Left err -> print (linebreak <> err) >> exitFailure
         Right prog -> do
           print $ (text (gName goal) <+> text "=" </> pretty prog)
           print solutionSizeDoc
