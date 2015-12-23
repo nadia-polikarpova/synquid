@@ -5,7 +5,7 @@ module Main where
 import Synquid.Logic
 import Synquid.Program
 import Synquid.Pretty
-import Synquid.Parser (parseProgram)
+import Synquid.Parser (parseFromFile, parseProgram)
 import Synquid.Resolver (resolveProgramAst)
 import Synquid.SolverMonad
 import Synquid.HornSolver
@@ -16,7 +16,6 @@ import Synquid.Synthesizer
 import System.Exit
 import System.Console.CmdArgs
 import Data.Time.Calendar
-import Text.ParserCombinators.Parsec (parse, parseFromFile)
 import Data.Map (size, elems, keys)
 
 programName = "synquid"
