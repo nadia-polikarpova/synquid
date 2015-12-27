@@ -1,6 +1,6 @@
-- Resolve formulas with free type variables in conditionals: get rid of formula programs
 - In matches: instantiate all constructor schemas together with the same free variables
 - Replace measures/predicates with arbitrary logic functions, give measures definitions, turn abstract datatypes into bound type variables, allow equality on them, but not other datatypes
+- Disallow sets in formula programs
 
 - Type classes (for type variables and abstract datatypes)
 - Default cond qualifiers

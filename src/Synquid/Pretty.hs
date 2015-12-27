@@ -227,7 +227,6 @@ prettyProgram (Program p typ) = case p of
     PIf c t e -> hang 2 $ text "if" <+> prettyProgram c $+$ (text "then" </> prettyProgram t) $+$ (text "else" </> prettyProgram e)
     PMatch l cases -> hang 2 $ text "match" <+> prettyProgram l <+> text "with" $+$ vsep (map prettyCase cases)
     PFix fs e -> prettyProgram e
-    PFormula fml -> pretty fml
     PLet x e e' -> align $ hang 2 (text "let" <+> text x <+> text "=" </> prettyProgram e </> text "in") $+$ prettyProgram e'
     PHole -> if show (pretty typ) == dontCare then text "??" else parens $ text "?? ::" <+> pretty typ
 
@@ -370,6 +369,5 @@ programNodeCount (Program p _) = case p of
   PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
   PFix _ e -> 1 + programNodeCount e
-  PFormula fml -> fmlNodeCount fml
   PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
   PHole -> 0

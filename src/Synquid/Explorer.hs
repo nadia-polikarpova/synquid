@@ -151,7 +151,7 @@ generateMatch env t = do
                                 (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
           guard isGoodScrutinee
 
-          (env'', x) <- toSymbol pScrutinee (addScrutinee pScrutinee env')
+          (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
           (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)             -- First case generated separately in an attempt to abduce a condition for the whole match
           if cond == ftrue
             then do -- First case is valid unconditionally
@@ -167,7 +167,7 @@ generateMatch env t = do
 
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
         
-generateFirstCase env scrName pScrutinee t consName = do
+generateFirstCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
@@ -176,7 +176,7 @@ generateFirstCase env scrName pScrutinee t consName = do
       let ScalarT baseT _ = (typeOf pScrutinee)
       let consT' = symbolType env consName consT
       binders <- replicateM (arity consT') (freshId "x")
-      (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) binders consT'
+      (syms, ass) <- caseSymbols scrVar binders consT'
       deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
       case deadBranchCond of
         Nothing -> do
@@ -189,7 +189,7 @@ generateFirstCase env scrName pScrutinee t consName = do
         Just cond -> return $ (Case consName binders (Program (PSymbol "error") t), cond)
 
 -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
-generateCase env scrName pScrutinee t consName = do
+generateCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
@@ -198,7 +198,7 @@ generateCase env scrName pScrutinee t consName = do
       let ScalarT baseT _ = (typeOf pScrutinee)
       let consT' = symbolType env consName consT
       binders <- replicateM (arity consT') (freshId "x")
-      (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) binders consT'
+      (syms, ass) <- caseSymbols scrVar binders consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
       pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
                                        $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
@@ -266,7 +266,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       let env' = addScrutinee pScrutinee env
-      pCases <- mapM (cut . generateCase env' x pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
+      pCases <- mapM (cut . generateCase env' var pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
       return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t
 
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
@@ -406,16 +406,17 @@ enumerateAt env typ d = do
           (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
                             $ inContext (\p -> Program (PApp fun p) tRes)
                             $ genArg env' tArg
-          (env''', y) <- toSymbol arg env''
-          return (env''', Program (PApp fun arg) (renameVar x y tArg tRes))
+          (env''', y) <- toVar arg env''
+          return (env''', Program (PApp fun arg) (renameVarFml x y tRes))
       ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
       return (envfinal, pApp)
 
--- | 'toSymbol' @p env@: a symbols with the same type as @p@ and an environment that defines that symbol (can be @p@ itself or a fresh ghost)
-toSymbol (Program (PSymbol name) _) env | not (Set.member name (env ^. constants)) = return (env, name)
-toSymbol p env = do
+-- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
+toVar (Program (PSymbol name) t) env 
+  | not (isConstant name env)  = return (env, Var (toSort $ baseTypeOf t) name)
+toVar (Program _ t) env = do
   g <- freshId "g"
-  return (addGhost g (typeOf p) env, g)
+  return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
 enqueueGoal env typ impl = do
   g <- freshId "f"
@@ -500,8 +501,8 @@ instantiate env sch fml = do
 symbolType env x (ScalarT b@(DatatypeT dtName _ _) fml)
   | x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors = ScalarT b (fml |&| (Var (toSort b) valueVarName) |=| Cons (toSort b) x [])
 symbolType env x t@(ScalarT b _)
-  | Set.member x (env ^. constants) = t -- x is a constant, use it's type (it must be very precise)
-  | otherwise                       = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
+  | isConstant x env = t -- x is a constant, use it's type (it must be very precise)
+  | otherwise        = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
 symbolType env x t = case lastType t of
   (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
                                               then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
