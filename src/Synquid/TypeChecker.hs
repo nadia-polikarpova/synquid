@@ -269,6 +269,8 @@ reconstructE' env typ (PFormula fml) = do
       addConstraint $ Subtype env typ' typ False  
       solveIncrementally
       return (env, Program (PFormula fml') typ')
+reconstructE' env typ impl = throwError $ text "Expected application term of type" </> squotes (pretty typ) </>
+                                          text "and got" </> squotes (pretty $ untyped impl)
     
 -- | 'checkAnnotation' @env t t' p@ : if user annotation @t'@ for program @p@ is a subtype of the goal type @t@,
 -- return resolved @t'@, otherwise fail
