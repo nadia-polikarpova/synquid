@@ -7,6 +7,7 @@ import Synquid.Logic
 import Synquid.Tokens
 import Synquid.Util
 
+import Data.Char
 import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
@@ -44,6 +45,7 @@ fromSort BoolS = ScalarT BoolT ftrue
 fromSort IntS = ScalarT IntT ftrue
 fromSort (VarS name) = ScalarT (TypeVarT name) ftrue
 fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) ftrue -- TODO: what to do with pArgs?
+fromSort AnyS = AnyT
 
 -- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
 complies :: Sort -> Sort -> Bool  
@@ -177,6 +179,7 @@ shape (ScalarT IntT _) = ScalarT IntT ()
 shape (ScalarT BoolT _) = ScalarT BoolT ()
 shape (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ()
 shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
+shape AnyT = AnyT
 
 -- | Insert weakest refinement
 refineTop :: SType -> RType
@@ -199,22 +202,25 @@ addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
   then ScalarT base fml' -- the type of a polymorphic variable does not require any other refinements
   else ScalarT base (fml `andClean` fml')
 addRefinement t (BoolLit True) = t
+addRefinement AnyT _ = AnyT
 addRefinement t _ = error $ "addRefinement: applied to function type"
 
 -- | Conjoin refinement to the return type
 addRefinementToLast t@(ScalarT _ _) fml = addRefinement t fml
 addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinementToLast tRes fml)
       
--- | 'renameVar' @old new t@: rename all occurrences of @old@ in @t@ into @new@
+-- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: Id -> Id -> RType -> RType -> RType
 renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
-renameVar old new t@(ScalarT b _)  (ScalarT baseT fml) = 
-  let 
-    subst = substitute (Map.singleton old (Var (toSort b) new))
+renameVar old new (ScalarT b _)       t = renameVarFml old (Var (toSort b) new) t
+
+-- | 'renameVarFml' @old new typ@: rename all occurrences of @old@ in @typ@ into @new@ (represented as a formula)
+renameVarFml :: Id -> Formula -> RType -> RType
+renameVarFml old new (ScalarT baseT fml) = let subst = substitute (Map.singleton old new)
   in case baseT of
-        DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (renameVar old new t) tArgs) (map subst pArgs)) (subst fml)
+        DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (renameVarFml old new) tArgs) (map subst pArgs)) (subst fml)
         _ -> ScalarT baseT (subst fml)
-renameVar old new t                  (FunctionT x tArg tRes) = FunctionT x (renameVar old new t tArg) (renameVar old new t tRes)
+renameVarFml old new (FunctionT x tArg tRes) = FunctionT x (renameVarFml old new tArg) (renameVarFml old new tRes)
 
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
@@ -285,7 +291,6 @@ data BareProgram t =
   PIf (Program t) (Program t) (Program t) |   -- ^ Conditional
   PMatch (Program t) [Case t] |               -- ^ Pattern match on datatypes
   PFix [Id] (Program t) |                     -- ^ Fixpoint
-  PFormula Formula |                          -- ^ Executable formula
   PLet Id (Program t) (Program t) |           -- ^ Let binding
   PHole
   deriving (Eq, Ord, Functor)
@@ -309,6 +314,9 @@ type RProgram = Program RType
 
 untyped c = Program c AnyT
 
+eraseTypes :: RProgram -> UProgram
+eraseTypes = fmap (const AnyT)
+
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
     
@@ -327,30 +335,29 @@ programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteS
 
 -- | Convert an executable formula into a program    
 fmlToProgram :: Formula -> RProgram
-fmlToProgram fml = Program (PFormula fml) (ScalarT BoolT $ valBool |=| fml)
--- fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
--- fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
--- fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
--- fmlToProgram fml@(Unary op e) = let 
-    -- s = sortOf fml 
-    -- p = fmlToProgram e
-    -- fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "x" (typeOf p) opRes)
-  -- in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  -- where    
-    -- opRes 
-      -- | op == Not = bool $ valBool |=| fnot (intVar "x")
-      -- | otherwise = int $ valInt |=| Unary op (intVar "x")    
--- fmlToProgram fml@(Binary op e1 e2) = let 
-    -- s = sortOf fml 
-    -- p1 = fmlToProgram e1
-    -- p2 = fmlToProgram e2
-    -- fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
-    -- fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
-  -- in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  -- where
-    -- opRes 
-      -- | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
-      -- | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")    
+fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
+fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
+fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
+fmlToProgram fml@(Unary op e) = let 
+    s = sortOf fml 
+    p = fmlToProgram e
+    fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "x" (typeOf p) opRes)
+  in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
+  where    
+    opRes 
+      | op == Not = bool $ valBool |=| fnot (intVar "x")
+      | otherwise = int $ valInt |=| Unary op (intVar "x")    
+fmlToProgram fml@(Binary op e1 e2) = let 
+    s = sortOf fml 
+    p1 = fmlToProgram e1
+    p2 = fmlToProgram e2
+    fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
+    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
+  in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
+  where
+    opRes 
+      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
+      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")    
 
 {- Evaluation environment -}
 
@@ -402,6 +409,37 @@ symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols)
 -- | All symbols in an environment
 allSymbols :: Environment -> Map Id RSchema
 allSymbols env = Map.unions $ Map.elems (env ^. symbols)
+
+-- | 'lookupSymbol' @name env@ : type of symbol @name@ in @env@, including built-in constants
+lookupSymbol :: Id -> Int -> Environment -> Maybe RSchema
+lookupSymbol name a env
+  | a == 0 && all isDigit name                        = let n = read name in Just $ Monotype $ ScalarT IntT (valInt |=| IntLit n)
+  | a == 1 && (name `elem` Map.elems unOpTokens)      = let op = head $ Map.keys $ Map.filter (== name) unOpTokens in Just $ unOpType op
+  | a == 2 && (name `elem` Map.elems binOpTokens)     = let op = head $ Map.keys $ Map.filter (== name) binOpTokens in Just $ binOpType op
+  | otherwise                             = Map.lookup name (allSymbols env)
+  where
+    unOpType Neg       = Monotype $ FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))
+    unOpType Not       = Monotype $ FunctionT "x" boolAll (bool (valBool |=| fnot (boolVar "x")))
+    unOpType Abs       = Monotype $ FunctionT "x" intAll (int (valInt |=| fabs (intVar "x"))) 
+    binOpType Times    = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |*| intVar "y")))
+    binOpType Plus     = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |*| intVar "y")))
+    binOpType Minus    = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |-| intVar "y")))
+    binOpType Eq       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |=| vartVar "a" "y"))))
+    binOpType Neq      = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |/=| vartVar "a" "y"))))
+    binOpType Lt       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |<| vartVar "a" "y"))))
+    binOpType Le       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |<=| vartVar "a" "y"))))
+    binOpType Gt       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |>| vartVar "a" "y"))))
+    binOpType Ge       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |>=| vartVar "a" "y"))))
+    binOpType And      = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |&| boolVar "y"))))
+    binOpType Or       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" ||| boolVar "y"))))
+    binOpType Implies  = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |=>| boolVar "y"))))
+    binOpType Iff      = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |<=>| boolVar "y"))))
+
+-- | Is @name@ a constant in @env@ including built-in constants)?    
+isConstant name env = all isDigit name || 
+                      (name `elem` Map.elems unOpTokens) || 
+                      (name `elem` Map.elems binOpTokens) || 
+                      (name `Set.member` (env ^. constants))    
 
 -- | 'isBound' @tv env@: is type variable @tv@ bound in @env@?
 isBound :: Id -> Environment -> Bool

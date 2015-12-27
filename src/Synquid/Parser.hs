@@ -334,7 +334,7 @@ parseETerm = parseFormulaTerm <|> try parseAppTerm <|> parseAtomTerm
       ]
     parseHole = reserved "??" >> return (untyped PHole)
     parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
-    parseFormulaTerm = untyped . PFormula <$> braces parseFormula
+    parseFormulaTerm = (eraseTypes . fmlToProgram) <$> braces parseFormula
     
 withOptionalType p = do
   (Program content _) <- p

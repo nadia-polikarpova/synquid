@@ -166,7 +166,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
     when (not isGoodScrutinee) $ throwError $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
         
-    (env'', x) <- toSymbol pScrutinee env'
+    (env'', x) <- toVar pScrutinee env'
     pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
     wrapInConditional env pathCond (Program (PMatch pScrutinee pCases) t) t
       
@@ -196,10 +196,10 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                           _ -> throwError $ text "Not in scope: data constructor" </> squotes (text consName)
     checkCases _ [] = return []
   
-reconstructCase env scrName pScrutinee t (Case consName args iBody) consT = do
+reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
   let ScalarT baseT _ = (typeOf pScrutinee)
-  (syms, ass) <- caseSymbols (Var (toSort baseT) scrName) args (symbolType env consName consT)
+  (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
   pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
   return $ Case consName args pCaseExpr
@@ -230,7 +230,7 @@ reconstructE env t (Program p t') = do
 
 reconstructE' env typ PHole = generateE env typ
 reconstructE' env typ (PSymbol name) = do
-  case Map.lookup name (symbolsOfArity (arity typ) env) of
+  case lookupSymbol name (arity typ) env of
     Nothing -> throwError $ text "Not in scope:" </> text name
     Just sch -> do
       t <- freshInstance sch
@@ -256,19 +256,10 @@ reconstructE' env typ (PApp iFun iArg) = do
       return (env', Program (PApp pFun pArg) tRes)
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
-      (env''', y) <- toSymbol pArg env''
-      return (env''', Program (PApp pFun pArg) (renameVar x y tArg tRes))
+      (env''', y) <- toVar pArg env''
+      return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
   checkE envfinal typ pApp
   return (envfinal, pApp)
-reconstructE' env typ (PFormula fml) = do
-  tass <- use (typingState . typeAssignment)
-  case resolveRefinement (typeSubstituteEnv tass env) AnyS fml of
-    Left err -> throwError $ text err
-    Right fml' -> do
-      let typ' = ScalarT BoolT (valBool |=| fml')
-      addConstraint $ Subtype env typ' typ False  
-      solveIncrementally
-      return (env, Program (PFormula fml') typ')
 reconstructE' env typ impl = throwError $ text "Expected application term of type" </> squotes (pretty typ) </>
                                           text "and got" </> squotes (pretty $ untyped impl)
     
