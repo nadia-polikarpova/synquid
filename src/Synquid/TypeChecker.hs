@@ -265,7 +265,7 @@ reconstructE' env typ (PFormula fml) = do
   case resolveRefinement (typeSubstituteEnv tass env) AnyS fml of
     Left err -> throwError $ text err
     Right fml' -> do
-      let typ' = ScalarT BoolT fml'
+      let typ' = ScalarT BoolT (valBool |=| fml')
       addConstraint $ Subtype env typ' typ False  
       solveIncrementally
       return (env, Program (PFormula fml') typ')
