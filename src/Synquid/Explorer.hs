@@ -477,7 +477,10 @@ inContext ctx f = local (over (_1 . context) (. ctx)) f
     
 -- | Replace all type variables with fresh identifiers
 instantiate :: MonadHorn s => Environment -> RSchema -> Formula -> Explorer s RType
-instantiate env sch fml = writeLog 2 (text "INSTANTIATE" <+> pretty sch) >> instantiate' Map.empty Map.empty sch
+instantiate env sch fml = do
+  t <- instantiate' Map.empty Map.empty sch
+  writeLog 2 (text "INSTANTIATE" <+> pretty sch $+$ text "INTO" <+> pretty t)
+  return t
   where
     instantiate' subst pSubst (ForallT a sch) = do
       a' <- freshId "a"

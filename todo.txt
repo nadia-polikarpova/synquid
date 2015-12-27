@@ -1,22 +1,19 @@
 - Resolve formulas with free type variables in conditionals: get rid of formula programs
-- Should let-defs and known conditionals have abstracted types?
-- More principled type substitution
 - In matches: instantiate all constructor schemas together with the same free variables
+- Replace measures/predicates with arbitrary logic functions, give measures definitions, turn abstract datatypes into bound type variables, allow equality on them, but not other datatypes
 
-- Type classes (to help instantiate qualifiers)	
-
-- Do something with datatype equality: does it make everything slower? Eq?
+- Type classes (for type variables and abstract datatypes)
+- Default cond qualifiers
+- More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
 
 - Irrefutable type errors (like symbol not in scope)
-- Collect stats: how many candidates? how many active/inactive constraints?
-- Forget unknowns between branches
-- Try to reduce the size of environment embedding? 
+- Collect stats: how big is env embedding? how many candidates? how many active/inactive constraints?
+- Should let-defs and known conditionals have abstracted types?
 - Memoization: remove subsumed components?
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
 - Check that the first constructor is the base case
 - When a measure is not mentioned in the goal spec, remove it from the components?
-- If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
 
 Security:
 - Make use of abstract predicates:
