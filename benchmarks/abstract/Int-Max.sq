@@ -1,4 +1,4 @@
 qualifier {x >= y, x <= y, x != y}
 
-max :: <P :: Int -> Bool> . x:{Int | P _v} -> y:{Int | P _v} -> {Int | P _v && _v >= x && _v >= y}
+max :: <p :: Int -> Bool> . x:{Int | p _v} -> y:{Int | p _v} -> {Int | p _v && _v >= x && _v >= y}
 max = ??

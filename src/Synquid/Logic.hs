@@ -57,9 +57,8 @@ data Formula =
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
   Ite Formula Formula Formula |       -- ^ If-then-else expression
-  Measure Sort Id Formula |           -- ^ Measure application
+  Pred Sort Id [Formula] |            -- ^ Logic function application
   Cons Sort Id [Formula] |            -- ^ Constructor application
-  Pred Id [Formula] |                 -- ^ Abstract refinement application
   All Formula Formula                 -- ^ Universal quantification
   deriving (Eq, Ord)
   
@@ -119,9 +118,8 @@ varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
 varsOf (Ite e0 e1 e2) = varsOf e0 `Set.union` varsOf e1 `Set.union` varsOf e2
-varsOf (Measure _ _ e) = varsOf e
+varsOf (Pred _ _ es) = Set.unions $ map varsOf es
 varsOf (Cons _ _ es) = Set.unions $ map varsOf es
-varsOf (Pred _ es) = Set.unions $ map varsOf es
 varsOf (All x e) = Set.delete x (varsOf e)
 varsOf _ = Set.empty
 
@@ -147,7 +145,7 @@ posUnknowns = fst . posNegUnknowns
 negUnknowns = snd . posNegUnknowns
 
 predsOf :: Formula -> Set Id
-predsOf (Pred p es) = Set.insert p (Set.unions $ map predsOf es)
+predsOf (Pred _ p es) = Set.insert p (Set.unions $ map predsOf es)
 predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
 predsOf (Unary _ e) = predsOf e
 predsOf (Binary _ e1 e2) = predsOf e1 `Set.union` predsOf e2
@@ -178,9 +176,8 @@ sortOf (Binary op e1 _)
   | op == Union || op == Intersect || op == Diff = sortOf e1
   | otherwise                                    = BoolS
 sortOf (Ite _ e1 _)                              = sortOf e1
-sortOf (Measure s _ _)                           = s
+sortOf (Pred s _ _)                              = s
 sortOf (Cons s _ _)                              = s
-sortOf (Pred _ _)                                = BoolS
 sortOf (All _ _)                                 = BoolS
 
 isExecutable :: Formula -> Bool
@@ -188,8 +185,7 @@ isExecutable (SetLit _ _) = False
 isExecutable (Unary _ e) = isExecutable e
 isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
 isExecutable (Ite e0 e1 e2) = False
-isExecutable (Measure _ _ _) = False
-isExecutable (Pred _ _) = False
+isExecutable (Pred _ _ _) = False
 isExecutable (All _ _) = False
 isExecutable _ = True
   
@@ -204,9 +200,8 @@ substitute subst fml = case fml of
   Unary op e -> Unary op (substitute subst e)
   Binary op e1 e2 -> Binary op (substitute subst e1) (substitute subst e2)
   Ite e0 e1 e2 -> Ite (substitute subst e0) (substitute subst e1) (substitute subst e2)
-  Measure b name arg -> Measure b name (substitute subst arg)
-  Cons b name args -> Cons b name $ map (substitute subst) args
-  Pred name args -> Pred name $ map (substitute subst) args
+  Pred b name args -> Pred b name $ map (substitute subst) args
+  Cons b name args -> Cons b name $ map (substitute subst) args  
   All v@(Var _ x) e -> if x `Map.member` subst
                             then error $ unwords ["Scoped variable clashes with substitution variable", x]
                             else All v (substitute subst e)
@@ -228,8 +223,8 @@ deBrujns = map (\i -> dontCare ++ show i) [0..]
                   
 substitutePredicate :: Substitution -> Formula -> Formula
 substitutePredicate pSubst fml = case fml of
-  Pred name args -> case Map.lookup name pSubst of
-                      Nothing -> Pred name (map (substitutePredicate pSubst) args)
+  Pred b name args -> case Map.lookup name pSubst of
+                      Nothing -> Pred b name (map (substitutePredicate pSubst) args)
                       Just value -> substitute (Map.fromList $ zip deBrujns args) (substitutePredicate pSubst value)
   Unary op e -> Unary op (substitutePredicate pSubst e)
   Binary op e1 e2 -> Binary op (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)

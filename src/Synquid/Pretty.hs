@@ -136,9 +136,8 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Measure _ _ _) = 7
+power (Pred _ _ _) = 7
 power (Cons _ _ _) = 7
-power (Pred _ _) = 7
 power (Unary _ _) = 6
 power (Binary op _ _)
   | op `elem` [Times, Intersect] = 5
@@ -167,9 +166,8 @@ fmlDocAt n fml = condParens (n' <= n) (
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
     Ite e0 e1 e2 -> text "if" <+> fmlDoc e0 <+> text "then" <+> fmlDoc e1 <+> text "else" <+> fmlDoc e2
-    Measure b name arg -> text name <+> fmlDocAt n' arg -- text name <> text ":" <> pretty  b <+> pretty arg
-    Cons b name args -> parens (text name <+> hsep (map (fmlDocAt n') args))
-    Pred name args -> text name <+> hsep (map (fmlDocAt n') args)
+    Pred b name args -> text name <+> hsep (map (fmlDocAt n') args) -- text name <> text ":" <> pretty  b <+> pretty arg
+    Cons b name args -> parens (text name <+> hsep (map (fmlDocAt n') args))    
     All x e -> text "forall" <+> pretty x <+> text "." <+> fmlDoc e
   )
   where
@@ -329,7 +327,7 @@ instance Pretty ConstructorSig where
   pretty (ConstructorSig name t) = text name <+> text "::" <+> pretty t
 
 instance Pretty PredSig where
-  pretty (PredSig p sorts) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
+  pretty (PredSig p argSorts resSort) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
   
 instance Pretty MeasureCase where
   pretty (MeasureCase name args body) = text name <+> hsep (map text args) <+> text "->" <+> pretty body
@@ -356,9 +354,8 @@ fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Ite c l r) = 1 + fmlNodeCount c + fmlNodeCount l + fmlNodeCount r
-fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
+fmlNodeCount (Pred _ _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Cons _ _ args) = 1 + sum (map fmlNodeCount args)
-fmlNodeCount (Pred _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (All _ e) = 1 + fmlNodeCount e
 fmlNodeCount _ = 1
 

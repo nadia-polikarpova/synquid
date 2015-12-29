@@ -1,18 +1,23 @@
-measure len :: List a -> {Int | _v >= 0}
-measure elems :: List a -> Set a
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
 
-data List a decreases len where
-	Nil :: {List a | len _v == 0 && elems _v == []}
-	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
 	
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}	
 	
-foldr :: <P :: List a -> b -> Bool> .
-		f: (xs: List a -> x: a -> acc: {b | P xs _v} -> {b | P (Cons x xs) _v}) ->
-		seed: {b | P Nil _v} ->
-		ys: List a ->
-		{b | P ys _v}
+foldr :: <p :: List a -> b -> Bool> .
+		f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->
+		seed: {b | p Nil _v} ->
+    ys: List a ->    
+		{b | p ys _v}
 foldr = ??		
 		
 length :: zs: List a -> {Int | _v == len zs}
