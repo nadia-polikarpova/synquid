@@ -542,7 +542,8 @@ embedding env subst pSubst includePost = (env ^. assumptions) `Set.union` (Map.f
       else Set.empty
     embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
-      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
+      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
+                          ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants    
     
 {- Input language declarations -}
