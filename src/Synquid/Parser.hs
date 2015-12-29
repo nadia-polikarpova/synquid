@@ -24,7 +24,7 @@ import Text.Parsec.Indent
 
 type Parser a = IndentParser String () a
 
-parseProgram :: Parser ProgramAst
+parseProgram :: Parser [Declaration]
 parseProgram = whiteSpace *> option [] (block parseDeclaration) <* eof
 
 parseFromFile :: Parser a -> String -> IO (Either ParseError a)
@@ -82,10 +82,10 @@ dot = Token.dot lexer
 {- Declarations -}      
 
 parseDeclaration :: Parser Declaration
-parseDeclaration = withPos (choice [parseTypeDef, parseDataDef, parseMeasureDef, parsePredDef, parseQualifierDef, try parseFuncDef, parseSynthesisGoal] <?> "declaration")
+parseDeclaration = choice [parseTypeDecl, parseDataDecl, parseMeasureDecl, parsePredDecl, parseQualifierDecl, try parseFuncDecl, parseSynthesisGoal] <?> "declaration"
 
-parseTypeDef :: Parser Declaration
-parseTypeDef = do
+parseTypeDecl :: Parser Declaration
+parseTypeDecl = do
   reserved "type"
   typeName <- parseTypeName
   typeVars <- many parseIdentifier
@@ -93,15 +93,14 @@ parseTypeDef = do
   typeDef <- parseType
   return $ TypeDecl typeName typeVars typeDef
 
-parseDataDef :: Parser Declaration
-parseDataDef = do
+parseDataDecl :: Parser Declaration
+parseDataDecl = do
   reserved "data"
   typeName <- parseTypeName
   typeParams <- many parseIdentifier
   predParams <- many $ angles parsePredSig
-  wfMetricName <- optionMaybe $ reserved "decreases" >> parseIdentifier
   constructors <- option [] (reserved "where" >> indented >> block parseConstructorSig) 
-  return $ DataDecl typeName typeParams predParams wfMetricName constructors  
+  return $ DataDecl typeName typeParams predParams constructors  
 
 parseConstructorSig :: Parser ConstructorSig
 parseConstructorSig = do
@@ -110,29 +109,39 @@ parseConstructorSig = do
   ctorType <- parseSchema  
   return $ ConstructorSig ctorName ctorType
 
-parseMeasureDef :: Parser Declaration
-parseMeasureDef = do
+parseMeasureDecl :: Parser Declaration
+parseMeasureDecl = do
+  isTermination <- option False (reserved "termination" >> return True)
   reserved "measure"
   measureName <- parseIdentifier
   reservedOp "::"
   inSort <- parseSort
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
-  return $ MeasureDecl measureName inSort outSort post
+  reserved "where"
+  cases <- indented >> block parseDefCase
+  return $ MeasureDecl measureName inSort outSort post cases isTermination
+  where
+    parseDefCase = do
+      ctor <- parseTypeName
+      args <- many parseIdentifier
+      reservedOp "->"
+      body <- parseFormula
+      return $ MeasureCase ctor args body  
   
-parsePredDef :: Parser Declaration
-parsePredDef = do
+parsePredDecl :: Parser Declaration
+parsePredDecl = do
   reserved "predicate"
   sig <- parsePredSig
   return $ PredDecl sig
   
-parseQualifierDef :: Parser Declaration
-parseQualifierDef = do
+parseQualifierDecl :: Parser Declaration
+parseQualifierDecl = do
   reserved "qualifier"
   QualifierDecl <$> braces (commaSep parseFormula)
 
-parseFuncDef :: Parser Declaration
-parseFuncDef = do
+parseFuncDecl :: Parser Declaration
+parseFuncDecl = do
   funcName <- parseIdentifier
   reservedOp "::"
   FuncDecl funcName <$> parseSchema
@@ -242,15 +251,24 @@ parseFormula = withPos $ (buildExpressionParser exprTable parseTerm <?> "refinem
       [unary Not, unary Neg, unary Abs],
       [binary Times AssocLeft],
       [binary Plus AssocLeft, binary Minus AssocLeft],
-      [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binary Member AssocNone],
+      [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binaryWord Member AssocNone],
       [binary And AssocLeft, binary Or AssocLeft],
       [binary Implies AssocRight, binary Iff AssocRight]]
     unary op = Prefix (reservedOp (unOpTokens ! op) >> return (Unary op))
     binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (Binary op)) assoc
+    binaryWord op assoc = Infix (reserved (binOpTokens ! op) >> return (Binary op)) assoc
 
 parseTerm :: Parser Formula
-parseTerm = try parseAppTerm <|> parseAtomTerm
+parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
   where
+    parseIte = do
+      reserved "if"
+      e0 <- parseFormula
+      reserved "then"
+      e1 <- parseFormula
+      reserved "else"
+      e2 <- parseFormula
+      return $ Ite e0 e1 e2
     parseAppTerm = parsePredApp <|> parseMeasureApp
     parseAtomTerm = choice [
         parens parseFormula
@@ -259,8 +277,7 @@ parseTerm = try parseAppTerm <|> parseAtomTerm
       , parseSetLit
       , parseNullaryCons
       , parseVariable
-      ]
-      
+      ]      
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
     parseSetLit = SetLit AnyS <$> brackets (commaSep parseFormula)
@@ -359,3 +376,15 @@ parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
   if not (isUpper $ head name) then unexpected ("non-capitalized " ++ show name) else return name
+  
+{- Debug -}
+
+printRefPos :: String -> Parser ()
+printRefPos msg = do
+  pos <- get
+  trace (msg ++ show pos) $ return ()
+  
+printCurPos :: String -> Parser ()
+printCurPos msg = do
+  pos <- getPosition
+  trace (msg ++ show pos) $ return ()  

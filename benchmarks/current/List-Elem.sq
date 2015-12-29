@@ -3,12 +3,17 @@ qualifier {x == y, x != y}
 true :: {Bool | _v}
 false :: {Bool | !_v}
 
-measure len :: List a -> {Int | _v >= 0}
-measure elems :: List a -> Set a
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
 
-data List a decreases len where
-	Nil :: {List a | len _v == 0 && elems _v == []}
-	Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
 	
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 elem = ??

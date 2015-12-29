@@ -338,7 +338,8 @@ checkE env typ p = do
       addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs $ typeOf p) (lastType (typeOf p))) (lastType typ) False
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
       
-  typingState . errorContext .= text "when checking" </> pretty p </> text "::" </> pretty typ </> text "in" $+$ pretty (ctx p)
+  fTyp <- runInSolver $ finalizeType typ
+  typingState . errorContext .= text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p)
   solveIncrementally
   typingState . errorContext .= empty
   where

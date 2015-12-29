@@ -148,6 +148,11 @@ toAST expr = case expr of
   Unknown _ name -> error $ unwords ["toAST: encountered a second-order unknown", name]
   Unary op e -> toAST e >>= unOp op
   Binary op e1 e2 -> join (binOp op <$> toAST e1 <*> toAST e2)
+  Ite e0 e1 e2 -> do
+    e0' <- toAST e0
+    e1' <- toAST e1
+    e2' <- toAST e2
+    mkIte e0' e1' e2'
   Measure s name arg -> do
     let tArg = sortOf arg
     -- decl <- measure b (name ++ show tArg ++ show b) tArg

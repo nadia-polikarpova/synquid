@@ -123,6 +123,7 @@ sortSubstituteFml subst fml = case fml of
   Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
   Unary op e -> Unary op (sortSubstituteFml subst e)
   Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
+  Ite c l r -> Ite (sortSubstituteFml subst c) (sortSubstituteFml subst l) (sortSubstituteFml subst r)
   Measure s name e -> Measure (sortSubstitute subst s) name (sortSubstituteFml subst e)
   Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
   Pred name es -> Pred name (map (sortSubstituteFml subst) es)
@@ -242,8 +243,8 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeArgCount :: Int,
-  _predArgs :: [[Sort]],
+  _typeArgCount :: Int,   -- ^ Number of type parameters
+  _predArgs :: [[Sort]],  -- ^ Signatures of predicate parameters
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
 } deriving (Eq, Ord)
@@ -281,7 +282,7 @@ data Case t = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
   expr :: Program t       -- ^ Result of the match in this case
-}  deriving (Eq, Ord, Functor)
+} deriving (Eq, Ord, Functor)
     
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram t =
@@ -357,7 +358,7 @@ fmlToProgram fml@(Binary op e1 e2) = let
   where
     opRes 
       | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
-      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")    
+      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
 
 {- Evaluation environment -}
 
@@ -543,6 +544,32 @@ embedding env subst pSubst includePost = (env ^. assumptions) `Set.union` (Map.f
       then Set.empty -- Ignore constants
       else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants    
+    
+{- Input language declarations -}
+
+-- | Constructor signature: name and type
+data ConstructorSig = ConstructorSig Id RSchema
+  deriving (Eq)
+  
+-- | Predicate signature: name and argument sorts  
+data PredSig = PredSig Id [Sort]
+  deriving (Eq)
+  
+-- | One case in a measure definition: constructor name, arguments, and body  
+data MeasureCase = MeasureCase Id [Id] Formula
+  deriving (Eq)  
+  
+data Declaration =
+  TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
+  FuncDecl Id RSchema |                                     -- ^ Function name and signature
+  DataDecl Id [Id] [PredSig] [ConstructorSig] |             -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
+  MeasureDecl Id Sort Sort Formula [MeasureCase] Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
+  PredDecl PredSig |                                        -- ^ Module-level predicate
+  QualifierDecl [Formula] |                                 -- ^ Qualifiers
+  SynthesisGoal Id UProgram                                 -- ^ Name and template for the function to reconstruct
+  deriving (Eq)
+
+constructorName (ConstructorSig name _) = name
             
 {- Misc -}
           
@@ -562,19 +589,3 @@ data Goal = Goal {
   gImpl :: UProgram
 } deriving (Eq, Ord)
   
-type ProgramAst = [Declaration]
-data ConstructorSig = ConstructorSig Id RSchema
-  deriving (Eq)
-data PredSig = PredSig Id [Sort]  
-  deriving (Eq)
-data Declaration =
-  TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
-  FuncDecl Id RSchema |                                     -- ^ Function name and signature
-  DataDecl Id [Id] [PredSig] (Maybe Id) [ConstructorSig] |  -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
-  MeasureDecl Id Sort Sort Formula |                        -- ^ Measure name, input sort, output sort, postcondition
-  PredDecl PredSig |                                        -- ^ Module-level predicate
-  QualifierDecl [Formula] |                                 -- ^ Qualifiers
-  SynthesisGoal Id UProgram                                 -- ^ Name and template for the function to reconstruct
-  deriving (Eq)
-
-constructorName (ConstructorSig name _) = name

@@ -6,7 +6,7 @@ import Synquid.Logic
 import Synquid.Program
 import Synquid.Pretty
 import Synquid.Parser (parseFromFile, parseProgram)
-import Synquid.Resolver (resolveProgramAst)
+import Synquid.Resolver (resolveDecls)
 import Synquid.SolverMonad
 import Synquid.HornSolver
 import Synquid.TypeConstraintSolver
@@ -157,7 +157,7 @@ runOnFile synquidParams explorerParams solverParams file = do
   case parseResult of
     Left parseErr -> (putStr $ show parseErr) >> exitFailure
     -- Right ast -> print $ vsep $ map pretty ast
-    Right ast -> case resolveProgramAst ast of
+    Right decls -> case resolveDecls decls of
       Left resolutionError -> (putStr resolutionError) >> exitFailure
       Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
   where
