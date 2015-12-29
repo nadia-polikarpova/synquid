@@ -19,7 +19,8 @@ module Synquid.TypeConstraintSolver (
   matchConsType,
   isEnvironmentInconsistent,
   freshId,
-  finalize,
+  finalizeType,
+  finalizeProgram,
   currentValuations
 ) where
 
@@ -380,6 +381,7 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
     Measure m _ arg -> inst arg
     Unary op e -> inst e
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
+    Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
     -- SetLit s elems -> ?
     Pred p args -> Set.unions $ map inst args
     -- All x e -> ?
@@ -416,8 +418,17 @@ isEnvironmentInconsistent env env' t = do
     
 -- | Substitute type variables, predicate variables, and predicate unknowns in @p@
 -- using current type assignment, predicate assignment, and liquid assignment
-finalize :: Monad s => RProgram -> TCSolver s RProgram
-finalize p = do
+finalizeType :: Monad s => RType -> TCSolver s RType
+finalizeType t = do
+  tass <- use typeAssignment
+  pass <- use predAssignment
+  sol <- uses candidates (solution . head)
+  return $ (typeApplySolution sol . typeSubstitutePred pass . typeSubstitute tass) t
+    
+-- | Substitute type variables, predicate variables, and predicate unknowns in @p@
+-- using current type assignment, predicate assignment, and liquid assignment
+finalizeProgram :: Monad s => RProgram -> TCSolver s RProgram
+finalizeProgram p = do
   tass <- use typeAssignment
   pass <- use predAssignment
   sol <- uses candidates (solution . head)

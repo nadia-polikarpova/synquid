@@ -1,19 +1,33 @@
 qualifier {x == y, x != y}
 
-measure len :: List a -> {Int | _v >= 0}
-measure elems :: List a -> Set a
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
 
-data List a decreases len where
-  Nil :: {List a | len _v == 0 && elems _v == []}
-  Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
 
-measure clen :: CList a -> {Int | _v >= 0}
-measure heads :: CList a -> Set a
-measure celems :: CList a -> Set a
+data CList a where
+  CNil :: CList a
+  CCons :: x: a -> xs: {CList a | !(x in heads _v)} -> CList a
+  
+termination measure clen :: CList a -> {Int | _v >= 0} where
+  CNil -> 0
+  CCons x xs -> 1 + clen xs  
+  
+measure heads :: CList a -> Set a where
+  CNil -> []
+  CCons x xs -> [x]
 
-data CList a decreases clen where
-  CNil :: {CList a | clen _v == 0 && celems _v == [] && heads _v == []}
-  CCons :: x: a -> xs: {CList a | !(x in heads _v)} -> {CList a | celems _v == celems xs + [x] && clen _v == clen xs + 1 && heads _v == [x] }
+measure celems :: CList a -> Set a where
+  CNil -> []
+  CCons x xs -> [x] + celems xs
 
 compress :: xs: List a -> {CList a | celems _v == elems xs}
-compress = ??
+compress = ??  
+

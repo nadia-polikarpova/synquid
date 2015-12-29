@@ -56,6 +56,7 @@ data Formula =
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
   Binary BinOp Formula Formula |      -- ^ Binary expression
+  Ite Formula Formula Formula |       -- ^ If-then-else expression
   Measure Sort Id Formula |           -- ^ Measure application
   Cons Sort Id [Formula] |            -- ^ Constructor application
   Pred Id [Formula] |                 -- ^ Abstract refinement application
@@ -117,6 +118,7 @@ varsOf (SetLit _ elems) = Set.unions $ map varsOf elems
 varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
+varsOf (Ite e0 e1 e2) = varsOf e0 `Set.union` varsOf e1 `Set.union` varsOf e2
 varsOf (Measure _ _ e) = varsOf e
 varsOf (Cons _ _ es) = Set.unions $ map varsOf es
 varsOf (Pred _ es) = Set.unions $ map varsOf es
@@ -127,7 +129,8 @@ varsOf _ = Set.empty
 unknownsOf :: Formula -> Set Formula
 unknownsOf u@(Unknown _ _) = Set.singleton u
 unknownsOf (Unary Not e) = unknownsOf e
-unknownsOf (Binary _ e1 e2) = Set.union (unknownsOf e1) (unknownsOf e2 )
+unknownsOf (Binary _ e1 e2) = unknownsOf e1 `Set.union` unknownsOf e2
+unknownsOf (Ite e0 e1 e2) = unknownsOf e0 `Set.union` unknownsOf e1 `Set.union` unknownsOf e2
 unknownsOf _ = Set.empty
 
 -- | 'posNegUnknowns' @fml@: sets of positive and negative predicate unknowns in @fml@
@@ -135,8 +138,9 @@ posNegUnknowns :: Formula -> (Set Id, Set Id)
 posNegUnknowns (Unknown _ u) = (Set.singleton u, Set.empty)
 posNegUnknowns (Unary Not e) = swap $ posNegUnknowns e
 posNegUnknowns (Binary Implies e1 e2) = both2 Set.union (swap $ posNegUnknowns e1) (posNegUnknowns e2)
-posNegUnknowns (Binary Iff e1 e2) = both2 Set.union (posNegUnknowns $ Binary Implies e1 e2) (posNegUnknowns $ Binary Implies e2 e1)
+posNegUnknowns (Binary Iff e1 e2) = both2 Set.union (posNegUnknowns $ e1 |=>| e2) (posNegUnknowns $ e2 |=>| e1)
 posNegUnknowns (Binary _ e1 e2) = both2 Set.union (posNegUnknowns e1) (posNegUnknowns e2)
+posNegUnknowns (Ite e e1 e2) = both2 Set.union (posNegUnknowns $ e |=>| e1) (posNegUnknowns $ fnot e |=>| e2)
 posNegUnknowns _ = (Set.empty, Set.empty)
 
 posUnknowns = fst . posNegUnknowns
@@ -147,6 +151,7 @@ predsOf (Pred p es) = Set.insert p (Set.unions $ map predsOf es)
 predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
 predsOf (Unary _ e) = predsOf e
 predsOf (Binary _ e1 e2) = predsOf e1 `Set.union` predsOf e2
+predsOf (Ite e0 e1 e2) = predsOf e0 `Set.union` predsOf e1 `Set.union` predsOf e2
 predsOf (All x e) = predsOf e
 predsOf _ = Set.empty
 
@@ -162,25 +167,27 @@ conjunctsOf f = Set.singleton f
 sortOf :: Formula -> Sort
 sortOf (BoolLit _)                               = BoolS
 sortOf (IntLit _)                                = IntS
-sortOf (SetLit b es)                             = SetS b
+sortOf (SetLit b _)                              = SetS b
 sortOf (Var s _ )                                = s
 sortOf (Unknown _ _)                             = BoolS
-sortOf (Unary op e)
+sortOf (Unary op _)
   | op == Neg || op == Abs                       = IntS
   | otherwise                                    = BoolS
-sortOf (Binary op e1 e2)
+sortOf (Binary op e1 _)
   | op == Times || op == Plus || op == Minus     = IntS
   | op == Union || op == Intersect || op == Diff = sortOf e1
   | otherwise                                    = BoolS
+sortOf (Ite _ e1 _)                              = sortOf e1
 sortOf (Measure s _ _)                           = s
 sortOf (Cons s _ _)                              = s
 sortOf (Pred _ _)                                = BoolS
-sortOf (All x e)                                 = BoolS
+sortOf (All _ _)                                 = BoolS
 
 isExecutable :: Formula -> Bool
 isExecutable (SetLit _ _) = False
 isExecutable (Unary _ e) = isExecutable e
 isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
+isExecutable (Ite e0 e1 e2) = False
 isExecutable (Measure _ _ _) = False
 isExecutable (Pred _ _) = False
 isExecutable (All _ _) = False
@@ -194,8 +201,9 @@ substitute subst fml = case fml of
     Just f -> f
     Nothing -> fml
   Unknown s name -> Unknown (s `compose` subst) name 
-  Unary op fml' -> Unary op (substitute subst fml')
-  Binary op fml1 fml2 -> Binary op (substitute subst fml1) (substitute subst fml2)
+  Unary op e -> Unary op (substitute subst e)
+  Binary op e1 e2 -> Binary op (substitute subst e1) (substitute subst e2)
+  Ite e0 e1 e2 -> Ite (substitute subst e0) (substitute subst e1) (substitute subst e2)
   Measure b name arg -> Measure b name (substitute subst arg)
   Cons b name args -> Cons b name $ map (substitute subst) args
   Pred name args -> Pred name $ map (substitute subst) args
@@ -223,8 +231,9 @@ substitutePredicate pSubst fml = case fml of
   Pred name args -> case Map.lookup name pSubst of
                       Nothing -> Pred name (map (substitutePredicate pSubst) args)
                       Just value -> substitute (Map.fromList $ zip deBrujns args) (substitutePredicate pSubst value)
-  Unary op fml' -> Unary op (substitutePredicate pSubst fml')
-  Binary op fml1 fml2 -> Binary op (substitutePredicate pSubst fml1) (substitutePredicate pSubst fml2)
+  Unary op e -> Unary op (substitutePredicate pSubst e)
+  Binary op e1 e2 -> Binary op (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
+  Ite e0 e1 e2 -> Ite (substitutePredicate pSubst e0) (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   All v@(Var _ x) e -> All v (substitutePredicate pSubst e)
   _ -> fml
 
@@ -281,8 +290,9 @@ applySolution sol fml = case fml of
   Unknown s ident -> case Map.lookup ident sol of
     Just quals -> substitute s $ conjunction quals
     Nothing -> fml
-  Unary op fml' -> Unary op (applySolution sol fml')
-  Binary op fml1 fml2 -> Binary op (applySolution sol fml1) (applySolution sol fml2)
+  Unary op e -> Unary op (applySolution sol e)
+  Binary op e1 e2 -> Binary op (applySolution sol e1) (applySolution sol e2)
+  Ite e0 e1 e2 -> Ite (applySolution sol e0) (applySolution sol e1) (applySolution sol e2)
   All x fml' -> All x (applySolution sol fml')
   otherwise -> fml
       

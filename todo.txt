@@ -1,5 +1,8 @@
+- Replace measures/predicates with arbitrary logic functions
+- Turn abstract datatypes into bound type variables, allow equality on them, but not other datatypes
+- Change e-term parser to always parse formulas
+
 - In matches: instantiate all constructor schemas together with the same free variables
-- Replace measures/predicates with arbitrary logic functions, give measures definitions, turn abstract datatypes into bound type variables, allow equality on them, but not other datatypes
 - Disallow sets in formula programs
 
 - Type classes (for type variables and abstract datatypes)

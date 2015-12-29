@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveProgramAst, resolveRefinement, resolveRefinedType, ResolverState (..)) where
+module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, ResolverState (..)) where
 
 import Synquid.Program
 import Synquid.Logic
@@ -17,7 +17,7 @@ import qualified Data.Set as Set
 import Data.Maybe
 import Data.List
 import qualified Data.Foldable as Foldable
-
+import qualified Data.Traversable as Traversable
 
 {- Interface -}
 
@@ -33,12 +33,19 @@ data ResolverState = ResolverState {
 makeLenses ''ResolverState
 
 -- | Convert a parsed program AST into a synthesizable @Goal@ object.
-resolveProgramAst :: ProgramAst -> Either ErrMsg ([Goal], [Formula], [Formula])
-resolveProgramAst declarations = 
-  case runExcept (execStateT (mapM_ resolveDeclaration declarations) (ResolverState emptyEnv [] [] [])) of
+resolveDecls :: [Declaration] -> Either ErrMsg ([Goal], [Formula], [Formula])
+resolveDecls declarations = 
+  case runExcept (execStateT go (ResolverState emptyEnv [] [] [])) of
     Left msg -> Left msg
     Right (ResolverState env goals cquals tquals) -> Right (map (makeGoal env (map fst goals)) goals, cquals, tquals)
   where
+    go = do
+      -- Pass 1: collect all declarations and resolve sorts, but do not resolve refinement types yet
+      mapM_ resolveDeclaration declarations
+      -- Pass 2: resolve refinement types in signatures
+      syms <- uses environment allSymbols
+      syms' <- Traversable.mapM resolveSchema syms
+      environment %= flip (Map.foldWithKey addPolyConstant) syms' 
     makeGoal env allNames (name, impl) = 
       let
         spec = allSymbols env Map.! name
@@ -63,27 +70,52 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
   if Set.null extraTypeVars
     then environment %= addTypeSynonym typeName typeVars typeBody'
     else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the definition of type synonym", typeName, "are undefined"]
-resolveDeclaration (FuncDecl funcName typeSchema) = resolveSignature funcName typeSchema
-resolveDeclaration (DataDecl dataName typeParams predParams wfMetricMb constructors) = do
-  case wfMetricMb of
-    Nothing -> return ()
-    Just wfMetric -> do
-      ifM (not . Map.member wfMetric <$> (use $ environment . measures)) (throwError $ unwords ["Measure", wfMetric, "is undefined"]) (return ())
-  -- ToDo: check sorts in predParams
+resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
+resolveDeclaration (DataDecl dataName typeParams predParams constructors) = do
   let
     datatype = DatatypeDef {
       _typeArgCount = length typeParams,
       _predArgs = map (\(PredSig _ sorts) -> sorts) predParams,
       _constructors = map constructorName constructors,
-      _wfMetric = wfMetricMb
+      _wfMetric = Nothing
     }
   environment %= addDatatype dataName datatype
   let addPreds sch = foldl (\s (PredSig p sorts) -> ForallP p sorts s) sch predParams
-  mapM_ (\(ConstructorSig name schema) -> resolveSignature name $ addPreds schema) constructors
-resolveDeclaration (MeasureDecl measureName inSort outSort post) = do
+  mapM_ (\(ConstructorSig name schema) -> addNewSignature name $ addPreds schema) constructors
+resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
+  -- Resolve measure signature:
+  inSort'@(DataS dtName _) <- resolveSort inSort
   outSort' <- resolveSort outSort
   post' <- resolveFormula BoolS outSort' post
-  environment %= addMeasure measureName (MeasureDef inSort outSort' post')
+  environment %= addMeasure measureName (MeasureDef inSort' outSort' post')
+  -- Possibly add as termination metric:
+  datatype <- uses (environment . datatypes) (Map.! dtName)
+  if isTermination
+    then environment %= addDatatype dtName datatype { _wfMetric = Just measureName }
+    else return ()
+  -- Insert definition cases as refinements into constructor types:
+  let ctors = datatype ^. constructors
+  if length defCases /= length ctors
+    then throwError $ unwords $ ["Definition of measure", measureName, "must include one case per constructor of", dtName]
+    else mapM_ (resolveMeasureDef ctors) defCases
+  where
+    resolveMeasureDef allCtors (MeasureCase ctorName ctorArgs body) = 
+      if not (ctorName `elem` allCtors)
+        then throwError $ unwords ["Not in scope: data constructor", ctorName, "used in definition of measure", measureName]
+        else do
+          sch <- uses environment ((Map.! ctorName) . allSymbols)
+          let n = arity $ toMonotype sch
+          if n /= length ctorArgs 
+            then throwError $ unwords ["Data constructor", ctorName, "expected", show n, "binders and got", show (length ctorArgs), "in definition of measure", measureName]
+            else do
+              let subst = Map.fromList (zip ctorArgs (map (\(Var _ name) -> Var AnyS name) $ allArgs $ toMonotype sch))
+              let fml = Measure AnyS measureName (Var AnyS valueVarName) |=| substitute subst body
+              -- sch' <- resolveSchema $ addMeasureRefinement fml sch
+              environment %= addPolyConstant ctorName (addMeasureRefinement fml sch)
+    addMeasureRefinement fml (ForallT a sch) = addMeasureRefinement fml sch
+    addMeasureRefinement fml (ForallP p argSorts sch) = ForallP p argSorts $ addMeasureRefinement fml sch
+    addMeasureRefinement fml (Monotype t) = Monotype $ addRefinementToLast t fml
+                  
 resolveDeclaration (PredDecl (PredSig name sorts)) = void $ resolvePredSignature name sorts
 resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols
@@ -131,7 +163,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
       tArgs' <- mapM resolveType tArgs
       pArgs' <- zipWithM resolvePredArg pVars pArgs
-      let baseT' = DatatypeT name tArgs' pArgs'
+      let baseT' = DatatypeT name tArgs' pArgs'      
       fml' <- resolveFormula BoolS (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
@@ -257,6 +289,11 @@ resolveFormula targetSort valueSort (Binary op l r) = do
       | op == Member                                        = (SetS lSort, BoolS)
       | op == Subset                                        = (lSort, BoolS)
     
+resolveFormula targetSort valueSort (Ite cond l r) = do
+  cond' <- resolveFormula BoolS valueSort cond
+  l' <- resolveFormula targetSort valueSort l
+  r' <- resolveFormula targetSort valueSort r
+  return $ Ite cond' l' r'
   
 resolveFormula targetSort valueSort (Measure AnyS name argFml) = do
   ms <- use $ environment . measures
@@ -303,10 +340,9 @@ resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type:
 
 {- Misc -}
 
-resolveSignature name sch = do
+addNewSignature name sch = do
   ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of function", name]) (return ())
-  sch' <- resolveSchema sch
-  environment %= addPolyConstant name sch'
+  environment %= addPolyConstant name sch
   
 resolvePredSignature name sorts = do
   ifM (Map.member name <$> use (environment . boundPredicates)) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())

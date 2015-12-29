@@ -32,7 +32,7 @@ reconstruct eParams tParams goal = do
       pMain <- reconstructTopLevel goal
       pAuxs <- reconstructAuxGoals
       let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
-      runInSolver $ finalize p      
+      runInSolver $ finalizeProgram p      
 
     reconstructAuxGoals = do
       goals <- use auxGoals
@@ -275,7 +275,9 @@ checkAnnotation env t t' p = do
       writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
       addConstraint $ Subtype env t'' t True
       
-      typingState . errorContext .= text "when checking consistency of type annotation" </> pretty t'' </> text "with" </> pretty t </> text "in" $+$ pretty (ctx (Program p t''))
+      fT <- runInSolver $ finalizeType t
+      fT'' <- runInSolver $ finalizeType t''
+      typingState . errorContext .= text "when checking consistency of type annotation" </> pretty fT'' </> text "with" </> pretty fT </> text "in" $+$ pretty (ctx (Program p t''))
       solveIncrementally
       typingState . errorContext .= empty
       

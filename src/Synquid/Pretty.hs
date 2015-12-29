@@ -136,19 +136,24 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
+power (Measure _ _ _) = 7
+power (Cons _ _ _) = 7
+power (Pred _ _) = 7
 power (Unary _ _) = 6
 power (Binary op _ _)
-  | op `elem` [Times] = 5
-  | op `elem` [Plus, Minus] = 4
-  | op `elem` [Eq, Neq, Lt, Le, Gt, Ge] = 3
+  | op `elem` [Times, Intersect] = 5
+  | op `elem` [Plus, Minus, Union, Diff] = 4
+  | op `elem` [Eq, Neq, Lt, Le, Gt, Ge, Member, Subset] = 3
   | op `elem` [And, Or] = 2
   | op `elem` [Implies] = 1
   | op `elem` [Iff] = 0
-power _ = 7
+power (All _ _) = -1
+power (Ite _ _ _) = -1  
+power _ = 8
 
 -- | Pretty-printed formula
 fmlDoc :: Formula -> Doc
-fmlDoc fml = fmlDocAt (-1) fml
+fmlDoc fml = fmlDocAt (-2) fml
 
 -- | 'fmlDocAt' @n fml@ : print @expr@ in a context with binding power @n@
 fmlDocAt :: Int -> Formula -> Doc
@@ -156,15 +161,16 @@ fmlDocAt n fml = condParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> pretty i
-    SetLit _ elems -> brackets $ commaSep $ map pretty elems
+    SetLit _ elems -> brackets $ commaSep $ map fmlDoc elems
     Var s name -> text name -- <> text ":" <> pretty  s
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
-    Measure b name arg -> text name <+> pretty arg -- text name <> text ":" <> pretty  b <+> pretty arg
-    Cons b name args -> parens (text name <+> hsep (map pretty args))
-    Pred name args -> text name <+> hsep (map pretty args)
-    All x e -> parens (text "forall" <+> pretty x <+> text "." <+> pretty e)
+    Ite e0 e1 e2 -> text "if" <+> fmlDoc e0 <+> text "then" <+> fmlDoc e1 <+> text "else" <+> fmlDoc e2
+    Measure b name arg -> text name <+> fmlDocAt n' arg -- text name <> text ":" <> pretty  b <+> pretty arg
+    Cons b name args -> parens (text name <+> hsep (map (fmlDocAt n') args))
+    Pred name args -> text name <+> hsep (map (fmlDocAt n') args)
+    All x e -> text "forall" <+> pretty x <+> text "." <+> fmlDoc e
   )
   where
     n' = power fml
@@ -324,17 +330,22 @@ instance Pretty ConstructorSig where
 
 instance Pretty PredSig where
   pretty (PredSig p sorts) = angles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") sorts) <+> pretty BoolS
+  
+instance Pretty MeasureCase where
+  pretty (MeasureCase name args body) = text name <+> hsep (map text args) <+> text "->" <+> pretty body
 
 instance Pretty Declaration where
   pretty (TypeDecl name tvs t) = text "type" <+> text name <+> hsep (map text tvs) <+> text "=" <+> pretty t
   pretty (QualifierDecl fmls) = text "qualifier" <+> braces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> text "::" <+> pretty t
-  pretty (DataDecl name typeVars predParams wfMetricMb ctors) = nest 2 (text "data" <+> text name <+> hsep (map text typeVars) <+>
-                                                            hsep (map pretty predParams) <+>
-                                                            optionMaybe wfMetricMb (\m -> text "decreases" <+> text m) <+> text "where") $+$
-                                                            vsep (map pretty ctors)
-  pretty (MeasureDecl name inSort outSort post) = text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->"
-                                                  <+> if post == ftrue then pretty outSort else braces (pretty outSort <+> text "|" <+> pretty post)
+  pretty (DataDecl name typeVars predParams ctors) = hang 2 $ 
+    text "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> text "where" 
+    $+$ vsep (map pretty ctors)
+  pretty (MeasureDecl name inSort outSort post cases isTermination) = hang 2 $ 
+    if isTermination then text "termination" else empty
+    <+> text "measure" <+> text name <+> text "::" <+> pretty inSort <+> text "->"
+    <+> if post == ftrue then pretty outSort else braces (pretty outSort <+> text "|" <+> pretty post) <+> text "where"
+    $+$ vsep (map pretty cases)                                                        
   pretty (SynthesisGoal name impl) = text name <+> text "=" <+> pretty impl
 
 {- AST node counting -}
@@ -344,6 +355,7 @@ fmlNodeCount :: Formula -> Int
 fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
+fmlNodeCount (Ite c l r) = 1 + fmlNodeCount c + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Measure _ _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Cons _ _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Pred _ args) = 1 + sum (map fmlNodeCount args)
