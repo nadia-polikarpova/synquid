@@ -110,6 +110,7 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubst
         in ScalarT (DatatypeT name tArgs' pArgs') ftrue
       _ -> ScalarT baseT ftrue
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
+typeSubstitute _ AnyT = AnyT
 
 schemaSubstitute :: TypeSubstitution -> RSchema -> RSchema
 schemaSubstitute tass (Monotype t) = Monotype $ typeSubstitute tass t
@@ -124,9 +125,8 @@ sortSubstituteFml subst fml = case fml of
   Unary op e -> Unary op (sortSubstituteFml subst e)
   Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
   Ite c l r -> Ite (sortSubstituteFml subst c) (sortSubstituteFml subst l) (sortSubstituteFml subst r)
-  Measure s name e -> Measure (sortSubstitute subst s) name (sortSubstituteFml subst e)
-  Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
-  Pred name es -> Pred name (map (sortSubstituteFml subst) es)
+  Pred s name es -> Pred (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
+  Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)  
   All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   _ -> fml
   
@@ -144,6 +144,7 @@ typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
     ScalarT (DatatypeT name tArgs pArgs) fml -> ScalarT (DatatypeT name (map tsp tArgs) (map (substitutePredicate pSubst) pArgs)) (substitutePredicate pSubst fml)
     ScalarT baseT fml -> ScalarT baseT (substitutePredicate pSubst fml)
     FunctionT x tArg tRes -> FunctionT x (tsp tArg) (tsp tRes)
+    AnyT -> AnyT
   
 -- | 'typeVarsOf' @t@ : all type variables in @t@
 typeVarsOf :: TypeSkeleton r -> Set Id
@@ -240,6 +241,7 @@ typeApplySolution :: Solution -> RType -> RType
 typeApplySolution sol (ScalarT (DatatypeT name tArgs pArgs) fml) = ScalarT (DatatypeT name (map (typeApplySolution sol) tArgs) (map (applySolution sol) pArgs)) (applySolution sol fml)
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
+typeApplySolution _ AnyT = AnyT
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
@@ -513,7 +515,7 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
     extractPost (mName, MeasureDef _ outSort fml) = 
       if fml == ftrue
         then Nothing
-        else Just $ substitute (Map.singleton valueVarName (Measure outSort mName (Var (toSort baseT) valueVarName))) fml
+        else Just $ substitute (Map.singleton valueVarName (Pred outSort mName [Var (toSort baseT) valueVarName])) fml
         
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _) = case elemIndex a vars of
       Nothing -> Nothing
@@ -523,7 +525,7 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
                     else  let
                             elemSort = toSort elemT
                             scopedVar = Var elemSort "_x"
-                            setVal = Measure (SetS elemSort) mName (Var (toSort baseT) valueVarName)
+                            setVal = Pred (SetS elemSort) mName [Var (toSort baseT) valueVarName]
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
     elemProperties (mName, MeasureDef _ _ _) = Nothing
     
@@ -553,7 +555,7 @@ data ConstructorSig = ConstructorSig Id RSchema
   deriving (Eq)
   
 -- | Predicate signature: name and argument sorts  
-data PredSig = PredSig Id [Sort]
+data PredSig = PredSig Id [Sort] Sort
   deriving (Eq)
   
 -- | One case in a measure definition: constructor name, arguments, and body  

@@ -153,18 +153,13 @@ toAST expr = case expr of
     e1' <- toAST e1
     e2' <- toAST e2
     mkIte e0' e1' e2'
-  Measure s name arg -> do
-    let tArg = sortOf arg
-    -- decl <- measure b (name ++ show tArg ++ show b) tArg
-    decl <- function s name [tArg]
-    mapM toAST [arg] >>= mkApp decl
+  Pred s name args -> do
+    let tArgs = map sortOf args
+    decl <- function s name tArgs
+    mapM toAST args >>= mkApp decl    
   Cons s name args -> do
     let tArgs = map sortOf args
     decl <- function s name tArgs
-    mapM toAST args >>= mkApp decl
-  Pred name args -> do
-    let tArgs = map sortOf args
-    decl <- function BoolS name tArgs
     mapM toAST args >>= mkApp decl
   All v e -> accumAll [v] e
   where
@@ -175,15 +170,6 @@ toAST expr = case expr of
 
     accumAll :: [Formula] -> Formula -> Z3State AST
     accumAll xs (All y e) = accumAll (xs ++ [y]) e
-    accumAll xs e@(Binary Eq (Measure s1 m c@(Cons _ _ _)) rhs) =  do
-      boundVars <- mapM toAST xs
-      boundApps <- mapM toApp boundVars
-      body <- toAST e
-      trigger <- toAST c
-      pats <- mkPattern [trigger]
-      res <- mkForallConst [pats] boundApps body
-      str <- astToString res
-      debug 1 str $ return res
     accumAll xs e =  do
       boundVars <- mapM toAST xs
       boundApps <- mapM toApp boundVars

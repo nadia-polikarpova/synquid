@@ -31,6 +31,8 @@ reconstruct eParams tParams goal = do
     go = do
       pMain <- reconstructTopLevel goal
       pAuxs <- reconstructAuxGoals
+      writeLog 1 $ text "FINAL TYPE CHECK"
+      runInSolver $ isFinal .= True >> solveTypeConstraints -- Run the final pass of type checking, where ambiguous type variables are assigned a default type
       let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
       runInSolver $ finalizeProgram p      
 
@@ -41,7 +43,7 @@ reconstruct eParams tParams goal = do
         (g : gs) -> do
           auxGoals .= gs
           let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
-          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'          
+          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'
           p <- reconstructTopLevel g'
           rest <- reconstructAuxGoals
           return $ (gName g, p) : rest    
@@ -108,7 +110,7 @@ reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = rec
     terminationRefinement argName (ScalarT dt@(DatatypeT name _ _) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just mName -> let MeasureDef inSort outSort _ = (env ^. measures) Map.! mName
-                        metric = Measure outSort mName
+                        metric x = Pred outSort mName [x]
                     in Just ( metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<| metric (Var inSort argName),
                               metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<=| metric (Var inSort argName))
     terminationRefinement _ _ = Nothing

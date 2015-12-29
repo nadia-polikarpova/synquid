@@ -492,7 +492,7 @@ instantiate env sch fml = do
       p' <- freshId "P"
       let argSorts' = map (sortSubstitute (asSortSubst subst)) argSorts
       addConstraint $ WellFormedPredicate env argSorts' p'
-      instantiate' subst (Map.insert p (Pred p' (zipWith Var argSorts deBrujns)) pSubst) sch
+      instantiate' subst (Map.insert p (Pred BoolS p' (zipWith Var argSorts deBrujns)) pSubst) sch
     instantiate' subst pSubst (Monotype t) = go subst pSubst t
     go subst pSubst (FunctionT x tArg tRes) = do
       x' <- freshId "x"
