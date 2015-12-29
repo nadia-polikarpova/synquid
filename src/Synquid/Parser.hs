@@ -20,6 +20,8 @@ import qualified Text.Parsec.Token as Token
 import Text.Parsec.Expr
 import Text.Parsec.Indent
 
+import Debug.Trace
+
 {- Interface -}
 
 type Parser a = IndentParser String () a
