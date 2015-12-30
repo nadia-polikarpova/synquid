@@ -25,6 +25,4 @@ When goal type contains abstract predicate, the only functions we should conside
 - Try encoding of atomic flow with HO functions
 
 Front-end:
-	- Make resolver multi-pass so that order of declarations doesn't matter
-	- Check if wf-metric is defined
-	- Attach positions to AST nodes?
+	- Attach positions to AST nodes
