@@ -39,6 +39,7 @@ executable synquid
                     , z3 >= 4.0
                     , logict >= 0.5
                     , parsec == 3.1.*
+                    , indents == 0.3.*
                     , cmdargs ==0.10.*
                     , time
 
@@ -67,6 +68,7 @@ Test-Suite synquid-tests
                     , logict >= 0.5
                     , HUnit >= 1.2
                     , parsec == 3.1.*
+                    , indents == 0.3.*                    
                     , test-framework
                     , test-framework-hunit
                     , smallcheck
