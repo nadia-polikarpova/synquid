@@ -239,7 +239,19 @@ parseRefinedSort = braces $ do
   refinement <- parseFormula
   return (s, refinement)
       
-{- Formulas -}     
+{- Formulas -}
+
+-- | Expression table
+exprTable mkUnary mkBinary = [
+  [unary Not, unary Neg, unary Abs],
+  [binary Times AssocLeft],
+  [binary Plus AssocLeft, binary Minus AssocLeft],
+  [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binary Member AssocNone],
+  [binary And AssocLeft, binary Or AssocLeft],
+  [binary Implies AssocRight, binary Iff AssocRight]]
+  where
+    unary op = Prefix (reservedOp (unOpTokens ! op) >> return (mkUnary op))
+    binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (mkBinary op)) assoc    
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
@@ -247,18 +259,7 @@ parseRefinedSort = braces $ do
  - (ie literals).
  -}
 parseFormula :: Parser Formula
-parseFormula = withPos $ (buildExpressionParser exprTable parseTerm <?> "refinement term")
-  where
-    exprTable = [
-      [unary Not, unary Neg, unary Abs],
-      [binary Times AssocLeft],
-      [binary Plus AssocLeft, binary Minus AssocLeft],
-      [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binaryWord Member AssocNone],
-      [binary And AssocLeft, binary Or AssocLeft],
-      [binary Implies AssocRight, binary Iff AssocRight]]
-    unary op = Prefix (reservedOp (unOpTokens ! op) >> return (Unary op))
-    binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (Binary op)) assoc
-    binaryWord op assoc = Infix (reserved (binOpTokens ! op) >> return (Binary op)) assoc
+parseFormula = withPos $ (buildExpressionParser (exprTable Unary Binary) parseTerm <?> "refinement term")
 
 parseTerm :: Parser Formula
 parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
@@ -340,20 +341,25 @@ parseIf = do
   iElse <- parseScalar
   return $ untyped $ PIf iCond iThen iElse
 
-parseETerm = parseFormulaTerm <|> try parseAppTerm <|> parseAtomTerm
+parseETerm = buildExpressionParser (exprTable mkUnary mkBinary) parseAppTerm <?> "elimination term"
   where
+    mkUnary op = untyped . PApp (untyped $ PSymbol (unOpTokens ! op))
+    mkBinary op p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens ! op)) p1) p2
     parseAppTerm = do
       head <- parseAtomTerm
-      args <- many1 (sameOrIndented >> (try parseAtomTerm <|> parens parseImpl))
-      return $ foldl1 (\e1 e2 -> untyped $ PApp e1 e2) (head : args)
+      args <- many (sameOrIndented >> (try parseAtomTerm <|> parens parseImpl))
+      return $ foldl (\e1 e2 -> untyped $ PApp e1 e2) head args
     parseAtomTerm = choice [
         parens (withOptionalType $ parseETerm)
       , parseHole
+      , parseBoolLit
+      , parseIntLit
       , parseSymbol
       ]
+    parseBoolLit = (reserved "False" >> return (untyped $ PSymbol "False")) <|> (reserved "True" >> return (untyped $ PSymbol "True"))
+    parseIntLit = natural >>= return . untyped . PSymbol . show
     parseHole = reserved "??" >> return (untyped PHole)
     parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
-    parseFormulaTerm = (eraseTypes . fmlToProgram) <$> braces parseFormula
     
 withOptionalType p = do
   (Program content _) <- p

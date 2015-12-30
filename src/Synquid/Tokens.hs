@@ -33,7 +33,7 @@ binOpTokens = fromList [ (Times,     "*")
                        , (Union,     "+")
                        , (Intersect, "*")
                        , (Diff,      "-")
-                       , (Member,    "in")
+                       , (Member,    "<-")
                        , (Subset,    "<=")
                        ]
                         
