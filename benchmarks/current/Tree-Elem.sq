@@ -16,5 +16,5 @@ measure telems :: Tree a -> Set a where
   Empty -> []
   Node x l r -> telems l + telems r + [x]  
 	
-elem :: x: a -> t: Tree a -> {Bool | _v == (x <- telems t)}
+elem :: x: a -> t: Tree a -> {Bool | _v == (x in telems t)}
 elem = ??

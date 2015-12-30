@@ -16,5 +16,5 @@ measure elems :: Heap a -> Set a where
   Empty -> []
   Node x l r -> elems l + elems r + [x]    
 
-member :: x: a -> t: Heap a -> {Bool | _v == (x <- elems t)}
+member :: x: a -> t: Heap a -> {Bool | _v == (x in elems t)}
 member = ??
