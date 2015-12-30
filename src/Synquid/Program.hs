@@ -416,10 +416,12 @@ allSymbols env = Map.unions $ Map.elems (env ^. symbols)
 -- | 'lookupSymbol' @name env@ : type of symbol @name@ in @env@, including built-in constants
 lookupSymbol :: Id -> Int -> Environment -> Maybe RSchema
 lookupSymbol name a env
+  | a == 0 && name == "True"                          = Just $ Monotype $ ScalarT BoolT valInt
+  | a == 0 && name == "False"                         = Just $ Monotype $ ScalarT BoolT (fnot valInt)
   | a == 0 && all isDigit name                        = let n = read name in Just $ Monotype $ ScalarT IntT (valInt |=| IntLit n)
   | a == 1 && (name `elem` Map.elems unOpTokens)      = let op = head $ Map.keys $ Map.filter (== name) unOpTokens in Just $ unOpType op
   | a == 2 && (name `elem` Map.elems binOpTokens)     = let op = head $ Map.keys $ Map.filter (== name) binOpTokens in Just $ binOpType op
-  | otherwise                             = Map.lookup name (allSymbols env)
+  | otherwise                                         = Map.lookup name (allSymbols env)
   where
     unOpType Neg       = Monotype $ FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))
     unOpType Not       = Monotype $ FunctionT "x" boolAll (bool (valBool |=| fnot (boolVar "x")))

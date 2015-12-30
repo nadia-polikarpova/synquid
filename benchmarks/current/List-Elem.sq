@@ -15,7 +15,7 @@ measure elems :: List a -> Set a where
   Nil -> []
   Cons x xs -> [x] + elems xs
 	
-elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
+elem :: x: a -> xs: List a -> {Bool | _v == (x <- elems xs)}
 elem = ??
 
 	
