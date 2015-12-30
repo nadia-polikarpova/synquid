@@ -15,5 +15,5 @@ measure telems :: BST a -> Set a where
   Empty -> []
   Node x l r -> telems l + telems r + [x]
 
-member :: x: a -> t: BST a -> {Bool | _v == (x <- telems t)}
+member :: x: a -> t: BST a -> {Bool | _v == (x in telems t)}
 member = ??

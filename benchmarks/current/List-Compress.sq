@@ -14,7 +14,7 @@ measure elems :: List a -> Set a where
 
 data CList a where
   CNil :: CList a
-  CCons :: x: a -> xs: {CList a | !(x <- heads _v)} -> CList a
+  CCons :: x: a -> xs: {CList a | !(x in heads _v)} -> CList a
   
 termination measure clen :: CList a -> {Int | _v >= 0} where
   CNil -> 0

@@ -26,8 +26,8 @@ predicate canRead :: File -> Set Principal
 predicate canWrite :: File -> Set Principal
 
 -- | Access permission "axioms" (constructors for @CanRead@ and @CanWrite@)
-wImpliesR :: p: Principal -> f: {File | p <- canWrite _v} -> {File | _v == f && p <- canRead _v}
-adminW :: f: File -> {File | _v == f && Admin <- canWrite _v}
+wImpliesR :: p: Principal -> f: {File | p in canWrite _v} -> {File | _v == f && p in canRead _v}
+adminW :: f: File -> {File | _v == f && Admin in canWrite _v}
 
 -- | File content
 data Content
@@ -49,10 +49,10 @@ flowJoinLeast :: l: Label -> m1: {Label | canFlow _v l} -> m2: {Label | canFlow 
 atomicFlowL :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v == F lo && canFlow _v (F hi)}
 atomicFlowR :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v == F hi && canFlow (F lo) _v}
 
-fread :: p: {Principal | isAuth _v} -> f: {File | p <- canRead _v} -> {Content | tracked _v (F f)}
+fread :: p: {Principal | isAuth _v} -> f: {File | p in canRead _v} -> {Content | tracked _v (F f)}
 -- fread' :: p: Principal -> f: File -> (Content) -- fread stripped of security
 
-fwrite :: p: {Principal | isAuth _v} -> f: {File | p <- canWrite _v} -> c: Content -> l: {Label | canFlow _v (F f) && tracked c _v} ->  {File | _v == f}
+fwrite :: p: {Principal | isAuth _v} -> f: {File | p in canWrite _v} -> c: Content -> l: {Label | canFlow _v (F f) && tracked c _v} ->  {File | _v == f}
 -- fwrite' :: p: Principal -> f: File -> c: Content -> {File | _v == f} -- fwrite stripped of security
 
 {- client -}

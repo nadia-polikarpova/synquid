@@ -242,16 +242,18 @@ parseRefinedSort = braces $ do
 {- Formulas -}
 
 -- | Expression table
-exprTable mkUnary mkBinary = [
+exprTable mkUnary mkBinary withGhost = [
   [unary Not, unary Neg, unary Abs],
   [binary Times AssocLeft],
   [binary Plus AssocLeft, binary Minus AssocLeft],
-  [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone, binary Member AssocNone],
+  [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone] 
+    ++ if withGhost then [binaryWord Member AssocNone] else [],
   [binary And AssocLeft, binary Or AssocLeft],
   [binary Implies AssocRight, binary Iff AssocRight]]
   where
     unary op = Prefix (reservedOp (unOpTokens ! op) >> return (mkUnary op))
-    binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (mkBinary op)) assoc    
+    binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (mkBinary op)) assoc
+    binaryWord op assoc = Infix (reserved (binOpTokens ! op) >> return (mkBinary op)) assoc    
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
@@ -259,7 +261,7 @@ exprTable mkUnary mkBinary = [
  - (ie literals).
  -}
 parseFormula :: Parser Formula
-parseFormula = withPos $ (buildExpressionParser (exprTable Unary Binary) parseTerm <?> "refinement term")
+parseFormula = withPos $ (buildExpressionParser (exprTable Unary Binary True) parseTerm <?> "refinement term")
 
 parseTerm :: Parser Formula
 parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
@@ -341,7 +343,7 @@ parseIf = do
   iElse <- parseScalar
   return $ untyped $ PIf iCond iThen iElse
 
-parseETerm = buildExpressionParser (exprTable mkUnary mkBinary) parseAppTerm <?> "elimination term"
+parseETerm = buildExpressionParser (exprTable mkUnary mkBinary False) parseAppTerm <?> "elimination term"
   where
     mkUnary op = untyped . PApp (untyped $ PSymbol (unOpTokens ! op))
     mkBinary op p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens ! op)) p1) p2
