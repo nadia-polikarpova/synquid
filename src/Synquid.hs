@@ -13,6 +13,7 @@ import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.Synthesizer
 
+import Control.Monad
 import System.Exit
 import System.Console.CmdArgs
 import Data.Time.Calendar
@@ -37,8 +38,9 @@ main = do
                    log_ 
                    useMemoization 
                    bfs
-                   print_solution_size 
-                   print_spec_info) <- cmdArgs cla
+                   print_spec
+                   print_spec_size
+                   print_solution_size) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -57,8 +59,9 @@ main = do
     solverLogLevel = log_
     }
   let synquidParams = defaultSynquidParams {
-    showSolutionSize = print_solution_size,
-    showSpecInfo = print_spec_info
+    showSpec = print_spec,
+    showSpecSize = print_spec_size,
+    showSolutionSize = print_solution_size
   }
   runOnFile synquidParams explorerParams solverParams file
 
@@ -87,9 +90,10 @@ data CommandLineArgs
         use_memoization :: Bool,
         -- | Solver params
         bfs_solver :: Bool,
-        -- | Output
-        print_solution_size :: Bool,
-        print_spec_info :: Bool
+        -- | Output        
+        print_spec :: Bool,
+        print_spec_size :: Bool,
+        print_solution_size :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
 
@@ -107,8 +111,9 @@ cla = CommandLineArgs {
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
   use_memoization = False           &= help ("Use memoization (default: False)"),
   bfs_solver      = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
-  print_solution_size = False       &= help ("Show size of the synthesized solution (default: False)"),
-  print_spec_info = False           &= help ("Show information about the given synthesis problem (default: False)")
+  print_spec      = True            &= help ("Show specification of each synthesis goal (default: True)"),
+  print_spec_size = False           &= help ("Show specification size (default: False)"),
+  print_solution_size = False       &= help ("Show solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
@@ -141,13 +146,15 @@ defaultHornSolverParams = HornSolverParams {
 
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
-  showSolutionSize :: Bool,                    -- ^ Print synthesized term size
-  showSpecInfo :: Bool                         -- ^ Print information about specification
+  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
+  showSpecSize :: Bool,                        -- ^ Print specification size
+  showSolutionSize :: Bool                     -- ^ Print solution size
 }
 
 defaultSynquidParams = SynquidParams {
-  showSolutionSize = False,
-  showSpecInfo = False
+  showSpec = True,
+  showSpecSize = False,
+  showSolutionSize = False
 }
 
 -- | Parse and resolve file, then synthesize the specified goals
@@ -162,7 +169,8 @@ runOnFile synquidParams explorerParams solverParams file = do
       Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
   where
     synthesizeGoal cquals tquals goal = do
-      print $ text (gName goal) <+> text "::" <+> pretty (gSpec goal)
+      when (showSpec synquidParams) $ 
+        print (text (gName goal) <+> text "::" <+> pretty (gSpec goal))
       -- print empty
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
@@ -170,17 +178,13 @@ runOnFile synquidParams explorerParams solverParams file = do
         Left err -> print (linebreak <> err) >> exitFailure
         Right prog -> do
           print $ (text (gName goal) <+> text "=" </> pretty prog)
-          print solutionSizeDoc
-          print specSizeDoc
+          when (showSolutionSize synquidParams) $ 
+            print (parens (text "Size:" <+> pretty (programNodeCount prog)))
+          when (showSpecSize synquidParams) $ print specSizeDoc
           where
-            solutionSizeDoc = if showSolutionSize synquidParams 
-                                then parens (text "Size:" <+> pretty (programNodeCount prog))
-                                else empty
-            specSizeDoc = if showSpecInfo synquidParams
-              then let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
+            specSizeDoc = let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
                 parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
                   parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
                   parens (text "#components:" <+>
                     pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
-              else empty
       print empty
