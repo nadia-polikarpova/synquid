@@ -20,4 +20,7 @@ replicate = \n . \x .
 
 Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.org/citation.cfm?doid=2737924.2738007) and [liquid types](http://dl.acm.org/citation.cfm?doid=1375581.1375602).
 
-**Try Synquid [online](http://ec2-52-25-255-117.us-west-2.compute.amazonaws.com/comcom/#Synquid)!**
+## Try Synquid ##
+
+* **Try [in your browser](http://ec2-52-25-255-117.us-west-2.compute.amazonaws.com/comcom/#Synquid)!**
+* **Build from sources:** you will need recent versions of [GHC and Cabal](https://www.haskell.org/platform/) (we are using GHC 7.10.2 and Cabal 1.22.6.0). Clone this repository and then run ```cabal install``` from its top-level directory.
