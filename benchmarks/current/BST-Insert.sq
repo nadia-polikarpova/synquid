@@ -8,9 +8,9 @@ termination measure size :: BST a -> {Int | _v >= 0} where
   Empty -> 0
   Node x l r -> size l + size r + 1
   
-measure telems :: BST a -> Set a where
+measure keys :: BST a -> Set a where
   Empty -> []
-  Node x l r -> telems l + telems r + [x]
+  Node x l r -> keys l + keys r + [x]
 	
-insert :: x: a -> t: BST a -> {BST a | telems _v == telems t + [x]}
+insert :: x: a -> t: BST a -> {BST a | keys _v == keys t + [x]}
 insert = ??
