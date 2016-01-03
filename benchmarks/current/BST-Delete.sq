@@ -8,12 +8,12 @@ termination measure size :: BST a -> {Int | _v >= 0} where
   Empty -> 0
   Node x l r -> size l + size r + 1
   
-measure telems :: BST a -> Set a where
+measure keys :: BST a -> Set a where
   Empty -> []
-  Node x l r -> telems l + telems r + [x]
+  Node x l r -> keys l + keys r + [x]
 
-mergePivot :: p: a -> t1: BST {a | _v < p} -> t2: BST {a | _v > p} -> {BST a | telems _v == telems t1 + telems t2}
+mergePivot :: p: a -> t1: BST {a | _v < p} -> t2: BST {a | _v > p} -> {BST a | keys _v == keys t1 + keys t2}
 mergePivot = ??
 
-delete :: t: BST a -> x: a -> {BST a | telems _v == telems t - [x]}
+delete :: t: BST a -> x: a -> {BST a | keys _v == keys t - [x]}
 delete = ??

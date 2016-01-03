@@ -11,9 +11,9 @@ termination measure size :: BST a -> {Int | _v >= 0} where
   Empty -> 0
   Node x l r -> size l + size r + 1
   
-measure telems :: BST a -> Set a where
+measure keys :: BST a -> Set a where
   Empty -> []
-  Node x l r -> telems l + telems r + [x]
+  Node x l r -> keys l + keys r + [x]
 
-member :: x: a -> t: BST a -> {Bool | _v == (x in telems t)}
+member :: x: a -> t: BST a -> {Bool | _v == (x in keys t)}
 member = ??
