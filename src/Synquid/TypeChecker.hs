@@ -131,6 +131,11 @@ reconstructI' env t@(FunctionT x tArg tRes) impl = case impl of
     let ctx = \p -> Program (PFun y p) t
     pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
     return $ ctx pBody
+  PSymbol _ -> do
+    args <- replicateM (arity t) (freshId "x")
+    let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped impl) (map (untyped . PSymbol) args)
+    let fun = foldr (\x p -> untyped $ PFun x p) body args
+    reconstructI' env t $ content fun
   _ -> throwError $ text "Cannot assign function type" </> squotes (pretty t) </>
                     text "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of

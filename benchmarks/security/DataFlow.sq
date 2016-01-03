@@ -1,3 +1,6 @@
+data Unit where
+  Unit :: Unit
+
 {- module Authentication -}
 
 -- | User IDs
@@ -52,15 +55,23 @@ atomicFlowR :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v 
 fread :: p: {Principal | isAuth _v} -> f: {File | p in canRead _v} -> {Content | tracked _v (F f)}
 -- fread' :: p: Principal -> f: File -> (Content) -- fread stripped of security
 
-fwrite :: p: {Principal | isAuth _v} -> f: {File | p in canWrite _v} -> c: Content -> l: {Label | canFlow _v (F f) && tracked c _v} ->  {File | _v == f}
+fwrite :: p: {Principal | isAuth _v} -> f: {File | p in canWrite _v} -> c: Content -> l: {Label | canFlow _v (F f) && tracked c _v} -> Unit
 -- fwrite' :: p: Principal -> f: File -> c: Content -> {File | _v == f} -- fwrite stripped of security
 
 {- client -}
 
+-- ===Client writes===
+-- sudoAppend = \pw . \fin . \fout . 
+                  -- let c1 = fread' Admin fin in
+                  -- let c2 = fread' Admin fout in
+                  -- let c = strcatFlow' c1 c2 in
+                  -- fwrite' Admin fout c 
+
+-- ===Encoding in Synquid===                  
 sudoAppend :: pw: Password -> 
               fin: {File | canRead _v == [Admin, User 0]} ->         
               fout: {File | canRead _v == [Admin]} -> 
-              (File)
+              Unit
 sudoAppend = \pw . \fin . \fout . 
                 let c1 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fin}) in
                 let c2 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) in
