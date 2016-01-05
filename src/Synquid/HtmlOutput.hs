@@ -20,7 +20,7 @@ renderHtmlNoHeader :: Html -> String
 renderHtmlNoHeader theHtml = foldr (.) id (map (renderHtml' 0) (getHtmlElements theHtml)) "\n"
 
 -- | Width in pixels of a single indentation position.
-indentWidth = 1
+indentWidth = 7
 
 -- | String that represents a CSS attribute with given key and value.
 cssAttr key val = key ++ ": " ++ val ++ ";"    
@@ -42,7 +42,7 @@ splitLines sgrs indent currentLine next = case next of
   PP.SLine indent' doc -> genLine +++ splitLines sgrs indent' (PP.SSGR sgrs) doc
   PP.SSGR sgrs' doc -> splitLines sgrs' indent (currentLine . PP.SSGR sgrs') doc
   where
-    genLine = thediv ! [thestyle (cssAttr "margin-left" $ show indentPX ++ "ex")] $ line
+    genLine = thediv ! [thestyle (cssAttr "margin-left" $ show indentPX ++ "px")] $ line
     indentPX = indent * indentWidth
     line = if isNoHtml content then spaceHtml else content
     content = splitStyles [] id (currentLine PP.SEmpty)    
