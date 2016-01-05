@@ -12,10 +12,12 @@ import Synquid.HornSolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.Synthesizer
+import Synquid.HtmlOutput
 
 import Control.Monad
 import System.Exit
 import System.Console.CmdArgs
+import System.Console.ANSI
 import Data.Time.Calendar
 import Data.Map (size, elems, keys)
 
@@ -38,6 +40,7 @@ main = do
                    log_ 
                    useMemoization 
                    bfs
+                   outFormat
                    print_spec
                    print_spec_size
                    print_solution_size) <- cmdArgs cla
@@ -59,6 +62,7 @@ main = do
     solverLogLevel = log_
     }
   let synquidParams = defaultSynquidParams {
+    outputFormat = outFormat,
     showSpec = print_spec,
     showSpecSize = print_spec_size,
     showSolutionSize = print_solution_size
@@ -90,7 +94,8 @@ data CommandLineArgs
         use_memoization :: Bool,
         -- | Solver params
         bfs_solver :: Bool,
-        -- | Output        
+        -- | Output
+        output :: OutputFormat,
         print_spec :: Bool,
         print_spec_size :: Bool,
         print_solution_size :: Bool
@@ -111,10 +116,13 @@ cla = CommandLineArgs {
   log_            = 0               &= help ("Logger verboseness level (default: 0)"),
   use_memoization = False           &= help ("Use memoization (default: False)"),
   bfs_solver      = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
+  output          = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   print_spec      = True            &= help ("Show specification of each synthesis goal (default: True)"),
   print_spec_size = False           &= help ("Show specification size (default: False)"),
   print_solution_size = False       &= help ("Show solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
+    where
+      defaultFormat = outputFormat defaultSynquidParams
 
 -- | Parameters for template exploration
 defaultExplorerParams = ExplorerParams {
@@ -144,14 +152,28 @@ defaultHornSolverParams = HornSolverParams {
   solverLogLevel = 0
 }
 
+-- | Output format
+data OutputFormat = Plain -- ^ Plain text
+  | Ansi -- ^ Text with ANSI-terminal special characters
+  | Html -- ^ HTML
+  deriving (Typeable, Data, Eq, Show)
+    
+-- | 'printDoc' @format doc@ : print @doc@ to the console using @format@
+printDoc :: OutputFormat -> Doc -> IO()
+printDoc Plain doc = putDoc (plain doc) >> putStr "\n"
+printDoc Ansi doc = putDoc doc >> putStr "\n"
+printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
+
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
+  outputFormat :: OutputFormat,                -- ^ Output format
   showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
   showSpecSize :: Bool,                        -- ^ Print specification size
   showSolutionSize :: Bool                     -- ^ Print solution size
 }
 
 defaultSynquidParams = SynquidParams {
+  outputFormat = Plain,
   showSpec = True,
   showSpecSize = False,
   showSolutionSize = False
@@ -162,29 +184,29 @@ runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> String -> IO
 runOnFile synquidParams explorerParams solverParams file = do
   parseResult <- parseFromFile parseProgram file
   case parseResult of
-    Left parseErr -> (putStr $ show parseErr) >> exitFailure
+    Left parseErr -> (pdoc $ errorDoc $ text (show parseErr)) >> exitFailure
     -- Right ast -> print $ vsep $ map pretty ast
     Right decls -> case resolveDecls decls of
-      Left resolutionError -> (putStr resolutionError) >> exitFailure
+      Left resolutionError -> (pdoc $ errorDoc $ text resolutionError) >> exitFailure
       Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
   where
+    pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
-      when (showSpec synquidParams) $ 
-        print (text (gName goal) <+> text "::" <+> pretty (gSpec goal))
+      when (showSpec synquidParams) $ pdoc (prettySpec goal)
       -- print empty
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> print (linebreak <> err) >> exitFailure
+        Left err -> pdoc (errorDoc err) >> exitFailure
         Right prog -> do
-          print $ (text (gName goal) <+> text "=" </> pretty prog)
-          when (showSolutionSize synquidParams) $ 
-            print (parens (text "Size:" <+> pretty (programNodeCount prog)))
-          when (showSpecSize synquidParams) $ print specSizeDoc
+          pdoc (prettySolution goal prog)
+          when (showSolutionSize synquidParams) $ pdoc (parens (text "Size:" <+> pretty (programNodeCount prog)))
+          when (showSpecSize synquidParams) $ pdoc specSizeDoc
           where
             specSizeDoc = let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
                 parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
                   parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
                   parens (text "#components:" <+>
                     pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
-      print empty
+      pdoc empty
+      
