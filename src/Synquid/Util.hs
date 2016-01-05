@@ -7,6 +7,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Char
 
 import Control.Applicative
 import Control.Monad
@@ -107,6 +108,9 @@ setPartitionM f s = both Set.fromList `liftM` partitionM f (Set.toList s)
 
 -- | 'pairGetter' @g1 g2@ : combine two getters into one that gets a pair
 pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
+
+asInteger :: String -> Maybe Integer
+asInteger s = if all isDigit s then Just $ read s else Nothing
 
 {- Debug output -}
 

@@ -302,5 +302,5 @@ isValidFml = lift . isValid
 
 writeLog level msg = do
   maxLevel <- asks solverLogLevel
-  if level <= maxLevel then traceShow msg $ return () else return ()
+  if level <= maxLevel then traceShow (plain msg) $ return () else return ()
 

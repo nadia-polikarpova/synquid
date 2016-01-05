@@ -475,5 +475,5 @@ instance Ord TypingState where
   
 writeLog level msg = do
   maxLevel <- asks _tcSolverLogLevel
-  if level <= maxLevel then traceShow msg $ return () else return ()
+  if level <= maxLevel then traceShow (plain msg) $ return () else return ()
   

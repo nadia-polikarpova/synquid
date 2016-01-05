@@ -8,8 +8,8 @@ data Password
 
 -- | Principals
 data Principal where
-  Admin :: (Principal)
-  User :: UId -> (Principal)
+  Admin :: Principal
+  User :: UId -> Principal
   
 -- | Is principal authenticated?  
 predicate isAuth :: Principal -> Bool
