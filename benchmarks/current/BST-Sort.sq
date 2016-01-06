@@ -32,20 +32,20 @@ termination measure size :: BST a -> {Int | _v >= 0} where
   Empty -> 0
   Node x l r -> size l + size r + 1
   
-measure keys :: BST a -> Set a where
+measure telems :: BST a -> Set a where
   Empty -> []
-  Node x l r -> keys l + keys r + [x]
+  Node x l r -> telems l + telems r + [x]
 
-insert :: x: a -> t: BST a -> {BST a | keys _v == keys t + [x]}
+insert :: x: a -> t: BST a -> {BST a | telems _v == telems t + [x]}
 insert = ??
 
-toBST :: xs: List a -> {BST a | keys _v == elems xs}
+toBST :: xs: List a -> {BST a | telems _v == elems xs}
 toBST = ??
 
 pivotAppend :: p: a -> xs: IList {a | _v < p} -> ys: IList {a | _v > p} -> {IList a | ilen _v == ilen xs + ilen ys + 1 && ielems _v == ielems xs + ielems ys + [p] }
 pivotAppend = ??
 
-flatten :: t: BST a -> {IList a | ielems _v == keys t}
+flatten :: t: BST a -> {IList a | ielems _v == telems t}
 flatten = ??
 
 sort :: xs: List a -> {IList a | ielems _v == elems xs}

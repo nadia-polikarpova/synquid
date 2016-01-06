@@ -175,7 +175,7 @@ solveHornClauses = do
     
   when (null cands') $ do
     ec <- use errorContext
-    throwError $ text "Cannot find sufficiently strong refinements" $+$ ec
+    throwError $ errorText "Cannot find sufficiently strong refinements" $+$ ec
   candidates .= cands'
 
 -- | Filter out liquid assignments that are too strong for current consistency checks  
@@ -186,7 +186,7 @@ checkTypeConsistency = do
   cands' <- lift . lift . lift $ checkConsistency clauses cands
   when (null cands') $ do
     ec <- use errorContext
-    throwError $ text "Found inconsistent refinements" $+$ ec
+    throwError $ errorText "Found inconsistent refinements" $+$ ec
   candidates .= cands'
 
 -- | Simplify @c@ into a set of simple and shapeless constraints, possibly extended the current type assignment or predicate assignment
@@ -266,8 +266,8 @@ simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= (c :)
 -- Otherwise (shape mismatch): fail
 simplifyConstraint' _ _ (Subtype _ t t' _) = do
   ec <- use errorContext
-  throwError $ text "Cannot match shape" <+> squotes (pretty $ shape t) $+$
-               text "with shape" <+> squotes (pretty $ shape t') $+$ ec
+  throwError $ errorText "Cannot match shape" <+> squotes (pretty $ shape t) $+$
+               errorText "with shape" <+> squotes (pretty $ shape t') $+$ ec
 
 -- | Unify type variable @a@ with type @t@ or fail if @a@ occurs in @t@
 unify env a t = if a `Set.member` typeVarsOf t

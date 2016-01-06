@@ -339,7 +339,7 @@ checkE env typ p = do
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
       
   fTyp <- runInSolver $ finalizeType typ
-  typingState . errorContext .= text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p)
+  typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)
   solveIncrementally
   typingState . errorContext .= empty
   where
@@ -437,7 +437,7 @@ putMemo memo = lift . lift . lift $ _1 .= memo
 -- | Record type error and backtrack
 throwError :: MonadHorn s => TypeError -> Explorer s a  
 throwError e = do
-  writeLog 1 $ text "TYPE ERROR:" <+> e
+  writeLog 1 $ text "TYPE ERROR:" <+> plain e
   lift . lift . lift $ _2 %= (e :)
   mzero
   

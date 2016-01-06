@@ -136,11 +136,11 @@ reconstructI' env t@(FunctionT x tArg tRes) impl = case impl of
     let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped impl) (map (untyped . PSymbol) args)
     let fun = foldr (\x p -> untyped $ PFun x p) body args
     reconstructI' env t $ content fun
-  _ -> throwError $ text "Cannot assign function type" </> squotes (pretty t) </>
-                    text "to non-lambda term" </> squotes (pretty $ untyped impl)
+  _ -> throwError $ errorText "Cannot assign function type" </> squotes (pretty t) </>
+                    errorText "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of
-  PFun _ _ -> throwError $ text "Cannot assign non-function type" </> squotes (pretty t) </>
-                           text "to lambda term" </> squotes (pretty $ untyped impl)
+  PFun _ _ -> throwError $ errorText "Cannot assign non-function type" </> squotes (pretty t) </>
+                           errorText "to lambda term" </> squotes (pretty $ untyped impl)
   
   PLet x iDef iBody -> do
     (env', pathCond, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructECond env AnyT iDef
@@ -171,7 +171,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     let scrutineeSymbols = symbolList pScrutinee
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
-    when (not isGoodScrutinee) $ throwError $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
+    when (not isGoodScrutinee) $ throwError $ errorText "Match scrutinee" </> squotes (pretty pScrutinee) </> errorText "is constant"
         
     (env'', x) <- toVar pScrutinee env'
     pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
@@ -184,7 +184,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
   where
     -- Check that all constructors are known and belong to the same datatype
     checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
-      Nothing -> throwError $ text "Not in scope: data constructor" </> squotes (text consName)
+      Nothing -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
       Just consSch -> do
                         consT <- instantiate env consSch ftrue
                         case lastType consT of
@@ -193,23 +193,27 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                               Nothing -> return ()                            
                               Just name -> if dtName == name
                                              then return ()
-                                             else throwError $ text "Expected constructor of datatype" </> squotes (text name) </> 
-                                                               text "and got constructor" </> squotes (text consName) </> 
-                                                               text "of datatype" </> squotes (text dtName)
+                                             else throwError $ errorText "Expected constructor of datatype" </> squotes (text name) </> 
+                                                               errorText "and got constructor" </> squotes (text consName) </> 
+                                                               errorText "of datatype" </> squotes (text dtName)
                             if arity (toMonotype consSch) /= length args 
-                              then throwError $ text "Constructor" </> squotes (text consName)
-                                            </> text "expected" </> pretty (arity (toMonotype consSch)) </> text "binder(s) and got" <+> pretty (length args)
+                              then throwError $ errorText "Constructor" </> squotes (text consName)
+                                            </> errorText "expected" </> pretty (arity (toMonotype consSch)) </> errorText "binder(s) and got" <+> pretty (length args)
                               else ((consName, consT) :) <$> checkCases (Just dtName) cs
-                          _ -> throwError $ text "Not in scope: data constructor" </> squotes (text consName)
+                          _ -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
     checkCases _ [] = return []
   
 reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
   let ScalarT baseT _ = (typeOf pScrutinee)
   (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
-  let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-  pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
-  return $ Case consName args pCaseExpr
+  deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
+  case deadBranchCond of
+    Just (BoolLit True) -> return $ Case consName args (Program (PSymbol "error") t)
+    _ -> do
+            let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+            pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
+            return $ Case consName args pCaseExpr  
   
 -- | 'reconstructECond' @env t impl@ :: conditionally reconstruct the judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
 reconstructECond :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, Formula, RProgram)
@@ -238,7 +242,7 @@ reconstructE env t (Program p t') = do
 reconstructE' env typ PHole = generateE env typ
 reconstructE' env typ (PSymbol name) = do
   case lookupSymbol name (arity typ) env of
-    Nothing -> throwError $ text "Not in scope:" </> text name
+    Nothing -> throwError $ errorText "Not in scope:" </> text name
     Just sch -> do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
@@ -267,8 +271,8 @@ reconstructE' env typ (PApp iFun iArg) = do
       return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
   checkE envfinal typ pApp
   return (envfinal, pApp)
-reconstructE' env typ impl = throwError $ text "Expected application term of type" </> squotes (pretty typ) </>
-                                          text "and got" </> squotes (pretty $ untyped impl)
+reconstructE' env typ impl = throwError $ errorText "Expected application term of type" </> squotes (pretty typ) </>
+                                          errorText "and got" </> squotes (pretty $ untyped impl)
     
 -- | 'checkAnnotation' @env t t' p@ : if user annotation @t'@ for program @p@ is a subtype of the goal type @t@,
 -- return resolved @t'@, otherwise fail
@@ -276,15 +280,15 @@ checkAnnotation :: MonadHorn s => Environment -> RType -> RType -> BareProgram R
 checkAnnotation env t t' p = do
   tass <- use (typingState . typeAssignment)
   case resolveRefinedType (typeSubstituteEnv tass env) t' of
-    Left err -> throwError $ text err
+    Left err -> throwError $ errorText err
     Right t'' -> do
       ctx <- asks $ _context . fst
-      writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
+      writeLog 1 $ errorText "Checking consistency of type annotation" <+> pretty t'' <+> errorText "with" <+> pretty t <+> errorText "in" $+$ pretty (ctx (Program p t''))
       addConstraint $ Subtype env t'' t True
       
       fT <- runInSolver $ finalizeType t
       fT'' <- runInSolver $ finalizeType t''
-      typingState . errorContext .= text "when checking consistency of type annotation" </> pretty fT'' </> text "with" </> pretty fT </> text "in" $+$ pretty (ctx (Program p t''))
+      typingState . errorContext .= errorText "when checking consistency of type annotation" </> pretty fT'' </> errorText "with" </> pretty fT </> errorText "in" $+$ pretty (ctx (Program p t''))
       solveIncrementally
       typingState . errorContext .= empty
       
