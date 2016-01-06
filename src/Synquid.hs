@@ -197,7 +197,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> pdoc (errorDoc err) >> exitFailure
+        Left err -> pdoc err >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
           when (showSolutionSize synquidParams) $ pdoc (parens (text "Size:" <+> pretty (programNodeCount prog)))

@@ -46,6 +46,7 @@ module Synquid.Pretty (
   -- * Highlighting
   plain,
   errorDoc,
+  errorText,
   -- * Counting
   typeNodeCount,
   programNodeCount
@@ -118,6 +119,7 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 {- Syntax highlighting -}
 
 errorDoc = red
+errorText = errorDoc . text
 keyword = bold . blue . text
 parenDoc = dullwhite
 operator = dullwhite . text
@@ -176,7 +178,7 @@ fmlDoc fml = fmlDocAt (-2) fml
 
 -- | 'fmlDocAt' @n fml@ : print @expr@ in a context with binding power @n@
 fmlDocAt :: Int -> Formula -> Doc
-fmlDocAt n fml = condParens (n' <= n) (
+fmlDocAt n fml = condHlParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> intLiteral i
@@ -192,6 +194,7 @@ fmlDocAt n fml = condParens (n' <= n) (
   )
   where
     n' = power fml
+    condHlParens b doc = if b then hlParens doc else doc
 
 instance Pretty Formula where pretty e = fmlDoc e
 
