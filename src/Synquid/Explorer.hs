@@ -177,7 +177,11 @@ generateFirstCase env scrVar pScrutinee t consName = do
       let consT' = symbolType env consName consT
       binders <- replicateM (arity consT') (freshId "x")
       (syms, ass) <- caseSymbols scrVar binders consT'
-      deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
+
+      -- Try to find a vacuousness condition:
+      deadUnknown <- Unknown Map.empty <$> freshId "u"
+      solveLocally $ WellFormedMatchCond env deadUnknown      
+      deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) deadUnknown
       case deadBranchCond of
         Nothing -> do
                     let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
@@ -222,8 +226,17 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       condUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env condUnknown
       (matchConds, p0) <- cut $ do
+        -- solveLocally $ WellFormedMatchCond env matchUnknown
+        -- deadBranchCond <- runInSolver $ isEnvironmentInconsistent emptyEnv env matchUnknown
+        -- (p0, matchValuation) <- case deadBranchCond of
+                    -- Just cond -> return (Program (PSymbol "error") t, Set.toList $ conjunctsOf cond) 
+                    -- Nothing -> do
+                      -- (_, p0) <- generateE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
+                      -- matchValuation <- Set.toList <$> currentValuation matchUnknown
+                      -- return (p0, matchValuation)                    
+                      
         (_, p0) <- generateE (addAssumption matchUnknown . addAssumption condUnknown $ env) t
-        matchValuation <- Set.toList <$> currentValuation matchUnknown
+        matchValuation <- Set.toList <$> currentValuation matchUnknown        
         let allVars = Set.toList $ Set.unions (map varsOf matchValuation)
         let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) allVars -- group by vars
         d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer

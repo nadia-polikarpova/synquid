@@ -131,6 +131,8 @@ hlBraces = enclose (parenDoc lbrace) (parenDoc rbrace)
 hlAngles = enclose (parenDoc langle) (parenDoc rangle)
 hlBrackets = enclose (parenDoc lbracket) (parenDoc rbracket)
 
+condHlParens b doc = if b then hlParens doc else doc
+
 {- Formulas -}
 
 instance Pretty Sort where
@@ -158,23 +160,23 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Pred _ _ _) = 7
-power (Cons _ _ _) = 7
-power (Unary _ _) = 6
+power (Pred _ _ _) = 9
+power (Cons _ _ _) = 9
+power (Unary _ _) = 8
 power (Binary op _ _)
-  | op `elem` [Times, Intersect] = 5
-  | op `elem` [Plus, Minus, Union, Diff] = 4
-  | op `elem` [Eq, Neq, Lt, Le, Gt, Ge, Member, Subset] = 3
-  | op `elem` [And, Or] = 2
-  | op `elem` [Implies] = 1
-  | op `elem` [Iff] = 0
-power (All _ _) = -1
-power (Ite _ _ _) = -1  
-power _ = 8
+  | op `elem` [Times, Intersect] = 7
+  | op `elem` [Plus, Minus, Union, Diff] = 6
+  | op `elem` [Eq, Neq, Lt, Le, Gt, Ge, Member, Subset] = 5
+  | op `elem` [And, Or] = 4
+  | op `elem` [Implies] = 3
+  | op `elem` [Iff] = 2
+power (All _ _) = 1
+power (Ite _ _ _) = 1
+power _ = 10
 
 -- | Pretty-printed formula
 fmlDoc :: Formula -> Doc
-fmlDoc fml = fmlDocAt (-2) fml
+fmlDoc fml = fmlDocAt 0 fml
 
 -- | 'fmlDocAt' @n fml@ : print @expr@ in a context with binding power @n@
 fmlDocAt :: Int -> Formula -> Doc
@@ -193,8 +195,7 @@ fmlDocAt n fml = condHlParens (n' <= n) (
     All x e -> keyword "forall" <+> pretty x <+> operator "." <+> fmlDoc e
   )
   where
-    n' = power fml
-    condHlParens b doc = if b then hlParens doc else doc
+    n' = power fml    
 
 instance Pretty Formula where pretty e = fmlDoc e
 
@@ -215,6 +216,8 @@ instance Show QSpace where
 
 instance Pretty QMap where
   pretty = vMapDoc text pretty
+  
+{- Types -}
 
 instance Pretty SBaseType where
   pretty IntT = text "Int"
@@ -226,10 +229,69 @@ instance Pretty RBaseType where
   pretty IntT = text "Int"
   pretty BoolT = text "Bool"
   pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
-  pretty (DatatypeT name tArgs pArgs) = text name <+> hsep (map (hlParens . pretty) tArgs) <+> hsep (map (hlAngles . pretty) pArgs)
+  pretty (DatatypeT name tArgs pArgs) = text name <+> hsep (map (prettyTypeAt 1) tArgs) <+> hsep (map (hlAngles . pretty) pArgs)
 
 instance Show RBaseType where
   show = show . pretty
+  
+prettySType :: SType -> Doc
+prettySType (ScalarT base _) = pretty base
+prettySType (FunctionT _ t1 t2) = hlParens (pretty t1 <+> operator "->" <+> pretty t2)
+prettySType AnyT = text "_"
+
+instance Pretty SType where
+  pretty = prettySType
+
+instance Show SType where
+ show = show . pretty
+
+-- | Pretty-printed refinement type
+prettyType :: RType -> Doc
+prettyType t = prettyTypeAt 0 t
+
+-- | Binding power of a type
+typePower :: RType -> Int
+typePower (FunctionT _ _ _) = 1
+typePower (ScalarT (DatatypeT _ tArgs pArgs) r)
+  | ((not (null tArgs) || not (null pArgs)) && (r == ftrue)) = 2
+typePower _ = 3
+
+prettyTypeAt :: Int -> RType -> Doc
+prettyTypeAt n t = condHlParens (n' <= n) (
+  case t of
+    ScalarT base (BoolLit True) -> pretty base
+    ScalarT base fml -> hlBraces (pretty base <> operator "|" <> pretty fml)
+    AnyT -> text "_"
+    FunctionT x t1 t2 -> text x <> operator ":" <> prettyTypeAt n' t1 <+> operator "->" <+> prettyTypeAt 0 t2
+  )
+  where
+    n' = typePower t
+
+instance Pretty RType where
+  pretty = prettyType
+
+instance Show RType where
+ show = show . pretty
+
+instance Pretty SSchema where
+  pretty sch = case sch of
+    Monotype t -> pretty t
+    ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
+    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
+
+instance Show SSchema where
+ show = show . pretty
+
+instance Pretty RSchema where
+  pretty sch = case sch of
+    Monotype t -> pretty t
+    ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
+    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
+
+instance Show RSchema where
+  show = show . pretty
+
+{- Programs -}  
 
 prettyCase :: (Pretty t) => Case t -> Doc
 prettyCase cas = hang 2 $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> operator "->" </> prettyProgram (expr cas)
@@ -266,47 +328,6 @@ instance (Pretty t) => Pretty (Program t) where
   pretty = prettyProgram
 
 instance (Pretty t) => Show (Program t) where
-  show = show . pretty
-
-prettySType :: SType -> Doc
-prettySType (ScalarT base _) = pretty base
-prettySType (FunctionT _ t1 t2) = hlParens (pretty t1 <+> operator "->" <+> pretty t2)
-prettySType AnyT = text "_"
-
-instance Pretty SType where
-  pretty = prettySType
-
-instance Show SType where
- show = show . pretty
-
-prettyType :: RType -> Doc
-prettyType (ScalarT base (BoolLit True)) = pretty base
-prettyType (ScalarT base fml) = hlBraces (pretty base <> operator "|" <> pretty fml)
-prettyType (FunctionT x t1 t2) = hlParens (text x <> operator ":" <> pretty t1 <+> operator "->" <+> pretty t2)
-prettyType AnyT = text "_"
-
-instance Pretty RType where
-  pretty = prettyType
-
-instance Show RType where
- show = show . pretty
-
-instance Pretty SSchema where
-  pretty sch = case sch of
-    Monotype t -> pretty t
-    ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
-
-instance Show SSchema where
- show = show . pretty
-
-instance Pretty RSchema where
-  pretty sch = case sch of
-    Monotype t -> pretty t
-    ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
-
-instance Show RSchema where
   show = show . pretty
 
 instance Pretty TypeSubstitution where
