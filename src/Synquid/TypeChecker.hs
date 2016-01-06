@@ -207,7 +207,9 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
   let ScalarT baseT _ = (typeOf pScrutinee)
   (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
-  deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) t
+  deadUnknown <- Unknown Map.empty <$> freshId "u"
+  solveLocally $ WellFormedMatchCond env deadUnknown        
+  deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) deadUnknown
   case deadBranchCond of
     Just (BoolLit True) -> return $ Case consName args (Program (PSymbol "error") t)
     _ -> do
