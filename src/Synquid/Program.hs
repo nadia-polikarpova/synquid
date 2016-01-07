@@ -571,6 +571,7 @@ data Declaration =
   MeasureDecl Id Sort Sort Formula [MeasureCase] Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
   PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
+  MutualDecl [Id] |                                         -- ^ Mutual recursion group
   SynthesisGoal Id UProgram                                 -- ^ Name and template for the function to reconstruct
   deriving (Eq)
 

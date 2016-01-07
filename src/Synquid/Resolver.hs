@@ -13,6 +13,7 @@ import Control.Monad.State
 import Text.Printf
 import Control.Lens
 import qualified Data.Map as Map
+import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Maybe
 import Data.List
@@ -27,35 +28,46 @@ data ResolverState = ResolverState {
   _environment :: Environment,
   _goals :: [(Id, UProgram)],
   _condQualifiers :: [Formula],
-  _typeQualifiers :: [Formula]
+  _typeQualifiers :: [Formula],
+  _mutuals :: Map Id [Id]
 }
 
 makeLenses ''ResolverState
 
+initResolverState = ResolverState {
+  _environment = emptyEnv,
+  _goals = [],
+  _condQualifiers = [],
+  _typeQualifiers = [],
+  _mutuals = Map.empty
+}
+
 -- | Convert a parsed program AST into a synthesizable @Goal@ object.
 resolveDecls :: [Declaration] -> Either ErrMsg ([Goal], [Formula], [Formula])
 resolveDecls declarations = 
-  case runExcept (execStateT go (ResolverState emptyEnv [] [] [])) of
+  case runExcept (execStateT go initResolverState) of
     Left msg -> Left msg
-    Right (ResolverState env goals cquals tquals) -> Right (map (makeGoal env (map fst goals)) goals, cquals, tquals)
+    Right (ResolverState env goals cquals tquals mutes) -> 
+      Right (map (makeGoal env (map fst goals) mutes) goals, cquals, tquals)
   where
     go = do
       -- Pass 1: collect all declarations and resolve sorts, but do not resolve refinement types yet
       mapM_ resolveDeclaration declarations
       -- Pass 2: resolve refinement types in signatures
       mapM_ resolveSignatures declarations
-    makeGoal env allNames (name, impl) = 
+    makeGoal env allNames allMutuals (name, impl) = 
       let
         spec = allSymbols env Map.! name
-        toRemove = drop (fromJust $ elemIndex name allNames) allNames -- All goals after and including @name@
+        myMutuals = Map.findWithDefault [] name allMutuals
+        toRemove = drop (fromJust $ elemIndex name allNames) allNames \\ myMutuals -- All goals after and including @name@, except mutuals
         env' = foldr removeVariable env toRemove
       in Goal name env' spec impl
       
 resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
-resolveRefinement env valueSort fml = runExcept (evalStateT (resolveFormula BoolS valueSort fml) (ResolverState env [] [] []))
+resolveRefinement env valueSort fml = runExcept (evalStateT (resolveFormula BoolS valueSort fml) (initResolverState {_environment = env}))
 
 resolveRefinedType :: Environment -> RType -> Either ErrMsg RType
-resolveRefinedType env t = runExcept (evalStateT (resolveType t) (ResolverState env [] [] []))
+resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
     
 {- Implementation -}    
 
@@ -126,6 +138,13 @@ resolveDeclaration (QualifierDecl quals) = mapM_ resolveQualifier quals
     resolveQualifier q = if Set.member valueVarName (Set.map varName $ varsOf q)
       then typeQualifiers %= (q:)
       else condQualifiers %= (q:)
+resolveDeclaration (MutualDecl names) = mapM_ addMutuals names
+  where
+    addMutuals name = do
+      goalMb <- uses goals (lookup name)
+      case goalMb of
+        Just _ -> mutuals %= Map.insert name (delete name names)
+        Nothing -> throwError $ unwords ["Synthesis goal", name, "in a mutual clause is undefined"]
       
 resolveSignatures :: Declaration -> Resolver ()      
 resolveSignatures (FuncDecl funcName _)  = resolveSignature funcName
