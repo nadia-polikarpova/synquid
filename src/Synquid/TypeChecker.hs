@@ -14,7 +14,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Data.Foldable as F
+import qualified Data.Foldable as F
 import Control.Monad.Logic
 import Control.Monad.State
 import Control.Monad.Reader
