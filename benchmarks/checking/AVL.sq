@@ -103,34 +103,25 @@ balRR = \x . \l . \r .
   match r with 
     Leaf -> ??
     Node rx rl rr rh -> mkNode rx (mkNode x l rl) rr
-    
+
+insert :: y: a -> t: AVL a -> {AVL a | realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1 &&
+                                        elems _v == [y] + elems t}
+insert = \y . \t .
+  match t with
+    Leaf -> singleton y
+    Node x l r h -> if y < x
+                      then insL y x l r
+                      else if y > x
+                        then insR y x l r 
+                        else t
+                 
 insL :: y: a
           -> x: {a | y < _v} 
           -> l: AVL {a | _v < x}
           -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1}                  
           -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
                         realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r) &&
-                        elems _v == [x, y] + elems l + elems r}
-                        
-insR :: y: a
-          -> x: {a | _v < y} 
-          -> l: AVL {a | _v < x}
-          -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1}                  
-          -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
-                        realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r) &&
-                        elems _v == [x, y] + elems l + elems r}                        
-    
-insert :: y: a -> t: AVL a -> {AVL a | realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1 &&
-                                        elems _v == [y] + elems t}
--- insert = \y . \t .
-  -- match t with
-    -- Leaf -> singleton y
-    -- Node x l r h -> if y < x
-                      -- then insL y x l r
-                      -- else if y > x
-                        -- then insR y x l r 
-                        -- else t
-                        
+                        elems _v == [x, y] + elems l + elems r}                 
 insL = \y . \x . \l . \r . 
   let l' = insert y l in
   let isLeftBig = getHeight l' - getHeight r == 2 in
@@ -142,6 +133,13 @@ insL = \y . \x . \l . \r .
                 then balL0 x l' r
                 else mkNode x l' r
                 
+insR :: y: a
+          -> x: {a | _v < y} 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1}                  
+          -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
+                        realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r) &&
+                        elems _v == [x, y] + elems l + elems r}                
 insR = \y . \x . \l . \r . 
   let r' = insert y r in
   let isRightBig = getHeight r' - getHeight l == 2 in
@@ -152,4 +150,7 @@ insR = \y . \x . \l . \r .
           else if isRightBig
                 then balR0 x l r'
                 else mkNode x l r'
+                
+mutual {insert, insL, insR}                        
+                
                           

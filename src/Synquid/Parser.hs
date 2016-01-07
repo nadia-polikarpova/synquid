@@ -84,7 +84,14 @@ dot = Token.dot lexer
 {- Declarations -}      
 
 parseDeclaration :: Parser Declaration
-parseDeclaration = choice [parseTypeDecl, parseDataDecl, parseMeasureDecl, parsePredDecl, parseQualifierDecl, try parseFuncDecl, parseSynthesisGoal] <?> "declaration"
+parseDeclaration = choice [parseTypeDecl
+                         , parseDataDecl
+                         , parseMeasureDecl
+                         , parsePredDecl
+                         , parseQualifierDecl
+                         , parseMutualDecl
+                         , try parseFuncDecl
+                         , parseSynthesisGoal] <?> "declaration"
 
 parseTypeDecl :: Parser Declaration
 parseTypeDecl = do
@@ -141,6 +148,11 @@ parseQualifierDecl :: Parser Declaration
 parseQualifierDecl = do
   reserved "qualifier"
   QualifierDecl <$> braces (commaSep parseFormula)
+  
+parseMutualDecl :: Parser Declaration
+parseMutualDecl = do
+  reserved "mutual"
+  MutualDecl <$> braces (commaSep parseIdentifier)  
 
 parseFuncDecl :: Parser Declaration
 parseFuncDecl = do
