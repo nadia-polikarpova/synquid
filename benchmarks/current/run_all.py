@@ -68,7 +68,20 @@ BENCHMARKS = [
     ('BinHeap-Member',      []),
     ('BinHeap-Insert',      []),
     # Evaluation
-    ('Evaluator',           []),
+    ('Evaluator',           []),    
+]
+
+AVL_BENCHMARKS = [
+    # AVL trees
+    ('AVL-BalL0',           ['-a 2', '-e']),
+    ('AVL-BalLL',           ['-a 2', '-e']),
+    ('AVL-BalLR',           ['-a 2', '-e']),
+    ('AVL-BalR0',           ['-a 2', '-e']),
+    ('AVL-BalRL',           ['-a 2', '-e']),
+    ('AVL-BalRR',           ['-a 2', '-e']),
+    ('AVL-BalanceL',        ['-a 2', '-e']),
+    ('AVL-BalanceR',        ['-a 2', '-e']),
+    ('AVL-Insert',          ['-a 2', '-e']),
 ]
 
 class SynthesisResult:
@@ -79,13 +92,13 @@ class SynthesisResult:
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', '
 
-def run_benchmark(name, opts):
+def run_benchmark(name, opts, path='.'):
     print name,
 
     with open(LOGFILE_NAME, 'a+') as logfile:          
       start = time.time()
       logfile.seek(0, os.SEEK_END)
-      return_code = call([synquid_path] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
+      return_code = call([synquid_path] + COMMON_OPTS + opts + [os.path.join (path, name + '.sq')], stdout=logfile, stderr=logfile)
       end = time.time()
 
       print '{0:0.2f}'.format(end - start),
@@ -128,5 +141,8 @@ if __name__ == '__main__':
 
     for (name, args) in BENCHMARKS:
         run_benchmark(name, args)
+
+    # for (name, args) in AVL_BENCHMARKS:
+        # run_benchmark(name, args, 'AVL')        
 
     postprocess()

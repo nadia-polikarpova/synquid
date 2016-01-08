@@ -10,6 +10,7 @@ import Synquid.TypeConstraintSolver hiding (freshId)
 import qualified Synquid.TypeConstraintSolver as TCSolver (freshId)
 import Synquid.Util
 import Synquid.Pretty
+import Synquid.Tokens
 
 import Data.List
 import qualified Data.Set as Set
@@ -122,9 +123,16 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
         pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption (fnot cond) env) t
         return $ Program (PIf pCond pThen pElse) t
             
-generateCondition env fml = if isExecutable fml
-                              then return $ fmlToProgram fml
-                              else snd <$> cut (generateE env (ScalarT BoolT $ valBool |=| fml))
+generateCondition env fml = do
+  conjuncts <- mapM genConjunct allConjuncts
+  return $ fmap (flip addRefinement $ valBool |=| fml) (foldl1 conjoin conjuncts)
+  where
+    allConjuncts = Set.toList $ conjunctsOf fml
+    genConjunct c = if isExecutable c
+                              then return $ fmlToProgram c
+                              else snd <$> cut (generateE env (ScalarT BoolT $ valBool |=| c))
+    andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
+    conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll
                 
 -- | If partial solutions are accepted, try @gen@, and if it fails, just leave a hole of type @t@; otherwise @gen@
 optionalInPartial :: MonadHorn s => RType -> Explorer s RProgram -> Explorer s RProgram

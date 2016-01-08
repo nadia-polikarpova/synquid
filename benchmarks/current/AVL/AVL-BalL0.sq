@@ -1,0 +1,27 @@
+inc :: x: Int -> {Int | _v == x + 1}
+
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | realHeight l - 1 <= realHeight _v && realHeight _v <= realHeight l + 1} 
+            -> h: {Int | _v == (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) } 
+            -> AVL a
+            
+termination measure realHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> (1 + if realHeight l >= realHeight r then realHeight l else realHeight r)
+  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> realHeight l - realHeight r
+  
+measure elems :: AVL a -> Set a where
+  Leaf -> []
+  Node x l r h -> [x] + elems l + elems r  
+    
+balL0 :: x: a 
+          -> l: {AVL {a | _v < x} | balFac _v == 0} 
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == 1 + realHeight l && elems _v == [x] + elems l + elems r}
+balL0 = ??
