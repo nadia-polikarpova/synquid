@@ -27,4 +27,4 @@ Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.o
 
 ## Testimonials ##
 
-"It’s very easy to use and doesn’t crash like ever!" -- Shachar Itzhaky (the second Synquid user in history) 
+![testimonial.png](https://bitbucket.org/repo/qXe57A/images/104717122-testimonial.png)
