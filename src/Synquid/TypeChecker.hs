@@ -294,7 +294,8 @@ checkAnnotation env t t' p = do
       solveIncrementally
       typingState . errorContext .= empty
       
-      return $ intersection t'' t
+      tass' <- use (typingState . typeAssignment)
+      return $ intersection t'' (typeSubstitute tass' t)
       
 -- | 'wrapInConditional' @env cond p t@ : program that executes @p@ under @cond@ and is undefined otherwise
 wrapInConditional :: MonadHorn s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram

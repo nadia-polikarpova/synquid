@@ -1,11 +1,11 @@
 - Inline functions
-- Solve the keys measure mystery in BST-delete
 - Collapse lambda-expansions in aux goals
 - In matches: instantiate all constructor schemas together with the same free variables
 - Parametrization by non-boolean predicates
 - Mutual recursion
 - Type classes (for type variables and abstract datatypes)
 - Default cond qualifiers
+- Solve the keys measure mystery in BST-delete
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
 
 - Irrefutable type errors (like symbol not in scope)
