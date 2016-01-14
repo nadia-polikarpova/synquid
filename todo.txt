@@ -1,4 +1,5 @@
 - Inline functions
+- Named arguments for abstract predicates
 - Collapse lambda-expansions in aux goals
 - In matches: instantiate all constructor schemas together with the same free variables
 - Parametrization by non-boolean predicates
