@@ -148,7 +148,8 @@ generateMatch env t = do
                                   $ inContext (\p -> Program (PMatch p []) t)
                                   $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
 
-      case typeOf pScrutinee of
+      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      case scrType of
         (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
 
@@ -180,8 +181,9 @@ generateFirstCase env scrVar pScrutinee t consName = do
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
       consT <- instantiate env consSch ftrue
-      runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
-      let ScalarT baseT _ = (typeOf pScrutinee)
+      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      runInSolver $ matchConsType (lastType consT) scrType
+      let ScalarT baseT _ = scrType
       let consT' = symbolType env consName consT
       binders <- replicateM (arity consT') (freshId "x")
       (syms, ass) <- caseSymbols scrVar binders consT'
@@ -206,8 +208,9 @@ generateCase env scrVar pScrutinee t consName = do
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
       consT <- instantiate env consSch ftrue
-      runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
-      let ScalarT baseT _ = (typeOf pScrutinee)
+      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      runInSolver $ matchConsType (lastType consT) scrType
+      let ScalarT baseT _ = scrType
       let consT' = symbolType env consName consT
       binders <- replicateM (arity consT') (freshId "x")
       (syms, ass) <- caseSymbols scrVar binders consT'

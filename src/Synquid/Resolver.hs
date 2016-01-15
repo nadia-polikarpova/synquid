@@ -360,30 +360,6 @@ resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type:
     else throwError $ unwords ["Encountered", show s, "where", show targetSort, "was expected"]
 
 {- Misc -}
-
-unifySorts :: [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
-unifySorts = unifySorts' Map.empty
-  where
-    unifySorts' subst [] []                                 
-      = Right subst
-    unifySorts' subst (x : xs) (y : ys) | x == y 
-      = unifySorts' subst xs ys
-    unifySorts' subst (SetS x : xs) (SetS y : ys)           
-      = unifySorts' subst (x:xs) (y:ys)
-    unifySorts' subst (DataS name args : xs) (DataS name' args' :ys) 
-      = if name == name' 
-          then unifySorts' subst (args ++ xs) (args' ++ ys) 
-          else Left (DataS name [], DataS name' [])
-    unifySorts' subst (VarS x : xs) (y : ys)                 
-      = case Map.lookup x subst of
-          Just s -> unifySorts' subst (s : xs) (y : ys)
-          Nothing -> if x `Set.member` typeVarsOf (fromSort y) 
-            then Left (VarS x, y) 
-            else unifySorts' (Map.insert x y subst) xs ys
-    unifySorts' subst (x : xs) (VarS y : ys)                 
-      = unifySorts' subst (VarS y : ys) (x:xs)
-    unifySorts' subst (x: _) (y: _)                 
-      = Left (x, y)
       
 unifyArguments :: Sort -> [Sort] -> Sort -> [Formula] -> Resolver (Sort, [Formula])      
 unifyArguments valueSort argSorts resSort argFmls = do

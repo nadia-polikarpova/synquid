@@ -8,6 +8,7 @@ import Synquid.Tokens
 import Synquid.Util
 
 import Data.Maybe
+import Data.Either
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -46,8 +47,37 @@ fromSort (VarS name) = ScalarT (TypeVarT name) ftrue
 fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) ftrue -- TODO: what to do with pArgs?
 fromSort AnyS = AnyT
 
+unifySorts :: [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
+unifySorts = unifySorts' Map.empty
+  where
+    unifySorts' subst [] []                                 
+      = Right subst
+    unifySorts' subst (x : xs) (y : ys) | x == y 
+      = unifySorts' subst xs ys
+    unifySorts' subst (SetS x : xs) (SetS y : ys)           
+      = unifySorts' subst (x:xs) (y:ys)
+    unifySorts' subst (DataS name args : xs) (DataS name' args' :ys) 
+      = if name == name' 
+          then if length args == length args'
+                then unifySorts' subst (args ++ xs) (args' ++ ys) 
+                else error $ unwords ["unifySorts: different number of arguments for datatype", name, show (length args), "and", show (length args')]
+          else Left (DataS name [], DataS name' [])
+    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys
+    unifySorts' subst (_ : xs) (AnyS : ys) = unifySorts' subst xs ys
+    unifySorts' subst (VarS x : xs) (y : ys)                 
+      = case Map.lookup x subst of
+          Just s -> unifySorts' subst (s : xs) (y : ys)
+          Nothing -> if x `Set.member` typeVarsOf (fromSort y) 
+            then Left (VarS x, y) 
+            else unifySorts' (Map.insert x y subst) xs ys
+    unifySorts' subst (x : xs) (VarS y : ys)                 
+      = unifySorts' subst (VarS y : ys) (x:xs)
+    unifySorts' subst (x: _) (y: _)                 
+      = Left (x, y)
+
 -- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
 complies :: Sort -> Sort -> Bool  
+-- complies s s' = isRight $ unifySorts [s] [s']
 complies AnyS s = True  
 complies s AnyS = True
 complies (SetS s) (SetS s') = complies s s'
