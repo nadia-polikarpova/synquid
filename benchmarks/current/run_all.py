@@ -67,8 +67,10 @@ BENCHMARKS = [
     # Binary heap
     ('BinHeap-Member',      []),
     ('BinHeap-Insert',      []),
-    # Evaluation
-    ('Evaluator',           []),    
+    # User-defined datatypes
+    ('Evaluator',           []),
+    ('AddressBook-Make',    ['-a=2']),
+    ('AddressBook-Merge',   ['-a=2']),
 ]
 
 AVL_BENCHMARKS = [

@@ -20,6 +20,7 @@ module Synquid.TypeConstraintSolver (
   matchConsType,
   isEnvironmentInconsistent,
   freshId,
+  currentAssignment,
   finalizeType,
   finalizeProgram,
   currentValuations
@@ -433,6 +434,11 @@ isEnvironmentInconsistent env env' unknown = do
   if null cands'
     then return Nothing
     else return $ Just $ (conjunction . flip valuation unknown . solution . head) cands'
+    
+currentAssignment :: Monad s => RType -> TCSolver s RType
+currentAssignment t = do
+  tass <- use typeAssignment
+  return $ typeSubstitute tass t    
     
 -- | Substitute type variables, predicate variables, and predicate unknowns in @p@
 -- using current type assignment, predicate assignment, and liquid assignment
