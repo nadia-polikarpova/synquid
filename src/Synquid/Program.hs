@@ -274,7 +274,7 @@ typeApplySolution _ AnyT = AnyT
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeArgCount :: Int,   -- ^ Number of type parameters
+  _typeArgs :: [Id],      -- ^ Number of type parameters
   _predArgs :: [[Sort]],  -- ^ Signatures of predicate parameters
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
