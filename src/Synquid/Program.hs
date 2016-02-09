@@ -577,8 +577,10 @@ typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute ta
 
 -- | Assumptions encoded in an environment    
 embedding :: Environment -> TypeSubstitution -> Substitution -> Bool -> Set Formula
-embedding env subst pSubst includePost = (env ^. assumptions) `Set.union` (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
+embedding env subst pSubst includePost = (Set.map substAssumption $ env ^. assumptions) `Set.union` 
+    (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
   where
+    substAssumption = substitutePredicate pSubst . sortSubstituteFml (asSortSubst subst)
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
     embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
       then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
