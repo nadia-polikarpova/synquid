@@ -44,7 +44,8 @@ BENCHMARKS = [
     ('List-Product',    []),
     # Unique lists
     ('UniqueList-Insert',   []),
-    ('List-Nub',            ['-f=FirstArgument', '-m=1']),
+    ('UniqueList-Delete',   []),
+    ('List-Nub',            ['-f=FirstArgument', '-m=1', '-g']),
     ('List-Compress',       ['-h']),
     # Insertion sort
     ('List-InsertSort',  []),
