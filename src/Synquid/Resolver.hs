@@ -98,7 +98,7 @@ resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermi
   outSort' <- resolveSort outSort
   post' <- resolveFormula BoolS outSort' post
   environment %= addMeasure measureName (MeasureDef inSort' outSort' post')
-  environment %= addPredicate measureName [outSort', inSort']
+  environment %= addGlobalPredicate measureName [outSort', inSort']
   -- Possibly add as termination metric:
   datatype <- uses (environment . datatypes) (Map.! dtName)
   if isTermination
@@ -127,7 +127,7 @@ resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermi
     addMeasureRefinement fml (ForallP p argSorts sch) = ForallP p argSorts $ addMeasureRefinement fml sch
     addMeasureRefinement fml (Monotype t) = Monotype $ addRefinementToLast t fml
                   
-resolveDeclaration (PredDecl sig) = void $ resolvePredSignature sig
+resolveDeclaration (PredDecl sig) = void $ resolvePredSignature sig True
 resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols
   if Map.member name syms
@@ -160,7 +160,7 @@ resolveSchema sch = do
   where
     resolveSchema' (ForallP predName sorts sch) = do
       oldEnv <- use environment
-      (_ : sorts') <- resolvePredSignature (PredSig predName sorts BoolS)
+      (_ : sorts') <- resolvePredSignature (PredSig predName sorts BoolS) False
       sch' <- resolveSchema' sch
       environment .= oldEnv
       return $ ForallP predName sorts' sch'
@@ -301,7 +301,7 @@ resolveFormula targetSort valueSort (Binary op l r) = do
                                                             VarS _  -> return op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Eq  || op == Neq                    = case lSort of
-                                                            -- DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
+                                                            DataS _ _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
                                                             _ -> return op
       | otherwise                                 = return op
       
@@ -326,7 +326,7 @@ resolveFormula targetSort valueSort (Ite cond l r) = do
   return $ Ite cond' l' r'
    
 resolveFormula targetSort valueSort (Pred AnyS name argFmls) = do
-  ps <- use $ environment . boundPredicates
+  ps <- uses environment allPredicates
   (resSort : argSorts) <- case Map.lookup name ps of
                             Nothing -> throwError $ unwords ["Predicate or measure", name, "is undefined"]
                             Just sorts -> return sorts
@@ -384,10 +384,10 @@ resolveSignature name = do
   sch' <- resolveSchema sch
   environment %= addPolyConstant name sch'
   
-resolvePredSignature (PredSig name argSorts resSort) = do
-  ifM (Map.member name <$> use (environment . boundPredicates)) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
+resolvePredSignature (PredSig name argSorts resSort) global = do
+  ifM (Map.member name <$> uses environment allPredicates) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
   sorts' <- mapM resolveSort (resSort : argSorts)
-  environment %= addPredicate name sorts'
+  environment %= if global then addGlobalPredicate name sorts' else addBoundPredicate name sorts'
   return sorts'
   
 substituteTypeSynonym name tArgs = do

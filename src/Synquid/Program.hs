@@ -400,13 +400,14 @@ data Environment = Environment {
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _boundPredicates :: Map Id [Sort],       -- ^ Signatures of bound abstract refinements
-  _assumptions :: Set Formula,             -- ^ Positive unknown assumptions
+  _assumptions :: Set Formula,             -- ^ Unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
   _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
   -- | Constant part:
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
+  _globalPredicates :: Map Id [Sort],      -- ^ Signatures of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType)    -- ^ Type synonym definitions
 }
@@ -430,6 +431,7 @@ emptyEnv = Environment {
   _usedScrutinees = [],
   _unfoldedVars = Set.empty,
   _constants = Set.empty,
+  _globalPredicates = Map.empty,
   _datatypes = Map.empty,
   _measures = Map.empty,
   _typeSynonyms = Map.empty
@@ -509,8 +511,11 @@ addGhost name t = over ghosts (Map.insert name t)
 addMeasure :: Id -> MeasureDef -> Environment -> Environment
 addMeasure measureName m = over measures (Map.insert measureName m)
 
-addPredicate :: Id -> [Sort] -> Environment -> Environment
-addPredicate predName argSorts = over boundPredicates (Map.insert predName argSorts)
+addBoundPredicate :: Id -> [Sort] -> Environment -> Environment
+addBoundPredicate predName argSorts = over boundPredicates (Map.insert predName argSorts)
+
+addGlobalPredicate :: Id -> [Sort] -> Environment -> Environment
+addGlobalPredicate predName argSorts = over globalPredicates (Map.insert predName argSorts)
 
 addTypeSynonym :: Id -> [Id] -> RType -> Environment -> Environment
 addTypeSynonym name tvs t = over typeSynonyms (Map.insert name (tvs, t))
@@ -537,6 +542,8 @@ addAssumption f = assumptions %~ Set.insert f
 -- | 'addScrutinee' @p env@ : @env@ with @p@ marked as having been scrutinized already
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
+
+allPredicates env = (env ^. boundPredicates) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _) -> dtName == sName) $ env ^. measures

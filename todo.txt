@@ -1,20 +1,20 @@
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
   - Debug with AddressBook: missing match qualifiers, unsoundness with predicates
   - Use unifySorts for qualifier substitution instead of complies
+  - Do we even need qualifiers from component types?
 - Inline functions
 - Named arguments for abstract predicates
 - Collapse lambda-expansions in aux goals
-- In matches: instantiate all constructor schemas together with the same free variables
 - Parametrization by non-boolean predicates
 - Mutual recursion
 - Type classes (for type variables and abstract datatypes)
 - Default cond qualifiers
 - Solve the keys measure mystery in BST-delete
+- Remove subsumed components (0 + x -> x, x + y -> y + x)
 
 - Irrefutable type errors (like symbol not in scope)
 - Collect stats: how big is env embedding? how many candidates? how many active/inactive constraints?
 - Should let-defs and known conditionals have abstracted types?
-- Memoization: remove subsumed components?
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
 - Check that the first constructor is the base case

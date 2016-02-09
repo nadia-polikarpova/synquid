@@ -13,8 +13,11 @@ measure elems :: PList a -> Set a where
 type UList a = PList a <{_0 != _1}>
 
 qualifier {x == y, x != y}
+
+param2elems :: <q :: a -> Bool> . <p :: a -> a -> Bool> . x: a -> xs: PList {a | q _v && _v != x} <p> -> {PList {a | q _v} <p> | !(x in elems _v) && elems _v == elems xs && len _v == len xs}  
+param2elems = ??
 	
-insert :: x: a -> xs: UList a -> {UList a | elems _v == elems xs + [x]}
-insert = ??
+delete :: x: a -> xs: UList a -> {UList {a | _v != x} | elems _v == elems xs - [x]}
+delete = ??
 
 	

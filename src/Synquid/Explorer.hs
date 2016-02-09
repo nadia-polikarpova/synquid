@@ -42,9 +42,10 @@ data ExplorerParams = ExplorerParams {
   _matchDepth :: Int,                     -- ^ Maximum nesting level of matches
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
+  _predPolyRecursion :: Bool,             -- ^ Enable recursion polymorphic in abstract predicates?
   _hideScrutinees :: Bool,                -- ^ Should scrutinized variables be removed from the environment?
   _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
-  _partialSolution :: Bool,                -- ^ Should implementations that only cover part of the input space be accepted?
+  _partialSolution :: Bool,               -- ^ Should implementations that only cover part of the input space be accepted?
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
   _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
@@ -180,7 +181,7 @@ generateFirstCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- instantiate env consSch ftrue
+      consT <- instantiate env consSch True
       scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
       runInSolver $ matchConsType (lastType consT) scrType
       let ScalarT baseT _ = scrType
@@ -207,7 +208,7 @@ generateCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- instantiate env consSch ftrue
+      consT <- instantiate env consSch True
       scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
       runInSolver $ matchConsType (lastType consT) scrType
       let ScalarT baseT _ = scrType
@@ -399,8 +400,8 @@ enumerateAt env typ 0 = do
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
-      else instantiate env sch ftrue
+      then instantiate env sch False -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
+      else instantiate env sch True
 
     soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
@@ -501,9 +502,10 @@ currentValuation u = do
 
 inContext ctx f = local (over (_1 . context) (. ctx)) f
     
--- | Replace all type variables with fresh identifiers
-instantiate :: MonadHorn s => Environment -> RSchema -> Formula -> Explorer s RType
-instantiate env sch fml = do
+-- | Replace all bound type and predicate variables with fresh free variables
+-- (if @top@ is @False@, instantiate with bottom refinements instead of top refinements)
+instantiate :: MonadHorn s => Environment -> RSchema -> Bool -> Explorer s RType
+instantiate env sch top = do
   t <- instantiate' Map.empty Map.empty sch
   writeLog 2 (text "INSTANTIATE" <+> pretty sch $+$ text "INTO" <+> pretty t)
   return t
@@ -511,17 +513,21 @@ instantiate env sch fml = do
     instantiate' subst pSubst (ForallT a sch) = do
       a' <- freshId "a"
       addConstraint $ WellFormed env (vart a' ftrue)
-      instantiate' (Map.insert a (vart a' fml) subst) pSubst sch
+      instantiate' (Map.insert a (vart a' (BoolLit top)) subst) pSubst sch
     instantiate' subst pSubst (ForallP p argSorts sch) = do
-      p' <- freshId "P"
       let argSorts' = map (sortSubstitute (asSortSubst subst)) argSorts
-      addConstraint $ WellFormedPredicate env argSorts' p'
-      instantiate' subst (Map.insert p (Pred BoolS p' (zipWith Var argSorts deBrujns)) pSubst) sch
+      fml <- if top
+              then do
+                p' <- freshId "P"
+                addConstraint $ WellFormedPredicate env argSorts' p'
+                return $ Pred BoolS p' (zipWith Var argSorts' deBrujns)
+              else return ffalse
+      instantiate' subst (Map.insert p fml pSubst) sch        
     instantiate' subst pSubst (Monotype t) = go subst pSubst t
     go subst pSubst (FunctionT x tArg tRes) = do
       x' <- freshId "x"
       liftM2 (FunctionT x') (go subst pSubst tArg) (go subst pSubst (renameVar x x' tArg tRes))
-    go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t
+    go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
   
 symbolType env x (ScalarT b@(DatatypeT dtName _ _) fml)
   | x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors = ScalarT b (fml |&| (Var (toSort b) valueVarName) |=| Cons (toSort b) x [])

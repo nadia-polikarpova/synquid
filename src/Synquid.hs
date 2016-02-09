@@ -31,7 +31,8 @@ main = do
                    appMax 
                    scrutineeMax 
                    matchMax 
-                   fix 
+                   fix
+                   genPreds
                    hideScr 
                    explicitMatch
                    partial
@@ -49,6 +50,7 @@ main = do
     _scrutineeDepth = scrutineeMax,
     _matchDepth = matchMax,
     _fixStrategy = fix,
+    _predPolyRecursion = genPreds,
     _hideScrutinees = hideScr,
     _abduceScrutinees = not explicitMatch,
     _partialSolution = partial,
@@ -85,6 +87,7 @@ data CommandLineArgs
         scrutinee_max :: Int,
         match_max :: Int,
         fix :: FixpointStrategy,
+        generalize_preds :: Bool,
         hide_scrutinees :: Bool,
         explicit_match :: Bool,
         partial :: Bool,
@@ -103,22 +106,23 @@ data CommandLineArgs
   deriving (Data, Typeable, Show, Eq)
 
 cla = CommandLineArgs {
-  file            = ""              &= typFile &= argPos 0,
-  app_max         = 3               &= help ("Maximum depth of an application term (default: 3)"),
-  scrutinee_max   = 1               &= help ("Maximum depth of a match scrutinee (default: 0)"),
-  match_max       = 2               &= help ("Maximum number of a matches (default: 2)"),
-  fix             = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
-  hide_scrutinees = False           &= help ("Hide scrutinized expressions from the environment (default: False)"),
-  explicit_match  = False           &= help ("Do not abduce match scrutinees (default: False)"),
-  partial         = False           &= help ("Generate best-effort partial solutions (default: False)"),
-  incremental     = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
-  consistency     = True            &= help ("Check incomplete application types for consistency (default: True)"),
-  log_            = 0               &= help ("Logger verboseness level (default: 0)"),
-  use_memoization = False           &= help ("Use memoization (default: False)"),
-  bfs_solver      = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
-  output          = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
-  print_spec      = True            &= help ("Show specification of each synthesis goal (default: True)"),
-  print_spec_size = False           &= help ("Show specification size (default: False)"),
+  file                = ""              &= typFile &= argPos 0,
+  app_max             = 3               &= help ("Maximum depth of an application term (default: 3)"),
+  scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 0)"),
+  match_max           = 2               &= help ("Maximum number of a matches (default: 2)"),
+  fix                 = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
+  generalize_preds    = False           &= help ("Make recursion polymorphic in abstract refinements (default: False)"),
+  hide_scrutinees     = False           &= help ("Hide scrutinized expressions from the environment (default: False)"),
+  explicit_match      = False           &= help ("Do not abduce match scrutinees (default: False)"),
+  partial             = False           &= help ("Generate best-effort partial solutions (default: False)"),
+  incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
+  consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
+  log_                = 0               &= help ("Logger verboseness level (default: 0)"),
+  use_memoization     = False           &= help ("Use memoization (default: False)"),
+  bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
+  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
+  print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
+  print_spec_size     = False           &= help ("Show specification size (default: False)"),
   print_solution_size = False       &= help ("Show solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
     where
@@ -131,6 +135,7 @@ defaultExplorerParams = ExplorerParams {
   _matchDepth = 2,
   _fixStrategy = AllArguments,
   _polyRecursion = True,
+  _predPolyRecursion = False,
   _hideScrutinees = False,
   _abduceScrutinees = True,
   _partialSolution = False,

@@ -50,16 +50,19 @@ reconstruct eParams tParams goal = do
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl)
-reconstructTopLevel (Goal funName env (ForallP pName pSorts sch) impl) = reconstructTopLevel (Goal funName (addPredicate pName pSorts env) sch impl)
+reconstructTopLevel (Goal funName env (ForallP pName pSorts sch) impl) = reconstructTopLevel (Goal funName (addBoundPredicate pName pSorts env) sch impl)
 reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = reconstructFix
   where
     reconstructFix = do    
       recCalls <- recursiveCalls t
       polymorphic <- asks $ _polyRecursion . fst
+      predPolymorphic <- asks $ _predPolyRecursion . fst
       let tvs = env ^. boundTypeVars
-      let env' = if polymorphic && not (null tvs)
-                    then foldr (\(f, t') -> addPolyVariable f (foldr ForallT (Monotype t') tvs) . (shapeConstraints %~ Map.insert f (shape t))) env recCalls -- polymorphic recursion enabled: generalize on all bound variables
-                    else foldr (\(f, t') -> addVariable f t') env recCalls  -- do not generalize
+      let pvs = env ^. boundPredicates      
+      let predGeneralized sch = if predPolymorphic then foldr (uncurry ForallP) sch (Map.toList pvs) else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function
+      let typeGeneralized sch = if polymorphic then foldr ForallT sch tvs else sch -- Version of @t'@ generalized in bound type variables of the enclosing function
+      
+      let env' = foldr (\(f, t') -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t') . (shapeConstraints %~ Map.insert f (shape t))) env recCalls
       let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
       p <- inContext ctx  $ reconstructI env' t impl
       return $ ctx p
@@ -186,7 +189,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
       Nothing -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
       Just consSch -> do
-                        consT <- instantiate env consSch ftrue
+                        consT <- instantiate env consSch True
                         case lastType consT of
                           (ScalarT (DatatypeT dtName _ _) _) -> do
                             case mName of
@@ -208,7 +211,7 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   let ScalarT baseT _ = (typeOf pScrutinee)
   (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
   deadUnknown <- Unknown Map.empty <$> freshId "u"
-  solveLocally $ WellFormedMatchCond env deadUnknown        
+  solveLocally $ WellFormedCond env deadUnknown  -- TODO: we are not even looking for a condition here!
   deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) deadUnknown
   case deadBranchCond of
     Just (BoolLit True) -> return $ Case consName args (Program (PSymbol "error") t)
@@ -256,8 +259,8 @@ reconstructE' env typ (PSymbol name) = do
       return (env, p)
   where    
     freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch ffalse -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
-      else instantiate env sch ftrue
+      then instantiate env sch False -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
+      else instantiate env sch True
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshId "x"
   (env', pFun) <- inContext (\p -> Program (PApp p (Program PHole AnyT)) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
