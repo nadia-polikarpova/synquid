@@ -307,7 +307,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         pass <- use predAssignment
         let l' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) l
         let r' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) r
-        if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ env ^. boundPredicates)
+        if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
             let lhss = embedding env tass pass True `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
             hornClauses %= ((conjunction lhss |=>| r') :)

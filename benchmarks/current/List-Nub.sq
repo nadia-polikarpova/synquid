@@ -1,37 +1,31 @@
+data PList a <p :: a -> a -> Bool> where
+	Nil :: PList a <p>
+	Cons :: x: a -> xs: PList {a | p x _v} <p> -> PList a <p>
+  
+termination measure len :: PList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+type List a = PList a <{True}>
+type UList a = PList a <{_0 != _1}>
+
 qualifier {x == y, x != y}
 
 true :: {Bool | _v}
 false :: {Bool | !_v}
-
-data List a where
-	Nil :: List a
-	Cons :: x: a -> xs: List a -> List a
-  
-termination measure len :: List a -> {Int | _v >= 0} where
-  Nil -> 0
-  Cons x xs -> 1 + len xs  
-
-measure elems :: List a -> Set a where
-  Nil -> []
-  Cons x xs -> [x] + elems xs
-
-data UList a where
-	UNil :: UList a
-	UCons :: x: a -> xs: UList {a | x != _v} -> UList a
-  
-termination measure ulen :: UList a -> {Int | _v >= 0} where
-  UNil -> 0
-  UCons x xs -> 1 + ulen xs  
-  
-measure uelems :: UList a -> Set a where
-  UNil -> []
-  UCons x xs -> [x] + uelems xs
 	
-elem :: x: a -> xs: UList a -> {Bool | _v == (x in uelems xs)}
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 elem = ??	
 	
-strengthen :: x: a -> xs: {UList a | !(x in uelems _v)} -> {UList {a | _v != x} | uelems _v == uelems xs && ulen _v == ulen xs}
-strengthen = ??
+elems2param :: <q :: a -> Bool> . <p :: a -> a -> Bool> . x: a -> xs: {PList {a | q _v} <p> | !(x in elems _v)} -> {PList {a | q _v && _v != x} <p> | elems _v == elems xs && len _v == len xs}  
+elems2param = ??
 	
-nub' :: xs: List a -> acc: UList a -> {UList a | uelems _v == uelems acc + elems xs}
+nub' :: xs: List a -> acc: UList a -> {UList a | elems _v == elems acc + elems xs}
 nub' = ??
+
+nub :: xs: List a -> {UList a | elems _v == elems xs}
+nub = ??
