@@ -1,5 +1,5 @@
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
-  - Debug with AddressBook: missing match qualifiers, unsoundness with predicates
+  - Missing match qualifiers (AddressBook)?
   - Use unifySorts for qualifier substitution instead of complies
   - Do we even need qualifiers from component types?
 - Inline functions

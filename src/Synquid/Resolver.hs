@@ -84,7 +84,7 @@ resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typ
 resolveDeclaration (DataDecl dataName typeParams predParams constructors) = do
   let
     datatype = DatatypeDef {
-      _typeArgCount = length typeParams,
+      _typeArgs = typeParams,
       _predArgs = map (\(PredSig _ argSorts _) -> argSorts) predParams,
       _constructors = map constructorName constructors,
       _wfMetric = Nothing
@@ -174,7 +174,8 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       t' <- substituteTypeSynonym name tArgs >>= resolveType      
       fml' <- resolveFormula BoolS (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
-    Just (DatatypeDef n pVars _ _) -> do
+    Just (DatatypeDef tVars pVars _ _) -> do
+      let n = length tVars
       when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]
       when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
       tArgs' <- mapM resolveType tArgs
@@ -215,7 +216,8 @@ resolveSort (DataS name sArgs) = do
     Nothing -> do
       t' <- substituteTypeSynonym name (map fromSort sArgs)
       resolveSort $ toSort $ baseTypeOf t'
-    Just (DatatypeDef n _ _ _) -> do
+    Just (DatatypeDef tVars _ _ _) -> do
+      let n = length tVars
       when (length sArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length sArgs)]
       sArgs' <- mapM resolveSort sArgs
       return $ DataS name sArgs'

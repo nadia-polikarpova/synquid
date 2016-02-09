@@ -119,6 +119,9 @@ addTypingConstraint c = over typingConstraints (nub . (c :))
 solveTypeConstraints :: MonadHorn s => TCSolver s ()
 solveTypeConstraints = do
   simplifyAllConstraints
+  
+  scs <- use simpleConstraints
+  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))  
         
   tass <- use typeAssignment
   writeLog 2 (text "Type assignment" $+$ vMapDoc text pretty tass)
@@ -153,6 +156,7 @@ simplifyAllConstraints = do
 processAllPredicates :: MonadHorn s => TCSolver s ()
 processAllPredicates = do
   tcs <- use typingConstraints
+  typingConstraints .= []
   mapM_ processPredicate tcs
     
 -- | Convert simple typing constraints into horn clauses and qualifier maps
@@ -369,10 +373,14 @@ fresh :: Monad s => Environment -> RType -> TCSolver s RType
 fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
   a' <- freshId "a"
   return $ ScalarT (TypeVarT a') ftrue
-fresh env (ScalarT (DatatypeT name tArgs pArgs) _) = do
+fresh env (ScalarT (DatatypeT name tArgs _) _) = do
   k <- freshId "u"
   tArgs' <- mapM (fresh env) tArgs
-  pArgs' <- mapM freshPred pArgs  
+  
+  let (DatatypeDef tVars pVars _ _) = (env ^. datatypes) Map.! name
+  let sortSubst = asSortSubst $ Map.fromList $ zip tVars tArgs'
+  
+  pArgs' <- mapM (freshPred env . map (sortSubstitute sortSubst)) pVars  
   return $ ScalarT (DatatypeT name tArgs' pArgs') (Unknown Map.empty k)
 fresh env (ScalarT baseT _) = do
   k <- freshId "u"
@@ -380,9 +388,10 @@ fresh env (ScalarT baseT _) = do
 fresh env (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
   
-freshPred fml = do
-  p' <- freshId "P"  
-  let args = Set.toList $ varsOf fml -- ToDo: relying on the fact that we always use deBrujns and they will be ordered properly: is that true?
+freshPred env sorts = do
+  p' <- freshId "P"
+  modify $ addTypingConstraint (WellFormedPredicate env sorts p')
+  let args = zipWith Var sorts deBrujns 
   return $ Pred BoolS p' args  
   
 addTypeAssignment tv t = typeAssignment %= Map.insert tv t
