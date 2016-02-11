@@ -1,0 +1,33 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+  
+append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}  
+  
+data Info where
+  Info :: streetAddr: Int -> zipcode: Int -> local: Bool -> Info
+    
+data Address where
+  Address :: info: Info -> priv: Bool -> Address
+  
+measure isPriv :: Address -> Bool where
+  Address info priv -> priv  
+  
+getPriv :: a:Address -> {Bool | _v == isPriv a}
+
+data AddressBook where
+  AddressBook :: business: List {Address | !(isPriv _v)} -> personal: List {Address | isPriv _v} -> AddressBook  
+  
+measure size :: AddressBook -> {Int | _v >= 0} where
+  AddressBook bs ps -> len bs + len ps
+  
+mergeAddressBooks :: a: AddressBook -> b: AddressBook -> {AddressBook | size _v == size a + size b}
+mergeAddressBooks = ??      
+
+
+
+  
