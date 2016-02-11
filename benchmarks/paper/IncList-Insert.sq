@@ -1,11 +1,16 @@
-qualifier {x <= y, x >= y, x != y}
+qualifier {x <= y, x != y}
 
-measure ilen :: IList a -> {Int | _v >= 0}
-measure ielems :: IList a -> Set a
+data IList a where
+	INil :: IList a
+	ICons :: x: a -> xs: IList {a | x <= _v} -> IList a
+  
+termination measure ilen :: IList a -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + ilen xs  
 
-data IList a decreases ilen where
-	INil :: {IList a | ilen _v == 0 && ielems _v == []}
-	ICons :: x: a -> xs: IList {a | x <= _v} -> {IList a | ilen _v == ilen xs + 1 && ielems _v == ielems xs + [x]}
+measure ielems :: IList a -> Set a where
+  INil -> []
+  ICons x xs -> [x] + ielems xs
 	
 insert :: x: a -> xs: IList a -> {IList a | ielems _v == ielems xs + [x]}
 insert = ??
