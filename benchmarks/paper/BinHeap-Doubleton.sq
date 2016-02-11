@@ -11,6 +11,6 @@ termination measure size :: Heap a -> {Int | _v >= 0} where
 measure elems :: Heap a -> Set a where
   Empty -> []
   Node x l r -> elems l + elems r + [x]
- 
-tripleton :: x: a -> y: a -> z: a -> {Heap a | elems _v == [x, y, z]}
-tripleton = ??
+
+doubleton :: x: a -> y: a -> {Heap a | elems _v == [x, y]}
+doubleton = ??

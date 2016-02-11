@@ -1,12 +1,16 @@
 qualifier {x == y, x != y}
 
-measure ulen :: UList a -> {Int | _v >= 0}
-measure uelems :: UList a -> Set a
-
-data UList a decreases ulen where
-	UNil :: {UList a | ulen _v == 0 && uelems _v == []}
-	UCons :: x: a -> xs: UList {a | x != _v} -> {UList a | ulen _v == ulen xs + 1 && uelems _v == uelems xs + [x]}
+data UList a where
+	UNil :: UList a
+	UCons :: x: a -> xs: UList {a | x != _v} -> UList a
+  
+termination measure ulen :: UList a -> {Int | _v >= 0} where
+  UNil -> 0
+  UCons x xs -> 1 + ulen xs
+  
+measure uelems :: UList a -> Set a where
+  UNil -> []
+  UCons x xs -> [x] + uelems xs
 	
--- delete :: x: a -> xs: UList a -> {UList {a | _v != x} | ~(ulen _v - ulen xs) <= 1}
 delete :: x: a -> xs: UList a -> {UList a | uelems _v == uelems xs - [x]}
 delete = ??

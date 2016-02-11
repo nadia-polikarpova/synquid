@@ -1,45 +1,46 @@
-qualifier {x >= y, x <= y, x != y}
+qualifier {x <= y, x != y}
 
---type Nat = {Int | _v >= 0}
 zero :: {Int | _v == 0}
 one :: {Int | _v == 1}
 two :: {Int | _v == 2}
---inc :: x:Nat -> {Int | _v == x + 1}
---dec :: x:Nat -> {Int | _v == x - 1}
 
-measure size :: AST -> {Int | _v >= 0}
-measure result :: AST -> Int
+data AST where
+  Zero :: AST
+  One :: AST
+  Two :: AST
+  PlusNode :: l: AST -> r: AST -> AST
+  MinusNode :: l: AST -> r: AST -> AST
+  ProductNode :: l: AST -> r: AST -> AST
+  
+termination measure size :: AST -> {Int | _v >= 0} where
+  Zero -> 1
+  One -> 1
+  Two -> 1
+  PlusNode l r -> 1 + size l + size r + 1
+  MinusNode l r -> 1 + size l + size r + 1
+  ProductNode l r -> 1 + size l + size r + 1
 
-data AST decreases size where
-  Zero :: {AST | size _v == 1 && result _v == 0}
-  One :: {AST | size _v == 1 && result _v == 1}
-  Two :: {AST | size _v == 1 && result _v == 2}
-  PlusNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l + result r}
-  MinusNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l - result r}
-  ProductNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l * result r}
-  --True :: x: Int -> {AST | size _v == 1 && result _v == x}
-  --False :: x: Int -> {AST | size _v == 1 && result _v == x}
-  --AndNode :: l: AST -> r: AST -> {AST | size _v == size l + size r + 1 && result _v == result l - result r}
+measure result :: AST -> Int where
+  Zero -> 0
+  One -> 1
+  Two -> 2
+  PlusNode l r -> result l + result r
+  MinusNode l r -> result l - result r
+  ProductNode l r -> result l * result r
 
 type OpCode = {Int | _v >= 0 && _v <= 2}
 
-measure size2 :: PAST -> {Int | _v >= 0}
-measure result2 :: PAST -> Int
+data PAST where
+  IntNode :: x: Int -> PAST
+  OpNode :: op: OpCode -> l: PAST -> r: PAST -> PAST
+  
+termination measure size2 :: PAST -> {Int | _v >= 0} where
+  IntNode x -> 1
+  OpNode op l r -> 1 + size2 l + size2 r
 
-data PAST decreases size2 where
-  IntNode :: x: Int -> {PAST | size2 _v == 1 && result2 _v == x}
-  OpNode :: op: OpCode -> l: PAST -> r: PAST -> {PAST | size2 _v == size2 l + size2 r + 1 &&
-    ((op == 0) ==> result2 _v == result2 l + result2 r) &&
-    ((op == 2) ==> result2 _v == result2 l * result2 r) &&
-    ((op == 1) ==> result2 _v == result2 l - result2 r)
-  }
-
---measure len :: List -> {Int | _v >= 0}
---measure result :: List -> Int
---
---data List decreases len where
-  --IntNode :: x: Int -> {AST | len _v == 1 && result _v == x}
-  --Cons :: x: a -> xs: List a -> {List a | len _v == len xs + 1 && elems _v == elems xs + [x]}
+measure result2 :: PAST -> Int where
+  IntNode x -> x
+  OpNode op l r -> if op == 0 then result2 l + result2 r else (if op == 1 then result2 l - result2 r else result2 l * result2 r)
 
 transform :: x: AST -> {PAST | result2 _v == result x}
 transform = ??
