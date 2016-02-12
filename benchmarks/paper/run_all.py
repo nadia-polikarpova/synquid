@@ -16,7 +16,7 @@ LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME_WINDOWS = 'oracle'
 ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
-COMMON_OPTS = ['--print-solution-size=True', '--print-spec-info=True']
+COMMON_OPTS = ['--print-solution-size=True', '--print-spec-size=True']
 BFS_ON_OPT = ['--bfs=1']
 INCREMENTAL_OFF_OPT = ['--incremental=0']
 CONSISTENCY_OFF_OPT = ['--consistency=0']
@@ -192,6 +192,7 @@ def run_benchmark(name, opts, defOpts, path=''):
       print '{0:0.2f}'.format(end - start),
       if return_code:
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+          results [name] = SynthesisResult(name, (end - start), "-", "-", "-", "-")
       else:
           lastLines = os.popen("tail -n 5 %s" % LOGFILE_NAME).read().split('\n')
           solutionSize = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
@@ -233,7 +234,7 @@ def postprocess(benchmarks):
                     ' & ' + '{0:0.2f}'.format(res.otherTimes[3])  + '& ' + '{0:0.2f}'.format(res.otherTimes[2]) + \
                     ' & ' + '{0:0.2f}'.format(res.otherTimes[0]) + '& ' + \
                     ' & ' + '{0:0.2f}'.format(res.otherTimes[4]) + '& ' + \
-                    '{0:0.2f}'.format(res.otherTimes[1])  + ' \\\\'
+                    '{0:0.2f}'.format(res.otherTimes[1]) + ' \\\\'
                     outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')
