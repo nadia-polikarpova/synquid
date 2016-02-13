@@ -76,8 +76,8 @@ BENCHMARKS = [
     # Trees
     ["Trees",  [],
         [('Tree-Elem', 'membership',[]),
-        ('Tree-Flatten', 'flatten to a list', []),
-        ('Tree-HBal', 'create balanced tree', [])]
+        ('Tree-ToList', 'flatten to a list', []),
+        ('Tree-BalancedReplicate', 'create balanced tree', [])]
     ],
     ["BST", ['-m=1', '-e', '-a=2'],
         [# Binary search tree
@@ -98,12 +98,12 @@ BENCHMARKS = [
         # Binary heap
         [('BinHeap-Member', 'membership', []),
         ('BinHeap-Insert', 'insertion', []),
-        ('BinHeap-Singleton', 'constructor', []),
+        ('BinHeap-Doubleton', 'constructor', []),
         ('BinHeap-Tripleton', 'constructor, 3 args', [])]
     ],
     ["User", [],
         # Evaluation
-        [('Evaluator', 'desugar AST', [])
+        [('Evaluator', 'desugar AST', [])]
     ]
 ]
 
