@@ -60,18 +60,6 @@ measure wcolor :: WeakRBT a -> {Int | _v >= 0 && _v <= 1} where
   Ok x c left right -> c
   Bad x lc left right -> 0
   
---==========================================================================================
--- Rotate when right subtree is broken (two cases):
---
---       B                R         |       B                R
---      / \             /   \       |      / \             /   \
---     l   R           B     B      |     l   R           B     B
---        / \ --->    / \   / \     |        / \ --->    / \   / \
---       R   rr     l rll rlr  rr   |      rl   R      l  rl rrl rrr
---      / \                         |          / \
---   rll  rlr                       |        rrl rrr
---
---==========================================================================================  
 rotateR :: x: a ->
             l: RBT {a | _v < x} ->
             rx: {a | x < _v} ->

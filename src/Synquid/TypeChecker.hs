@@ -212,13 +212,9 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
   deadUnknown <- Unknown Map.empty <$> freshId "u"
   solveLocally $ WellFormedCond env deadUnknown  -- TODO: we are not even looking for a condition here!
-  deadBranchCond <- runInSolver $ isEnvironmentInconsistent env (foldr (uncurry addVariable) (addAssumption ass emptyEnv) syms) deadUnknown
-  case deadBranchCond of
-    Just (BoolLit True) -> return $ Case consName args (Program (PSymbol "error") t)
-    _ -> do
-            let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-            pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
-            return $ Case consName args pCaseExpr  
+  let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+  pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
+  return $ Case consName args pCaseExpr  
   
 -- | 'reconstructECond' @env t impl@ :: conditionally reconstruct the judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
 reconstructECond :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, Formula, RProgram)

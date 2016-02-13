@@ -183,9 +183,9 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     let allSolutions = concat $ Map.elems splitting
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
-        (do 
-          valuations' <- pruneValuations usedLhsQuals (Map.keys splitting) -- TODO: is this dangeorous??? the result might not cover the pruned alternatives in a different context!
-          -- valuations' <- pruneValuations Set.empty (Map.keys splitting)
+        (do
+          let pruneAssumptions = if rhs == ffalse then Set.empty else usedLhsQuals -- TODO: is this dangeorous??? the result might not cover the pruned alternatives in a different context!
+          valuations' <- pruneValuations pruneAssumptions (Map.keys splitting)
           writeLog 2 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
@@ -247,11 +247,12 @@ optimalValuationsBFS maxSize quals lhs rhs = map qualsAt <$> filterSubsets (chec
           else return False
     
 optimalValuationsMarco :: MonadSMT s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
-optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores fixedLhs fixedRhs qualsList)
+optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores assumption mustHave qualsList)
   where
-    qualsList = Set.toList quals
+    qualsList = Set.toList $ Set.filter (\q -> not $ q `Set.member` lhs || fnot q `Set.member` lhs) quals
     fixedLhs = conjunction lhs
     fixedRhs = fnot rhs
+    (assumption, mustHave) = if rhs == ffalse then (ftrue, fixedLhs) else (fixedLhs, fixedRhs) -- When RHS is literally false, then inconsistent LHSs are acceptable
                             
 -- | 'filterSubsets' @check n@: all minimal subsets of indexes from [0..@n@) that satisfy @check@,
 -- where @check@ is monotone (if a set satisfies @check@, then every superset also satisfies @check@);
