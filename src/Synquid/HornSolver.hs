@@ -249,7 +249,7 @@ optimalValuationsBFS maxSize quals lhs rhs = map qualsAt <$> filterSubsets (chec
 optimalValuationsMarco :: MonadSMT s => Set Formula -> Set Formula -> Formula -> FixPointSolver s [Valuation]
 optimalValuationsMarco quals lhs rhs = map Set.fromList <$> lift (allUnsatCores assumption mustHave qualsList)
   where
-    qualsList = Set.toList quals
+    qualsList = Set.toList $ Set.filter (\q -> not $ q `Set.member` lhs || fnot q `Set.member` lhs) quals
     fixedLhs = conjunction lhs
     fixedRhs = fnot rhs
     (assumption, mustHave) = if rhs == ffalse then (ftrue, fixedLhs) else (fixedLhs, fixedRhs) -- When RHS is literally false, then inconsistent LHSs are acceptable
