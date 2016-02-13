@@ -92,7 +92,7 @@ BENCHMARKS = [
         ('RBT-BalanceL', 'balance left', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
         ('RBT-BalanceR', 'balance right', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
         #('RBT-Balance', 'balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'])]
-        ('RBT-Insert', ['-m=1', '-a=2', '-e'])
+        ('RBT-Insert', ['-m=1', '-a=2', '-e'])]
     ],
     ["Heap", [],
         # Binary heap
