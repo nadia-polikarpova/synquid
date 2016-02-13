@@ -29,8 +29,8 @@ elem :: x: a -> xs: UList a -> {Bool | _v == (x in uelems xs)}
 strengthen :: x: a -> xs: {UList a | !(x in uelems _v)} -> {UList {a | _v != x} | uelems _v == uelems xs && ulen _v == ulen xs}
 strengthen = ??
 	
-nub' :: acc: UList a -> xs: List a -> {UList a | uelems _v == uelems acc + elems xs}
+nub' :: xs: List a -> acc: UList a -> {UList a | uelems _v == uelems acc + elems xs}
 nub' = ??
 
-nub :: xs: List a -> {UList a | elems _v == elems xs}
+nub :: xs: List a -> {UList a | uelems _v == elems xs}
 nub = ??
