@@ -87,10 +87,14 @@ extractTypeQGen qual (env, (val@(Var s valName) : syms)) =
 extractCondQGen qual (env, syms) = allSubstitutions env qual AnyS (Set.toList $ varsOf qual) syms
 
 extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
-extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = let baseCaseCtor = head ctors
-  in case toMonotype $ allSymbols env Map.! baseCaseCtor of
-    FunctionT _ _ _ -> [] -- not supported
-    ScalarT baseT fml -> let s = toSort baseT in concatMap (\qual -> allSubstitutions env qual s [Var s valueVarName] syms) $ Set.toList (conjunctsOf fml)
+extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = 
+  let baseCaseCtor = head ctors in
+  case lastType $ toMonotype $ allSymbols env Map.! baseCaseCtor of
+    ScalarT baseT fml -> 
+      let s = toSort baseT in
+      let v = Var s valueVarName in
+      let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
+      concatMap (\qual -> allSubstitutions env qual s [v] syms) arglessConjucts
 
 -- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
 extractQGenFromType :: RType -> (Environment, [Formula]) -> [Formula]

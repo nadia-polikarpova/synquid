@@ -87,6 +87,13 @@ AVL_BENCHMARKS = [
     ('AVL-Insert',          ['-a 2', '-e']),
 ]
 
+RBT_BENCHMARKS = [
+    # Red-black trees
+    ('RBT-BalanceL',        ['-a 2', '-m 1', '-u']),
+    ('RBT-BalanceR',        ['-a 2', '-m 1', '-u']),
+    ('RBT-Insert',          ['-a 2', '-m 1', '-u']),
+]
+
 class SynthesisResult:
     def __init__(self, name, time):
         self.name = name
@@ -146,6 +153,9 @@ if __name__ == '__main__':
         run_benchmark(name, args)
 
     # for (name, args) in AVL_BENCHMARKS:
-        # run_benchmark(name, args, 'AVL')        
+        # run_benchmark(name, args, 'AVL')
+        
+    # for (name, args) in RBT_BENCHMARKS:
+        # run_benchmark(name, args, 'RBT')                
 
     postprocess()

@@ -138,7 +138,7 @@ generateCondition env fml = do
 -- | If partial solutions are accepted, try @gen@, and if it fails, just leave a hole of type @t@; otherwise @gen@
 optionalInPartial :: MonadHorn s => RType -> Explorer s RProgram -> Explorer s RProgram
 optionalInPartial t gen = ifM (asks $ _partialSolution . fst) (ifte gen return (return $ Program PHole t)) gen
-  
+
 -- | Generate a match term of type @t@
 generateMatch env t = do
   d <- asks $ _matchDepth . fst
@@ -162,10 +162,46 @@ generateMatch env t = do
           guard isGoodScrutinee
 
           (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
-          pCases <- mapM (cut . generateCase env'' x pScrutinee t) ctors              -- Generate a case for each of the remaining constructors
-          return $ Program (PMatch pScrutinee pCases) t
+          (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)             -- First case generated separately in an attempt to abduce a condition for the whole match
+          if cond == ftrue
+            then do -- First case is valid unconditionally
+              pCases <- mapM (cut . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
+              return $ Program (PMatch pScrutinee (pCase : pCases)) t
+            else do -- First case is valid under a condition
+              pCases <- mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
+              let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
+              pCond <- generateCondition env cond
+              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $               -- Generate the else branch
+                          generateI (addAssumption (fnot cond) env) t            
+              return $ Program (PIf pCond pThen pElse) t
 
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
+        
+generateFirstCase env scrVar pScrutinee t consName = do
+  case Map.lookup consName (allSymbols env) of
+    Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
+    Just consSch -> do
+      consT <- instantiate env consSch True
+      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      runInSolver $ matchConsType (lastType consT) scrType
+      let ScalarT baseT _ = scrType
+      let consT' = symbolType env consName consT
+      binders <- replicateM (arity consT') (freshId "x")
+      (syms, ass) <- caseSymbols scrVar binders consT'
+      let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+
+      ifte  (do -- Try to find a vacuousness condition:
+              deadUnknown <- Unknown Map.empty <$> freshId "u"
+              addConstraint $ WellFormedCond env deadUnknown
+              err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
+              deadValuation <- currentValuation deadUnknown
+              return (err, conjunction deadValuation)) 
+            (\(err, deadCond) -> return $ (Case consName binders err, deadCond)) 
+            (do
+              pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) 
+                            $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
+                            $ generateI caseEnv t
+              return $ (Case consName binders pCaseExpr, ftrue))
 
 -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
 generateCase env scrVar pScrutinee t consName = do
@@ -184,6 +220,52 @@ generateCase env scrVar pScrutinee t consName = do
                                        $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                                        $ generateI caseEnv t
       return $ Case consName binders pCaseExpr
+  
+-- -- | Generate a match term of type @t@
+-- generateMatch env t = do
+  -- d <- asks $ _matchDepth . fst
+  -- if d == 0
+    -- then mzero
+    -- else do
+      -- (env', pScrutinee) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
+                                  -- $ inContext (\p -> Program (PMatch p []) t)
+                                  -- $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
+
+      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      -- case scrType of
+        -- (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
+          -- let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
+
+          -- let scrutineeSymbols = symbolList pScrutinee
+          -- let isGoodScrutinee = not (null ctors) &&                                               -- Datatype is not abstract
+                                -- (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
+                                -- (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
+                                -- (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
+          -- guard isGoodScrutinee
+
+          -- (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
+          -- pCases <- mapM (cut . generateCase env'' x pScrutinee t) ctors              -- Generate a case for each of the remaining constructors
+          -- return $ Program (PMatch pScrutinee pCases) t
+
+        -- _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
+
+-- -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
+-- generateCase env scrVar pScrutinee t consName = do
+  -- case Map.lookup consName (allSymbols env) of
+    -- Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
+    -- Just consSch -> do
+      -- consT <- instantiate env consSch True
+      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      -- runInSolver $ matchConsType (lastType consT) scrType
+      -- let ScalarT baseT _ = scrType
+      -- let consT' = symbolType env consName consT
+      -- binders <- replicateM (arity consT') (freshId "x")
+      -- (syms, ass) <- caseSymbols scrVar binders consT'
+      -- let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+      -- pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
+                                       -- $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
+                                       -- $ generateI caseEnv t
+      -- return $ Case consName binders pCaseExpr
 
 caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
   return ([], subst fml)
@@ -204,12 +286,12 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
       cut $ do
         p0 <- generateEOrError (addAssumption matchUnknown . addAssumption condUnknown $ env) t
         matchValuation <- Set.toList <$> currentValuation matchUnknown
+        let matchVars = Set.toList $ Set.unions (map varsOf matchValuation)
         condValuation <- currentValuation condUnknown
-        let badError = isError p0 && null matchValuation && (not $ Set.null condValuation) -- Have we abduced a nontrivial vacuousness condition that is not a match branch?
+        let badError = isError p0 && length matchVars /= 1 -- null matchValuation && (not $ Set.null condValuation) -- Have we abduced a nontrivial vacuousness condition that is not a match branch?
         writeLog 2 $ text "Match valuation" <+> pretty matchValuation <+> if badError then text ": discarding error" else empty
-        guard $ not badError -- Such vacuousness conditions are not productive (do not add to the environment assumptions and can be discovered over and over infinitely)
-        let allVars = Set.toList $ Set.unions (map varsOf matchValuation)
-        let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) allVars -- group by vars
+        guard $ not badError -- Such vacuousness conditions are not productive (do not add to the environment assumptions and can be discovered over and over infinitely)        
+        let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) matchVars -- group by vars
         d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer
         guard $ length matchConds <= d
         return (matchConds, conjunction condValuation, p0)
