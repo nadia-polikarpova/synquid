@@ -263,36 +263,39 @@ delete = \x . \xs .
 (#measures: 2)
 (#components: 0)
 
-elem :: <a> . (x:a -> (xs:UList (a) -> {Bool|_v == (x) in (uelems xs)}))
-elem = \x . \xs . match xs with
-  UNil -> false
-  UCons x3 x4 -> if x3 == x
-    then true
-    else elem x x4
-(Size: 18)
-(Spec size: 6)
-(#measures: 4)
-(#components: 2)
-
-strengthen :: <a> . (x:a -> (xs:{UList (a)|!(x) in (uelems _v)} -> {UList ({a|_v != x})|uelems _v == uelems xs && ulen _v == ulen xs}))
-strengthen = \x . \xs . match xs with
-  UNil -> UNil
-  UCons x3 x4 -> UCons x3 (strengthen x x4)
+List-Nub
+strengthen :: <a> . x:a -> xs:{UList a|!(x in uelems _v)} -> {UList {a|_v != x}|uelems _v == uelems xs && ulen _v == ulen xs}
+strengthen = \x . \xs .
+    match xs with
+      UNil -> UNil
+      UCons x3 x4 -> UCons x3
+                       (strengthen x x4)
 (Size: 15)
 (Spec size: 19)
 (#measures: 4)
-(#components: 3)
+(#components: 1)
 
-nub' :: <a> . (xs:List (a) -> (acc:UList (a) -> {UList (a)|uelems _v == (uelems acc) + (elems xs)}))
-nub' = \xs . \acc . match xs with
-  Nil -> acc
-  Cons x3 x4 -> if elem x3 acc
-    then nub' x4 acc
-    else nub' x4 (UCons x3 (strengthen x3 acc))
+nub' :: <a> . xs:List a -> acc:UList a -> {UList a|uelems _v == uelems acc + elems xs}
+nub' = \xs . \acc .
+    match xs with
+      Nil -> acc
+      Cons x3 x4 -> if elem x3 acc
+                      then nub' x4 acc
+                      else nub' x4 (UCons x3
+                                      (strengthen x3 acc))
 (Size: 30)
 (Spec size: 8)
 (#measures: 4)
-(#components: 4)
+(#components: 2)
+
+nub :: <a> . xs:List a -> {UList a|uelems _v == elems xs}
+nub = \xs . match xs with
+              Nil -> UNil
+              Cons x3 x4 -> nub' xs UNil
+(Size: 10)
+(Spec size: 5)
+(#measures: 4)
+(#components: 3)
 
 List-Compress
 compress :: <a> . xs:List a -> {CList a|celems _v == elems xs}
