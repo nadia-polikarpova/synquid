@@ -22,7 +22,7 @@ INCREMENTAL_OFF_OPT = ['--incremental=0']
 CONSISTENCY_OFF_OPT = ['--consistency=0']
 MEMOIZATION_ON_OPT = ['--use-memoization=1']
 TIMEOUT_COMMAND = 'timeout'
-TIMEOUT= '2'
+TIMEOUT= '120'
 FNULL = open(os.devnull, 'w')
 
 BENCHMARKS = [
@@ -91,8 +91,8 @@ BENCHMARKS = [
         [('RBT-Constructors', 'constructors', ['-m=0', '-a=2']),
         ('RBT-BalanceL', 'balance left', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
         ('RBT-BalanceR', 'balance right', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
-        ('RBT-Balance', 'balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'])]
-        #('RBT-Ins', ['-m=1', '-a=2', '-e'])
+        #('RBT-Balance', 'balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'])]
+        ('RBT-Insert', ['-m=1', '-a=2', '-e'])
     ],
     ["Heap", [],
         # Binary heap
