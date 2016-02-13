@@ -480,20 +480,24 @@ elem = \x . \t . match t with
 (#measures: 2)
 (#components: 3)
 
-flatten :: <a> . (t:Tree (a) -> {List (a)|len _v == size t})
-flatten = \t . match t with
-  Empty -> Nil
-  Node x4 x5 x6 -> Cons x4 (append (flatten x5) (flatten x6))
+Tree-ToList
+toList :: <a> . t:Tree a -> {List a|len _v == size t}
+toList = \t . match t with
+                Empty -> Nil
+                Node x4 x5 x6 -> Cons x4 (append
+                                            (toList x5) (toList x6))
 (Size: 18)
 (Spec size: 5)
 (#measures: 2)
 (#components: 1)
 
-hbal :: <a> . (h:{Int|_v >= 0} -> {Tree (a)|height _v == h})
-hbal = \h . if h == 0
-  then Empty
-  else Node (hbal (dec h)) (hbal (dec h))
-(Size: 22)
+Tree-BalancedReplicate
+replicate :: <a> . x:a -> h:{Int|_v >= 0} -> {BalTree a|height _v == h}
+replicate = \x . \h . if h <= 0
+                        then Empty
+                        else Node x (replicate x (dec
+                                                    h)) (replicate x (dec h))
+(Size: 29)
 (Spec size: 7)
 (#measures: 2)
 (#components: 2)
@@ -718,16 +722,20 @@ insert = \t . \x . match t with
 (#measures: 2)
 (#components: 0)
 
-member :: <a> . (x:a -> (t:Heap (a) -> {Bool|_v == (x) in (elems t)}))
-member = \x . \t . match t with
-  Empty -> false
-  Node x4 x5 x6 -> if x4 == x
-    then not false
-    else or (member x x5) (member x x6)
-(Size: 28)
+BinHeap-Doubleton
+doubleton :: <a> . x:a -> y:a -> {Heap a|elems _v == [x, y]}
+doubleton = \x . \y . if (x <=
+                            y) && (y <= x)
+                        then Node x Empty Empty
+                        else if y <= x
+                               then Node y Empty (Node x Empty
+                                                    Empty)
+                               else Node x Empty (Node y Empty
+                                                    Empty)
+(Size: 55)
 (Spec size: 6)
 (#measures: 2)
-(#components: 3)
+(#components: 0)
 
 BinHeap-Tripleton
 tripleton :: <a> . x:a -> y:a -> z:a -> {Heap a|elems _v == [x, y, z]}
