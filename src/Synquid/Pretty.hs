@@ -69,6 +69,8 @@ import Control.Lens
 infixr 5 $+$
 infixr 6 <+>
 
+tab = 1
+
 -- | Is document empty?
 isEmpty d = case renderCompact d of
   SEmpty -> True
@@ -294,7 +296,7 @@ instance Show RSchema where
 {- Programs -}  
 
 prettyCase :: (Pretty t) => Case t -> Doc
-prettyCase cas = hang 2 $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> operator "->" </> prettyProgram (expr cas)
+prettyCase cas = hang tab $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> operator "->" </> prettyProgram (expr cas)
 
 prettyProgram :: (Pretty t) => Program t -> Doc
 prettyProgram (Program p typ) = case p of
@@ -306,22 +308,22 @@ prettyProgram (Program p typ) = case p of
         Program (PSymbol _) _ -> prettyProgram p
         Program PHole _ -> prettyProgram p
         _ -> hlParens (prettyProgram p)
-      prefix = hang 2 $ prettyProgram f </> optParens x
+      prefix = hang tab $ prettyProgram f </> optParens x
       in case content f of
           PSymbol name -> if name `elem` Map.elems unOpTokens
-                            then hang 2 $ operator name <+> optParens x
+                            then hang tab $ operator name <+> optParens x
                             else prefix
           PApp g y -> case content g of
             PSymbol name -> if name `elem` Map.elems binOpTokens
-                              then hang 2 $ optParens y </> operator name </> optParens x -- Binary operator: use infix notation
+                              then hang tab $ optParens y </> operator name </> optParens x -- Binary operator: use infix notation
                               else prefix
             _ -> prefix
           _ -> prefix
     PFun x e -> nest 2 $ operator "\\" <> text x <+> operator "." </> prettyProgram e
-    PIf c t e -> hang 2 $ keyword "if" <+> prettyProgram c $+$ (keyword "then" </> prettyProgram t) $+$ (keyword "else" </> prettyProgram e)
-    PMatch l cases -> hang 2 $ keyword "match" <+> prettyProgram l <+> keyword "with" $+$ vsep (map prettyCase cases)
+    PIf c t e -> hang tab $ keyword "if" <+> prettyProgram c $+$ (keyword "then" </> prettyProgram t) $+$ (keyword "else" </> prettyProgram e)
+    PMatch l cases -> hang tab $ keyword "match" <+> prettyProgram l <+> keyword "with" $+$ vsep (map prettyCase cases)
     PFix fs e -> prettyProgram e
-    PLet x e e' -> align $ hang 2 (keyword "let" <+> text x <+> operator "=" </> prettyProgram e </> keyword "in") $+$ prettyProgram e'
+    PLet x e e' -> align $ hang tab (keyword "let" <+> text x <+> operator "=" </> prettyProgram e </> keyword "in") $+$ prettyProgram e'
     PHole -> if show (pretty typ) == dontCare then operator "??" else hlParens $ operator "?? ::" <+> pretty typ
 
 instance (Pretty t) => Pretty (Program t) where
@@ -388,10 +390,10 @@ instance Pretty Declaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
   pretty (QualifierDecl fmls) = keyword "qualifier" <+> hlBraces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> operator "::" <+> pretty t
-  pretty (DataDecl name typeVars predParams ctors) = hang 2 $ 
+  pretty (DataDecl name typeVars predParams ctors) = hang tab $ 
     keyword "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> keyword "where" 
     $+$ vsep (map pretty ctors)
-  pretty (MeasureDecl name inSort outSort post cases isTermination) = hang 2 $ 
+  pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $ 
     if isTermination then keyword "termination" else empty
     <+> keyword "measure" <+> text name <+> operator "::" <+> pretty inSort <+> operator "->"
     <+> if post == ftrue then pretty outSort else hlBraces (pretty outSort <+> operator "|" <+> pretty post) <+> keyword "where"

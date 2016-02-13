@@ -18,7 +18,7 @@ module Synquid.TypeConstraintSolver (
   addTypingConstraint,
   solveTypeConstraints,
   matchConsType,
-  isEnvironmentInconsistent,
+  hasPotentialScrutinees,
   freshId,
   currentAssignment,
   finalizeType,
@@ -360,6 +360,11 @@ allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symb
         then Just $ Var (toSort b) x
         else Nothing
     toFormula _ = Nothing
+    
+hasPotentialScrutinees :: Monad s => Environment -> TCSolver s Bool
+hasPotentialScrutinees env = do
+  tass <- use typeAssignment
+  return $ not $ null $ allPotentialScrutinees env tass
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> TCSolver s String
@@ -425,24 +430,6 @@ matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args p
       zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'
-
--- | If additional bindings of @env'@ compared to @env@ make it inconsistent under some condition, return that condition
-isEnvironmentInconsistent env env' unknown = do
-  -- cUnknown <- Unknown Map.empty <$> freshId "u"
-  -- modify (addTypingConstraint $ WellFormedCond env cUnknown)
-  -- solveTypeConstraints
-  
-  tass <- use typeAssignment
-  pass <- use predAssignment
-  qmap <- use qualifierMap
-  let fml = conjunction $ embedding env tass pass True
-  let fml' = conjunction $ embedding env' tass pass False
-  cands <- use candidates
-  cands' <- lift . lift . lift $ refine [(unknown |&| fml) |=>| fnot fml'] qmap (instantiateConsAxioms env) cands
-  
-  if null cands'
-    then return Nothing
-    else return $ Just $ (conjunction . flip valuation unknown . solution . head) cands'
     
 currentAssignment :: Monad s => RType -> TCSolver s RType
 currentAssignment t = do

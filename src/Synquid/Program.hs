@@ -351,6 +351,10 @@ eraseTypes = fmap (const AnyT)
 
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
+
+errorProgram = Program (PSymbol "error") (vart dontCare ftrue)
+isError (Program (PSymbol x) _) = x == "error"
+isError _ = False
     
 -- | Substitute a symbol for a subterm in a program    
 programSubstituteSymbol :: Id -> RProgram -> RProgram -> RProgram

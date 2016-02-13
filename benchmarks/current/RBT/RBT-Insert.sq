@@ -1,5 +1,6 @@
-qualifier {x == 0}
+qualifier {x <= y, x != y}
 
+red   :: {Int | _v == 0}
 black :: {Int | _v == 1}
 
 data RBT a where
@@ -59,28 +60,16 @@ measure isOk :: WeakRBT a -> Bool where
 measure wcolor :: WeakRBT a -> {Int | _v >= 0 && _v <= 1} where
   Ok x c left right -> c
   Bad x lc left right -> 0
-  
---==========================================================================================
--- Rotate when right subtree is broken (two cases):
---
---       B                R         |       B                R
---      / \             /   \       |      / \             /   \
---     l   R           B     B      |     l   R           B     B
---        / \ --->    / \   / \     |        / \ --->    / \   / \
---       R   rr     l rll rlr  rr   |      rl   R      l  rl rrl rrr
---      / \                         |          / \
---   rll  rlr                       |        rrl rrr
---
---==========================================================================================  
-rotateR :: x: a ->
-            l: RBT {a | _v < x} ->
-            rx: {a | x < _v} ->
-            rlc: {Int | _v == 0 || _v == 1} ->
-            rl: {RBT {a | x < _v && _v < rx} | color _v == rlc && blackHeight _v == blackHeight l} ->
-            rr: {RBT {a | rx < _v} | color _v != rlc && blackHeight _v == blackHeight l} ->             
-            {WeakRBT a | isOk _v && wcolor _v == 0 && welems _v == [x, rx] + elems l + elems rl + elems rr && wheight _v == blackHeight l + 1 && wsize _v == 2 + size l + size rl + size rr}
-rotateR = ??
-  
+
+balanceL :: y: a ->
+              c: {Int | 0 <= _v  && _v <= 1} ->
+              l: {WeakRBT {a | _v < y} | c == 0 ==> isOk _v} ->
+              r: {RBT {a | _v > y} | (c == 0 ==> color _v == 1) && blackHeight _v == wheight l} ->
+              {WeakRBT a | welems _v == [y] + welems l + elems r && 
+                            wheight _v == blackHeight r + c && 
+                            wsize _v == 1 + wsize l + size r &&
+                            (isOk _v || c == 0)}
+
 balanceR :: x: a ->
               c: {Int | 0 <= _v  && _v <= 1} ->
               l: {RBT {a | _v < x} | c == 0 ==> color _v == 1} ->
@@ -89,4 +78,15 @@ balanceR :: x: a ->
                             wheight _v == blackHeight l + c && 
                             wsize _v == 1 + size l + wsize r &&
                             (isOk _v || c == 0)}
-balanceR = ??
+  
+ins :: x: a -> t: RBT a -> {WeakRBT a | welems _v == [x] + elems t &&
+                                          wheight _v == blackHeight t &&
+                                          size t <= wsize _v && wsize _v <= size t + 1 &&
+                                          (isOk _v || color t == 0)}
+ins = ??
+
+mkBlack :: t: WeakRBT a -> {RBT a | elems _v == welems t}
+mkBlack = ??
+
+insert :: x: a -> t: RBT a -> {RBT a | elems _v == elems t + [x]}
+insert = ??
