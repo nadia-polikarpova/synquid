@@ -22,7 +22,7 @@ INCREMENTAL_OFF_OPT = ['--incremental=0']
 CONSISTENCY_OFF_OPT = ['--consistency=0']
 MEMOIZATION_ON_OPT = ['--use-memoization=1']
 TIMEOUT_COMMAND = 'timeout'
-TIMEOUT= '120'
+TIMEOUT= '2'
 FNULL = open(os.devnull, 'w')
 
 BENCHMARKS = [
@@ -103,8 +103,7 @@ BENCHMARKS = [
     ],
     ["User", [],
         # Evaluation
-        [('Evaluator', 'desugar AST', []),
-        ('Evaluator-Vars', 'desugar AST with variables', [])]
+        [('Evaluator', 'desugar AST', [])
     ]
 ]
 
@@ -185,6 +184,7 @@ def run_benchmark(name, opts, defOpts, path=''):
 
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
+      logfile.write(path + name + '\n')
       logfile.seek(0, os.SEEK_END)
       return_code = call([synquid_path] + COMMON_OPTS + opts + [path + name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.time()
