@@ -692,6 +692,45 @@ balanceR = \x . \l . \r . match r with
 (#measures: 5)
 (#components: 3)
 
+RBT-Insert
+ins :: <a> . x:a -> t:RBT a -> {WeakRBT a|(((welems _v == [x] + elems t && wheight _v == blackHeight t) && size t <= wsize _v) && wsize _v <= size t + 1) && (isOk _v || color t == 0)}
+ins = \x . \t . match t with
+                  Empty -> Ok x red Empty Empty
+                  Node x13 x14 x15 x16 -> if (x <=
+                                                x13) && (x13 <= x)
+                                            then Ok x13 x14 x15 x16
+                                            else if x13 <= x
+                                                   then balanceR x13 x14 x15
+                                                          (ins x x16)
+                                                   else balanceL x13 x14 (ins x
+                                                                            x15)
+                                                          x16
+(Size: 69)
+(Spec size: 36)
+(#measures: 9)
+(#components: 4)
+
+mkBlack :: <a> . t:WeakRBT a -> {RBT a|elems _v == welems t}
+mkBlack = \t . match t with
+                 Ok x5 x6 x7 x8 -> Node x5 x6 x7
+                                     x8
+                 Bad x21 x22 x23 x24 -> if 1 <=
+                                             x22
+                                          then Node x21 x22 x23 x24
+                                          else Node x21 black x23 x24
+(Size: 37)
+(Spec size: 5)
+(#measures: 9)
+(#components: 5)
+
+insert :: <a> . x:a -> t:RBT a -> {RBT a|elems _v == elems t + [x]}
+insert = \x . \t . mkBlack (ins
+                              x t)
+(Size: 10)
+(Spec size: 8)
+(#measures: 9)
+(#components: 6)
+
 BinHeap-Member
 member :: <a> . x:a -> t:Heap a -> {Bool|_v == (x in elems t)}
 member = \x . \t . match t with
