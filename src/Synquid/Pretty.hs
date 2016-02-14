@@ -69,7 +69,7 @@ import Control.Lens
 infixr 5 $+$
 infixr 6 <+>
 
-tab = 1
+tab = 2
 
 -- | Is document empty?
 isEmpty d = case renderCompact d of

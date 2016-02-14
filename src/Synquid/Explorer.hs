@@ -218,7 +218,7 @@ generateCase env scrVar pScrutinee t consName = do
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
       pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
                                        $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
-                                       $ generateI caseEnv t
+                                       $ generateError caseEnv `mplus` generateI caseEnv t
       return $ Case consName binders pCaseExpr
   
 -- -- | Generate a match term of type @t@
