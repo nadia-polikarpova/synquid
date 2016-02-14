@@ -9,13 +9,9 @@ from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
 # Parameters
-# SYNQUID_PATH_LINUX = '../../dist/build/synquid/synquid'
-# SYNQUID_PATH_WINDOWS = '../../src/Synquid.exe'
-# BENCH_PATH = '.'
-SYNQUID_CMD = synquid
+SYNQUID_CMD = 'synquid'
 LOGFILE_NAME = 'run_all.log'
 ORACLE_NAME = 'oracle'
-# ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
 COMMON_OPTS = ['--print-solution-size', '--print-spec-size']
 BFS_ON_OPT = ['--bfs']
@@ -27,7 +23,7 @@ TIMEOUT= '120'
 FNULL = open(os.devnull, 'w')
 
 class Benchmark:
-    def __init__(self, name, description, components=[], options=[]):
+    def __init__(self, name, description, components='', options=[]):
         self.name = name
         self.description = description
         self.components = components
@@ -187,7 +183,7 @@ def run_benchmark(name, opts, default_opts):
 
       print
 
-def postprocess(benchmarks):
+def postprocess():
     with open(OUTFILE_NAME, 'w') as outfile:
         for group in ALL_BENCHMARKS:
             outfile.write ('\multirow{')
@@ -197,16 +193,16 @@ def postprocess(benchmarks):
             outfile.write ('}}')
         
             for b in group.benchmarks:
-                result = results [name]
+                result = results [b.name]
                 outfile.write (' & ')
                 outfile.write (b.description)
                 outfile.write (' & ')
                 row = \
                     result.spec_size + \
-                    ' & ' + result.measure_count + 
+                    ' & ' + result.measure_count + \
                     ' & ' + result.component_count + \
                     ' & ' + b.components + \
-                    ' & ' + result.code_size + 
+                    ' & ' + result.code_size + \
                     ' & ' + '{0:0.2f}'.format(result.time) + \
                     ' & ' + '{0:0.2f}'.format(result.variant_times['def']) + \
                     ' & ' + '{0:0.2f}'.format(result.variant_times['nis']) + \
@@ -228,7 +224,7 @@ if __name__ == '__main__':
         for b in group.benchmarks:
             print b.str()
             run_benchmark(b.name, b.options, group.default_options)
-    postprocess(benchmarks)
+    postprocess()
 
     if os.path.isfile(oracle_name):
         fromlines = open(oracle_name).readlines()
