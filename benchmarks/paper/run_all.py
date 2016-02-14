@@ -9,260 +9,226 @@ from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
 # Parameters
-SYNQUID_PATH_LINUX = '../../dist/build/synquid/synquid'
-SYNQUID_PATH_WINDOWS = '../../src/Synquid.exe'
-BENCH_PATH = '.'
+# SYNQUID_PATH_LINUX = '../../dist/build/synquid/synquid'
+# SYNQUID_PATH_WINDOWS = '../../src/Synquid.exe'
+# BENCH_PATH = '.'
+SYNQUID_CMD = synquid
 LOGFILE_NAME = 'run_all.log'
-ORACLE_NAME_WINDOWS = 'oracle'
-ORACLE_NAME_LINUX = 'oracle_nx'
+ORACLE_NAME = 'oracle'
+# ORACLE_NAME_LINUX = 'oracle_nx'
 OUTFILE_NAME = 'run_all.csv'
-COMMON_OPTS = ['--print-solution-size=True', '--print-spec-size=True']
-BFS_ON_OPT = ['--bfs=1']
+COMMON_OPTS = ['--print-solution-size', '--print-spec-size']
+BFS_ON_OPT = ['--bfs']
 INCREMENTAL_OFF_OPT = ['--incremental=0']
 CONSISTENCY_OFF_OPT = ['--consistency=0']
-MEMOIZATION_ON_OPT = ['--use-memoization=1']
+MEMOIZATION_ON_OPT = ['--use-memoization']
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
 FNULL = open(os.devnull, 'w')
 
-BENCHMARKS = [
-    # Integers
-    ["Integer", [],
-        [('Int-Max2', 'maximum of 2 elements', []),
-        ('Int-Max3', 'maximum of 3 elements', []),
-        ('Int-Max4', 'maximum of 4 elements', []),
-        ('Int-Max5', 'maximum of 5 elements', []),
-        ('Int-Add', 'addition', [])]
-    ],
-    # Lists
-    ["List", [],
-        [('List-Null', 'is list empty', []),
-        ('List-Elem', 'contains an element', []),
-        ('List-Stutter', 'duplicate each element', []),
-        ('List-Replicate', 'list of element repetitions', []),
-        ('List-Append', 'append two lists', ['-m=1']),
-        ('List-Concat', 'concatenate list of lists', []),
-        ('List-Take', 'take first n elements', []),
-        ('List-Drop', 'drop first n elements', []),
-        ('List-Delete', 'delete given element', []),
-        ('List-Map', 'list map', []),
-        ('List-ZipWith', 'list zip with', []),
-        ('List-Zip', 'zip two lists', []),
-        ('List-ToNat', 'list of integers to nats', []),
-        ('List-Product', 'Cartesian product', [])]
-    ],
-    # Unique lists
-    ["Unique list",  ['-f=FirstArgument'],
-        [('UniqueList-Insert', 'insertion', []),
-        ('UniqueList-Delete', 'deletion', []),
-        ('List-Nub', 'deduplication', ['-f=FirstArgument', '-m=1']),
-        ('List-Compress', 'dedup subsequences', ['-h'])]
-    ],
-    ["Sorting",  ['-a=2', '-m=3', '-s=1'],
-        # Insertion Sort
-        [('IncList-Insert', 'insertion', []),
-        ('IncList-InsertSort', 'insertion sort', []),
-        ('StrictIncList-Insert', 'insertion (strict order)', []),
-        ('StrictIncList-Delete', 'deletion (strict order)', []),
-        # Merge sort
-        ('List-Split', 'balanced split', ['-s=1', '-m=3']),
-        ('IncList-Merge', 'sorted merge', ['-h']),
-        ('IncList-MergeSort', 'merge sort', ['-a=2', '-s=1', '-m=3']),
-        # Quick sort
-        ('List-Partition', 'partition', ['-s=1']),
-        ('IncList-PivotAppend', 'append pivot', []),
-        ('IncList-QuickSort', 'quick sort', ['-a=2', '-s=1'])]
-    ],
-    # Trees
-    ["Trees",  [],
-        [('Tree-Elem', 'membership',[]),
-        ('Tree-ToList', 'flatten to a list', []),
-        ('Tree-BalancedReplicate', 'create balanced tree', [])]
-    ],
-    ["BST", ['-m=1', '-e', '-a=2'],
-        [# Binary search tree
-        ('BST-Member', 'membership', []),
-        ('BST-Insert', 'insertion', []),
-        # works with: -m=2 -e (fast), -m=2 slower
-        ('BST-Delete', 'deletion', ['-m=1', '-e', '-a=2']),
-        ('BST-Sort', 'BST sort', [])]
-    ],
-    ["RBT", ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'],
-        [('RBT-Constructors', 'constructors', ['-m=0', '-a=2']),
-        ('RBT-BalanceL', 'balance left', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
-        ('RBT-BalanceR', 'balance right', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
-        #('RBT-Balance', 'balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'])]
-        ('RBT-Insert', 'insert element into tree', ['-m=1', '-a=2', '-e'])]
-    ],
-    ["Heap", [],
-        # Binary heap
-        [('BinHeap-Member', 'membership', []),
-        ('BinHeap-Insert', 'insertion', []),
-        ('BinHeap-Doubleton', 'constructor', []),
-        ('BinHeap-Tripleton', 'constructor, 3 args', [])]
-    ],
-    ["User", [],
-        # Evaluation
-        [('Evaluator', 'desugar AST', [])]
-    ]
-]
-
-ABS_BENCHMARKS = [
-    # Integers
-    ["Integer", [],
-      [('Int-Max', 'maximum of 2 elements (abs)', [])]
-    ],
-    # Lists
-    ["List", [],
-      [('List-Reverse', 'reverse a list', []),
-      ('List-Fold', 'length with fold', ['-e'])]
-    ],
-    # Insertion Sort
-    ["Sorting", [],
-      [('IncList-Insert', 'insertion sort (abs)', [])]
-    ]
-]
-
-COMPONENTS = {
-   "Int-Add": "integer",
-   "List-Null": "bool",
-   "List-Elem": "bool",
-   "List-Replicate": "integer",
-   "List-Take": "integer",
-   "List-Drop": "integer",
-   "List-Concat": "append",
-   "List-ToNat": "map, negate",
-   "List-Product": "map, append",
-   "List-Nub": "bool, elem",
-   "Tree-Elem": "bool",
-   "Tree-Flatten": "append",
-   "Tree-HBal": "integer",
-   "IncList-InsertSort": "insert",
-   "IncList-MergeSort": "split, merge",
-   "IncList-QuickSort": "partition, pivot append",
-   "BST-Member": "bool",
-   "BST-Sort": "toBST, flatten, insert, merge",
-   "BST-Delete": "merge",
-   "Evaluator": "integer",
-   "Evaluator-Vars": "integer",
-}
-
-class SynthesisResult:
-    def __init__(self, name, time, size, specSize, nMeasures, nComponents):
+class Benchmark:
+    def __init__(self, name, description, components=[], options=[]):
         self.name = name
-        self.time = time
-        self.size = size
-        self.specSize = specSize
-        self.nMeasures = nMeasures
-        self.nComponents = nComponents
-        self.otherTimes = [0.0, 0.0, 0.0, 0.0, 0.0]
+        self.description = description
+        self.components = components
+        self.options = options
 
     def str(self):
-        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.size + ', ' + self.specSize + ', ' + self.nMeasures + ', ' + self.nComponents
+        return self.name + ': ' + self.description + ' ' + str(self.options)
+        
+class BenchmarkGroup:
+    def __init__(self, name, default_options, benchmarks):
+        self.name = name
+        self.default_options = default_options
+        self.benchmarks = benchmarks
 
-def run_version(name, opts, path, logfile, versionInd, versionParameter):
+ALL_BENCHMARKS = [
+    BenchmarkGroup('Integer', [], [
+        Benchmark('Int-Max2', 'maximum of 2'),
+        Benchmark('Int-Max3', 'maximum of 3'),
+        Benchmark('Int-Max4', 'maximum of 4'),
+        Benchmark('Int-Max5', 'maximum of 5'),
+        Benchmark('Int-Add', 'add using increment', '0, inc, dec')
+        ]),
+    BenchmarkGroup("List", [], [
+        Benchmark('List-Null', 'is empty', 'true, false'),
+        Benchmark('List-Elem', 'is member', 'true, false'),
+        Benchmark('List-Stutter', 'duplicate each element'),
+        Benchmark('List-Replicate', '$n$ copies of value', '0, inc, dec'),
+        Benchmark('List-Append', 'append two lists', '', ['-m=1']),
+        Benchmark('List-Concat', 'concatenate list of lists', 'append'),
+        Benchmark('List-Take', 'take first $n$ elements', '0, inc, dec'),
+        Benchmark('List-Drop', 'drop first $n$ elements', '0, inc, dec'),
+        Benchmark('List-Delete', 'delete value'),
+        Benchmark('List-Map', 'map'),
+        Benchmark('List-Zip', 'zip'),
+        Benchmark('List-ZipWith', 'zip with function'),
+        Benchmark('List-ToNat', 'absolute values', 'neg, map'),
+        Benchmark('List-Product', 'cartesian product', 'append, map'),
+        Benchmark('List-Snoc', 'insert at end'),
+        Benchmark('List-Reverse', 'reverse', 'insert at end'),
+        Benchmark('List-Foldr', 'fold'),
+        Benchmark('List-Fold-Length', 'length using fold', '0, inc, dec', ['-m=0']),
+        Benchmark('List-Fold-Append', 'append using fold', '', ['-m=0'])
+        ]),
+    BenchmarkGroup("Unique list", ['-f=FirstArgument'], [
+        Benchmark('UniqueList-Insert', 'insert'),
+        Benchmark('UniqueList-Delete', 'delete'),
+        Benchmark('List-Nub', 'remove duplicates', 'is member', ['-f=FirstArgument', '-m=1']),
+        Benchmark('List-Compress', 'remove adjacent dupl.', ['-h'])
+        ]),
+    BenchmarkGroup("Sorting",  ['-a=2', '-m=3', '-s=1'], [
+        # Insertion Sort
+        Benchmark('IncList-Insert', 'insert (sorted)'),
+        Benchmark('IncList-InsertSort', 'insertion sort', 'insert (sorted)'),
+        Benchmark('StrictIncList-Insert', 'insert (strictly sorted)'),
+        Benchmark('StrictIncList-Delete', 'delete (strictly sorted)'),
+        # Merge sort
+        Benchmark('List-Split', 'balanced split', '', ['-s=1', '-m=3']),
+        Benchmark('IncList-Merge', 'merge', '', ['-h']),
+        Benchmark('IncList-MergeSort', 'merge sort', 'split, merge', ['-a=2', '-s=1', '-m=3']),
+        # Quick sort
+        Benchmark('List-Partition', 'partition', '', ['-s=1']),
+        Benchmark('IncList-PivotAppend', 'append with pivot'),
+        Benchmark('IncList-QuickSort', 'quick sort', 'partition, append w/pivot', ['-a=2', '-s=1'])
+        ]),
+    BenchmarkGroup("Trees",  [], [
+        Benchmark('Tree-Elem', 'is member', 'false, not, or'),
+        Benchmark('Tree-ToList', 'to a list', 'append'),
+        Benchmark('Tree-BalancedReplicate', 'create balanced', '0, inc, dec')
+        ]),
+    BenchmarkGroup("BST", [], [
+        Benchmark('BST-Member', 'is member', 'true, false'),
+        Benchmark('BST-Insert', 'insert'),
+        Benchmark('BST-Delete', 'delete', '', ['-m=1', '-e', '-a=2']),
+        Benchmark('BST-Sort', 'BST sort', 'insert, append w/pivot')
+        ]),
+    BenchmarkGroup("Bin Heap", [], [
+        Benchmark('BinHeap-Member', 'is member', 'false, not, or'),
+        Benchmark('BinHeap-Insert', 'insert'),
+        Benchmark('BinHeap-Doubleton', '2-element constructor'),
+        Benchmark('BinHeap-Tripleton', '3-element constructor')
+        ]),
+    BenchmarkGroup("RBT", ['-m=1', '-a=2', '-u'], [
+        Benchmark('RBT-BalanceL', 'balance left', '', ['-m=1', '-a=2', '-u']),
+        Benchmark('RBT-BalanceR', 'balance right', '', ['-m=1', '-a=2', '-u']),
+        Benchmark('RBT-Insert', 'insert', 'balance left, right', ['-m=1', '-a=2', '-u'])
+        ]),
+    BenchmarkGroup("User", [], [
+        Benchmark('Evaluator', 'desugar AST', '0, 1, 2'),
+        Benchmark('AddressBook-Make', 'make address book', 'is private', ['-a=2']),
+        Benchmark('AddressBook-Merge', 'merge address books', 'append', ['-a=2'])
+        ])
+]
+
+class SynthesisResult:
+    def __init__(self, name, time, code_size, spec_size, measure_count, component_count):
+        self.name = name
+        self.time = time
+        self.code_size = code_size
+        self.spec_size = spec_size
+        self.measure_count = measure_count
+        self.component_count = component_count
+        self.variant_times = {'def': 0.0, 'nis': 0.0, 'ncc': 0.0, 'nuc': 0.0, 'nm': 0.0}
+
+    def str(self):
+        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.code_size + ', ' + self.spec_size + ', ' + self.measure_count + ', ' + self.component_count
+
+def run_version(name, version_id, verion_opts, logfile):
   start = time.time()
   logfile.seek(0, os.SEEK_END)
   # execute but mute output
-  return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [synquid_path] + COMMON_OPTS +
-    versionParameter + [path + name + '.sq'], stdout=FNULL, stderr=STDOUT)
+  return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [SYNQUID_CMD] + COMMON_OPTS +
+    verion_opts + [name + '.sq'], stdout=FNULL, stderr=STDOUT)
   end = time.time()
 
   print '{0:0.2f}'.format(end - start),
   if return_code == 124:
       print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-      results[name].otherTimes[versionInd] = -1
+      results[name].variant_times[version_id] = -1
   elif return_code:
       print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      results[name].otherTimes[versionInd] = -2
+      results[name].variant_times[version_id] = -2
   else:
-      results[name].otherTimes[versionInd] = (end - start)
+      results[name].variant_times[version_id] = (end - start)
       print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
-def run_benchmark(name, opts, defOpts, path=''):
-    print name,
-
+def run_benchmark(name, opts, default_opts):
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
-      logfile.write(path + name + '\n')
+      logfile.write(name + '\n')
       logfile.seek(0, os.SEEK_END)
-      return_code = call([synquid_path] + COMMON_OPTS + opts + [path + name + '.sq'], stdout=logfile, stderr=logfile)
+      return_code = call([SYNQUID_CMD] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.time()
 
       print '{0:0.2f}'.format(end - start),
       if return_code:
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-          results [name] = SynthesisResult(name, (end - start), "-", "-", "-", "-")
+          results [name] = SynthesisResult(name, (end - start), '-', '-', '-', '-')
       else:
           lastLines = os.popen("tail -n 5 %s" % LOGFILE_NAME).read().split('\n')
           solutionSize = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
-          specSize = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
+          spec_size = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
           measures = re.match("\(#measures: (\d+)\).*$", lastLines[2]).group(1)
           components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
-          results [name] = SynthesisResult(name, (end - start), solutionSize, specSize, measures, components)
+          results [name] = SynthesisResult(name, (end - start), solutionSize, spec_size, measures, components)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
-      versions = [(defOpts, 4), (BFS_ON_OPT, 0), (INCREMENTAL_OFF_OPT, 1),
-        (CONSISTENCY_OFF_OPT, 2), (MEMOIZATION_ON_OPT, 3)]
-
-      for (opts, versionInd) in versions:
-        run_version(name, opts, path, logfile, versionInd, opts)
+      variant_options = [
+            ('def', default_opts), 
+            ('nis', INCREMENTAL_OFF_OPT), 
+            ('ncc', CONSISTENCY_OFF_OPT), 
+            ('nuc', BFS_ON_OPT), 
+            ('nm', MEMOIZATION_ON_OPT)
+        ]
+      
+      for (version_id, opts) in variant_options:
+        run_version(name, version_id, opts, logfile)
 
       print
 
 def postprocess(benchmarks):
     with open(OUTFILE_NAME, 'w') as outfile:
-        for arr in benchmarks:
-            category = arr[0]
-            benchArray = arr[2]
+        for group in ALL_BENCHMARKS:
             outfile.write ('\multirow{')
-            outfile.write (str(benchArray.__len__()))
+            outfile.write (str(group.benchmarks.__len__()))
             outfile.write ('}{*}[-2pt]{\\rotatebox{90}{')
-            outfile.write (category)
+            outfile.write (group.name)
             outfile.write ('}}')
-            for (name, tableName, args) in benchArray:
-                if name in results:
-                    res = results [name]
-                    outfile.write (' & ')
-                    outfile.write (tableName)
-                    outfile.write (' & ')
-                    row = \
-                    res.specSize + \
-                    ' & ' + res.nMeasures + '& ' + res.nComponents + \
-                    ' & ' + COMPONENTS.get(name, '') + \
-                    ' & ' + res.size + '& ' + '{0:0.2f}'.format(res.time) + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[3])  + '& ' + '{0:0.2f}'.format(res.otherTimes[2]) + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[0]) + '& ' + \
-                    ' & ' + '{0:0.2f}'.format(res.otherTimes[4]) + '& ' + \
-                    '{0:0.2f}'.format(res.otherTimes[1]) + ' \\\\'
-                    outfile.write (row)
+        
+            for b in group.benchmarks:
+                result = results [name]
+                outfile.write (' & ')
+                outfile.write (b.description)
+                outfile.write (' & ')
+                row = \
+                    result.spec_size + \
+                    ' & ' + result.measure_count + 
+                    ' & ' + result.component_count + \
+                    ' & ' + b.components + \
+                    ' & ' + result.code_size + 
+                    ' & ' + '{0:0.2f}'.format(result.time) + \
+                    ' & ' + '{0:0.2f}'.format(result.variant_times['def']) + \
+                    ' & ' + '{0:0.2f}'.format(result.variant_times['nis']) + \
+                    ' & ' + '{0:0.2f}'.format(result.variant_times['ncc']) + \
+                    ' & ' + '{0:0.2f}'.format(result.variant_times['nuc']) + \
+                    ' & ' + '{0:0.2f}'.format(result.variant_times['nm']) + ' \\\\'
+                outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')
 
 if __name__ == '__main__':
     init()
     results = {}
-
-    if platform.system() == 'Linux':
-        synquid_path = SYNQUID_PATH_LINUX
-        oracle_name = ORACLE_NAME_LINUX
-    else:
-        synquid_path = SYNQUID_PATH_WINDOWS
-        oracle_name = ORACLE_NAME_WINDOWS
-
+    
     if os.path.isfile(LOGFILE_NAME):
       os.remove(LOGFILE_NAME)
-
-    allBenchmarks = [('Normal benchmarks', BENCHMARKS, ''), ('Abstract refinements', ABS_BENCHMARKS, '../abstract/')]
-
-    for (benchmarkCategory, benchmarks, dirPrefix) in allBenchmarks:
-      print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + benchmarkCategory + Style.RESET_ALL
-      benchmarkArray = [ (item, array[1]) for array in benchmarks for item in array[2]]
-      #print([str(item) for item in benchmarkArray])
-      for ((name, _, args), defOpts) in benchmarkArray:
-          print(str(name) + str(args))
-          run_benchmark(name, args, defOpts, dirPrefix)
-      postprocess(benchmarks)
+      
+    for group in ALL_BENCHMARKS:
+        for b in group.benchmarks:
+            print b.str()
+            run_benchmark(b.name, b.options, group.default_options)
+    postprocess(benchmarks)
 
     if os.path.isfile(oracle_name):
         fromlines = open(oracle_name).readlines()
