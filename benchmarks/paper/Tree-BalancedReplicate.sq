@@ -14,6 +14,7 @@ measure height :: BalTree a -> {Int | _v >= 0} where
 
 zero :: { Int | _v == 0 }  
 dec :: a: Int -> { Int | _v == a - 1 }
+inc :: a: Int -> { Int | _v == a + 1 }
 
 replicate :: x: a -> h: { Int | _v >= 0 } -> {BalTree a | height _v == h }
 replicate = ??
