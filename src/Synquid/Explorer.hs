@@ -484,7 +484,7 @@ generateError env = do
   writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
   addConstraint $ Subtype env (int ftrue) (int ffalse) False
   typingState . errorContext .= errorText "when checking" </> pretty errorProgram </> errorText "in" $+$ pretty (ctx errorProgram)
-  solveIncrementally
+  runInSolver solveTypeConstraints
   typingState . errorContext .= empty
   return errorProgram
 
