@@ -8,35 +8,35 @@ import difflib
 from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
-# Parameters
-SYNQUID_CMD = 'synquid'
-LOGFILE_NAME = 'run_all.log'
-ORACLE_NAME = 'oracle'
-OUTFILE_NAME = 'run_all.csv'
-COMMON_OPTS = ['--print-solution-size', '--print-spec-size']
-BFS_ON_OPT = ['--bfs']
-INCREMENTAL_OFF_OPT = ['--incremental=0']
-CONSISTENCY_OFF_OPT = ['--consistency=0']
-MEMOIZATION_ON_OPT = ['--use-memoization']
-TIMEOUT_COMMAND = 'timeout'
-TIMEOUT= '120'
-FNULL = open(os.devnull, 'w')
+# Globals
+SYNQUID_CMD = 'synquid'                                         # Command to call Synquid
+LOGFILE_NAME = 'run_all.log'                                    # Log file
+OUTFILE_NAME = 'results.tex'                                    # Latex table with experiment results
+ORACLE_NAME = 'solutions'                                       # Solutions file
+COMMON_OPTS = ['--print-solution-size', '--print-spec-size']    # Options to use for all benchmarks
+BFS_ON_OPT = ['--bfs']                                          # Option to disable UNSAT-core based solver
+INCREMENTAL_OFF_OPT = ['--incremental=0']                       # Option to disable incremental solving
+CONSISTENCY_OFF_OPT = ['--consistency=0']                       # Option to disable consistency checks
+MEMOIZATION_ON_OPT = ['--use-memoization']                      # Option to disable memoization
+TIMEOUT_CMD = 'timeout'                                         # Timeout command
+TIMEOUT= '120'                                                  # Timeout value (seconds)
+FNULL = open(os.devnull, 'w')                                   # Null file
 
 class Benchmark:
     def __init__(self, name, description, components='', options=[]):
-        self.name = name
-        self.description = description
-        self.components = components
-        self.options = options
+        self.name = name                # Id
+        self.description = description  # Description (in the table)
+        self.components = components    # Description of components used (in the table)
+        self.options = options          # Command-line options to use for this benchmark when running in individual context
 
     def str(self):
         return self.name + ': ' + self.description + ' ' + str(self.options)
         
 class BenchmarkGroup:
     def __init__(self, name, default_options, benchmarks):
-        self.name = name
-        self.default_options = default_options
-        self.benchmarks = benchmarks
+        self.name = name                        # Id
+        self.default_options = default_options  # Command-line options to use for all benchmarks in this group when running in common context
+        self.benchmarks = benchmarks            # List of benchmarks in this group
 
 ALL_BENCHMARKS = [
     BenchmarkGroup('Integer', [], [
@@ -119,58 +119,48 @@ ALL_BENCHMARKS = [
 
 class SynthesisResult:
     def __init__(self, name, time, code_size, spec_size, measure_count, component_count):
-        self.name = name
-        self.time = time
-        self.code_size = code_size
-        self.spec_size = spec_size
-        self.measure_count = measure_count
-        self.component_count = component_count
-        self.variant_times = {'def': 0.0, 'nis': 0.0, 'ncc': 0.0, 'nuc': 0.0, 'nm': 0.0}
+        self.name = name                        # Benchmark name
+        self.time = time                        # Synthesis time (seconds)                 
+        self.code_size = code_size              # Synthesized code size (in AST nodes)
+        self.spec_size = spec_size              # Specification size (in AST nodes)
+        self.measure_count = measure_count      # Number of measures defined
+        self.component_count = component_count  # Number of components provided
+        self.variant_times = {                  # Synthesis times for Synquid variants:
+                                'def': 0.0,         # in common context  
+                                'nis': 0.0,         # with no incremental solving
+                                'ncc': 0.0,         # with no consistency checks
+                                'nuc': 0.0,         # with no UNSAT-core based solving
+                                'nm': 0.0           # with no memoization
+                             }
 
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.code_size + ', ' + self.spec_size + ', ' + self.measure_count + ', ' + self.component_count
 
-def run_version(name, version_id, verion_opts, logfile):
-  start = time.time()
-  logfile.seek(0, os.SEEK_END)
-  # execute but mute output
-  return_code = call([TIMEOUT_COMMAND] + [TIMEOUT] + [SYNQUID_CMD] + COMMON_OPTS +
-    verion_opts + [name + '.sq'], stdout=FNULL, stderr=STDOUT)
-  end = time.time()
-
-  print '{0:0.2f}'.format(end - start),
-  if return_code == 124:
-      print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
-      results[name].variant_times[version_id] = -1
-  elif return_code:
-      print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
-      results[name].variant_times[version_id] = -2
-  else:
-      results[name].variant_times[version_id] = (end - start)
-      print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-
 def run_benchmark(name, opts, default_opts):
+    '''Run benchmark name with command-line options opts (use default_opts with running the common context variant); record results in the results dictionary'''
+    
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
       logfile.write(name + '\n')
       logfile.seek(0, os.SEEK_END)
+      # Run Synquid on the benchmark:
       return_code = call([SYNQUID_CMD] + COMMON_OPTS + opts + [name + '.sq'], stdout=logfile, stderr=logfile)
       end = time.time()
 
       print '{0:0.2f}'.format(end - start),
-      if return_code:
+      if return_code: # Synthesis failed
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
           results [name] = SynthesisResult(name, (end - start), '-', '-', '-', '-')
-      else:
+      else: # Synthesis succeeded: code metrics from the output and record synthesis time
           lastLines = os.popen("tail -n 5 %s" % LOGFILE_NAME).read().split('\n')
-          solutionSize = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
+          solution_size = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
           spec_size = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
           measures = re.match("\(#measures: (\d+)\).*$", lastLines[2]).group(1)
           components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
-          results [name] = SynthesisResult(name, (end - start), solutionSize, spec_size, measures, components)
+          results [name] = SynthesisResult(name, (end - start), solution_size, spec_size, measures, components)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
-      variant_options = [
+      variant_options = [   # Command-line options to use for each variant of Synquid
             ('def', default_opts), 
             ('nis', INCREMENTAL_OFF_OPT), 
             ('ncc', CONSISTENCY_OFF_OPT), 
@@ -178,12 +168,37 @@ def run_benchmark(name, opts, default_opts):
             ('nm', MEMOIZATION_ON_OPT)
         ]
       
-      for (version_id, opts) in variant_options:
-        run_version(name, version_id, opts, logfile)
+      # Run each variant:
+      for (variant_id, opts) in variant_options:
+        run_version(name, variant_id, opts, logfile)
 
       print
+      
+def run_version(name, variant_id, variant_opts, logfile):
+    '''Run benchmark name using command-line options variant_opts and record it as a Synquid variant variant_id in the results dictionary'''
+    
+    start = time.time()
+    logfile.seek(0, os.SEEK_END)
+    # Run Synquid on the benchmark, mute output:
+    return_code = call([TIMEOUT_CMD] + [TIMEOUT] + [SYNQUID_CMD] + COMMON_OPTS + 
+        variant_opts + [name + '.sq'], stdout=FNULL, stderr=STDOUT)
+    end = time.time()
+
+    print '{0:0.2f}'.format(end - start),
+    if return_code == 124:  # Timeout: record timeout
+      print Back.RED + Fore.RED + Style.BRIGHT + 'TIMEOUT' + Style.RESET_ALL,
+      results[name].variant_times[variant_id] = -1
+    elif return_code: # Synthesis failed: record failure
+      print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
+      results[name].variant_times[variant_id] = -2
+    else: # Synthesis succeeded: record time for variant
+      results[name].variant_times[variant_id] = (end - start)
+      print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+      
 
 def postprocess():
+    '''Generate Latex table from the results dictionary'''
+    
     with open(OUTFILE_NAME, 'w') as outfile:
         for group in ALL_BENCHMARKS:
             outfile.write ('\multirow{')
@@ -217,17 +232,21 @@ if __name__ == '__main__':
     init()
     results = {}
     
+    # Delete old log file
     if os.path.isfile(LOGFILE_NAME):
       os.remove(LOGFILE_NAME)
       
+    # Run experiments
     for group in ALL_BENCHMARKS:
         for b in group.benchmarks:
             print b.str()
             run_benchmark(b.name, b.options, group.default_options)
+    # Generate Latex table
     postprocess()
 
-    if os.path.isfile(oracle_name):
-        fromlines = open(oracle_name).readlines()
+    # Compare with previous solutions and print the diff
+    if os.path.isfile(ORACLE_NAME):
+        fromlines = open(ORACLE_NAME).readlines()
         tolines = open(LOGFILE_NAME, 'U').readlines()
         diff = difflib.unified_diff(fromlines, tolines, n=0)
         print
