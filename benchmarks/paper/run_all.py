@@ -92,7 +92,7 @@ BENCHMARKS = [
         ('RBT-BalanceL', 'balance left', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
         ('RBT-BalanceR', 'balance right', ['-m=1', '-a=2', '-u', '-h', '-f=DisableFixpoint']),
         #('RBT-Balance', 'balance', ['-m=2', '-a=2', '-u', '-h', '-f=DisableFixpoint'])]
-        ('RBT-Insert', ['-m=1', '-a=2', '-e'])]
+        ('RBT-Insert', 'insert element into tree', ['-m=1', '-a=2', '-e'])]
     ],
     ["Heap", [],
         # Binary heap
@@ -260,7 +260,7 @@ if __name__ == '__main__':
       benchmarkArray = [ (item, array[1]) for array in benchmarks for item in array[2]]
       #print([str(item) for item in benchmarkArray])
       for ((name, _, args), defOpts) in benchmarkArray:
-          #print(str(name) + str(args))
+          print(str(name) + str(args))
           run_benchmark(name, args, defOpts, dirPrefix)
       postprocess(benchmarks)
 
