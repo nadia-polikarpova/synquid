@@ -9,7 +9,7 @@ from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
 # Globals
-SYNQUID_CMD = 'synquid'                                         # Command to call Synquid
+SYNQUID_CMD = '../../dist/build/synquid/synquid'                                         # Command to call Synquid
 LOGFILE_NAME = 'run_all.log'                                    # Log file
 OUTFILE_NAME = 'results.tex'                                    # Latex table with experiment results
 ORACLE_NAME = 'solutions'                                       # Solutions file
@@ -102,6 +102,7 @@ ALL_BENCHMARKS = [
     BenchmarkGroup("Bin Heap", [], [
         Benchmark('BinHeap-Member', 'is member', 'false, not, or'),
         Benchmark('BinHeap-Insert', 'insert'),
+        Benchmark('BinHeap-Singleton', '1-element constructor'),
         Benchmark('BinHeap-Doubleton', '2-element constructor'),
         Benchmark('BinHeap-Tripleton', '3-element constructor')
         ]),
@@ -162,10 +163,10 @@ def run_benchmark(name, opts, default_opts):
 
       variant_options = [   # Command-line options to use for each variant of Synquid
             ('def', default_opts),
-            ('nis', INCREMENTAL_OFF_OPT),
-            ('ncc', CONSISTENCY_OFF_OPT),
-            ('nuc', BFS_ON_OPT),
-            ('nm', MEMOIZATION_ON_OPT)
+            ('nis', opts + INCREMENTAL_OFF_OPT),
+            ('ncc', opts + CONSISTENCY_OFF_OPT),
+            ('nuc', opts + BFS_ON_OPT),
+            ('nm', opts + MEMOIZATION_ON_OPT)
         ]
 
       # Run each variant:
