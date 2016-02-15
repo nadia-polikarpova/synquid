@@ -404,7 +404,7 @@ checkE env typ p = do
       ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
       
   fTyp <- runInSolver $ finalizeType typ
-  typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)
+  typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
   solveIncrementally
   typingState . errorContext .= empty
   where
@@ -533,7 +533,7 @@ runInSolver f = do
       return res
       
 solveIncrementally :: MonadHorn s => Explorer s ()        
-solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
+solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver $ isFinal .= False >> solveTypeConstraints >> isFinal .= True) (return ())
 
 solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
 solveLocally c = do
