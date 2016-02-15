@@ -31,7 +31,7 @@ class Benchmark:
 
     def str(self):
         return self.name + ': ' + self.description + ' ' + str(self.options)
-        
+
 class BenchmarkGroup:
     def __init__(self, name, default_options, benchmarks):
         self.name = name                        # Id
@@ -71,7 +71,7 @@ ALL_BENCHMARKS = [
         Benchmark('UniqueList-Insert', 'insert'),
         Benchmark('UniqueList-Delete', 'delete'),
         Benchmark('List-Nub', 'remove duplicates', 'is member', ['-f=FirstArgument', '-m=1']),
-        Benchmark('List-Compress', 'remove adjacent dupl.', ['-h'])
+        Benchmark('List-Compress', 'remove adjacent dupl.', '', ['-h'])
         ]),
     BenchmarkGroup("Sorting",  ['-a=2', '-m=3', '-s=1'], [
         # Insertion Sort
@@ -120,13 +120,13 @@ ALL_BENCHMARKS = [
 class SynthesisResult:
     def __init__(self, name, time, code_size, spec_size, measure_count, component_count):
         self.name = name                        # Benchmark name
-        self.time = time                        # Synthesis time (seconds)                 
+        self.time = time                        # Synthesis time (seconds)
         self.code_size = code_size              # Synthesized code size (in AST nodes)
         self.spec_size = spec_size              # Specification size (in AST nodes)
         self.measure_count = measure_count      # Number of measures defined
         self.component_count = component_count  # Number of components provided
         self.variant_times = {                  # Synthesis times for Synquid variants:
-                                'def': 0.0,         # in common context  
+                                'def': 0.0,         # in common context
                                 'nis': 0.0,         # with no incremental solving
                                 'ncc': 0.0,         # with no consistency checks
                                 'nuc': 0.0,         # with no UNSAT-core based solving
@@ -138,7 +138,7 @@ class SynthesisResult:
 
 def run_benchmark(name, opts, default_opts):
     '''Run benchmark name with command-line options opts (use default_opts with running the common context variant); record results in the results dictionary'''
-    
+
     with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
       logfile.write(name + '\n')
@@ -161,26 +161,26 @@ def run_benchmark(name, opts, default_opts):
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
       variant_options = [   # Command-line options to use for each variant of Synquid
-            ('def', default_opts), 
-            ('nis', INCREMENTAL_OFF_OPT), 
-            ('ncc', CONSISTENCY_OFF_OPT), 
-            ('nuc', BFS_ON_OPT), 
+            ('def', default_opts),
+            ('nis', INCREMENTAL_OFF_OPT),
+            ('ncc', CONSISTENCY_OFF_OPT),
+            ('nuc', BFS_ON_OPT),
             ('nm', MEMOIZATION_ON_OPT)
         ]
-      
+
       # Run each variant:
       for (variant_id, opts) in variant_options:
         run_version(name, variant_id, opts, logfile)
 
       print
-      
+
 def run_version(name, variant_id, variant_opts, logfile):
     '''Run benchmark name using command-line options variant_opts and record it as a Synquid variant variant_id in the results dictionary'''
-    
+
     start = time.time()
     logfile.seek(0, os.SEEK_END)
     # Run Synquid on the benchmark, mute output:
-    return_code = call([TIMEOUT_CMD] + [TIMEOUT] + [SYNQUID_CMD] + COMMON_OPTS + 
+    return_code = call([TIMEOUT_CMD] + [TIMEOUT] + [SYNQUID_CMD] + COMMON_OPTS +
         variant_opts + [name + '.sq'], stdout=FNULL, stderr=STDOUT)
     end = time.time()
 
@@ -194,11 +194,11 @@ def run_version(name, variant_id, variant_opts, logfile):
     else: # Synthesis succeeded: record time for variant
       results[name].variant_times[variant_id] = (end - start)
       print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
-      
+
 
 def postprocess():
     '''Generate Latex table from the results dictionary'''
-    
+
     with open(OUTFILE_NAME, 'w') as outfile:
         for group in ALL_BENCHMARKS:
             outfile.write ('\multirow{')
@@ -206,7 +206,7 @@ def postprocess():
             outfile.write ('}{*}[-2pt]{\\rotatebox{90}{')
             outfile.write (group.name)
             outfile.write ('}}')
-        
+
             for b in group.benchmarks:
                 result = results [b.name]
                 outfile.write (' & ')
@@ -231,11 +231,11 @@ def postprocess():
 if __name__ == '__main__':
     init()
     results = {}
-    
+
     # Delete old log file
     if os.path.isfile(LOGFILE_NAME):
       os.remove(LOGFILE_NAME)
-      
+
     # Run experiments
     for group in ALL_BENCHMARKS:
         for b in group.benchmarks:
