@@ -31,8 +31,6 @@ reconstruct eParams tParams goal = do
     go = do
       pMain <- reconstructTopLevel goal
       pAuxs <- reconstructAuxGoals
-      writeLog 1 $ text "FINAL TYPE CHECK"
-      runInSolver $ isFinal .= True >> solveTypeConstraints -- Run the final pass of type checking, where ambiguous type variables are assigned a default type
       let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
       runInSolver $ finalizeProgram p      
 
