@@ -86,7 +86,7 @@ complies (DataS name sArgs) (DataS name' sArgs') = name == name' && and (zipWith
 complies s s' = s == s'
 
 arity :: TypeSkeleton r -> Int
-arity (FunctionT _ _ t) = arity t + 1
+arity (FunctionT _ _ t) = 1 + arity t
 arity _ = 0
 
 lastType (FunctionT _ _ tRes) = lastType tRes
@@ -161,7 +161,7 @@ sortSubstituteFml subst fml = case fml of
   
 sortSubstitute :: SortSubstitution -> Sort -> Sort
 sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
-  Just s' -> s'
+  Just s' -> sortSubstitute subst s'
   Nothing -> s
 sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
 sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
@@ -586,14 +586,20 @@ embedding env subst pSubst includePost = (Set.map substAssumption $ env ^. assum
   where
     substAssumption = substitutePredicate pSubst . sortSubstituteFml (asSortSubst subst)
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
-    embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
-      then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
-      else Set.empty
-    embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
+    -- embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
+      -- then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
+      -- else Set.empty
+    -- embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
+      -- then Set.empty -- Ignore constants
+      -- else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
+                          -- ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
+    embedBinding x (Monotype t) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
-      else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                          ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
-    embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants    
+      else case typeSubstitute subst t of
+            ScalarT baseT fml -> Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
+                                    ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
+            _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
+    embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants      
     
 {- Input language declarations -}
 
