@@ -23,7 +23,8 @@ module Synquid.TypeConstraintSolver (
   currentAssignment,
   finalizeType,
   finalizeProgram,
-  currentValuations
+  currentValuations,
+  initEnv
 ) where
 
 import Synquid.Logic
@@ -175,7 +176,7 @@ solveHornClauses = do
   clauses <- use hornClauses
   qmap <- use qualifierMap
   cands <- use candidates
-  env <- use initEnv
+  env <- use initEnv  
   cands' <- lift . lift . lift $ refine clauses qmap (instantiateConsAxioms env) cands
     
   when (null cands') $ do
@@ -250,10 +251,13 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
       simplifyConstraint (Subtype env tArg2 tArg1 False)
       simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2 False)
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
-  = do -- TODO: rename type vars
-      simplifyConstraint (Subtype env tArg2 tArg1 False) -- Function types are only consistent if their argument types are the same
-      simplifyConstraint (Subtype env tArg1 tArg2 False)
-      simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
+  = -- TODO: rename type vars
+      if arity tArg1 == 0 
+        then do
+          simplifyConstraint (Subtype env tArg2 tArg1 False) -- Function types are only consistent if their argument types are the same
+          simplifyConstraint (Subtype env tArg1 tArg2 False)
+          simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
+        else simplifyConstraint (Subtype env tRes1 tRes2 True)
 simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
   = do
       simplifyConstraint (WellFormed env tArg)
@@ -325,10 +329,12 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
       consistencyChecks %= (conjunction (Set.insert l' $ Set.insert r' $ embedding env tass pass False) :)
 processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
-      Unknown _ u -> do
+      Unknown _ u -> do      
+        qmap <- use qualifierMap
         tass <- use typeAssignment
         tq <- asks _typeQualsGen
-        addQuals u (tq (env, Var (toSort baseT) valueVarName : allScalars env tass))
+        -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
+        when (not $ Map.member u qmap) $ addQuals u (tq (env, Var (toSort baseT) valueVarName : allScalars env tass))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
@@ -355,6 +361,7 @@ allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
 allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
+    toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
     toFormula (x, Monotype t@(ScalarT b@(DatatypeT _ _ _) _)) =
       if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
         then Just $ Var (toSort b) x
@@ -424,9 +431,10 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
       in conjunctsOf (substitute subst fml)
     constructorAxioms args vars ctor (FunctionT x tArg tRes) = constructorAxioms args (vars ++ [x]) ctor tRes  
     
--- | 'matchConsType' @actual@ @formal@ : unify constructor return type @formal@ with @actual@
-matchConsType (ScalarT (DatatypeT d vars pVars) _) (ScalarT (DatatypeT d' args pArgs) _) | d == d' 
+-- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
+matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 
   = do
+      writeLog 2 $ text "Matching constructor type" $+$ pretty formal $+$ text "with scrutinee" $+$ pretty actual
       zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'

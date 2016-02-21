@@ -318,7 +318,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
     generateMatchesFor env [] pBaseCase t = return pBaseCase
     generateMatchesFor env (matchCond : rest) pBaseCase t = do
       let matchVar@(Var _ x) = Set.findMin $ varsOf matchCond
-      let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+      scrT@(ScalarT (DatatypeT scrDT _ _) _) <- runInSolver $ currentAssignment (toMonotype $ symbolsOfArity 0 env Map.! x)
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       pBaseCase' <- cut $ inContext (\p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t) $
@@ -327,7 +327,7 @@ generateMaybeMatchIf env t = ifte generateOneBranch generateOtherBranches (gener
 
     generateKnownMatch :: MonadHorn s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram
     generateKnownMatch env var@(Var s x) pBaseCase t = do
-      let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
+      scrT@(ScalarT (DatatypeT scrDT _ _) _) <- runInSolver $ currentAssignment (toMonotype $ symbolsOfArity 0 env Map.! x)
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       let env' = addScrutinee pScrutinee env
@@ -497,6 +497,7 @@ toVar (Program _ t) env = do
 
 enqueueGoal env typ impl = do
   g <- freshId "f"
+  -- env <- runInSolver $ use initEnv
   auxGoals %= ((Goal g env (Monotype typ) impl) :)
   return $ Program (PSymbol g) typ
 

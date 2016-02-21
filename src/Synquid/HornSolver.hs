@@ -134,11 +134,11 @@ greatestFixPoint quals extractAssumptions candidates = do
     updateCandidate fml (Candidate sol valids invalids label) diffs diff = do
       let sol' = merge sol diff
       let modifiedUnknowns = Map.keysSet $ Map.filter (not . Set.null) diff
-      let (unaffectedValids, affectedValids) = Set.partition (\fml -> posUnknowns fml `disjoint` modifiedUnknowns) valids
+      let (unaffectedValids, affectedValids) = Set.partition (\fml -> posUnknowns fml `disjoint` modifiedUnknowns) (Set.insert fml valids) -- fml should be re-evaluated if it happens to have the same unknowns also on the right
       let (unaffectedInvalids, affectedInvalids) = Set.partition (\fml -> negUnknowns fml `disjoint` modifiedUnknowns) (Set.delete fml invalids)
       (newValids, newInvalids) <- setPartitionM (isValidFml . hornApplySolution extractAssumptions sol') $ affectedValids `Set.union` affectedInvalids
       let newLabel = if length diffs == 1 then label else label ++ "." ++ show (fromJust $ elemIndex diff diffs)
-      return $ Candidate sol' (Set.insert fml $ unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) newLabel
+      return $ Candidate sol' (unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) newLabel
       
     nontrivCount = Map.size . Map.filter (not . Set.null) -- number of unknowns with a non-top valuation
     totalQCount = sum . map Set.size . Map.elems          -- total number of qualifiers in a solution

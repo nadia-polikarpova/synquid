@@ -187,7 +187,7 @@ fmlDocAt n fml = condHlParens (n' <= n) (
     BoolLit b -> pretty b
     IntLit i -> intLiteral i
     SetLit _ elems -> hlBrackets $ commaSep $ map fmlDoc elems
-    Var s name -> if name == valueVarName then special name else text name -- <> text ":" <> pretty  s
+    Var s name -> (if name == valueVarName then special name else text name) -- <> text ":" <> pretty  s
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
