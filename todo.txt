@@ -1,15 +1,14 @@
 - Get rid of -h
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
-  - Missing match qualifiers (AddressBook)?
   - Use unifySorts for qualifier substitution instead of complies
-  - Do we even need qualifiers from component types?
+  - Qualifier discovery should be local (otherwise doesn't work for abstract refinements?)
 - Inline functions
 - Named arguments for abstract predicates
 - Collapse lambda-expansions in aux goals
 - Parametrization by non-boolean predicates
 - Mutual recursion
 - Type classes (for type variables and abstract datatypes)
-- Default cond qualifiers
+- Default components
 - Solve the keys measure mystery in BST-delete
 - Remove subsumed components (0 + x -> x, x + y -> y + x)
 
