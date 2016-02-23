@@ -58,10 +58,10 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
 
     -- | Qualifier generator for types
     typeQuals :: QualsGen
-    typeQuals = toSpace . foldl (|++|)
-      (extractQGenFromType (toMonotype $ gSpec goal)) -- extract from spec
-      (map extractTypeQGen tquals ++ -- extract from given qualifiers
-      map extractQGenFromType (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components
+    typeQuals = toSpace . foldl1 (|++|)
+      ([extractQGenFromType False (toMonotype $ gSpec goal), extractQGenFromType True (toMonotype $ gSpec goal)] -- extract from spec: both positive and negative
+        ++ map extractTypeQGen tquals -- extract from given qualifiers
+        ++ map (extractQGenFromType False) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components: only negative
 
 {- Qualifier Generators -}
 
@@ -96,9 +96,11 @@ extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) =
       let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
       concatMap (\qual -> allSubstitutions env qual s [v] syms) arglessConjucts
 
--- | 'extractQGenFromType' @t@: qualifier generator that extracts all conjuncts from @t@ and treats their free variables as parameters
-extractQGenFromType :: RType -> (Environment, [Formula]) -> [Formula]
-extractQGenFromType (ScalarT baseT fml) (env, syms) =
+-- | 'extractQGenFromType' @positive t@: qualifier generator that extracts all conjuncts from refinements of @t@ and treats their free variables as parameters;
+-- extracts from positively or negatively occurring refinements depending on @positive@
+extractQGenFromType :: Bool -> RType -> (Environment, [Formula]) -> [Formula]
+extractQGenFromType False (ScalarT _ _) _ = []
+extractQGenFromType True (ScalarT baseT fml) (env, syms) =
   let
     -- fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
     -- fs = map (sortSubstituteFml subst) $ Set.toList $ conjunctsOf fml
@@ -109,10 +111,11 @@ extractQGenFromType (ScalarT baseT fml) (env, syms) =
       let
         ps = Set.toList $ Set.unions (map (conjunctsOf . replaceWithValueVar) pArgs)
         res = concatMap (flip extractTypeQGen (env, syms)) ps
-      in concatMap (flip extractQGenFromType (env, syms)) tArgs ++ res
+      in concatMap (flip (extractQGenFromType True) (env, syms)) tArgs ++ res
     extractFromBase _ = []
   in concatMap (flip extractTypeQGen (env, syms)) fs ++ extractFromBase baseT
-extractQGenFromType (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType tArg (env, syms) ++ extractQGenFromType tRes (env, syms)
+extractQGenFromType False (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType True tArg (env, syms) ++ extractQGenFromType False tRes (env, syms)
+extractQGenFromType True (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType True tRes (env, syms)
     
 -- | Extract conditional qualifiers from the types of Boolean functions    
 extractCondFromType :: RType -> (Environment, [Formula]) -> [Formula]

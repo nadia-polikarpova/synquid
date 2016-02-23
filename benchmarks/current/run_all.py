@@ -118,9 +118,9 @@ def run_benchmark(name, opts, path='.'):
           results [name] = SynthesisResult(name, (end - start))
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL          
 
-def postprocess():
+def postprocess(benchmarks):
     with open(OUTFILE_NAME, 'w') as outfile:
-        for (name, args) in BENCHMARKS:
+        for (name, args) in benchmarks:
             outfile.write (name + ',')
             if name in results:
                 res = results [name]
@@ -151,11 +151,11 @@ if __name__ == '__main__':
 
     for (name, args) in BENCHMARKS:
         run_benchmark(name, args)
-
-    # for (name, args) in AVL_BENCHMARKS:
-        # run_benchmark(name, args, 'AVL')
         
-    # for (name, args) in RBT_BENCHMARKS:
-        # run_benchmark(name, args, 'RBT')                
+    for (name, args) in RBT_BENCHMARKS:
+        run_benchmark(name, args, 'RBT')
 
-    postprocess()
+    for (name, args) in AVL_BENCHMARKS:
+        run_benchmark(name, args, 'AVL')
+        
+    postprocess(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
