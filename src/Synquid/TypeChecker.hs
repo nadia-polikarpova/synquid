@@ -153,7 +153,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
     cond <- conjunction <$> currentValuation cUnknown
-    pCond <- generateCondition env cond
+    pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
     return $ Program (PIf pCond pThen pElse) t
   
@@ -258,7 +258,7 @@ reconstructE' env typ (PSymbol name) = do
       else instantiate env sch True
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshId "x"
-  (env', pFun) <- inContext (\p -> Program (PApp p (Program PHole AnyT)) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
+  (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
 
   (envfinal, pApp) <- if isFunctionType tArg
@@ -300,7 +300,7 @@ wrapInConditional :: MonadHorn s => Environment -> Formula -> RProgram -> RType 
 wrapInConditional env cond p t = if cond == ftrue
   then return p
   else do
-    pCond <- generateCondition env cond        
+    pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond        
     let pElse = Program PHole t
     -- pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond p0 p) t) $ generateI (addAssumption (fnot cond) env) t
     return $ Program (PIf pCond p pElse) t

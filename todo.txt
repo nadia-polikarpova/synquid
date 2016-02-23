@@ -1,3 +1,4 @@
+- Get rid of -h
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
   - Missing match qualifiers (AddressBook)?
   - Use unifySorts for qualifier substitution instead of complies

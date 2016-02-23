@@ -46,7 +46,7 @@ BENCHMARKS = [
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
     ('List-Nub',            ['-f=FirstArgument', '-m=1', '-g']),
-    ('List-Compress',       ['-h']),
+    ('List-Compress',       []),
     # Insertion sort
     ('List-InsertSort',  []),
     # Merge sort
@@ -76,15 +76,15 @@ BENCHMARKS = [
 
 AVL_BENCHMARKS = [
     # AVL trees
-    ('AVL-BalL0',           ['-a 2', '-e']),
-    ('AVL-BalLL',           ['-a 2', '-e']),
-    ('AVL-BalLR',           ['-a 2', '-e']),
-    ('AVL-BalR0',           ['-a 2', '-e']),
-    ('AVL-BalRL',           ['-a 2', '-e']),
-    ('AVL-BalRR',           ['-a 2', '-e']),
+    ('AVL-BalL0',           ['-a 2']),
+    ('AVL-BalLL',           ['-a 2', '-n']),
+    ('AVL-BalLR',           ['-a 2', '-n']),
+    ('AVL-BalR0',           ['-a 2']),
+    ('AVL-BalRL',           ['-a 2', '-n']),
+    ('AVL-BalRR',           ['-a 2', '-n']),
     ('AVL-BalanceL',        ['-a 2', '-e']),
     ('AVL-BalanceR',        ['-a 2', '-e']),
-    ('AVL-Insert',          ['-a 2', '-e']),
+    ('AVL-Insert',          ['-a 2']),
 ]
 
 RBT_BENCHMARKS = [
