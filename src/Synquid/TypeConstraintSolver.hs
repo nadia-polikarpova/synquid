@@ -147,8 +147,8 @@ simplifyAllConstraints = do
   writeLog 2 (text "Typing Constraints" $+$ (vsep $ map pretty tcs))
   typingConstraints .= []
   tass <- use typeAssignment
-  mapM_ simplifyConstraint tcs  
-  
+  mapM_ simplifyConstraint tcs
+    
   -- If type assignment has changed, we might be able to process more shapeless constraints:
   tass' <- use typeAssignment
   when (Map.size tass' > Map.size tass) simplifyAllConstraints
@@ -225,7 +225,7 @@ simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVa
             (do -- This is a final pass: assign an arbitrary type to one of the variables
               addTypeAssignment a intAll
               simplifyConstraint c) 
-            (modify $ addTypingConstraint c)        
+            (modify $ addTypingConstraint c)
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) 
   = modify $ addTypingConstraint c
 simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstraint c
@@ -350,22 +350,27 @@ processConstraint c = error $ show $ text "processConstraint: not a simple const
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> TypeSubstitution -> [Formula]
-allScalars env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
     toFormula (_, ForallT _ _) = Nothing
-    toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
-    toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
-    toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
+    toFormula (x, Monotype t) = case typeSubstitute tass t of
+      ScalarT IntT (Binary Eq _ (IntLit n)) -> Just $ IntLit n
+      ScalarT b _ -> Just $ Var (toSort b) x
+    -- | a `Map.member` tass = toFormula (x, Monotype $ typeSubstitute tass t)
+    -- toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
+    -- toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
-allPotentialScrutinees env subst = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+allPotentialScrutinees env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
-    toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` subst = toFormula (x, Monotype $ typeSubstitute subst t)
-    toFormula (x, Monotype t@(ScalarT b@(DatatypeT _ _ _) _)) =
-      if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
-        then Just $ Var (toSort b) x
-        else Nothing
+    -- toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` tass = toFormula (x, Monotype $ typeSubstitute tass t)
+    toFormula (x, Monotype t) = case typeSubstitute tass t of
+      ScalarT b@(DatatypeT _ _ _) _ ->
+        if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
+          then Just $ Var (toSort b) x
+          else Nothing
+      _ -> Nothing 
     toFormula _ = Nothing
     
 hasPotentialScrutinees :: Monad s => Environment -> TCSolver s Bool
@@ -390,9 +395,10 @@ fresh env (ScalarT (DatatypeT name tArgs _) _) = do
   tArgs' <- mapM (fresh env) tArgs
   
   let (DatatypeDef tVars pVars _ _) = (env ^. datatypes) Map.! name
-  let sortSubst = asSortSubst $ Map.fromList $ zip tVars tArgs'
+  let substToUnique = Map.fromList $ zip tVars (map VarS deBrujns)
+  let substFromUnique = asSortSubst $ Map.fromList $ zip deBrujns tArgs'
   
-  pArgs' <- mapM (freshPred env . map (sortSubstitute sortSubst)) pVars  
+  pArgs' <- mapM (freshPred env . map (sortSubstitute substFromUnique) . map (sortSubstitute substToUnique)) pVars  
   return $ ScalarT (DatatypeT name tArgs' pArgs') (Unknown Map.empty k)
 fresh env (ScalarT baseT _) = do
   k <- freshId "u"

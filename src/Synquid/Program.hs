@@ -345,6 +345,7 @@ type UProgram = Program RType
 type RProgram = Program RType
 
 untyped c = Program c AnyT
+uHole = untyped PHole
 
 eraseTypes :: RProgram -> UProgram
 eraseTypes = fmap (const AnyT)

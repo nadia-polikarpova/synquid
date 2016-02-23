@@ -35,6 +35,7 @@ main = do
                    genPreds
                    hideScr 
                    explicitMatch
+                   unfoldLocals
                    partial
                    incremental
                    consistency 
@@ -53,6 +54,7 @@ main = do
     _predPolyRecursion = genPreds,
     _hideScrutinees = hideScr,
     _abduceScrutinees = not explicitMatch,
+    _unfoldLocals = unfoldLocals,
     _partialSolution = partial,
     _incrementalChecking = incremental,
     _consistencyChecking = consistency,
@@ -90,6 +92,7 @@ data CommandLineArgs
         generalize_preds :: Bool,
         hide_scrutinees :: Bool,
         explicit_match :: Bool,
+        unfold_locals :: Bool,
         partial :: Bool,
         incremental :: Bool,
         consistency :: Bool,
@@ -114,16 +117,17 @@ cla = CommandLineArgs {
   generalize_preds    = False           &= help ("Make recursion polymorphic in abstract refinements (default: False)"),
   hide_scrutinees     = False           &= help ("Hide scrutinized expressions from the environment (default: False)"),
   explicit_match      = False           &= help ("Do not abduce match scrutinees (default: False)"),
+  unfold_locals       = False           &= help ("Use all variables, as opposed to top-level function arguments only, in match scrutinee abduction (default: False)") &= name "n",
   partial             = False           &= help ("Generate best-effort partial solutions (default: False)"),
   incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_                = 0               &= help ("Logger verboseness level (default: 0)"),
-  use_memoization     = False           &= help ("Use memoization (default: False)"),
+  use_memoization     = False           &= help ("Use memoization (default: False)") &= name "u",
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
   print_spec_size     = False           &= help ("Show specification size (default: False)"),
-  print_solution_size = False       &= help ("Show solution size (default: False)")
+  print_solution_size = False           &= help ("Show solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
     where
       defaultFormat = outputFormat defaultSynquidParams
@@ -138,6 +142,7 @@ defaultExplorerParams = ExplorerParams {
   _predPolyRecursion = False,
   _hideScrutinees = False,
   _abduceScrutinees = True,
+  _unfoldLocals = False,
   _partialSolution = False,
   _incrementalChecking = True,
   _consistencyChecking = True,
