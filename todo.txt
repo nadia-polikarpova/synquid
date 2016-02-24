@@ -1,3 +1,4 @@
+- Do not add measures to constructor types, only instantiate them later throughextractAssumptions
 - Get rid of -h
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
   - Use unifySorts for qualifier substitution instead of complies

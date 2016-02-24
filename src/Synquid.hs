@@ -31,6 +31,7 @@ main = do
                    appMax 
                    scrutineeMax 
                    matchMax 
+                   auxMax
                    fix
                    genPreds
                    hideScr 
@@ -50,6 +51,7 @@ main = do
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
     _matchDepth = matchMax,
+    _auxDepth = auxMax,
     _fixStrategy = fix,
     _predPolyRecursion = genPreds,
     _hideScrutinees = hideScr,
@@ -88,6 +90,7 @@ data CommandLineArgs
         app_max :: Int,
         scrutinee_max :: Int,
         match_max :: Int,
+        aux_max :: Int,
         fix :: FixpointStrategy,
         generalize_preds :: Bool,
         hide_scrutinees :: Bool,
@@ -111,8 +114,9 @@ data CommandLineArgs
 cla = CommandLineArgs {
   file                = ""              &= typFile &= argPos 0,
   app_max             = 3               &= help ("Maximum depth of an application term (default: 3)"),
-  scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 0)"),
-  match_max           = 2               &= help ("Maximum number of a matches (default: 2)"),
+  scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 1)"),
+  match_max           = 2               &= help ("Maximum depth of matches (default: 2)"),
+  aux_max             = 1               &= help ("Maximum depth of auxiliary functions (default: 1)") &= name "x",
   fix                 = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
   generalize_preds    = False           &= help ("Make recursion polymorphic in abstract refinements (default: False)"),
   hide_scrutinees     = False           &= help ("Hide scrutinized expressions from the environment (default: False)"),
@@ -137,6 +141,7 @@ defaultExplorerParams = ExplorerParams {
   _eGuessDepth = 3,
   _scrutineeDepth = 1,
   _matchDepth = 2,
+  _auxDepth = 1,
   _fixStrategy = AllArguments,
   _polyRecursion = True,
   _predPolyRecursion = False,

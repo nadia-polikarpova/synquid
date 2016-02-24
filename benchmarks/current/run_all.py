@@ -48,7 +48,8 @@ BENCHMARKS = [
     ('List-Nub',            ['-f=FirstArgument', '-m=1', '-g']),
     ('List-Compress',       []),
     # Insertion sort
-    ('List-InsertSort',  []),
+    ('List-InsertSort',      []),
+    ('List-InsertSort-Fold', ['-m=1', '-a=2', '-e']),
     # Merge sort
     ('List-Split',          ['-m=3']),
     ('IncList-Merge',       []),
@@ -92,6 +93,13 @@ RBT_BENCHMARKS = [
     ('RBT-BalanceL',        ['-a 2', '-m 1', '-u']),
     ('RBT-BalanceR',        ['-a 2', '-m 1', '-u']),
     ('RBT-Insert',          ['-a 2', '-m 1', '-u']),
+]
+
+CHECKING_BENCHMARKS = [
+    ('List-Append',         []),
+    ('List-Replicate',      []),
+    ('List-ToNat',          []),
+    ('AVL',                 []),
 ]
 
 class SynthesisResult:
@@ -152,6 +160,9 @@ if __name__ == '__main__':
 
     if os.path.isfile(LOGFILE_NAME):
         os.remove(LOGFILE_NAME)
+        
+    # for (name, args) in CHECKING_BENCHMARKS:
+        # run_benchmark(name, args, '../checking')
 
     for (name, args) in BENCHMARKS:
         run_benchmark(name, args)

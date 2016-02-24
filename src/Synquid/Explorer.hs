@@ -40,6 +40,7 @@ data ExplorerParams = ExplorerParams {
   _eGuessDepth :: Int,                    -- ^ Maximum depth of application trees
   _scrutineeDepth :: Int,                 -- ^ Maximum depth of application trees inside match scrutinees
   _matchDepth :: Int,                     -- ^ Maximum nesting level of matches
+  _auxDepth :: Int,                       -- ^ Maximum nesting level of auxiliary functions (lambdas used as arguments)
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _predPolyRecursion :: Bool,             -- ^ Enable recursion polymorphic in abstract predicates?
@@ -469,7 +470,9 @@ enumerateAt env typ d = do
 
       (envfinal, pApp) <- if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-          arg <- enqueueGoal env' tArg (untyped PHole)
+          d <- asks $ _auxDepth . fst
+          guard $ d > 0 -- When d is 0, no more nested auxiliary functions are allowed, thus a higher-order argument cannot be generated
+          arg <- enqueueGoal env' tArg (untyped PHole) (d - 1)
           return (env', Program (PApp fun arg) tRes)
         else do -- First-order argument: generate now
           (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
@@ -498,10 +501,18 @@ toVar (Program _ t) env = do
   g <- freshId "g"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
-enqueueGoal env typ impl = do
+enqueueGoal _ typ (Program (PSymbol f) _) depth = do -- Known goal, must have been defined before with a let
+ goalsByName <- uses auxGoals (filter (\g -> gName g == f))
+ if null goalsByName
+  then throwError $ errorText "Not in scope: function" </> squotes (text f)
+  else do
+    let goal@(Goal _ env _ impl _) = head goalsByName
+    auxGoals %= ((Goal f env (Monotype typ) impl depth) :) . delete goal
+    return $ Program (PSymbol f) typ  
+enqueueGoal env typ impl depth = do
   g <- freshId "f"
-  -- env <- runInSolver $ use initEnv
-  auxGoals %= ((Goal g env (Monotype typ) impl) :)
+  -- env' <- (set boundTypeVars (env ^. boundTypeVars ) . set boundPredicates (env ^. boundPredicates )) <$> runInSolver (use initEnv)
+  auxGoals %= ((Goal g env (Monotype typ) impl depth) :)
   return $ Program (PSymbol g) typ
 
 {- Utility -}
