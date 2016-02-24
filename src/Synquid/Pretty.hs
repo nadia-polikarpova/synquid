@@ -367,13 +367,13 @@ instance Show Candidate where
   show = show . pretty
   
 instance Pretty Goal where
-  pretty (Goal name env spec impl) = pretty env <+> operator "|-" <+> text name <+> operator "::" <+> pretty spec $+$ text name <+> operator "=" <+> pretty impl
+  pretty (Goal name env spec impl depth) = pretty env <+> operator "|-" <+> text name <+> operator "::" <+> pretty spec $+$ text name <+> operator "=" <+> pretty impl $+$ parens (text "depth:" <+> pretty depth)
 
 instance Show Goal where
   show = show. pretty
   
-prettySpec (Goal name _ spec _) = text name <+> operator "::" <+> pretty spec
-prettySolution (Goal name _ _ _) prog = text name <+> operator "=" </> pretty prog
+prettySpec (Goal name _ spec _ _) = text name <+> operator "::" <+> pretty spec
+prettySolution (Goal name _ _ _ _) prog = text name <+> operator "=" </> pretty prog
 
 {- Input language -}
 

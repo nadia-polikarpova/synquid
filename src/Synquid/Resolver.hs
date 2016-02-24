@@ -61,7 +61,7 @@ resolveDecls declarations =
         myMutuals = Map.findWithDefault [] name allMutuals
         toRemove = drop (fromJust $ elemIndex name allNames) allNames \\ myMutuals -- All goals after and including @name@, except mutuals
         env' = foldr removeVariable env toRemove
-      in Goal name env' spec impl
+      in Goal name env' spec impl 0
       
 resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
 resolveRefinement env valueSort fml = runExcept (evalStateT (resolveFormula BoolS valueSort fml) (initResolverState {_environment = env}))

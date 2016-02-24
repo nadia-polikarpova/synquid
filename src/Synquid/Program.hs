@@ -252,7 +252,7 @@ renameVarFml old new (ScalarT baseT fml) = let subst = substitute (Map.singleton
         DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (renameVarFml old new) tArgs) (map subst pArgs)) (subst fml)
         _ -> ScalarT baseT (subst fml)
 renameVarFml old new (FunctionT x tArg tRes) = FunctionT x (renameVarFml old new tArg) (renameVarFml old new tRes)
-
+    
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
 intersection AnyT t = t
@@ -395,6 +395,16 @@ fmlToProgram fml@(Binary op e1 e2) = let
     opRes 
       | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
       | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
+      
+-- | 'renameAsImpl' @p t@: change argument names in function type @t@ to be the same as in the abstraction @p@
+renameAsImpl :: UProgram -> RType -> RType
+renameAsImpl p t = renameAsImpl' Map.empty p t
+  where
+    renameAsImpl' subst  _                        (ScalarT baseT fml)     = ScalarT baseT (substitute subst fml)      
+    renameAsImpl' subst (Program (PFun y pRes) _) (FunctionT x tArg tRes) = case tArg of
+      FunctionT _ _ _ -> FunctionT y tArg (renameAsImpl' subst pRes tRes)
+      ScalarT baseT fml -> FunctionT y (ScalarT baseT (substitute subst fml)) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)    
+    renameAsImpl' _     _                         t                       = t
 
 {- Evaluation environment -}
 
@@ -641,9 +651,10 @@ data Constraint = Subtype Environment RType RType Bool
   
 -- | Synthesis goal
 data Goal = Goal {
-  gName :: Id, 
-  gEnvironment :: Environment, 
-  gSpec :: RSchema,
-  gImpl :: UProgram
+  gName :: Id,                  -- ^ Function name
+  gEnvironment :: Environment,  -- ^ Enclosing environment
+  gSpec :: RSchema,             -- ^ Specification
+  gImpl :: UProgram,            -- ^ Implementation template
+  gDepth :: Int                 -- ^ Maximum level of auxiliary goal nesting allowed inside this goal
 } deriving (Eq, Ord)
   

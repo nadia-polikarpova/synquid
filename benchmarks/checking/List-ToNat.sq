@@ -11,6 +11,7 @@ termination measure len :: List a -> {Int | _v >= 0} where
 map :: (a -> b) -> xs: List a -> {List b | len _v == len xs}	
 	
 toNat :: xs: List Int -> {List Nat | len _v == len xs}
-toNat = \xs . map (\x . if x < 0 then -x else x) xs
+toNat = let f = \x . if x < 0 then -x else x in
+        \xs . map f xs
 
 	

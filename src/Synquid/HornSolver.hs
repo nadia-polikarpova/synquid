@@ -126,7 +126,7 @@ greatestFixPoint quals extractAssumptions candidates = do
     instantiateRhs sol fml = case fml of
       Binary Implies lhs rhs -> let
          rhs' = applySolution sol rhs
-         assumptions = extractAssumptions rhs'
+         assumptions = extractAssumptions lhs `Set.union` extractAssumptions rhs' -- TODO: also extract assumptions from unused qualifiers
         in Binary Implies (lhs `andClean` conjunction assumptions) rhs'
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
@@ -167,9 +167,10 @@ greatestFixPoint quals extractAssumptions candidates = do
         
 hornApplySolution extractAssumptions sol fml = case fml of
   Binary Implies lhs rhs -> let
+     lhs' = applySolution sol lhs
      rhs' = applySolution sol rhs
-     assumptions = extractAssumptions rhs'
-    in Binary Implies (applySolution sol lhs `andClean` conjunction assumptions) rhs'
+     assumptions = extractAssumptions lhs' `Set.union` extractAssumptions rhs'
+    in Binary Implies (lhs' `andClean` conjunction assumptions) rhs'
   _ -> error $ unwords ["hornApplySolution: encountered ill-formed constraint", show fml]        
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;

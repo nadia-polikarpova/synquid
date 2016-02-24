@@ -29,30 +29,46 @@ reconstruct eParams tParams goal = do
     runExplorer eParams tParams initTS go
   where
     go = do
-      pMain <- reconstructTopLevel goal
+      pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
       pAuxs <- reconstructAuxGoals
       let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
       runInSolver $ finalizeProgram p      
 
     reconstructAuxGoals = do
       goals <- use auxGoals
+      writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
       case goals of
         [] -> return []
-        (g : gs) -> do
-          auxGoals .= gs
-          let g' = g { gEnvironment = removeVariable (gName goal) (gEnvironment g) } -- remove recursive calls of the main goal
-          writeLog 1 $ text "AUXILIARY GOAL" <+> pretty g'
-          p <- reconstructTopLevel g'
-          rest <- reconstructAuxGoals
-          return $ (gName g, p) : rest    
+        (g : gs) -> if isUnusedGoal g
+            then if all isUnusedGoal gs -- g doesn't have a spec yet
+                  then return [] -- all remaining goals are unused, nothing more to reconstruct
+                  else do
+                    auxGoals .= gs ++ [g] -- leave the unused goal for later
+                    reconstructAuxGoals
+            else do -- g has a proper spec: reconstruct
+              auxGoals .= gs
+              spec' <- runInSolver $ finalizeType (toMonotype $ gSpec g)
+              let g' = g {
+                          gSpec = Monotype spec',
+                          gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
+                         }
+              writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
+              p <- reconstructTopLevel g'
+              rest <- reconstructAuxGoals
+              return $ (gName g, p) : rest
+    
+    isUnusedGoal g = case toMonotype $ gSpec g of
+                        AnyT -> True
+                        _ -> False
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
-reconstructTopLevel (Goal funName env (ForallT a sch) impl) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl)
-reconstructTopLevel (Goal funName env (ForallP pName pSorts sch) impl) = reconstructTopLevel (Goal funName (addBoundPredicate pName pSorts env) sch impl)
-reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = reconstructFix
+reconstructTopLevel (Goal funName env (ForallT a sch) impl depth) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth)
+reconstructTopLevel (Goal funName env (ForallP pName pSorts sch) impl depth) = reconstructTopLevel (Goal funName (addBoundPredicate pName pSorts env) sch impl depth)
+reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth) = local (set (_1 . auxDepth) depth) $ reconstructFix
   where
-    reconstructFix = do    
-      recCalls <- recursiveCalls t
+    reconstructFix = do
+      let typ' = renameAsImpl impl typ
+      recCalls <- recursiveCalls typ'
       polymorphic <- asks $ _polyRecursion . fst
       predPolymorphic <- asks $ _predPolyRecursion . fst
       let tvs = env ^. boundTypeVars
@@ -60,9 +76,9 @@ reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = rec
       let predGeneralized sch = if predPolymorphic then foldr (uncurry ForallP) sch (Map.toList pvs) else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function
       let typeGeneralized sch = if polymorphic then foldr ForallT sch tvs else sch -- Version of @t'@ generalized in bound type variables of the enclosing function
       
-      let env' = foldr (\(f, t') -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t') . (shapeConstraints %~ Map.insert f (shape t))) env recCalls
-      let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) t
-      p <- inContext ctx  $ reconstructI env' t impl
+      let env' = foldr (\(f, t) -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t) . (shapeConstraints %~ Map.insert f (shape typ'))) env recCalls
+      let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) typ'
+      p <- inContext ctx  $ reconstructI env' typ' impl
       return $ ctx p
 
     -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
@@ -116,7 +132,7 @@ reconstructTopLevel (Goal funName env (Monotype t@(FunctionT _ _ _)) impl) = rec
                               metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<=| metric (Var inSort argName))
     terminationRefinement _ _ = Nothing
 
-reconstructTopLevel (Goal _ env (Monotype t) impl) = reconstructI env t impl
+reconstructTopLevel (Goal _ env (Monotype t) impl depth) = local (set (_1 . auxDepth) depth) $ reconstructI env t impl
 
 -- | 'reconstructI' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is a (possibly) introduction term
 -- (top-down phase of bidirectional reconstruction)
@@ -137,16 +153,24 @@ reconstructI' env t@(FunctionT x tArg tRes) impl = case impl of
     let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped impl) (map (untyped . PSymbol) args)
     let fun = foldr (\x p -> untyped $ PFun x p) body args
     reconstructI' env t $ content fun
+  PLet x iDef@(Program (PFun _ _) _) iBody -> do
+    auxGoals %= ((Goal x env (Monotype AnyT) iDef 0) :)
+    reconstructI env t iBody    
   _ -> throwError $ errorText "Cannot assign function type" </> squotes (pretty t) </>
                     errorText "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of
   PFun _ _ -> throwError $ errorText "Cannot assign non-function type" </> squotes (pretty t) </>
                            errorText "to lambda term" </> squotes (pretty $ untyped impl)
                            
-  PLet x iDef iBody -> do
-    (env', pathCond, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructECond env AnyT iDef
-    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
-    wrapInConditional env pathCond (Program (PLet x pDef pBody) t) t
+  PLet x iDef iBody -> 
+    case content iDef of
+      PFun _ _ -> do -- lambda-let: create auxiliary goal with unknown type (to be filled on use)
+        auxGoals %= ((Goal x env (Monotype AnyT) iDef 0) :)
+        reconstructI env t iBody
+      _ -> do -- E-term let
+        (env', pathCond, pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructECond env AnyT iDef
+        pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
+        wrapInConditional env pathCond (Program (PLet x pDef pBody) t) t    
   
   PIf (Program PHole AnyT) iThen iElse -> do
     cUnknown <- Unknown Map.empty <$> freshId "u"
@@ -173,8 +197,8 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
     when (not isGoodScrutinee) $ throwError $ errorText "Match scrutinee" </> squotes (pretty pScrutinee) </> errorText "is constant"
-        
-    (env'', x) <- toVar pScrutinee env'
+            
+    (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
     pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
     wrapInConditional env pathCond (Program (PMatch pScrutinee pCases) t) t
       
@@ -212,7 +236,9 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   deadUnknown <- Unknown Map.empty <$> freshId "u"
   solveLocally $ WellFormedCond env deadUnknown  -- TODO: we are not even looking for a condition here!
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-  pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ reconstructI caseEnv t iBody
+  pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) $
+               inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
+               reconstructI caseEnv t iBody
   return $ Case consName args pCaseExpr  
   
 -- | 'reconstructECond' @env t impl@ :: conditionally reconstruct the judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
@@ -263,7 +289,8 @@ reconstructE' env typ (PApp iFun iArg) = do
 
   (envfinal, pApp) <- if isFunctionType tArg
     then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
-      pArg <- enqueueGoal env' tArg iArg
+      d <- asks $ _auxDepth . fst
+      pArg <- enqueueGoal env' tArg iArg (d - 1)
       return (env', Program (PApp pFun pArg) tRes)
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg

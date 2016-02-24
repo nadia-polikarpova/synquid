@@ -9,4 +9,4 @@ termination measure len :: List a -> {Int | _v >= 0} where
 append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}
 append = \xs . \ys . match xs with
                       Nil -> ys
-                      Cons z zs -> Cons z (append (?? :: {List a | len _v == len xs}) ys) -- Discovers inconsistent types
+                      Cons z zs -> Cons z (append (?? :: {List a | len _v > len xs}) ys) -- Discovers inconsistent types
