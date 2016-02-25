@@ -334,6 +334,12 @@ instance (Pretty t) => Show (Program t) where
 
 instance Pretty TypeSubstitution where
   pretty = hMapDoc text pretty
+  
+instance Pretty MeasureCase where
+  pretty (MeasureCase cons args def) = text cons <+> hsep (map text args) <+> text "->" <+> pretty def
+  
+instance Pretty MeasureDef where
+  pretty (MeasureDef inSort outSort defs post) = nest 2 (pretty inSort <+> text "->" <+> pretty outSort <+> braces (pretty post) $+$ vsep (map pretty defs))
 
 prettyBinding (name, typ) = text name <+> operator "::" <+> pretty typ
 
@@ -382,9 +388,6 @@ instance Pretty ConstructorSig where
 
 instance Pretty PredSig where
   pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
-  
-instance Pretty MeasureCase where
-  pretty (MeasureCase name args body) = text name <+> hsep (map text args) <+> text "->" <+> pretty body
 
 instance Pretty Declaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t

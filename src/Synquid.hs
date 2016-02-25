@@ -210,6 +210,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       when (showSpec synquidParams) $ pdoc (prettySpec goal)
       -- print empty
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
+      -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left err -> pdoc err >> exitFailure

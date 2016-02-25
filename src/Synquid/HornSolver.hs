@@ -108,7 +108,7 @@ greatestFixPoint quals extractAssumptions candidates = do
     fml <- asks constraintPickStrategy >>= pickConstraint cand
     let modifiedConstraint = instantiateRhs sol fml 
     debugOutput candidates cand fml modifiedConstraint
-    diffs <- strengthen quals modifiedConstraint sol                        
+    diffs <- strengthen quals extractAssumptions modifiedConstraint sol                        
     (newCandidates, rest') <- if length diffs == 1
       then do -- Propagate the diff to all equivalent candidates
         let unknowns = Set.map unknownName $ unknownsOf fml
@@ -126,8 +126,7 @@ greatestFixPoint quals extractAssumptions candidates = do
     instantiateRhs sol fml = case fml of
       Binary Implies lhs rhs -> let
          rhs' = applySolution sol rhs
-         assumptions = extractAssumptions lhs `Set.union` extractAssumptions rhs' -- TODO: also extract assumptions from unused qualifiers
-        in Binary Implies (lhs `andClean` conjunction assumptions) rhs'
+        in Binary Implies lhs rhs'
       _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
               
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
@@ -170,15 +169,17 @@ hornApplySolution extractAssumptions sol fml = case fml of
      lhs' = applySolution sol lhs
      rhs' = applySolution sol rhs
      assumptions = extractAssumptions lhs' `Set.union` extractAssumptions rhs'
+     -- traceShow (text "Instantiated axioms for" <+> pretty (lhs' |=>| rhs') $+$ commaSep (map pretty $ Set.toList assumptions)) $ 
     in Binary Implies (lhs' `andClean` conjunction assumptions) rhs'
   _ -> error $ unwords ["hornApplySolution: encountered ill-formed constraint", show fml]        
     
 -- | 'strengthen' @quals fml sol@: all minimal strengthenings of @sol@ using qualifiers from @quals@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
-strengthen :: MonadSMT s => QMap -> Formula -> Solution -> FixPointSolver s [Solution]
-strengthen quals fml@(Binary Implies lhs rhs) sol = do
+strengthen :: MonadSMT s => QMap -> ExtractAssumptions -> Formula -> Solution -> FixPointSolver s [Solution]
+strengthen quals extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize quals sol unknowns
-    lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) usedLhsQuals rhs -- all minimal valid valuations of the whole antecedent
+    writeLog 2 (text "Instantiated axioms for" <+> pretty fml $+$ commaSep (map pretty $ Set.toList assumptions))
+    lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) (usedLhsQuals `Set.union` assumptions) rhs -- all minimal valid valuations of the whole antecedent
     writeLog 2 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting
@@ -200,6 +201,9 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
     lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst quals) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (valuation sol) unknowns `Set.union` knownConjuncts      -- already used qualifiers for the whole antecedent
     rhsVars = Set.map varName $ varsOf rhs
+    assumptions = setConcatMap extractAssumptions lhsQuals `Set.union`
+                  setConcatMap extractAssumptions knownConjuncts `Set.union`
+                  extractAssumptions rhs
         
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
@@ -219,7 +223,7 @@ strengthen quals fml@(Binary Implies lhs rhs) sol = do
       
     unsubst u@(Unknown s name) quals = (name, Set.map (substitute (inverse s)) quals)
           
-strengthen _ fml _ = error $ unwords ["strengthen: encountered ill-formed constraint", show fml]
+strengthen _ _ fml _ = error $ unwords ["strengthen: encountered ill-formed constraint", show fml]
 
 -- | 'maxValSize' @quals sol unknowns@: Upper bound on the size of valuations of a conjunction of @unknowns@ when strengthening @sol@ 
 maxValSize :: QMap -> Solution -> Set Formula -> Int 

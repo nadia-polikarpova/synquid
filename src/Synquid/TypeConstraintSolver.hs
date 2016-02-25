@@ -177,7 +177,7 @@ solveHornClauses = do
   qmap <- use qualifierMap
   cands <- use candidates
   env <- use initEnv  
-  cands' <- lift . lift . lift $ refine clauses qmap (instantiateConsAxioms env) cands
+  cands' <- lift . lift . lift $ refine clauses qmap (instantiateAxioms env) cands
     
   when (null cands') $ do
     ec <- use errorContext
@@ -420,11 +420,17 @@ addQuals name quals = do
   quals' <- lift . lift . lift $ pruneQualifiers quals
   qualifierMap %= Map.insert name quals'  
   
+instantiateAxioms :: Environment -> Formula -> Set Formula  
+instantiateAxioms env fml = 
+  let consAxioms = instantiateConsAxioms env fml in
+  -- let measurePosts = instantiateMeasurePost env fml `Set.union` instantiateMeasurePost env (conjunction consAxioms) in
+  consAxioms -- `Set.union` measurePosts
+  
 -- | 'instantiateConsAxioms' @env fml@ : If @fml@ contains constructor applications, return the set of instantiations of constructor axioms for those applications in the environment @env@ 
-instantiateConsAxioms :: Environment -> Formula -> Set Formula      
+instantiateConsAxioms :: Environment -> Formula -> Set Formula  
 instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
   case fml of
-    Cons (DataS dtName _) ctor args -> constructorAxioms args [] ctor (toMonotype $ allSymbols env Map.! ctor)
+    Cons resS@(DataS dtName _) ctor args -> Set.fromList $ map (measureAxiom resS ctor args) (Map.elems $ allMeasuresOf dtName env)
     Unary op e -> inst e
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
@@ -433,9 +439,45 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
     -- All x e -> ?
     _ -> Set.empty  
   where
-    constructorAxioms args vars ctor (ScalarT baseT fml) = let subst = Map.fromList $ (valueVarName, (Cons (toSort baseT) ctor args)) : zip vars args
-      in conjunctsOf (substitute subst fml)
-    constructorAxioms args vars ctor (FunctionT x tArg tRes) = constructorAxioms args (vars ++ [x]) ctor tRes  
+    measureAxiom resS ctor args (MeasureDef _ _ defs _) = 
+      let MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs in
+      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in
+      substitute subst body    
+    -- constructorAxioms args vars ctor (ScalarT baseT fml) = let subst = Map.fromList $ (valueVarName, (Cons (toSort baseT) ctor args)) : zip vars args
+      -- in conjunctsOf (substitute subst fml)
+    -- constructorAxioms args vars ctor (FunctionT x tArg tRes) = constructorAxioms args (vars ++ [x]) ctor tRes
+    
+-- instantiateMeasurePost :: Environment -> Formula -> Set Formula      
+-- instantiateMeasurePost env fml = let inst = instantiateMeasurePost env in
+  -- case fml of
+    -- Pred resS p args -> Set.unions (map inst args) `Set.union`
+      -- case Map.lookup p (env ^. measures) of
+        -- Nothing -> Set.empty
+        -- Just (MeasureDef inSort outSort _ post) -> extractPost resS p args post -- `Set.union` elemProperties resS p args inSort outSort
+    -- Unary op e -> inst e
+    -- Binary op e1 e2 -> inst e1 `Set.union` inst e2
+    -- Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
+    -- -- SetLit s elems -> ?    
+    -- -- All x e -> ?
+    -- _ -> Set.empty
+  -- where
+    -- extractPost resS mName args post = 
+      -- if post == ftrue
+        -- then Set.empty
+        -- else Set.singleton $ substitute (Map.singleton valueVarName (Pred resS mName args)) post
+        
+    -- elemProperties resS mName args@(arg:[]) (DataS _ tVars) (SetS a) = case elemIndex a tVars of
+      -- Nothing -> Set.empty
+      -- Just i -> let DataS _ tArgs = sortOf (arg) in
+                -- let ScalarT elemT fml = tArgs !! i in -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
+                -- if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
+                    -- then Set.empty
+                    -- else  let
+                            -- elemSort = toSort elemT
+                            -- scopedVar = Var elemSort "_x"
+                          -- in Set.singleton $ All scopedVar (fin scopedVar (Pred resS mName args) |=>| substitute (Map.singleton valueVarName scopedVar) fml)
+    -- elemProperties _ _ _ _ _ = Set.empty
+  
     
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 

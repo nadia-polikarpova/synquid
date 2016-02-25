@@ -27,6 +27,8 @@ import Control.Monad.State
 import Control.Lens
 import Control.Applicative ((<$>))
 
+import Debug.Trace
+
 type HornSolver = FixPointSolver Z3State
 
 -- | 'synthesize' @templGenParam consGenParams solverParams env typ templ cq tq@ : synthesize a program that has a type @typ@
@@ -89,12 +91,28 @@ extractCondQGen qual (env, syms) = allSubstitutions env qual AnyS (Set.toList $ 
 extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
 extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = 
   let baseCaseCtor = head ctors in
-  case lastType $ toMonotype $ allSymbols env Map.! baseCaseCtor of
+  case toMonotype $ allSymbols env Map.! baseCaseCtor of
     ScalarT baseT fml -> 
       let s = toSort baseT in
       let v = Var s valueVarName in
-      let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
-      concatMap (\qual -> allSubstitutions env qual s [v] syms) arglessConjucts
+      -- let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
+      -- let res = allSubstitutions env fml s [v] syms in
+      -- traceShow (text "extractMatchQGen from" <+> pretty fml <+> text "for var" <+> pretty v <+> text "and symbols" <+> commaSep (map pretty syms) <+> text "YIELDS" <+> pretty res) $ res
+      allSubstitutions env fml s [v] syms
+    _ -> []
+  
+  
+  -- concatMap (extractFrom baseCaseCtor) (Map.elems $ allMeasuresOf dtName env)
+  -- where
+    -- extractFrom ctor (MeasureDef inSort outSort defs _) = 
+      -- let MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs in
+      -- allSubstitutions env body inSort [Var inSort valueVarName] syms
+  -- case lastType $ toMonotype $ allSymbols env Map.! baseCaseCtor of
+    -- ScalarT baseT fml -> 
+      -- let s = toSort baseT in
+      -- let v = Var s valueVarName in
+      -- let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
+      -- concatMap (\qual -> allSubstitutions env qual s [v] syms) arglessConjucts
 
 -- | 'extractQGenFromType' @positive t@: qualifier generator that extracts all conjuncts from refinements of @t@ and treats their free variables as parameters;
 -- extracts from positively or negatively occurring refinements depending on @positive@
@@ -124,7 +142,7 @@ extractCondFromType t@(FunctionT _ _ _) (env, syms) = case lastType t of
   _ -> []
 extractCondFromType _ _ = []  
 
--- | 'allSubstitutions' @qual valueSort vars syms@: all well-types substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
+-- | 'allSubstitutions' @qual valueSort vars syms@: all well-typed substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
 allSubstitutions :: Environment -> Formula -> Sort -> [Formula] -> [Formula] -> [Formula]
 allSubstitutions env qual valueSort vars syms = do
   let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (sortOf v) (sortOf var)]
