@@ -239,6 +239,10 @@ addRefinement t _ = error $ "addRefinement: applied to function type"
 -- | Conjoin refinement to the return type
 addRefinementToLast t@(ScalarT _ _) fml = addRefinement t fml
 addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinementToLast tRes fml)
+
+addRefinementToLastSch (Monotype t) fml = Monotype $ addRefinementToLast t fml
+addRefinementToLastSch (ForallT a sch) fml = ForallT a $ addRefinementToLastSch sch fml
+addRefinementToLastSch (ForallP p sorts sch) fml = ForallP p sorts $ addRefinementToLastSch sch fml
       
 -- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: Id -> Id -> RType -> RType -> RType
@@ -282,10 +286,15 @@ data DatatypeDef = DatatypeDef {
 
 makeLenses ''DatatypeDef
 
+-- | One case in a measure definition: constructor name, arguments, and body  
+data MeasureCase = MeasureCase Id [Id] Formula
+  deriving (Eq, Ord)
+
 -- | User-defined measure function representation
 data MeasureDef = MeasureDef {
   _inSort :: Sort,
   _outSort :: Sort,
+  _definitions :: [MeasureCase],
   _postcondition :: Formula
 } deriving (Eq, Ord)
 
@@ -561,19 +570,19 @@ addScrutinee p = usedScrutinees %~ (p :)
 allPredicates env = (env ^. boundPredicates) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
-allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _) -> dtName == sName) $ env ^. measures
+allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env = 
     let allMeasures = Map.toList $ allMeasuresOf dtName env 
     in catMaybes $ map extractPost allMeasures ++ map elemProperties allMeasures
   where
-    extractPost (mName, MeasureDef _ outSort fml) = 
+    extractPost (mName, MeasureDef _ outSort _ fml) = 
       if fml == ftrue
         then Nothing
         else Just $ substitute (Map.singleton valueVarName (Pred outSort mName [Var (toSort baseT) valueVarName])) fml
         
-    elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _) = case elemIndex a vars of
+    elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
                 in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
@@ -583,7 +592,7 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
                             scopedVar = Var elemSort "_x"
                             setVal = Pred (SetS elemSort) mName [Var (toSort baseT) valueVarName]
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
-    elemProperties (mName, MeasureDef _ _ _) = Nothing
+    elemProperties (mName, MeasureDef _ _ _ _) = Nothing
     
 allMeasurePostconditions _ _ = []
 
@@ -615,17 +624,13 @@ embedding env subst pSubst includePost = (Set.map substAssumption $ env ^. assum
 {- Input language declarations -}
 
 -- | Constructor signature: name and type
-data ConstructorSig = ConstructorSig Id RSchema
+data ConstructorSig = ConstructorSig Id RType
   deriving (Eq)
   
 -- | Predicate signature: name and argument sorts  
 data PredSig = PredSig Id [Sort] Sort
   deriving (Eq)
-  
--- | One case in a measure definition: constructor name, arguments, and body  
-data MeasureCase = MeasureCase Id [Id] Formula
-  deriving (Eq)  
-  
+
 data Declaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature

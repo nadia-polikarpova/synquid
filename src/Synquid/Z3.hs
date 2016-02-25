@@ -25,7 +25,7 @@ import Control.Monad.Trans.State
 import Control.Applicative
 import Control.Lens hiding (both)
 
-import System.IO.Unsafe
+import Debug.Trace
 
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
@@ -155,7 +155,7 @@ toAST expr = case expr of
     mkIte e0' e1' e2'
   Pred s name args -> do
     let tArgs = map sortOf args
-    decl <- function s name tArgs
+    decl <- function s name tArgs    
     mapM toAST args >>= mkApp decl    
   Cons s name args -> do
     let tArgs = map sortOf args
@@ -220,8 +220,8 @@ toAST expr = case expr of
           vars %= Map.insert ident v
           return v
 
-    -- | Lookup or create a function declaration with name `ident', type `baseT', and argument type `argType'
-    function s name argTypes = do
+    -- | Lookup or create a function declaration with name `name', return type `resT', and argument types `argTypes'
+    function resT name argTypes = do
       -- let name' = name -- ++ show argType
       declMb <- uses functions (Map.lookup name)
       case declMb of
@@ -229,9 +229,10 @@ toAST expr = case expr of
         Nothing -> do
           symb <- mkStringSymbol name
           argSorts <- mapM toZ3Sort argTypes
-          resSort <- toZ3Sort s
+          resSort <- toZ3Sort resT
           decl <- mkFuncDecl symb argSorts resSort
           functions %= Map.insert name decl
+          -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
           return decl
 
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
@@ -244,6 +245,7 @@ getAllMUSs assumption mustHave fmls = do
   let allFmls = mustHave : fmls
   (controlLits, controlLitsAux) <- unzip <$> mapM getControlLits allFmls
 
+  -- traceShow (text "getAllMUSs" <+> pretty assumption <+> pretty mustHave <+> pretty fmls) $ return ()
   toAST assumption >>= assert
   condAssumptions <- mapM toAST allFmls >>= zipWithM mkImplies controlLits
   mapM_ assert $ condAssumptions

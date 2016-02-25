@@ -67,6 +67,11 @@ valueVarName = "_v"
 unknownName (Unknown _ name) = name
 varName (Var _ name) = name
 varType (Var t _) = t
+
+isVar (Var _ _) = True
+isVar _ = False
+isCons (Cons _ _ _) = True
+isCons _ = False
   
 ftrue = BoolLit True
 ffalse = BoolLit False
