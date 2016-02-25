@@ -95,24 +95,8 @@ extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) =
     ScalarT baseT fml -> 
       let s = toSort baseT in
       let v = Var s valueVarName in
-      -- let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
-      -- let res = allSubstitutions env fml s [v] syms in
-      -- traceShow (text "extractMatchQGen from" <+> pretty fml <+> text "for var" <+> pretty v <+> text "and symbols" <+> commaSep (map pretty syms) <+> text "YIELDS" <+> pretty res) $ res
       allSubstitutions env fml s [v] syms
     _ -> []
-  
-  
-  -- concatMap (extractFrom baseCaseCtor) (Map.elems $ allMeasuresOf dtName env)
-  -- where
-    -- extractFrom ctor (MeasureDef inSort outSort defs _) = 
-      -- let MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs in
-      -- allSubstitutions env body inSort [Var inSort valueVarName] syms
-  -- case lastType $ toMonotype $ allSymbols env Map.! baseCaseCtor of
-    -- ScalarT baseT fml -> 
-      -- let s = toSort baseT in
-      -- let v = Var s valueVarName in
-      -- let arglessConjucts = filter (\c -> varsOf c == Set.singleton v) $ Set.toList (conjunctsOf fml) in
-      -- concatMap (\qual -> allSubstitutions env qual s [v] syms) arglessConjucts
 
 -- | 'extractQGenFromType' @positive t@: qualifier generator that extracts all conjuncts from refinements of @t@ and treats their free variables as parameters;
 -- extracts from positively or negatively occurring refinements depending on @positive@

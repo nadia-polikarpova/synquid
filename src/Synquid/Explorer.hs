@@ -598,17 +598,10 @@ instantiate env sch top = do
       x' <- freshId "x"
       liftM2 (FunctionT x') (go subst pSubst tArg) (go subst pSubst (renameVar x x' tArg tRes))
     go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
-  
--- symbolType env x (ScalarT b@(DatatypeT dtName _ _) fml)
-  -- | x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors = ScalarT b (fml |&| (Var (toSort b) valueVarName) |=| Cons (toSort b) x [])
+    
 symbolType env x t@(ScalarT b _)
   | isConstant x env = t -- x is a constant, use it's type (it must be very precise)
   | otherwise        = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
--- symbolType env x t = case lastType t of
-  -- (ScalarT b@(DatatypeT dtName _ _) fml) -> if x `elem` ((env ^. datatypes) Map.! dtName) ^. constructors
-                                              -- then addRefinementToLast t ((Var (toSort b) valueVarName) |=| Cons (toSort b) x (allArgs t))
-                                              -- else t
-  -- _ -> t
 symbolType _ _ t = t
   
 -- | Perform an exploration, and once it succeeds, do not backtrack it  
