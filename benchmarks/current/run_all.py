@@ -42,14 +42,17 @@ BENCHMARKS = [
     ('List-Zip',        []),
     ('List-ToNat',      []),
     ('List-Product',    []),
+    ('List-Fold',           []),
+    ('List-Fold-Length',    ['-m=0']),
+    ('List-Fold-Append',    ['-m=0']),    
     # Unique lists
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
     ('List-Nub',            ['-f=FirstArgument', '-m=1', '-g']),
     ('List-Compress',       []),
     # Insertion sort
-    ('List-InsertSort',      []),
-    ('List-InsertSort-Fold', ['-m=1', '-a=2', '-e']),
+    ('List-InsertSort',     []),
+    ('List-Fold-Sort',      ['-m=1', '-a=2', '-e']),
     # Merge sort
     ('List-Split',          ['-m=3']),
     ('IncList-Merge',       []),
