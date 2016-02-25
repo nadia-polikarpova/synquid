@@ -11,17 +11,14 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
 	
 zero :: {Int | _v == 0}
-inc :: x: Int -> {Int | _v == x + 1}	
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}	
 	
 foldr :: <p :: List a -> b -> Bool> .
 		f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->
 		seed: {b | p Nil _v} ->
     ys: List a ->    
 		{b | p ys _v}
-foldr = ??		
-		
-length :: zs: List a -> {Int | _v == len zs}
-length = ??
 
-append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}
-append = ??
+length :: xs: List a -> {Int | _v == len xs}
+length = ??
