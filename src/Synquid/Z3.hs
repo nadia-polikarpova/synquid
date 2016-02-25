@@ -25,8 +25,6 @@ import Control.Monad.Trans.State
 import Control.Applicative
 import Control.Lens hiding (both)
 
-import Debug.Trace
-
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver

@@ -71,7 +71,8 @@ instance MonadSMT s => MonadHorn (FixPointSolver s) where
  
 {- Implementation -}
 
--- | 'refineCandidates' @params quals constraints cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
+-- | 'refineCandidates' @constraints quals extractAssumptions cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
+-- use @extractAssumptions@ to extract axiom instantiations from formulas;
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
 refineCandidates :: MonadSMT s => [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
 refineCandidates constraints quals extractAssumptions cands = do
@@ -89,16 +90,18 @@ refineCandidates constraints quals extractAssumptions cands = do
       (valids', invalids') <- partitionM (isValidFml . hornApplySolution extractAssumptions sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
 
--- | 'check' @fmls cands@ : return those candidates from @cands@ under which all @fmls@ are satisfiable
-check :: MonadSMT s => [Formula] -> [Candidate] -> FixPointSolver s [Candidate]
-check fmls cands = do
+-- | 'check' @fmls extractAssumptions cands@ : return those candidates from @cands@ under which all @fmls@ are satisfiable;
+-- use @extractAssumptions@ to extract axiom instantiations from formulas
+check :: MonadSMT s => [Formula] ->  ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
+check fmls extractAssumptions cands = do    
     writeLog 2 (vsep [nest 2 $ text "Consistency" $+$ vsep (map pretty fmls), nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
     cands' <- filterM checkCand cands
     writeLog 2 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
     return cands'
   where
-    checkCand (Candidate sol valids invalids label) = let fmls' = map (applySolution sol) fmls 
-      in not <$> anyM isValidFml (map fnot fmls')
+    negate sol fml = let fml' = applySolution sol fml in fnot (fml' |&| conjunction (extractAssumptions fml'))
+      
+    checkCand (Candidate sol valids invalids label) = not <$> anyM isValidFml (map (negate sol) fmls)
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
 greatestFixPoint :: MonadSMT s => QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
@@ -169,7 +172,6 @@ hornApplySolution extractAssumptions sol fml = case fml of
      lhs' = applySolution sol lhs
      rhs' = applySolution sol rhs
      assumptions = extractAssumptions lhs' `Set.union` extractAssumptions rhs'
-     -- traceShow (text "Instantiated axioms for" <+> pretty (lhs' |=>| rhs') $+$ commaSep (map pretty $ Set.toList assumptions)) $ 
     in Binary Implies (lhs' `andClean` conjunction assumptions) rhs'
   _ -> error $ unwords ["hornApplySolution: encountered ill-formed constraint", show fml]        
     
