@@ -86,7 +86,12 @@ extractTypeQGen qual (env, (val@(Var s valName) : syms)) =
                 else []
 
 -- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
-extractCondQGen qual (env, syms) = allSubstitutions env qual AnyS (Set.toList $ varsOf qual) syms
+extractCondQGen qual (env, syms) = filter (not . isDataEq) $ -- TODO: disallowing datatype equality in conditionals, this is a bit of a hack
+    allSubstitutions env qual AnyS (Set.toList $ varsOf qual) syms
+  where
+    isDataEq (Binary op e1 _)
+      | op == Eq || op == Neq = isData (sortOf e1)
+      | otherwise = False
 
 extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
 extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = 

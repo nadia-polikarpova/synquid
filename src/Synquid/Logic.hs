@@ -23,6 +23,8 @@ data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | AnyS
   
 isSetS (SetS _) = True
 isSetS _ = False
+isData (DataS _ _) = True
+isData _ = False
 
 {- Formulas of the refinement logic -}
 

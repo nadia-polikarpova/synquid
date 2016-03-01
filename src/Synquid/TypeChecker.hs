@@ -233,12 +233,10 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do
   runInSolver $ matchConsType (lastType consT) scrType
   let ScalarT baseT _ = scrType
   (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
-  deadUnknown <- Unknown Map.empty <$> freshId "u"
-  solveLocally $ WellFormedCond env deadUnknown  -- TODO: we are not even looking for a condition here!
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
   pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) $
                inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
-               reconstructI caseEnv t iBody
+               generateError caseEnv `mplus` reconstructI caseEnv t iBody
   return $ Case consName args pCaseExpr  
   
 -- | 'reconstructECond' @env t impl@ :: conditionally reconstruct the judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term

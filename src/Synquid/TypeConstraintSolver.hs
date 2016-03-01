@@ -355,7 +355,9 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
   where
     toFormula (_, ForallT _ _) = Nothing
     toFormula (x, Monotype t) = case typeSubstitute tass t of
-      ScalarT IntT (Binary Eq _ (IntLit n)) -> Just $ IntLit n
+      ScalarT IntT  (Binary Eq _ (IntLit n)) -> Just $ IntLit n
+      ScalarT BoolT (Var _ _) -> Just $ BoolLit True
+      ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False      
       ScalarT b _ -> Just $ Var (toSort b) x
     -- | a `Map.member` tass = toFormula (x, Monotype $ typeSubstitute tass t)
     -- toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n

@@ -322,9 +322,6 @@ resolveFormula targetSort valueSort (Binary op l r) = do
                                                             VarS _  -> return op
                                                             _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
       | op == Eq  || op == Neq                    = case lSort of
-                                                            DataS _ _ -> if isVar l && isCons r 
-                                                                          then return op -- This is a hack: needed for constructor types
-                                                                          else throwError $ unwords ["No overloading of", show op, "for", show lSort]
                                                             _ -> return op
       | otherwise                                 = return op
       
