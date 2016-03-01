@@ -44,7 +44,9 @@ BENCHMARKS = [
     ('List-Product',    []),
     ('List-Fold',           []),
     ('List-Fold-Length',    ['-m=0']),
-    ('List-Fold-Append',    ['-m=0']),    
+    ('List-Fold-Append',    ['-m=0']),
+    ('List-Snoc',           []),
+    ('List-Reverse',        []),
     # Unique lists
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
@@ -67,6 +69,7 @@ BENCHMARKS = [
     # Binary search tree
     ('BST-Member',          []),
     ('BST-Insert',          []),
+    ('BST-DeleteMin',       ['-a=2', '-m=3']),
     ('BST-Delete',          ['-e']),
     ('BST-Sort',            []),
     # Binary heap
