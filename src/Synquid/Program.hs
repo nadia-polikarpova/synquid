@@ -573,7 +573,7 @@ allPredicates env = (env ^. boundPredicates) `Map.union` (env ^. globalPredicate
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
-allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env = 
+allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env = 
     let allMeasures = Map.toList $ allMeasuresOf dtName env 
     in catMaybes $ map extractPost allMeasures ++ map elemProperties allMeasures
   where
@@ -585,7 +585,7 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
-                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
+                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml) || not (mName `Set.member` includeQuanitifed)
                     then Nothing
                     else  let
                             elemSort = toSort elemT
@@ -594,30 +594,23 @@ allMeasurePostconditions baseT@(DatatypeT dtName tArgs _) env =
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
     elemProperties (mName, MeasureDef _ _ _ _) = Nothing
     
-allMeasurePostconditions _ _ = []
+allMeasurePostconditions _ _ _ = []
 
 typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
 typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute tass))) env
 
 -- | Assumptions encoded in an environment    
-embedding :: Environment -> TypeSubstitution -> Substitution -> Bool -> Set Formula
-embedding env subst pSubst includePost = (Set.map substAssumption $ env ^. assumptions) `Set.union` 
+embedding :: Environment -> TypeSubstitution -> Substitution -> Set Id -> Set Formula
+embedding env subst pSubst includeQuantified = (Set.map substAssumption $ env ^. assumptions) `Set.union` 
     (Map.foldlWithKey (\fmls name sch -> fmls `Set.union` embedBinding name sch) Set.empty allSymbols)
   where
     substAssumption = substitutePredicate pSubst . sortSubstituteFml (asSortSubst subst)
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
-    -- embedBinding x (Monotype t@(ScalarT (TypeVarT a) _)) | not (isBound a env) = if a `Map.member` subst 
-      -- then embedBinding x (Monotype $ typeSubstitute subst t) -- Substitute free variables
-      -- else Set.empty
-    -- embedBinding x (Monotype (ScalarT baseT fml)) = if Set.member x (env ^. constants) 
-      -- then Set.empty -- Ignore constants
-      -- else Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                          -- ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
     embedBinding x (Monotype t) = if Set.member x (env ^. constants) 
       then Set.empty -- Ignore constants
       else case typeSubstitute subst t of
             ScalarT baseT fml -> Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                                    ((substitutePredicate pSubst fml) : if includePost then allMeasurePostconditions baseT env else [])
+                                    ((substitutePredicate pSubst fml) : allMeasurePostconditions includeQuantified baseT env)
             _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
     embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants      
     

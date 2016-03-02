@@ -1,5 +1,3 @@
--- qualifier {x <= y, x != y}
-
 data BST a where
 	Empty :: BST a
 	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
