@@ -320,8 +320,8 @@ prettyProgram (Program p typ) = case p of
             _ -> prefix
           _ -> prefix
     PFun x e -> nest 2 $ operator "\\" <> text x <+> operator "." </> prettyProgram e
-    PIf c t e -> hang tab $ keyword "if" <+> prettyProgram c $+$ (keyword "then" </> prettyProgram t) $+$ (keyword "else" </> prettyProgram e)
-    PMatch l cases -> hang tab $ keyword "match" <+> prettyProgram l <+> keyword "with" $+$ vsep (map prettyCase cases)
+    PIf c t e -> linebreak <> (hang tab $ keyword "if" <+> prettyProgram c $+$ (hang tab (keyword "then" </> prettyProgram t)) $+$ (hang tab (keyword "else" </> prettyProgram e)))
+    PMatch l cases -> linebreak <> (hang tab $ keyword "match" <+> prettyProgram l <+> keyword "with" $+$ vsep (map prettyCase cases))
     PFix fs e -> prettyProgram e
     PLet x e e' -> align $ hang tab (keyword "let" <+> text x <+> operator "=" </> prettyProgram e </> keyword "in") $+$ prettyProgram e'
     PHole -> if show (pretty typ) == dontCare then operator "??" else hlParens $ operator "?? ::" <+> pretty typ

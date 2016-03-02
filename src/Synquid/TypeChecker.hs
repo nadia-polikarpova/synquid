@@ -228,7 +228,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                           _ -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
     checkCases _ [] = return []
   
-reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = do  
+reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $ do  
   scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
   runInSolver $ matchConsType (lastType consT) scrType
   let ScalarT baseT _ = scrType

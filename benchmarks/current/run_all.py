@@ -42,6 +42,7 @@ BENCHMARKS = [
     ('List-Zip',        []),
     ('List-ToNat',      []),
     ('List-Product',    []),
+    ('List-ExtractMin',     ['-a=2', '-m 3']),
     ('List-Fold',           []),
     ('List-Fold-Length',    ['-m=0']),
     ('List-Fold-Append',    ['-m=0']),
@@ -69,7 +70,7 @@ BENCHMARKS = [
     # Binary search tree
     ('BST-Member',          []),
     ('BST-Insert',          []),
-    ('BST-DeleteMin',       ['-a=2', '-m=3']),
+    ('BST-ExtractMin',      ['-a=2', '-m=3']),
     ('BST-Delete',          ['-e']),
     ('BST-Sort',            []),
     # Binary heap
