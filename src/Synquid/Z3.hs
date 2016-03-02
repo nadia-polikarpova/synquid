@@ -49,7 +49,6 @@ initZ3Data env env' = Z3Data {
   _sorts = Map.empty,
   _vars = Map.empty,
   _functions = Map.empty,
-  -- _predicates = Map.empty,
   _controlLiterals = Bimap.empty,
   _auxEnv = env',
   _boolSortAux = Nothing,
@@ -60,6 +59,12 @@ type Z3State = StateT Z3Data IO
 
 instance MonadSMT Z3State where
   initSolver = do
+    -- Disable MBQI:
+    params <- mkParams
+    symb <- mkStringSymbol "mbqi"
+    paramsSetBool params symb False
+    solverSetParams params
+  
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
 
@@ -69,7 +74,8 @@ instance MonadSMT Z3State where
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
         Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False
-        _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
+        -- _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
+        _ -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNKNOWN treating as INVALID") $ return False
 
   allUnsatCores = getAllMUSs
 
@@ -168,11 +174,16 @@ toAST expr = case expr of
 
     accumAll :: [Formula] -> Formula -> Z3State AST
     accumAll xs (All y e) = accumAll (xs ++ [y]) e
-    accumAll xs e =  do
+    accumAll xs e = do
       boundVars <- mapM toAST xs
       boundApps <- mapM toApp boundVars
       body <- toAST e
-      mkForallConst [] boundApps body
+      
+      let triggers = case e of
+                      Binary Implies lhs _ -> [lhs]
+                      _ -> []      
+      patterns <- mapM (toAST >=> (mkPattern . replicate 1)) triggers
+      mkForallConst patterns boundApps body
 
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
@@ -291,14 +302,14 @@ getAllMUSs' controlLitsAux mustHave cores = do
             else do
                   debugOutput "MUSeless" unsatFmls
                   getAllMUSs' controlLitsAux mustHave cores
-        Sat -> do
+        _ -> do
           mss <- maximize seed rest  -- Satisfiable: expand to MSS
           blockDown mss
           mapM litToFml mss >>= debugOutput "MSS"
           getAllMUSs' controlLitsAux mustHave cores
-        _ -> do
-          fmls <- mapM litToFml seed
-          error $ unwords $ ["getAllMUSs: Z3 returned Unknown for"] ++ map show fmls
+        -- _ -> do
+          -- fmls <- mapM litToFml seed
+          -- error $ unwords $ ["getAllMUSs: Z3 returned Unknown for"] ++ map show fmls
 
   where
     -- | Get the formula mapped to a given control literal in the main solver
@@ -333,8 +344,8 @@ getAllMUSs' controlLitsAux mustHave cores = do
     minimize' checked (lit:lits) = do
       res <- checkAssumptions lits
       case res of
-        Sat -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
         Unsat -> minimize' checked lits -- lit can be omitted
+        _ -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core        
 
     -- | Grow satisfiable set @checked@ with literals from @rest@ to some MSS
     maximize checked rest = local $ mapM_ assert checked >> maximize' checked rest
@@ -344,7 +355,7 @@ getAllMUSs' controlLitsAux mustHave cores = do
       (res, modelMb) <- getModel
       case res of
         Unsat -> return checked -- cannot add any literals, checked is maximal
-        Sat -> do -- found some literals to add; fix them and continue
+        _ -> do -- found some literals to add; fix them and continue
           (setRest, unsetRest) <- partitionM (getCtrlLitModel True (fromJust modelMb)) rest
           mapM_ assert setRest
           maximize' (checked ++ setRest) unsetRest

@@ -1,33 +1,24 @@
-qualifier {x == y, x != y}
-
-data List a where
-	Nil :: List a
-	Cons :: x: a -> xs: List a -> List a
+data PList a <p :: a -> PList a -> Bool> where
+	Nil :: PList a <p>
+	Cons :: x: a -> xs: {PList a <p> | p x _v} -> PList a <p>
   
-termination measure len :: List a -> {Int | _v >= 0} where
+termination measure len :: PList a -> {Int | _v >= 0} where
   Nil -> 0
   Cons x xs -> 1 + len xs  
 
-measure elems :: List a -> Set a where
+measure elems :: PList a -> Set a where
   Nil -> []
   Cons x xs -> [x] + elems xs
 
-data CList a where
-  CNil :: CList a
-  CCons :: x: a -> xs: {CList a | !(x in heads _v)} -> CList a
-  
-termination measure clen :: CList a -> {Int | _v >= 0} where
-  CNil -> 0
-  CCons x xs -> 1 + clen xs  
-  
-measure heads :: CList a -> Set a where
-  CNil -> []
-  CCons x xs -> [x]
+measure heads :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x]
 
-measure celems :: CList a -> Set a where
-  CNil -> []
-  CCons x xs -> [x] + celems xs
+type List a = PList a <{True}>  
+type CList a = PList a <{!(_0 in heads _1)}>
+  
+qualifier {x == y, x != y}  
 
-compress :: xs: List a -> {CList a | celems _v == elems xs}
+compress :: xs: List a -> {CList a | elems _v == elems xs}
 compress = ??  
 
