@@ -16,6 +16,8 @@ module Synquid.TypeConstraintSolver (
   runTCSolver,
   initTypingState,
   addTypingConstraint,
+  addFixedUnknown,
+  setUnknownRecheck,
   solveTypeConstraints,
   matchConsType,
   hasPotentialScrutinees,
@@ -421,7 +423,37 @@ addPredAssignment p fml = predAssignment %= Map.insert p fml
 addQuals :: MonadHorn s => Id -> QSpace -> TCSolver s ()
 addQuals name quals = do
   quals' <- lift . lift . lift $ pruneQualifiers quals
-  qualifierMap %= Map.insert name quals'  
+  qualifierMap %= Map.insert name quals'
+  
+-- | Add unknown @name@ with valuation @valuation@ to solutions of all candidates  
+addFixedUnknown :: MonadHorn s => Id -> Set Formula -> TCSolver s ()  
+addFixedUnknown name valuation = do
+    addQuals name emptyQSpace
+    candidates %= map update
+  where
+    update cand = cand { solution = Map.insert name valuation (solution cand) }
+    
+-- | Set valuation of unknown @name@ to @valuation@
+-- and re-check all potentially affected constraints in all candidates 
+setUnknownRecheck :: MonadHorn s => Id -> Set Formula -> TCSolver s ()
+setUnknownRecheck name valuation = do
+  writeLog 2 $ text "Re-checking candidates after updating" <+> text name
+  qmap <- use qualifierMap
+  let qmap' = Map.map (const emptyQSpace) qmap -- empty qualifier map: disable strengthening
+  cands@(cand:_) <- use candidates
+  let clauses = Set.filter (\fml -> name `Set.member` (Set.map unknownName (unknownsOf fml))) (validConstraints cand) -- First candidate cannot have invalid constraints
+  let cands' = map (\c -> c {
+                              solution = Map.insert name valuation (solution c),
+                              validConstraints = validConstraints c `Set.difference` clauses, 
+                              invalidConstraints = invalidConstraints c `Set.difference` clauses
+                            }) cands
+  env <- use initEnv
+  cands'' <- lift . lift . lift $ refine (Set.toList clauses) qmap' (instantiateConsAxioms env) cands'
+    
+  when (null cands'') $ do
+    ec <- use errorContext
+    throwError $ errorText "Re-checking candidates failed" $+$ ec
+  candidates .= cands''  
   
 -- | 'instantiateConsAxioms' @env fml@ : If @fml@ contains constructor applications, return the set of instantiations of constructor axioms for those applications in the environment @env@ 
 instantiateConsAxioms :: Environment -> Formula -> Set Formula  

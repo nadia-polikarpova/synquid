@@ -70,8 +70,6 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
 (|++|) gen gen' = \(env, symbs) -> nub $ gen (env, symbs) ++ gen' (env, symbs)
 infixr 5  |++|
 
-toSpace quals = QSpace quals (length quals)
-
 -- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
 extractTypeQGen (BoolLit True) _ = []
 extractTypeQGen qual (env, (val@(Var s valName) : syms)) =

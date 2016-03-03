@@ -109,7 +109,7 @@ generateI env t@(ScalarT _ _) = do
 
 -- | Generate a possibly conditional term type @t@, depending on whether a condition is abduced
 generateMaybeIf :: MonadHorn s => Environment -> RType -> Explorer s RProgram
-generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- If at least one solution without a match exists, go with it and continue with the else branch; otherwise try to match
+generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (generateMatch env t) -- If at least one solution without a match exists, go with it and continue with the else branch; otherwise try to match
   where
     -- | Guess an E-term and abduce a condition for it
     generateThen = do
@@ -119,13 +119,19 @@ generateMaybeIf env t = ifte generateThen generateElse (generateMatch env t) -- 
       cond <- conjunction <$> currentValuation cUnknown
       return (cond, pThen)
 
-    -- | Proceed after solution @pThen@ has been found under assumption @cond@
-    generateElse (cond, pThen) = if cond == ftrue
-      then return pThen -- @pThen@ is valid under no assumptions: return it
-      else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
-        pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond        
-        pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption (fnot cond) env) t
-        return $ Program (PIf pCond pThen pElse) t
+-- | Proceed after solution @pThen@ has been found under assumption @cond@
+generateElse env t cond pThen = if cond == ftrue
+  then return pThen -- @pThen@ is valid under no assumptions: return it
+  else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
+    pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
+    
+    cUnknown <- Unknown Map.empty <$> freshId "u"
+    runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
+    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t        
+    ifte
+      (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty) -- Re-check subsumption constraints after retracting @!cond@
+      (const $ return pElse)                                             -- constraints still hold: @pElse@ is a valid solution for both branches
+      (return $ Program (PIf pCond pThen pElse) t)                       -- constraints don't hold: the conditional is essential               
             
 generateCondition env fml = do
   conjuncts <- mapM genConjunct allConjuncts
@@ -165,18 +171,10 @@ generateMatch env t = do
           guard isGoodScrutinee
 
           (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
-          (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)             -- First case generated separately in an attempt to abduce a condition for the whole match
-          if cond == ftrue
-            then do -- First case is valid unconditionally
-              pCases <- mapM (cut . generateCase env'' x pScrutinee t) (tail ctors)              -- Generate a case for each of the remaining constructors
-              return $ Program (PMatch pScrutinee (pCase : pCases)) t
-            else do -- First case is valid under a condition
-              pCases <- mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
-              let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
-              pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
-              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $               -- Generate the else branch
-                          generateI (addAssumption (fnot cond) env) t            
-              return $ Program (PIf pCond pThen pElse) t
+          (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)                  -- First case generated separately in an attempt to abduce a condition for the whole match
+          pCases <- mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
+          let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
+          generateElse env t cond pThen                                                               -- Generate the else branch
 
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
         
@@ -303,21 +301,9 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
     generateEOrError env typ = generateError env `mplus` (snd <$> generateE env typ)
 
     -- | Proceed after solution @p0@ has been found under assumption @cond@ and match-assumption @matchCond@
-    generateOtherBranches (matchConds, cond, p0) = case matchConds of
-      [] -> if cond == ftrue
-        then return p0 -- @p0@ is valid under no assumptions: return it
-        else do -- @p0@ is valid under a nontrivial assumption, but no need to match
-              pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
-              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond p0 p) t) $ generateI (addAssumption (fnot cond) env) t
-              return $ Program (PIf pCond p0 pElse) t
-      _ -> if cond == ftrue
-        then generateMatchesFor env matchConds p0 t
-        else do -- @p0@ needs both a match and a condition; let's put the match inside the conditional because it's easier
-              pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
-              pThen <- cut $ generateMatchesFor (addAssumption cond env) matchConds p0 t
-              pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $
-                          generateI (addAssumption (fnot cond) env) t
-              return $ Program (PIf pCond pThen pElse) t
+    generateOtherBranches (matchConds, cond, p0) = do
+      pThen <- cut $ generateMatchesFor (addAssumption cond env) matchConds p0 t
+      generateElse env t cond pThen
 
     generateMatchesFor env [] pBaseCase t = return pBaseCase
     generateMatchesFor env (matchCond : rest) pBaseCase t = do
