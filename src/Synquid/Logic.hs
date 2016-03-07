@@ -200,7 +200,7 @@ isExecutable _ = True
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
   SetLit b elems -> SetLit b $ map (substitute subst) elems
-  Var _ name -> case Map.lookup name subst of
+  Var s name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
   Unknown s name -> Unknown (s `compose` subst) name 
@@ -214,17 +214,11 @@ substitute subst fml = case fml of
                             else All v (substitute subst e)
   otherwise -> fml
   where
-    compose old new = if Map.null old
-      then new
-      else if Map.null new
-        then old
-        else  case Map.deleteFindMin old of
-                ((x, Var b y), old') -> case Map.lookup y new of
-                    Nothing -> Map.insert x (Var b y) $ compose old' new
-                    Just (Var b' v) -> if b == b' 
-                      then Map.insert x (Var b v) $ compose old' (Map.delete y new)
-                      else error "Base type mismatch when composing pending substitutions"
-                _ -> compose (Map.deleteMin old) new
+    compose :: Substitution -> Substitution -> Substitution
+    compose old new = 
+      let oldRangeVars = Set.map varName $ Set.unions $ map varsOf (Map.elems old) in
+      let (newCompose, newAdd) = Map.partitionWithKey (\var _ -> var `Set.member` oldRangeVars) new in
+      newAdd `Map.union` Map.map (substitute newCompose) old
                   
 deBrujns = map (\i -> dontCare ++ show i) [0..] 
                   

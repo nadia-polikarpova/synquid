@@ -47,7 +47,7 @@ reconstruct eParams tParams goal = do
                     reconstructAuxGoals
             else do -- g has a proper spec: reconstruct
               auxGoals .= gs
-              spec' <- runInSolver $ finalizeType (toMonotype $ gSpec g)
+              spec' <- runInSolver $ currentAssignment (toMonotype $ gSpec g)
               let g' = g {
                           gSpec = Monotype spec',
                           gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
@@ -229,10 +229,11 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     checkCases _ [] = return []
   
 reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $ do  
-  scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+  let scrType = typeOf pScrutinee
+  -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
   runInSolver $ matchConsType (lastType consT) scrType
-  let ScalarT baseT _ = scrType
-  (syms, ass) <- caseSymbols scrVar args (symbolType env consName consT)
+  consT' <- runInSolver $ currentAssignment consT
+  (syms, ass) <- caseSymbols scrVar args consT'
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
   pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) $
                inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
@@ -274,8 +275,8 @@ reconstructE' env typ (PSymbol name) = do
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False
-      checkE env typ p
-      return (env, p)
+      pFinal <- checkE env typ p
+      return (env, pFinal)
   where    
     freshInstance sch = if arity (toMonotype sch) == 0
       then instantiate env sch False -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
@@ -294,8 +295,8 @@ reconstructE' env typ (PApp iFun iArg) = do
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
       return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
-  checkE envfinal typ pApp
-  return (envfinal, pApp)
+  pFinal <- checkE envfinal typ pApp
+  return (envfinal, pFinal)
 reconstructE' env typ impl = throwError $ errorText "Expected application term of type" </> squotes (pretty typ) </>
                                           errorText "and got" </> squotes (pretty $ untyped impl)
     
