@@ -158,7 +158,8 @@ generateMatch env t = do
                                   $ inContext (\p -> Program (PMatch p []) t)
                                   $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
 
-      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      let scrType = typeOf pScrutinee
       case scrType of
         (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
@@ -183,10 +184,11 @@ generateFirstCase env scrVar pScrutinee t consName = do
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
       consT <- instantiate env consSch True
-      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      let scrType = typeOf pScrutinee
       runInSolver $ matchConsType (lastType consT) scrType
-      let ScalarT baseT _ = scrType
-      let consT' = symbolType env consName consT
+      -- consT' = symbolType env consName consT
+      consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshId "x")
       (syms, ass) <- caseSymbols scrVar binders consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
@@ -210,10 +212,11 @@ generateCase env scrVar pScrutinee t consName = do
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
       consT <- instantiate env consSch True
-      scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
+      let scrType = typeOf pScrutinee
       runInSolver $ matchConsType (lastType consT) scrType
-      let ScalarT baseT _ = scrType
-      let consT' = symbolType env consName consT
+      -- let consT' = symbolType env consName consT
+      consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshId "x")
       (syms, ass) <- caseSymbols scrVar binders consT'
       unfoldSyms <- asks $ _unfoldLocals . fst
@@ -222,52 +225,6 @@ generateCase env scrVar pScrutinee t consName = do
                                        $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                                        $ generateError caseEnv `mplus` generateI caseEnv t
       return $ Case consName binders pCaseExpr
-  
--- -- | Generate a match term of type @t@
--- generateMatch env t = do
-  -- d <- asks $ _matchDepth . fst
-  -- if d == 0
-    -- then mzero
-    -- else do
-      -- (env', pScrutinee) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
-                                  -- $ inContext (\p -> Program (PMatch p []) t)
-                                  -- $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
-
-      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
-      -- case scrType of
-        -- (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
-          -- let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
-
-          -- let scrutineeSymbols = symbolList pScrutinee
-          -- let isGoodScrutinee = not (null ctors) &&                                               -- Datatype is not abstract
-                                -- (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
-                                -- (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
-                                -- (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
-          -- guard isGoodScrutinee
-
-          -- (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
-          -- pCases <- mapM (cut . generateCase env'' x pScrutinee t) ctors              -- Generate a case for each of the remaining constructors
-          -- return $ Program (PMatch pScrutinee pCases) t
-
-        -- _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
-
--- -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
--- generateCase env scrVar pScrutinee t consName = do
-  -- case Map.lookup consName (allSymbols env) of
-    -- Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
-    -- Just consSch -> do
-      -- consT <- instantiate env consSch True
-      -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
-      -- runInSolver $ matchConsType (lastType consT) scrType
-      -- let ScalarT baseT _ = scrType
-      -- let consT' = symbolType env consName consT
-      -- binders <- replicateM (arity consT') (freshId "x")
-      -- (syms, ass) <- caseSymbols scrVar binders consT'
-      -- let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      -- pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
-                                       -- $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
-                                       -- $ generateI caseEnv t
-      -- return $ Case consName binders pCaseExpr
 
 caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
   return ([], subst fml)
@@ -308,30 +265,25 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
     generateMatchesFor env [] pBaseCase t = return pBaseCase
     generateMatchesFor env (matchCond : rest) pBaseCase t = do
       let matchVar@(Var _ x) = Set.findMin $ varsOf matchCond
-      scrT@(ScalarT (DatatypeT scrDT _ _) _) <- runInSolver $ currentAssignment (toMonotype $ symbolsOfArity 0 env Map.! x)
-      let pScrutinee = Program (PSymbol x) scrT
-      let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
-      pBaseCase' <- cut $ inContext (\p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t) $
-                            generateMatchesFor (addScrutinee pScrutinee . addAssumption matchCond $ env) rest pBaseCase t -- TODO: if matchCond contains only a subset of case conjuncts, we should add the rest
-      generateKnownMatch env matchVar pBaseCase' t
-
-    generateKnownMatch :: MonadHorn s => Environment -> Formula -> RProgram -> RType -> Explorer s RProgram
-    generateKnownMatch env var@(Var s x) pBaseCase t = do
-      scrT@(ScalarT (DatatypeT scrDT _ _) _) <- runInSolver $ currentAssignment (toMonotype $ symbolsOfArity 0 env Map.! x)
+      -- scrT@(ScalarT (DatatypeT scrDT _ _) _) <- runInSolver $ currentAssignment (toMonotype $ symbolsOfArity 0 env Map.! x)
+      let scrT@(ScalarT (DatatypeT scrDT _ _) _) = toMonotype $ symbolsOfArity 0 env Map.! x
       let pScrutinee = Program (PSymbol x) scrT
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       let env' = addScrutinee pScrutinee env
-      pCases <- mapM (cut . generateCase env' var pScrutinee t) (tail ctors)              -- Generate a case for each constructor of the datatype
-      return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pCases)) t  
+      pBaseCase' <- cut $ inContext (\p -> Program (PMatch pScrutinee [Case (head ctors) [] p]) t) $
+                            generateMatchesFor (addAssumption matchCond env') rest pBaseCase t      
+      pOtherCases <- mapM (cut . generateCase env' matchVar pScrutinee t) (tail ctors)
+      return $ Program (PMatch pScrutinee (Case (head ctors) [] pBaseCase : pOtherCases)) t  
+
 
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)
 generateE :: MonadHorn s => Environment -> RType -> Explorer s (Environment, RProgram)
 generateE env typ = do
   d <- asks $ _eGuessDepth . fst
-  (finalEnv, p) <- generateEUpTo env typ d
-  runInSolver solveTypeConstraints
-  return (finalEnv, p)
+  (finalEnv, Program pTerm pTyp) <- generateEUpTo env typ d
+  pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
+  return (finalEnv, Program pTerm pTyp')
   
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
 generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
@@ -345,8 +297,8 @@ generateEAt env typ d = do
   if not useMem || d == 0
     then do -- Do not use memoization
       (envFinal, p) <- enumerateAt env typ d
-      checkE envFinal typ p
-      return (envFinal, p)
+      pFinal <- checkE envFinal typ p
+      return (envFinal, pFinal)
     else do -- Try to fetch from memoization store
       startState <- get
       let tass = startState ^. typingState . typeAssignment
@@ -368,35 +320,37 @@ generateEAt env typ d = do
 
           putMemo memo'
 
-          checkE envFinal typ p
-          return (envFinal, p)
+          pFinal <- checkE envFinal typ p
+          return (envFinal, pFinal)
   where
     applyMemoized (finalEnv, p, finalState) = do
       put finalState
       let env' = joinEnv env finalEnv
-      checkE env' typ p
-      return (env', p)
+      p' <- checkE env' typ p
+      return (env', p')
 
     joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
 
 -- | Perform a gradual check that @p@ has type @typ@ in @env@:
 -- if @p@ is a scalar, perform a full subtyping check;
 -- if @p@ is a (partially applied) function, check as much as possible with unknown arguments
-checkE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
-checkE env typ p = do
+checkE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s RProgram
+checkE env typ p@(Program pTerm pTyp) = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx p)
                               
   if arity typ == 0
-    then addConstraint $ Subtype env (typeOf p) typ False
+    then addConstraint $ Subtype env pTyp typ False
     else do
-      addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs $ typeOf p) (lastType (typeOf p))) (lastType typ) False
-      ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env (typeOf p) typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+      addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs pTyp) (lastType pTyp)) (lastType typ) False
+      ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
       
   fTyp <- runInSolver $ finalizeType typ
   typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
   solveIncrementally
   typingState . errorContext .= empty
+  pTyp' <- runInSolver $ currentAssignment pTyp
+  return $ Program pTerm pTyp'
   where
     removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
       ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
@@ -457,15 +411,17 @@ enumerateAt env typ d = do
       (envfinal, pApp) <- if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
           d <- asks $ _auxDepth . fst
-          guard $ d > 0 -- When d is 0, no more nested auxiliary functions are allowed, thus a higher-order argument cannot be generated
+          when (d <= 0) $ writeLog 1 (text "Cannot synthesize higher-order argument: no auxiliary functions allowed") >> mzero
           arg <- enqueueGoal env' tArg (untyped PHole) (d - 1)
           return (env', Program (PApp fun arg) tRes)
         else do -- First-order argument: generate now
           (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
                             $ inContext (\p -> Program (PApp fun p) tRes)
                             $ genArg env' tArg
+          writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
-          return (env''', Program (PApp fun arg) (renameVarFml x y tRes))
+          tRes' <- runInSolver $ currentAssignment tRes
+          return (env''', Program (PApp fun arg) (renameVarFml x y tRes'))
       ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
       return (envfinal, pApp)
       
