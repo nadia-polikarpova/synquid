@@ -22,8 +22,8 @@ import Data.Time.Calendar
 import Data.Map (size, elems, keys)
 
 programName = "synquid"
-versionName = "0.2"
-releaseDate = fromGregorian 2015 11 20
+versionName = "0.3"
+releaseDate = fromGregorian 2016 3 8
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
@@ -199,10 +199,10 @@ runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> String -> IO
 runOnFile synquidParams explorerParams solverParams file = do
   parseResult <- parseFromFile parseProgram file
   case parseResult of
-    Left parseErr -> (pdoc $ errorDoc $ text (show parseErr)) >> exitFailure
+    Left parseErr -> (pdoc $ errorDoc $ text (show parseErr)) >> pdoc empty >> exitFailure
     -- Right ast -> print $ vsep $ map pretty ast
     Right decls -> case resolveDecls decls of
-      Left resolutionError -> (pdoc $ errorDoc $ text resolutionError) >> exitFailure
+      Left resolutionError -> (pdoc $ errorDoc $ text resolutionError) >> pdoc empty >> exitFailure
       Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
   where
     pdoc = printDoc (outputFormat synquidParams)
@@ -213,7 +213,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> pdoc err >> exitFailure
+        Left err -> pdoc err >> pdoc empty >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
           when (showSolutionSize synquidParams) $ pdoc (parens (text "Size:" <+> pretty (programNodeCount prog)))
