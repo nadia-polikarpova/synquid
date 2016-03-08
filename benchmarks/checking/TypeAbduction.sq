@@ -1,0 +1,27 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+type Nat = {Int | _v >= 0}    
+type Pos = {Int | _v > 0}  
+  
+filterLE :: p: a -> xs: List a -> List {a | _v <= p}
+
+-- Here we cannot just copy {_v == 0} into the instantiation of a, we need to solve u && _v <= 0 ==> _v == 0
+client :: xs: List Nat -> List {Int | _v == 0}
+client = \xs . filterLE 0 xs
+
+filterLE1 :: p: a -> xs: List a -> ys: List a -> List {a | _v <= p}
+
+-- Here we discover that xs is unsuitable before looking at y
+-- due to top-down propagation and type abduction
+clientBad :: xs: List Int -> ys: List Nat -> List {Int | _v == 0}
+clientBad = \xs . \ys . filterLE1 0 xs ys
