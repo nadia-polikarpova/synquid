@@ -214,11 +214,7 @@ substitute subst fml = case fml of
                             else All v (substitute subst e)
   otherwise -> fml
   where
-    compose :: Substitution -> Substitution -> Substitution
-    compose old new = 
-      let oldRangeVars = Set.map varName $ Set.unions $ map varsOf (Map.elems old) in
-      let (newCompose, newAdd) = Map.partitionWithKey (\var _ -> var `Set.member` oldRangeVars) new in
-      newAdd `Map.union` Map.map (substitute newCompose) old
+    compose old new = Map.map (substitute new) old `Map.union` new
                   
 deBrujns = map (\i -> dontCare ++ show i) [0..] 
                   

@@ -47,10 +47,8 @@ reconstruct eParams tParams goal = do
                     reconstructAuxGoals
             else do -- g has a proper spec: reconstruct
               auxGoals .= gs
-              spec' <- runInSolver $ currentAssignment (toMonotype $ gSpec g)
               let g' = g {
-                          gSpec = Monotype spec',
-                          gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
+                            gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
                          }
               writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
               p <- reconstructTopLevel g'
@@ -229,9 +227,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     checkCases _ [] = return []
   
 reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $ do  
-  let scrType = typeOf pScrutinee
-  -- scrType <- runInSolver $ currentAssignment (typeOf pScrutinee)
-  runInSolver $ matchConsType (lastType consT) scrType
+  runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
   consT' <- runInSolver $ currentAssignment consT
   (syms, ass) <- caseSymbols scrVar args consT'
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
@@ -244,12 +240,12 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 reconstructECond :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, Formula, RProgram)
 reconstructECond env typ impl = if hasUnknownAssumptions
   then do  -- @env@ already contains an unknown assumption to be abduced
-    (env', p) <- reconstructE env typ impl
+    (env', p) <- reconstructETopLevel env typ impl
     return (env', ftrue, p)
   else do -- create a fresh unknown assumption to be abduced
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
-    (env', p) <- reconstructE (addAssumption cUnknown env) typ impl
+    (env', p) <- reconstructETopLevel (addAssumption cUnknown env) typ impl
     cond <- conjunction <$> currentValuation cUnknown
     let env'' = over assumptions (Set.delete cUnknown . Set.insert cond) env' -- Replace @cUnknown@ with its valuation: it's not allowed to be strngthened anymore
     return (env'', cond, p)
@@ -257,14 +253,23 @@ reconstructECond env typ impl = if hasUnknownAssumptions
     hasUnknownAssumptions = F.any (not . Set.null . unknownsOf) (env ^. assumptions)
 
 -- | 'reconstructE' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
--- (bottom-up phase of bidirectional reconstruction)  
+-- (bottom-up phase of bidirectional reconstruction)    
+reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
+reconstructETopLevel env t impl = do
+  (finalEnv, Program pTerm pTyp) <- reconstructE env t impl
+  pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
+  cleanupTypeVars
+  return (finalEnv, Program pTerm pTyp')
+
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
 reconstructE env t (Program p AnyT) = reconstructE' env t p
 reconstructE env t (Program p t') = do
   t'' <- checkAnnotation env t t' p
   reconstructE' env t'' p  
 
-reconstructE' env typ PHole = generateE env typ
+reconstructE' env typ PHole = do
+  d <- asks $ _eGuessDepth . fst
+  generateEUpTo env typ d
 reconstructE' env typ (PSymbol name) = do
   case lookupSymbol name (arity typ) env of
     Nothing -> throwError $ errorText "Not in scope:" </> text name
@@ -275,8 +280,8 @@ reconstructE' env typ (PSymbol name) = do
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False
-      pFinal <- checkE env typ p
-      return (env, pFinal)
+      checkE env typ p
+      return (env, p)
   where    
     freshInstance sch = if arity (toMonotype sch) == 0
       then instantiate env sch False -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
@@ -295,8 +300,8 @@ reconstructE' env typ (PApp iFun iArg) = do
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
       return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
-  pFinal <- checkE envfinal typ pApp
-  return (envfinal, pFinal)
+  checkE envfinal typ pApp
+  return (envfinal, pApp)
 reconstructE' env typ impl = throwError $ errorText "Expected application term of type" </> squotes (pretty typ) </>
                                           errorText "and got" </> squotes (pretty $ untyped impl)
     
