@@ -1,0 +1,146 @@
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1} 
+            -> h: {Int | _v == (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) } 
+            -> AVL a
+
+termination measure realHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> (1 + if realHeight l >= realHeight r then realHeight l else realHeight r)
+  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> realHeight l - realHeight r
+  
+empty :: {AVL a | realHeight _v == 0}
+empty = Leaf  
+  
+singleton :: x: a -> {AVL a | realHeight _v == 1}
+singleton = \x . Node x Leaf Leaf 1
+
+getHeight :: t: AVL a -> {Int | _v == realHeight t}
+getHeight = \t . 
+  match t with
+    Leaf -> 0
+    Node x l r h -> h
+    
+getBalFac :: t: AVL a -> {Int | _v == balFac t}   
+getBalFac = \t .
+  match t with
+    Leaf -> 0
+    Node x l r h -> getHeight l - getHeight r
+
+mkNode :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1} 
+            -> {AVL a | realHeight _v == (1 + if realHeight l >= realHeight r then realHeight l else realHeight r)}
+mkNode =  \x . \l . \r . 
+  if getHeight l >= getHeight r
+    then Node x l r (1 + getHeight l)
+    else Node x l r (1 + getHeight r)
+    
+balL0 :: x: a 
+          -> l: {AVL {a | _v < x} | balFac _v == 0} 
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == 1 + realHeight l}
+balL0 = \x . \l . \r . 
+  match l with 
+    Leaf -> ??
+    Node lx ll lr lh -> mkNode lx ll (mkNode x lr r)    
+    
+balLL :: x: a
+          -> l: {AVL {a | _v < x} | balFac _v > 0} 
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == realHeight l}
+balLL = \x . \l . \r . 
+  match l with 
+    Leaf -> ??
+    Node lx ll lr lh -> mkNode lx ll (mkNode x lr r)
+    
+balLR :: x:a
+          -> l: {AVL {a | _v < x} | balFac _v < 0}
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == realHeight l}
+balLR = \x . \l . \r .
+  match l with
+    Leaf -> ??
+    Node lx ll lr lh -> match lr with
+                          Leaf -> ??
+                          Node lrx lrl lrr lrh -> mkNode lrx (mkNode lx ll lrl) (mkNode x lrr r)
+                          
+balR0 :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v == 0} 
+          -> {AVL a | realHeight _v == 1 + realHeight r}
+balR0 = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> mkNode rx (mkNode x l rl) rr
+    
+balRL :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v > 0} 
+          -> {AVL a | realHeight _v == realHeight r}
+balRL = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> match rl with
+                          Leaf -> ??
+                          Node rlx rll rlr rlh -> mkNode rlx (mkNode x l rll) (mkNode rx rlr rr)
+    
+balRR :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v < 0} 
+          -> {AVL a | realHeight _v == realHeight r}
+balRR = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> mkNode rx (mkNode x l rl) rr
+                                    
+insert :: y: a -> t: AVL a -> {AVL a | realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1}
+insert = \y . \t .
+  match t with
+    Leaf -> singleton y
+    Node x l r h -> if y < x
+                      then insL y x l r
+                      else if y > x
+                        then insR y x l r 
+                        else t
+                        
+insL :: y: a
+          -> x: {a | y < _v} 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1}                  
+          -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
+                        realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r)}                        
+insL = \y . \x . \l . \r . 
+  let l' = insert y l in
+  let isLeftBig = getHeight l' - getHeight r == 2 in
+  if isLeftBig && (getBalFac l' > 0)
+    then balLL x l' r
+    else if isLeftBig && (getBalFac l' < 0)
+          then balLR x l' r
+          else if isLeftBig
+                then balL0 x l' r
+                else mkNode x l' r
+                
+insR :: y: a
+          -> x: {a | _v < y} 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | ~(realHeight _v - realHeight l) <= 1}                  
+          -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
+                        realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r)}                                        
+insR = \y . \x . \l . \r . 
+  let r' = insert y r in
+  let isRightBig = getHeight r' - getHeight l == 2 in
+  if isRightBig && (getBalFac r' > 0)
+    then balRL x l r'
+    else if isRightBig && (getBalFac r' < 0)
+          then balRR x l r'
+          else if isRightBig
+                then balR0 x l r'
+                else mkNode x l r'
+                
+mutual {insert, insL, insR}
