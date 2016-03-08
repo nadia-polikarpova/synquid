@@ -9,13 +9,12 @@ from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
 # Parameters
-SYNQUID_PATH_LINUX = '../../dist/build/synquid/synquid'
-SYNQUID_PATH_WINDOWS = '../../src/Synquid.exe'
+SYNQUID_PATH_LINUX = 'synquid'
+SYNQUID_PATH_WINDOWS = 'Synquid.exe'
 BENCH_PATH = '.'
-LOGFILE_NAME = 'run_all.log'
-ORACLE_NAME_WINDOWS = 'oracle'
-ORACLE_NAME_LINUX = 'oracle_nx'
-OUTFILE_NAME = 'run_all.csv'
+LOGFILE_NAME = 'results.log'
+ORACLE_NAME = 'oracle'
+OUTFILE_NAME = 'results.csv'
 COMMON_OPTS = []
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
@@ -134,9 +133,16 @@ def run_benchmark(name, opts, path='.'):
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
           results [name] = SynthesisResult(name, t)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL          
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
+          
+def run_test(name, path='.'):
+    print name
 
-def postprocess(benchmarks):    
+    with open(LOGFILE_NAME, 'a+') as logfile:          
+      logfile.seek(0, os.SEEK_END)
+      call([synquid_path] + COMMON_OPTS + [os.path.join (path, name + '.sq')], stdout=logfile, stderr=logfile)
+
+def write_times(benchmarks):    
     with open(OUTFILE_NAME, 'w') as outfile:
         for (name, args) in benchmarks:
             outfile.write (name + ',')
@@ -146,8 +152,9 @@ def postprocess(benchmarks):
                 outfile.write (',')                
             outfile.write ('\n')
 
-    if os.path.isfile(oracle_name):
-        fromlines = open(oracle_name).readlines()
+def show_diff():            
+    if os.path.isfile(ORACLE_NAME):
+        fromlines = open(ORACLE_NAME).readlines()
         tolines = open(LOGFILE_NAME, 'U').readlines()
         diff = difflib.unified_diff(fromlines, tolines, n=0)
         print
@@ -160,26 +167,41 @@ if __name__ == '__main__':
 
     if platform.system() == 'Linux':
         synquid_path = SYNQUID_PATH_LINUX
-        oracle_name = ORACLE_NAME_LINUX
     else:
         synquid_path = SYNQUID_PATH_WINDOWS
-        oracle_name = ORACLE_NAME_WINDOWS
+        
+    if len(sys.argv) == 1:
+        # Default: run synthesis benchmarks in 'current' directory, which must succeed; compare results with oracle
+        os.chdir('current')
+        if os.path.isfile(LOGFILE_NAME):
+            os.remove(LOGFILE_NAME)
+            
+        for (name, args) in BENCHMARKS:
+            run_benchmark(name, args)
+            
+        for (name, args) in RBT_BENCHMARKS:
+            run_benchmark(name, args, 'RBT')
 
-    if os.path.isfile(LOGFILE_NAME):
-        os.remove(LOGFILE_NAME)
+        for (name, args) in AVL_BENCHMARKS:
+            run_benchmark(name, args, 'AVL')
+            
+        print 'TOTAL', '{0:0.2f}'.format(total_time)
+            
+        write_times(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
+        show_diff()
         
-    # for (name, args) in CHECKING_BENCHMARKS:
-        # run_benchmark(name, args, '../checking')
-
-    for (name, args) in BENCHMARKS:
-        run_benchmark(name, args)
+    elif sys.argv[1] == 'unit':
+        # Run unit tests 
+        os.chdir('unit')
+        if os.path.isfile(LOGFILE_NAME):
+            os.remove(LOGFILE_NAME)        
         
-    for (name, args) in RBT_BENCHMARKS:
-        run_benchmark(name, args, 'RBT')
-
-    for (name, args) in AVL_BENCHMARKS:
-        run_benchmark(name, args, 'AVL')
+        for name in os.listdir('.'):
+            filename, file_extension = os.path.splitext(name)
+            if file_extension == '.sq':
+                run_test(filename)
         
-    print 'TOTAL', '{0:0.2f}'.format(total_time)
-        
-    postprocess(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
+        show_diff()
+    
+    else:
+        print 'Unknown command-line argument', sys.argv[1]
