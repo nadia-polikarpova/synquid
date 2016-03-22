@@ -44,7 +44,6 @@ data ExplorerParams = ExplorerParams {
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _predPolyRecursion :: Bool,             -- ^ Enable recursion polymorphic in abstract predicates?
-  _hideScrutinees :: Bool,                -- ^ Should scrutinized variables be removed from the environment?
   _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
   _unfoldLocals :: Bool,                  -- ^ Unfold binders introduced by matching (to use them in match abduction)?
   _partialSolution :: Bool,               -- ^ Should implementations that only cover part of the input space be accepted?
@@ -377,7 +376,6 @@ enumerateAt env typ 0 = do
     pickSymbol (name, sch) = do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
       writeLog 1 $ text "Trying" <+> pretty p
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
@@ -423,7 +421,6 @@ enumerateAt env typ d = do
           writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
           return (env''', Program (PApp fun arg) (renameVarFml x y tRes))
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
       return (envfinal, pApp)
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)      
