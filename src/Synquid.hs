@@ -34,14 +34,13 @@ main = do
                    auxMax
                    fix
                    genPreds
-                   hideScr 
                    explicitMatch
                    unfoldLocals
                    partial
                    incremental
                    consistency 
                    log_ 
-                   useMemoization 
+                   memoize 
                    bfs
                    outFormat
                    print_spec
@@ -54,13 +53,12 @@ main = do
     _auxDepth = auxMax,
     _fixStrategy = fix,
     _predPolyRecursion = genPreds,
-    _hideScrutinees = hideScr,
     _abduceScrutinees = not explicitMatch,
     _unfoldLocals = unfoldLocals,
     _partialSolution = partial,
     _incrementalChecking = incremental,
     _consistencyChecking = consistency,
-    _useMemoization = useMemoization,
+    _useMemoization = memoize,
     _explorerLogLevel = log_
     }
   let solverParams = defaultHornSolverParams {
@@ -93,14 +91,13 @@ data CommandLineArgs
         aux_max :: Int,
         fix :: FixpointStrategy,
         generalize_preds :: Bool,
-        hide_scrutinees :: Bool,
         explicit_match :: Bool,
         unfold_locals :: Bool,
         partial :: Bool,
         incremental :: Bool,
         consistency :: Bool,
         log_ :: Int,
-        use_memoization :: Bool,
+        memoize :: Bool,
         -- | Solver params
         bfs_solver :: Bool,
         -- | Output
@@ -119,14 +116,13 @@ cla = CommandLineArgs {
   aux_max             = 1               &= help ("Maximum depth of auxiliary functions (default: 1)") &= name "x",
   fix                 = AllArguments    &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show AllArguments, ")"]),
   generalize_preds    = False           &= help ("Make recursion polymorphic in abstract refinements (default: False)"),
-  hide_scrutinees     = False           &= help ("Hide scrutinized expressions from the environment (default: False)"),
   explicit_match      = False           &= help ("Do not abduce match scrutinees (default: False)"),
-  unfold_locals       = False           &= help ("Use all variables, as opposed to top-level function arguments only, in match scrutinee abduction (default: False)") &= name "n",
-  partial             = False           &= help ("Generate best-effort partial solutions (default: False)"),
+  unfold_locals       = False           &= help ("Use all variables, as opposed to top-level function arguments only, in match scrutinee abduction (default: False)"),
+  partial             = False           &= help ("Generate best-effort partial solutions (default: False)") &= name "p",
   incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_                = 0               &= help ("Logger verboseness level (default: 0)"),
-  use_memoization     = False           &= help ("Use memoization (default: False)") &= name "u",
+  memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
@@ -145,7 +141,6 @@ defaultExplorerParams = ExplorerParams {
   _fixStrategy = AllArguments,
   _polyRecursion = True,
   _predPolyRecursion = False,
-  _hideScrutinees = False,
   _abduceScrutinees = True,
   _unfoldLocals = False,
   _partialSolution = False,

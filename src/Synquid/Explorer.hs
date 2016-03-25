@@ -44,7 +44,6 @@ data ExplorerParams = ExplorerParams {
   _fixStrategy :: FixpointStrategy,       -- ^ How to generate terminating fixpoints
   _polyRecursion :: Bool,                 -- ^ Enable polymorphic recursion?
   _predPolyRecursion :: Bool,             -- ^ Enable recursion polymorphic in abstract predicates?
-  _hideScrutinees :: Bool,                -- ^ Should scrutinized variables be removed from the environment?
   _abduceScrutinees :: Bool,              -- ^ Should we match eagerly on all unfolded variables?
   _unfoldLocals :: Bool,                  -- ^ Unfold binders introduced by matching (to use them in match abduction)?
   _partialSolution :: Bool,               -- ^ Should implementations that only cover part of the input space be accepted?
@@ -143,11 +142,14 @@ generateElse env t cond pThen = if cond == ftrue
     
     cUnknown <- Unknown Map.empty <$> freshId "u"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
-    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t        
-    ifte
-      (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty) -- Re-check subsumption constraints after retracting @!cond@
-      (const $ return pElse)                                             -- constraints still hold: @pElse@ is a valid solution for both branches
-      (return $ Program (PIf pCond pThen pElse) t)                       -- constraints don't hold: the conditional is essential               
+    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
+    let conditional = Program (PIf pCond pThen pElse) t
+    if isHole pElse
+      then return conditional
+      else ifte -- If synthesis of the else branch succeeded, try to remove the conditional
+            (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty) -- Re-check subsumption constraints after retracting @!cond@
+            (const $ return pElse)                                             -- constraints still hold: @pElse@ is a valid solution for both branches
+            (return conditional)                                               -- constraints don't hold: the conditional is essential               
             
 generateCondition env fml = do
   conjuncts <- mapM genConjunct allConjuncts
@@ -180,7 +182,7 @@ generateMatch env t = do
 
           let scrutineeSymbols = symbolList pScrutinee
           let isGoodScrutinee = not (null ctors) &&                                               -- Datatype is not abstract
-                                (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- We only need this in case the hiding flag is off
+                                (not $ pScrutinee `elem` (env ^. usedScrutinees)) &&              -- Hasn't been scrutinized yet
                                 (not $ head scrutineeSymbols `elem` ctors) &&                     -- Is not a value
                                 (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
           guard isGoodScrutinee
@@ -418,7 +420,6 @@ enumerateAt env typ 0 = do
     pickSymbol (name, sch) = do
       t <- freshInstance sch
       let p = Program (PSymbol name) (symbolType env name t)
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem p (env ^. usedScrutinees)) (return ())
       writeLog 1 $ text "Trying" <+> pretty p
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
@@ -464,7 +465,6 @@ enumerateAt env typ d = do
           writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
           return (env''', Program (PApp fun arg) (renameVarFml x y tRes))
-      ifM (asks $ _hideScrutinees . fst) (guard $ not $ elem pApp (env ^. usedScrutinees)) (return ())
       return (envfinal, pApp)
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)      
