@@ -74,7 +74,6 @@ data MemoKey = MemoKey {
   keyState :: ExplorerState,
   keyDepth :: Int
 } deriving (Eq, Ord)
-
 instance Pretty MemoKey where
   -- pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
   pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (st ^. typingState . candidates))
@@ -82,13 +81,30 @@ instance Pretty MemoKey where
 -- | Memoization store
 type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 
+data PartialKey = PartialKey {
+    pKeyEnv :: Environment,
+    pKeyType :: RType,
+    pKeyState :: ExplorerState,
+    pKeyMaxDepth :: Int
+} deriving (Eq, Ord)
+
+type PartialMemo = Map PartialKey [RType]
+-- | Persistent state accross explorations
+data PersistentState = PersistentState {
+  _termMemo :: Memo,
+  _partialFailures :: PartialMemo,
+  _typeErrors :: [TypeError]
+}
+
+makeLenses ''PersistentState
+
 -- | Computations that explore program space, parametrized by the the horn solver @s@
-type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT (Memo, [TypeError]) s)))
+type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT PersistentState s)))
 
 -- | 'runExplorer' @eParams tParams initTS go@ : execute exploration @go@ with explorer parameters @eParams@, typing parameters @tParams@ in typing state @initTS@
 runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either TypeError a)
 runExplorer eParams tParams initTS go = do
-  (ress, (_, errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) (Map.empty, [])
+  (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) (PersistentState Map.empty Map.empty [])
   case ress of
     [] -> return $ Left $ if null errs then text "No solution" else head errs
     (res : _) -> return $ Right res
@@ -301,7 +317,7 @@ generateEAt env typ d = do
   if not useMem || d == 0
     then do -- Do not use memoization
       (envFinal, p) <- enumerateAt env typ d
-      checkE envFinal typ p
+      checkE envFinal typ p (Just d)
       return (envFinal, p)
     else do -- Try to fetch from memoization store
       startState <- get
@@ -324,13 +340,13 @@ generateEAt env typ d = do
 
           putMemo memo'
 
-          checkE envFinal typ p
+          checkE envFinal typ p (Just d)
           return (envFinal, p)
   where
     applyMemoized (finalEnv, p, finalState) = do
       put finalState
       let env' = joinEnv env finalEnv
-      checkE env' typ p
+      checkE env' typ p (Just d)
       return (env', p)
 
     joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
@@ -338,11 +354,35 @@ generateEAt env typ d = do
 -- | Perform a gradual check that @p@ has type @typ@ in @env@:
 -- if @p@ is a scalar, perform a full subtyping check;
 -- if @p@ is a (partially applied) function, check as much as possible with unknown arguments
-checkE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
-checkE env typ p@(Program pTerm pTyp) = do
+checkE :: MonadHorn s => Environment -> RType -> RProgram -> Maybe Int -> Explorer s ()
+checkE env typ p@(Program pTerm pTyp) md = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx p)
-                              
+  case md of
+    Just d -> do
+    
+      startState <- get
+      let partialKey = PartialKey env typ startState d
+      startPartials <- getPartials
+      let pastPartials = maybe [] id (Map.lookup partialKey startPartials)
+
+      writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of" <+> pretty pastPartials <+> text "at depth" <+> pretty d
+
+      -- Check that pTyp is not a subtype of any stored partial.
+      if d > 0
+        then mapM_ (\oldTyp -> ifte (solveLocally $ Subtype env pTyp oldTyp False)
+                                  (\_ -> do
+                                    writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "Is a subtype of" <+> pretty oldTyp
+                                    mzero)
+                                  (return ())) pastPartials
+        else return ()
+
+      let newPartials = pTyp : pastPartials
+      let newPartialMap = Map.insert partialKey newPartials startPartials
+      putPartials newPartialMap
+
+    Nothing -> return ()
+
   if arity typ == 0
     then addConstraint $ Subtype env pTyp typ False
     else do
@@ -353,11 +393,12 @@ checkE env typ p@(Program pTerm pTyp) = do
   typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
   solveIncrementally
   typingState . errorContext .= empty
-  where
-    removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
-      ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
-    removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (removeFrom argNames fml)
-    removeFrom argNames fml = if varsOf fml `disjoint` argNames then fml else ffalse
+
+    where
+      removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
+        ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
+      removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (removeFrom argNames fml)
+      removeFrom argNames fml = if varsOf fml `disjoint` argNames then fml else ffalse
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
@@ -462,17 +503,23 @@ enqueueGoal env typ impl depth = do
 
 -- | Get memoization store
 getMemo :: MonadHorn s => Explorer s Memo
-getMemo = lift . lift . lift $ use _1
+getMemo = lift . lift . lift $ use termMemo
 
 -- | Set memoization store
 putMemo :: MonadHorn s => Memo -> Explorer s ()
-putMemo memo = lift . lift . lift $ _1 .= memo
+putMemo memo = lift . lift . lift $ termMemo .= memo
+
+getPartials :: MonadHorn s => Explorer s PartialMemo
+getPartials = lift . lift . lift $ use partialFailures
+
+putPartials :: MonadHorn s => PartialMemo -> Explorer s ()
+putPartials partials = lift . lift . lift $ partialFailures .= partials
 
 -- | Record type error and backtrack
 throwError :: MonadHorn s => TypeError -> Explorer s a  
 throwError e = do
   writeLog 1 $ text "TYPE ERROR:" <+> plain e
-  lift . lift . lift $ _2 %= (e :)
+  lift . lift . lift $ typeErrors %= (e :)
   mzero
   
 -- | Impose typing constraint @c@ on the programs
