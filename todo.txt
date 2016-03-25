@@ -1,5 +1,4 @@
 - Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
-- Get rid of -h
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
   - Re-enable sort checking in substitute (sometimes wrong in applications, test case: List-Fold-Sort)
   - Use unifySorts for qualifier substitution instead of complies

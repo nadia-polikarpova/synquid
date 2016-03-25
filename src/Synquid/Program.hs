@@ -333,7 +333,7 @@ data BareProgram t =
   PMatch (Program t) [Case t] |               -- ^ Pattern match on datatypes
   PFix [Id] (Program t) |                     -- ^ Fixpoint
   PLet Id (Program t) (Program t) |           -- ^ Let binding
-  PHole
+  PHole                                       -- ^ Hole (program to fill in)
   deriving (Eq, Ord, Functor)
   
 -- | Programs annotated with types  
@@ -355,6 +355,8 @@ type RProgram = Program RType
 
 untyped c = Program c AnyT
 uHole = untyped PHole
+isHole (Program PHole _) = True
+isHole _ = False
 
 eraseTypes :: RProgram -> UProgram
 eraseTypes = fmap (const AnyT)

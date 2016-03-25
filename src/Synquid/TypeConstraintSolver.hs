@@ -361,15 +361,11 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
       ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False      
       ScalarT b _ -> Just $ Var (toSort b) x
-    -- | a `Map.member` tass = toFormula (x, Monotype $ typeSubstitute tass t)
-    -- toFormula (_, Monotype (ScalarT IntT (Binary Eq _ (IntLit n)))) = Just $ IntLit n
-    -- toFormula (x, Monotype (ScalarT b _)) = Just $ Var (toSort b) x
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
 allPotentialScrutinees env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
-    -- toFormula (x, Monotype t@(ScalarT (TypeVarT a) _)) | a `Map.member` tass = toFormula (x, Monotype $ typeSubstitute tass t)
     toFormula (x, Monotype t) = case typeSubstitute tass t of
       ScalarT b@(DatatypeT _ _ _) _ ->
         if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
