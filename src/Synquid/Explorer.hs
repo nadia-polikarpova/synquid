@@ -126,11 +126,14 @@ generateElse env t cond pThen = if cond == ftrue
     
     cUnknown <- Unknown Map.empty <$> freshId "u"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
-    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t        
-    ifte
-      (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty) -- Re-check subsumption constraints after retracting @!cond@
-      (const $ return pElse)                                             -- constraints still hold: @pElse@ is a valid solution for both branches
-      (return $ Program (PIf pCond pThen pElse) t)                       -- constraints don't hold: the conditional is essential               
+    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
+    let conditional = Program (PIf pCond pThen pElse) t
+    if isHole pElse
+      then return conditional
+      else ifte -- If synthesis of the else branch succeeded, try to remove the conditional
+            (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty) -- Re-check subsumption constraints after retracting @!cond@
+            (const $ return pElse)                                             -- constraints still hold: @pElse@ is a valid solution for both branches
+            (return conditional)                                               -- constraints don't hold: the conditional is essential               
             
 generateCondition env fml = do
   conjuncts <- mapM genConjunct allConjuncts
