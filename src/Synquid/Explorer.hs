@@ -50,7 +50,8 @@ data ExplorerParams = ExplorerParams {
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
   _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
-  _useMemoization :: Bool,                -- ^ Should we memoize enumerated terms (and corresponding environments)
+  _useMemoization :: Bool,                -- ^ Should enumerated terms be memoized?
+  _symmetryReduction :: Bool,             -- ^ Should partial applications be memoized to check for redundancy?
   _explorerLogLevel :: Int                -- ^ How verbose logging is
 } 
 
@@ -360,31 +361,9 @@ checkE :: MonadHorn s => Environment -> RType -> RProgram -> Maybe Int -> Explor
 checkE env typ p@(Program pTerm pTyp) md = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx p)
-  case md of
-    Just d -> do
-    
-      startState <- get
-      let partialKey = PartialKey env typ startState d
-      startPartials <- getPartials
-      let pastPartials = maybe [] id (Map.lookup partialKey startPartials)
-
-      writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of" <+> pretty pastPartials <+> text "at depth" <+> pretty d
-
-      -- Check that pTyp is not a subtype of any stored partial.
-      if d > 0
-        then mapM_ (\oldTyp -> ifte (solveLocally $ Subtype env pTyp oldTyp False)
-                                  (\_ -> do
-                                    writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "Is a subtype of" <+> pretty oldTyp
-                                    mzero)
-                                  (return ())) pastPartials
-        else return ()
-
-      let newPartials = pTyp : pastPartials
-      let newPartialMap = Map.insert partialKey newPartials startPartials
-      putPartials newPartialMap
-
-    Nothing -> return ()
-
+  
+  ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
+  
   if arity typ == 0
     then addConstraint $ Subtype env pTyp typ False
     else do
@@ -395,12 +374,36 @@ checkE env typ p@(Program pTerm pTyp) md = do
   typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
   solveIncrementally
   typingState . errorContext .= empty
-
     where
       removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
         ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
       removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (removeFrom argNames fml)
       removeFrom argNames fml = if varsOf fml `disjoint` argNames then fml else ffalse
+      
+      checkSymmetry = 
+        case md of
+          Just d -> do          
+            startState <- get
+            let partialKey = PartialKey env typ startState d
+            startPartials <- getPartials
+            let pastPartials = maybe [] id (Map.lookup partialKey startPartials)
+
+            writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of" <+> pretty pastPartials <+> text "at depth" <+> pretty d
+
+            -- Check that pTyp is not a subtype of any stored partial.
+            if d > 0
+              then mapM_ (\oldTyp -> ifte (solveLocally $ Subtype env pTyp oldTyp False)
+                                        (\_ -> do
+                                          writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "Is a subtype of" <+> pretty oldTyp
+                                          mzero)
+                                        (return ())) pastPartials
+              else return ()
+
+            let newPartials = pTyp : pastPartials
+            let newPartialMap = Map.insert partialKey newPartials startPartials
+            putPartials newPartialMap
+
+          Nothing -> return ()
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do

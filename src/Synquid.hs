@@ -147,6 +147,7 @@ defaultExplorerParams = ExplorerParams {
   _incrementalChecking = True,
   _consistencyChecking = True,
   _useMemoization = False,
+  _symmetryReduction = False,
   _context = id,
   _explorerLogLevel = 0
 }
