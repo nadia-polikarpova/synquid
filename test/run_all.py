@@ -84,11 +84,11 @@ BENCHMARKS = [
 AVL_BENCHMARKS = [
     # AVL trees
     ('AVL-BalL0',           ['-a 2']),
-    ('AVL-BalLL',           ['-a 2', '-n']),
-    ('AVL-BalLR',           ['-a 2', '-n']),
+    ('AVL-BalLL',           ['-a 2', '-u']),
+    ('AVL-BalLR',           ['-a 2', '-u']),
     ('AVL-BalR0',           ['-a 2']),
-    ('AVL-BalRL',           ['-a 2', '-n']),
-    ('AVL-BalRR',           ['-a 2', '-n']),
+    ('AVL-BalRL',           ['-a 2', '-u']),
+    ('AVL-BalRR',           ['-a 2', '-u']),
     ('AVL-BalanceL',        ['-a 2', '-e']),
     ('AVL-BalanceR',        ['-a 2', '-e']),
     ('AVL-Insert',          ['-a 2']),
@@ -96,9 +96,9 @@ AVL_BENCHMARKS = [
 
 RBT_BENCHMARKS = [
     # Red-black trees
-    ('RBT-BalanceL',        ['-a 2', '-m 1', '-u']),
-    ('RBT-BalanceR',        ['-a 2', '-m 1', '-u']),
-    ('RBT-Insert',          ['-a 2', '-m 1', '-u']),
+    ('RBT-BalanceL',        ['-a 2', '-m 1', '-z']),
+    ('RBT-BalanceR',        ['-a 2', '-m 1', '-z']),
+    ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
 ]
 
 CHECKING_BENCHMARKS = [
