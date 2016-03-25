@@ -118,7 +118,7 @@ cla = CommandLineArgs {
   generalize_preds    = False           &= help ("Make recursion polymorphic in abstract refinements (default: False)"),
   explicit_match      = False           &= help ("Do not abduce match scrutinees (default: False)"),
   unfold_locals       = False           &= help ("Use all variables, as opposed to top-level function arguments only, in match scrutinee abduction (default: False)"),
-  partial             = False           &= help ("Generate best-effort partial solutions (default: False)"),
+  partial             = False           &= help ("Generate best-effort partial solutions (default: False)") &= name "p",
   incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_                = 0               &= help ("Logger verboseness level (default: 0)"),
