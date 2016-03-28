@@ -600,35 +600,6 @@ allMeasurePostconditions _ _ _ = []
 
 typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
 typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute tass))) env
-
--- | Assumptions encoded in an environment    
-embedding :: Environment -> TypeSubstitution -> Substitution -> Set Formula -> Set Id -> Set Formula
-embedding env subst pSubst vars measures = addBindings allAssumptions (Set.map varName $ Set.unions $ vars : (map varsOf (Set.toList allAssumptions)))
-  where
-    substAssumption = substitutePredicate pSubst . sortSubstituteFml (asSortSubst subst)
-    allAssumptions = Set.map substAssumption $ env ^. assumptions
-    addBindings fmls vars = 
-      if Set.null vars
-        then fmls
-        else let (x, rest) = Set.deleteFindMin vars in
-              if Set.member x (env ^. constants)
-                then addBindings fmls rest -- Ignore constants
-                else case Map.lookup x allSymbols of
-                  Nothing -> addBindings fmls rest -- Variable not found (useful to ignore value variables)
-                  Just (Monotype t) -> case typeSubstitute subst t of
-                    ScalarT baseT fml -> 
-                      let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                                            ((substitutePredicate pSubst fml) : allMeasurePostconditions measures baseT env) in
-                      addBindings (fmls `Set.union` fmls') (rest `Set.union` Set.map varName (varsOf fml))
-                    _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
-    allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
-    -- embedBinding x (Monotype t) = if Set.member x (env ^. constants) 
-      -- then Set.empty -- Ignore constants
-      -- else case typeSubstitute subst t of
-            -- ScalarT baseT fml -> Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                                    -- ((substitutePredicate pSubst fml) : allMeasurePostconditions measures baseT env)
-            -- _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
-    -- embedBinding _ _ = Set.empty -- Ignore polymorphic things, since they could only be constants      
     
 {- Input language declarations -}
 
