@@ -187,9 +187,6 @@ toAST expr = case expr of
 
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
-    unOp Abs = \arg -> do
-      cond <- toZ3Sort IntS >>= mkInt 0 >>= mkGe arg
-      mkUnaryMinus arg >>= mkIte cond arg
     unOp Not = mkNot
 
     binOp :: BinOp -> AST -> AST -> Z3State AST

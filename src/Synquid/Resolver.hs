@@ -29,7 +29,8 @@ data ResolverState = ResolverState {
   _goals :: [(Id, UProgram)],
   _condQualifiers :: [Formula],
   _typeQualifiers :: [Formula],
-  _mutuals :: Map Id [Id]
+  _mutuals :: Map Id [Id],
+  _inlines :: Map Id ([Id], Formula)
 }
 
 makeLenses ''ResolverState
@@ -39,7 +40,8 @@ initResolverState = ResolverState {
   _goals = [],
   _condQualifiers = [],
   _typeQualifiers = [],
-  _mutuals = Map.empty
+  _mutuals = Map.empty,
+  _inlines = Map.empty
 }
 
 -- | Convert a parsed program AST into a synthesizable @Goal@ object.
@@ -47,7 +49,7 @@ resolveDecls :: [Declaration] -> Either ErrMsg ([Goal], [Formula], [Formula])
 resolveDecls declarations = 
   case runExcept (execStateT go initResolverState) of
     Left msg -> Left msg
-    Right (ResolverState env goals cquals tquals mutes) -> 
+    Right (ResolverState env goals cquals tquals mutes _) -> 
       Right (map (makeGoal env (map fst goals) mutes) goals, cquals, tquals)
   where
     go = do
@@ -126,6 +128,14 @@ resolveDeclaration (MutualDecl names) = mapM_ addMutuals names
       case goalMb of
         Just _ -> mutuals %= Map.insert name (delete name names)
         Nothing -> throwError $ unwords ["Synthesis goal", name, "in a mutual clause is undefined"]
+resolveDeclaration (InlineDecl name args body) = 
+  ifM (uses inlines (Map.member name))
+    (throwError $ unwords ["Duplicate definition of inline", name])
+    (do
+      let extraVars = Set.map varName (varsOf body) `Set.difference` Set.fromList args
+      if not $ Set.null extraVars
+        then throwError $ unwords (["Variables"] ++ Set.toList extraVars ++ ["undefined in the body of inline", name])
+        else inlines %= Map.insert name (args, body))
       
 resolveSignatures :: Declaration -> Resolver ()      
 resolveSignatures (FuncDecl funcName _)  = resolveSignature funcName
@@ -342,21 +352,25 @@ resolveFormula targetSort valueSort (Binary op l r) = do
 resolveFormula targetSort valueSort (Ite cond l r) = do
   cond' <- resolveFormula BoolS valueSort cond
   l' <- resolveFormula targetSort valueSort l
-  r' <- resolveFormula targetSort valueSort r
+  r' <- resolveFormula (sortOf l') valueSort r
   return $ Ite cond' l' r'
    
 resolveFormula targetSort valueSort (Pred AnyS name argFmls) = do
-  ps <- uses environment allPredicates
-  (resSort : argSorts) <- case Map.lookup name ps of
-                            Nothing -> throwError $ unwords ["Predicate or measure", name, "is undefined"]
-                            Just sorts -> return sorts
-  if length argFmls /= length argSorts
-      then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate or measure", name, "and got", show (length argFmls)]
-      else do
-        (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls
-        if complies targetSort resSort' 
-          then return $ Pred resSort' name argFmls'
-          else throwError $ unwords ["Encountered predicate or measure", name, "where", show targetSort, "was expected"]
+  inlineMb <- uses inlines (Map.lookup name)
+  case inlineMb of
+    Just (args, body) -> resolveFormula targetSort valueSort (substitute (Map.fromList $ zip args argFmls) body)
+    Nothing -> do
+      ps <- uses environment allPredicates
+      (resSort : argSorts) <- case Map.lookup name ps of
+                                Nothing -> throwError $ unwords ["Predicate or measure", name, "is undefined"]
+                                Just sorts -> return sorts
+      if length argFmls /= length argSorts
+          then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate or measure", name, "and got", show (length argFmls)]
+          else do
+            (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls
+            if complies targetSort resSort' 
+              then return $ Pred resSort' name argFmls'
+              else throwError $ unwords ["Encountered predicate or measure", name, "where", show targetSort, "was expected"]
           
 resolveFormula targetSort valueSort (Cons AnyS name argFmls) = do
   syms <- uses environment allSymbols
