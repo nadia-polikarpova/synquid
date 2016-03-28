@@ -475,11 +475,14 @@ generateError :: MonadHorn s => Environment -> Explorer s RProgram
 generateError env = do
   ctx <- asks $ _context . fst  
   writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
-  addConstraint $ Subtype env (int ftrue) (int ffalse) False
+  tass <- use (typingState . typeAssignment)
+  addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env tass)) (int ffalse) False
   typingState . errorContext .= errorText "when checking" </> pretty errorProgram </> errorText "in" $+$ pretty (ctx errorProgram)
   runInSolver solveTypeConstraints
   typingState . errorContext .= empty
   return errorProgram
+  where
+    trivial var = var |=| var
 
 -- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
 toVar (Program (PSymbol name) t) env 
