@@ -26,7 +26,8 @@ module Synquid.TypeConstraintSolver (
   finalizeType,
   finalizeProgram,
   currentValuations,
-  initEnv
+  initEnv,
+  allScalars
 ) where
 
 import Synquid.Logic
@@ -256,10 +257,7 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
   = -- TODO: rename type vars
       if arity tArg1 == 0 
-        then do
-          simplifyConstraint (Subtype env tArg2 tArg1 False) -- Function types are only consistent if their argument types are the same
-          simplifyConstraint (Subtype env tArg1 tArg2 False)
-          simplifyConstraint (Subtype (addGhost y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
+        then simplifyConstraint (Subtype (addVariable y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
         else simplifyConstraint (Subtype env tRes1 tRes2 True)
 simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
   = do
@@ -320,7 +318,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         let r' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) r
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
-            let lhss = embedding env tass pass (predsOf r') `Set.union` Set.fromList [l'] -- (sortSubstFml l : allMeasurePostconditions baseT env)
+            let lhss = embedding env tass pass (varsOf l' `Set.union` varsOf r') (predsOf r') `Set.union` Set.fromList [l']
             hornClauses %= ((conjunction lhss |=>| r') :)
           else modify $ addTypingConstraint c -- Constraint contains free predicate: add back and wait until more type variables get unified, so predicate variables can be instantiated
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
@@ -329,7 +327,7 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
       pass <- use predAssignment
       let l' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) l
       let r' = substitutePredicate pass $ sortSubstituteFml (asSortSubst tass) r      
-      consistencyChecks %= (conjunction (Set.insert l' $ Set.insert r' $ embedding env tass pass Set.empty) :)
+      consistencyChecks %= (conjunction (Set.insert l' $ Set.insert r' $ embedding env tass pass (varsOf l' `Set.union` varsOf r') Set.empty) :)
 processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
       Unknown _ u -> do      
