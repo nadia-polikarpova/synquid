@@ -2,19 +2,23 @@ qualifier {x < y}
 
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
-max :: x: Int -> y: Int -> {Int | _v == if x > y then x else y}
+maximum :: x: Int -> y: Int -> {Int | _v == max x y}
+
+inline max x y = if x >= y then x else y
+inline abs x = if x >= 0 then x else -x
+inline eqOrOneLess x y = x <= y && y <= x + 1 
 
 data AVL a where
   Leaf :: AVL a
   Node :: x: a 
             -> l: AVL {a | _v < x} 
-            -> r: {AVL {a | _v > x} | realHeight l - 1 <= realHeight _v && realHeight _v <= realHeight l + 1} 
-            -> h: {Int | _v == (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) } 
+            -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1} 
+            -> h: {Int | _v == 1 + max (realHeight l) (realHeight r) } 
             -> AVL a
             
 termination measure realHeight :: AVL a -> {Int | _v >= 0} where
   Leaf -> 0
-  Node x l r h -> (1 + if realHeight l >= realHeight r then realHeight l else realHeight r)
+  Node x l r h -> 1 + max (realHeight l) (realHeight r)
   
 measure balFac :: AVL a -> Int where
   Leaf -> 0
@@ -30,8 +34,8 @@ getHeight = \t .
     Leaf -> 0
     Node x l r h -> h
     
-nodeHeight :: l: AVL a -> r: AVL r -> {Int | _v == 1 + if realHeight l > realHeight r then realHeight l else realHeight r}  
-nodeHeight = \l . \r . 1 + max (getHeight l) (getHeight r)
+nodeHeight :: l: AVL a -> r: AVL r -> {Int | _v == 1 + max (realHeight l) (realHeight r)}  
+nodeHeight = \l . \r . 1 + maximum (getHeight l) (getHeight r)
 
 isSkewed :: t: AVL a -> t': AVL a -> {Bool | _v == (realHeight t - realHeight t' == 2)}
 isSkewed = \t . \t' . getHeight t - getHeight t' == 2
@@ -110,13 +114,11 @@ balRR = \x . \l . \r .
                           Leaf -> ??
                           Node rrx rrl rrr rrh -> Node rx (Node x l rl rrh) rr rh 
     
-balanceL :: x: a          
+balanceL :: x: a
           -> l: AVL {a | _v < x}
-          -> l': {AVL {a | _v < x} | realHeight l <= realHeight _v && realHeight _v <= realHeight l + 1}          
-          -> r: {AVL {a | _v > x} | realHeight l - 1 <= realHeight _v && realHeight _v <= realHeight l + 1 }
-          -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
-                        realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r) &&
-                        elems _v == [x] + elems l' + elems r}          
+          -> l': {AVL {a | _v < x} | eqOrOneLess (realHeight l) (realHeight _v)}          
+          -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1 }
+          -> {AVL a | eqOrOneLess (1 + max (realHeight l) (realHeight r)) (realHeight _v) && elems _v == [x] + elems l' + elems r}
 balanceL = \x . \l . \l' . \r . 
   if isSkewed l' r && isLeftHeavy l'
     then balLL x l' r
@@ -128,11 +130,9 @@ balanceL = \x . \l . \l' . \r .
                         
 balanceR :: x: a
           -> l: AVL {a | _v < x}
-          -> r: {AVL {a | _v > x} | realHeight l - 1 <= realHeight _v && realHeight _v <= realHeight l + 1 }
-          -> r': {AVL {a | _v > x} | realHeight r <= realHeight _v && realHeight _v <= realHeight r + 1 }
-          -> {AVL a | (1 + if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && 
-                        realHeight _v <= (2 + if realHeight l >= realHeight r then realHeight l else realHeight r) &&
-                        elems _v == [x] + elems l + elems r'}          
+          -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1 }
+          -> r': {AVL {a | _v > x} | eqOrOneLess (realHeight r) (realHeight _v) }
+          -> {AVL a | eqOrOneLess (1 + max (realHeight l) (realHeight r)) (realHeight _v) && elems _v == [x] + elems l + elems r'}          
 balanceR = \x . \l. \r . \r' . 
   if isSkewed r' l && isLeftHeavy r'
     then balRL x l r'
@@ -143,8 +143,7 @@ balanceR = \x . \l. \r . \r' .
                 else Node x l r' (nodeHeight l r')
                 
                 
-insert :: y: a -> t: AVL a -> {AVL a | realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1 &&
-                                        elems _v == [y] + elems t}
+insert :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight t) (realHeight _v) && elems _v == [y] + elems t}
 insert = \y . \t .
   match t with
     Leaf -> Node y Leaf Leaf 1

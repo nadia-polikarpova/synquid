@@ -3,7 +3,6 @@
   - Re-enable sort checking in substitute (sometimes wrong in applications, test case: List-Fold-Sort)
   - Use unifySorts for qualifier substitution instead of complies
   - Qualifier discovery should be local (otherwise doesn't work for abstract refinements?)
-- Inline functions
 - Named arguments for abstract predicates
 - Collapse lambda-expansions in aux goals
 - Parametrization by non-boolean predicates

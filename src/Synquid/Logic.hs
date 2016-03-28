@@ -29,7 +29,7 @@ isData _ = False
 {- Formulas of the refinement logic -}
 
 -- | Unary operators
-data UnOp = Neg | Abs | Not
+data UnOp = Neg | Not
   deriving (Eq, Ord)
 
 -- | Binary operators  
@@ -84,7 +84,6 @@ valInt = intVar valueVarName
 vartVar n = Var (VarS n)
 valVart n = vartVar n valueVarName
 fneg = Unary Neg
-fabs = Unary Abs
 fnot = Unary Not
 (|*|) = Binary Times
 (|+|) = Binary Plus
@@ -176,7 +175,7 @@ sortOf (SetLit b _)                              = SetS b
 sortOf (Var s _ )                                = s
 sortOf (Unknown _ _)                             = BoolS
 sortOf (Unary op _)
-  | op == Neg || op == Abs                       = IntS
+  | op == Neg                                    = IntS
   | otherwise                                    = BoolS
 sortOf (Binary op e1 _)
   | op == Times || op == Plus || op == Minus     = IntS

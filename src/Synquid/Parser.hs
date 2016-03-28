@@ -90,6 +90,7 @@ parseDeclaration = choice [parseTypeDecl
                          , parsePredDecl
                          , parseQualifierDecl
                          , parseMutualDecl
+                         , parseInlineDecl
                          , try parseFuncDecl
                          , parseSynthesisGoal] <?> "declaration"
 
@@ -153,6 +154,15 @@ parseMutualDecl :: Parser Declaration
 parseMutualDecl = do
   reserved "mutual"
   MutualDecl <$> braces (commaSep parseIdentifier)  
+  
+parseInlineDecl :: Parser Declaration
+parseInlineDecl = do
+  reserved "inline"
+  name <- parseIdentifier
+  args <- many parseIdentifier
+  reservedOp "="
+  body <- parseFormula
+  return $ InlineDecl name args body
 
 parseFuncDecl :: Parser Declaration
 parseFuncDecl = do
@@ -255,7 +265,7 @@ parseRefinedSort = braces $ do
 
 -- | Expression table
 exprTable mkUnary mkBinary withGhost = [
-  [unary Not, unary Neg, unary Abs],
+  [unary Not, unary Neg],
   [binary Times AssocLeft],
   [binary Plus AssocLeft, binary Minus AssocLeft],
   [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone] 
