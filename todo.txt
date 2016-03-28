@@ -12,10 +12,10 @@
 - Default components
 - Solve the keys measure mystery in BST-delete
 - Remove subsumed components (0 + x -> x, x + y -> y + x)
+- Field measures (and other independent measures): is it possible to split type-checking per conjunct?
+- Intersection types (carry multiple environments and type constraint checkers), good example: allPos :: (List Int -> Bool) &&& (List Pos -> {Bool | _v}) &&& ({List Nonpos | len _v > 0} -> {Bool | !_v})
 
 - Irrefutable type errors (like symbol not in scope)
-- Collect stats: how big is env embedding? how many candidates? how many active/inactive constraints?
-- Should let-defs and known conditionals have abstracted types?
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
 - Check that the first constructor is the base case
