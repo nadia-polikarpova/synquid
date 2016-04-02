@@ -50,14 +50,14 @@ BENCHMARKS = [
     # Unique lists
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
-    ('List-Nub',            ['-f=FirstArgument', '-m=1', '-g']),
+    ('List-Nub',            ['-m=1']),
     ('List-Compress',       []),
     # Insertion sort
     ('List-InsertSort',     []),
     ('List-Fold-Sort',      ['-m=1', '-a=2', '-e']),
     # Merge sort
     ('List-Split',          ['-m=3']),
-    ('IncList-Merge',       []),
+    ('IncList-Merge',       ['-f=AllArguments']),
     ('IncList-MergeSort',   ['-a=2', '-m=3']),
     # Quick sort
     ('List-Partition',      []),
