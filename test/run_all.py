@@ -42,6 +42,7 @@ BENCHMARKS = [
     ('List-ToNat',      []),
     ('List-Product',    []),
     ('List-ExtractMin',     ['-a=2', '-m 3']),
+    ('List-Intersection',   ['-a=2', '-e']),
     ('List-Fold',           []),
     ('List-Fold-Length',    ['-m=0']),
     ('List-Fold-Append',    ['-m=0']),

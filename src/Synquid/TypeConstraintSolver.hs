@@ -334,11 +334,14 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
       pass <- use predAssignment
       qmap <- use qualifierMap
       let l' = substitutePredicate pass l
-      let r' = substitutePredicate pass r 
-      let relevantVars = potentialVars qmap (l' |&| r')
-      ass <- embedding env relevantVars Set.empty
-      let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' $ Set.insert r' ass))
-      consistencyChecks %= (clause :)
+      let r' = substitutePredicate pass r
+      if l' == ftrue || r' == ftrue
+        then return ()
+        else do
+          let relevantVars = potentialVars qmap (l' |&| r')
+          ass <- embedding env relevantVars Set.empty
+          let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' $ Set.insert r' ass))
+          consistencyChecks %= (clause :)
 processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
       Unknown _ u -> do      
@@ -505,10 +508,14 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
     -- All x e -> ?
     _ -> Set.empty  
   where
-    measureAxiom resS ctor args (MeasureDef _ _ defs _) = 
+    measureAxiom resS ctor args (MeasureDef inSort _ defs _) = 
       let MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs in
-      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in
-      substitute subst body  
+      let sArgs = sortArgsOf inSort in
+      let uniqueSubst = Map.fromList $ zip (map varSortName sArgs) (map VarS deBrujns) in
+      let inSort' = sortSubstitute uniqueSubst inSort in
+      let (Right sortSubst) = unifySorts [inSort'] [resS] in
+      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in      
+      substitute subst (sortSubstituteFml sortSubst . sortSubstituteFml uniqueSubst $ body)
     
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 

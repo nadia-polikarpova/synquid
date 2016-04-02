@@ -25,6 +25,8 @@ isSetS (SetS _) = True
 isSetS _ = False
 isData (DataS _ _) = True
 isData _ = False
+sortArgsOf (DataS _ sArgs) = sArgs
+varSortName (VarS name) = name
 
 -- | 'typeVarsOfSort' @s@ : all type variables in @s@
 typeVarsOfSort :: Sort -> Set Id

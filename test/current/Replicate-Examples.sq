@@ -1,0 +1,16 @@
+qualifier {x <= y, x != y}
+
+type Nat = {Int | _v >= 0}
+
+zero :: {Int | _v == 0}
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  	
+replicate :: n: {Nat | _v <= 2} -> x: a -> {List a | (n == 0 ==> _v == Nil) && 
+                                                     (n == 1 ==> _v == Cons x Nil) &&
+                                                     (n == 2 ==> _v == Cons x (Cons x Nil)) }
+replicate = ??
