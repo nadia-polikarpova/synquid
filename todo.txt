@@ -1,3 +1,4 @@
+- toAST: bug with function lookup
 - Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
   - Re-enable sort checking in substitute (sometimes wrong in applications, test case: List-Fold-Sort)
@@ -12,6 +13,7 @@
 - Solve the keys measure mystery in BST-delete
 - Remove subsumed components (0 + x -> x, x + y -> y + x)
 - Field measures (and other independent measures): is it possible to split type-checking per conjunct?
+- replicate x n: is length requirement fails, no need to reconsider x 
 - Intersection types (carry multiple environments and type constraint checkers), good example: allPos :: (List Int -> Bool) &&& (List Pos -> {Bool | _v}) &&& ({List Nonpos | len _v > 0} -> {Bool | !_v})
 
 - Irrefutable type errors (like symbol not in scope)
