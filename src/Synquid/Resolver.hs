@@ -151,16 +151,15 @@ resolveSignatures (DataDecl dtName tArgs pArgs ctors) = mapM_ resolveConstructor
     resolveConstructorSignature (ConstructorSig name typ) = do
       sch <- uses environment ((Map.! name) . allSymbols)
       sch' <- resolveSchema sch
-      let lastBase = baseTypeOf $ lastType typ
-      let dtBase = DatatypeT dtName (map vartAll tArgs) (map predApp pArgs)
-      if dtBase == lastBase
+      let lastSort = toSort $ baseTypeOf $ lastType typ
+      let dtSort = DataS dtName (map VarS tArgs) -- ToDo: compare base types instead
+      if dtSort == lastSort
         then do
-          let dtSort = toSort dtBase      
           let sch'' = addRefinementToLastSch sch' (Var dtSort valueVarName |=| Cons dtSort name (allArgs typ))    
           environment %= addPolyConstant name sch''
-        else throwError $ unwords ["Constructor", name, "must return type", show dtBase]
+        else throwError $ unwords ["Constructor", name, "must return type", show dtSort, ", got", show lastSort]
     
-    predApp (PredSig p sorts BoolS) = Pred BoolS p (zipWith Var sorts deBrujns)
+    predApp (PredSig p sorts BoolS) = Pred BoolS p [] -- (zipWith Var sorts deBrujns)
   
 resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
   (outSort : (inSort@(DataS dtName tArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)

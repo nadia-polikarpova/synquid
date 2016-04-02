@@ -215,7 +215,8 @@ toAST expr = case expr of
     -- | Lookup or create a variable with name `ident' and sort `s'
     var s ident = do
       z3s <- toZ3Sort s
-      let ident' = ident ++ show s
+      suffix <- sortToString z3s
+      let ident' = ident ++ suffix
       varMb <- uses vars (Map.lookup ident')
 
       case varMb of
@@ -228,17 +229,18 @@ toAST expr = case expr of
 
     -- | Lookup or create a function declaration with name `name', return type `resT', and argument types `argTypes'
     function resT name argTypes = do
-      -- let name' = name -- ++ show argType
-      declMb <- uses functions (Map.lookup name)
+      argSorts <- mapM toZ3Sort argTypes
+      resSort <- toZ3Sort resT
+      suffix <- concat <$> mapM sortToString (resSort : argSorts)
+      let name' = name ++ suffix
+      declMb <- uses functions (Map.lookup name')
       case declMb of
         Just d -> return d
         Nothing -> do
-          symb <- mkStringSymbol name
-          argSorts <- mapM toZ3Sort argTypes
-          resSort <- toZ3Sort resT
+          symb <- mkStringSymbol name'
           decl <- mkFuncDecl symb argSorts resSort
-          functions %= Map.insert name decl
-          -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
+          functions %= Map.insert name' decl
+          -- return $ traceShow (text "DECLARE" <+> text name' <+> pretty argTypes <+> pretty resT) decl
           return decl
 
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
