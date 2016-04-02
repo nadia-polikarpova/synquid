@@ -113,9 +113,8 @@ runExplorer eParams tParams initTS go = do
 -- (top-down phase of bidirectional typechecking)
 generateI :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 generateI env t@(FunctionT x tArg tRes) = do
-  x' <- if x == dontCare then freshId "x" else return x
-  let ctx = \p -> Program (PFun x' p) t
-  pBody <- inContext ctx $ generateI (unfoldAllVariables $ addVariable x' tArg $ env) tRes
+  let ctx = \p -> Program (PFun x p) t
+  pBody <- inContext ctx $ generateI (unfoldAllVariables $ addVariable x tArg $ env) tRes
   return $ ctx pBody
 generateI env t@(ScalarT _ _) = do
   maEnabled <- asks $ _abduceScrutinees . fst -- Is match abduction enabled?
