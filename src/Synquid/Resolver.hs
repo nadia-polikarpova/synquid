@@ -16,9 +16,12 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Maybe
+import Data.Either
 import Data.List
 import qualified Data.Foldable as Foldable
 import qualified Data.Traversable as Traversable
+
+import Debug.Trace
 
 {- Interface -}
 
@@ -255,41 +258,35 @@ resolveSort s = return s
 {- Formulas -}  
 
 resolveFormula :: Sort -> Sort -> Formula -> Resolver Formula
-resolveFormula targetSort valueSort (SetLit AnyS memberFmls) = 
-  if complies targetSort (SetS AnyS)
-    then case memberFmls of
-      [] -> return $ SetLit (elemSort targetSort) []
-      (fml:fmls) -> do
-        fml' <- resolveFormula (elemSort targetSort) valueSort fml
-        let newElemSort = sortOf fml'
-        fmls' <- mapM (resolveFormula newElemSort valueSort) fmls
-        return $ SetLit newElemSort (fml':fmls')
-    else throwError $ unwords ["Encountered set literal where", show targetSort, "was expected"]
+resolveFormula targetSort valueSort (SetLit AnyS memberFmls) = do
+  _ <- targetSort `unifiedWith` (SetS AnyS)
+  case memberFmls of
+    [] -> return $ SetLit (elemSort targetSort) []
+    (fml:fmls) -> do
+      fml' <- resolveFormula (elemSort targetSort) valueSort fml
+      let newElemSort = sortOf fml'
+      fmls' <- mapM (resolveFormula newElemSort valueSort) fmls
+      return $ SetLit newElemSort (fml':fmls')
   where
     elemSort (SetS s) = s
     elemSort AnyS = AnyS  
       
 resolveFormula targetSort valueSort (Var AnyS varName) =
   if varName == valueVarName
-    then if complies targetSort valueSort 
-          then return $ Var valueSort varName
-          else throwError $ unwords ["Encountered value variable of sort", show valueSort, "where", show targetSort, "was expected"]
+    then flip Var varName <$> (valueSort `unifiedWith` targetSort)
     else do
       env <- use environment
       case Map.lookup varName (symbolsOfArity 0 env) of
         Just varType ->
           case toMonotype varType of
-            ScalarT baseType _ -> let s = toSort baseType in 
-              if complies targetSort s  
-                then return $ Var s varName
-                else throwError $ unwords ["Encountered variable of sort", show s, "where", show targetSort, "was expected"]
+            ScalarT baseType _ -> flip Var varName <$> (toSort baseType `unifiedWith` targetSort)
             FunctionT _ _ _ -> error "The impossible happened: function in a formula"
         Nothing -> throwError $ printf "Var `%s` is not in scope." varName
       
 resolveFormula targetSort valueSort (Unary op fml) = fmap (Unary op) $ 
-    if complies resSort targetSort
-      then resolveFormula operandSort valueSort fml
-      else throwError $ unwords ["Encountered unary operation", show op, "where", show targetSort, "was expected"]
+    do
+      _ <- unifiedWith resSort targetSort
+      resolveFormula operandSort valueSort fml
   where
     resSort = case op of
       Not -> BoolS
@@ -298,24 +295,30 @@ resolveFormula targetSort valueSort (Unary op fml) = fmap (Unary op) $
       Not -> BoolS
       _ -> IntS
 
-resolveFormula targetSort valueSort (Binary op l r) = do
-  l' <- resolveFormula (leftSort op) valueSort l
-  let lS = sortOf l'
-  op' <- newOp op lS
-  let (rS, resS) = rightRes op' lS
-  r' <- resolveFormula rS valueSort r
-  if complies resS targetSort
-    then return $ Binary op' l' r'
-    else throwError $ unwords ["Encountered binary operation", show op, "where", show targetSort, "was expected"]
+resolveFormula targetSort valueSort (Binary op l r) = 
+  if wrongTargetSort op
+    then throwError $ unwords ["Encountered binary operation", show op, "where", show targetSort, "was expected"]
+    else do
+      l' <- resolveFormula (leftSort op) valueSort l
+      let lS = sortOf l'
+      op' <- newOp op lS
+      let rS = right op' lS
+      r' <- resolveFormula rS valueSort r
+      return $ Binary op' l' r'
   where
+    wrongTargetSort op
+      | op == Times || op == Plus || op == Minus            = isLeft (unifySorts [targetSort] [IntS]) && isLeft (unifySorts [targetSort] [SetS AnyS])
+      | op == Union || op == Intersect || op == Diff        = isLeft (unifySorts [targetSort] [SetS AnyS]) 
+      | otherwise                                           = isLeft (unifySorts [targetSort] [BoolS])
+  
     leftSort op
-      | op == Times || op == Plus || op == Minus            = AnyS
+      | op == Times || op == Plus || op == Minus            = targetSort
       | op == Eq  || op == Neq                              = AnyS
       | op == Lt || op == Le || op == Gt || op == Ge        = AnyS
       | op == And || op == Or || op == Implies || op == Iff = BoolS
       | op == Member                                        = AnyS
-      | op == Union || op == Intersect || op == Diff        = SetS AnyS
-      | op == Subset                                        = SetS AnyS
+      | op == Union || op == Intersect || op == Diff        = targetSort
+      | op == Subset                                        = targetSort
       
     newOp op lSort
       | op == Times || op == Plus || op == Minus  = case lSort of
@@ -340,14 +343,14 @@ resolveFormula targetSort valueSort (Binary op l r) = do
     toSetOp Minus = Diff
     toSetOp Le = Subset
       
-    rightRes op lSort
-      | op == Times || op == Plus || op == Minus            = (IntS, IntS)
-      | op == Eq  || op == Neq                              = (lSort, BoolS)
-      | op == Lt || op == Le || op == Gt || op == Ge        = (lSort, BoolS)
-      | op == And || op == Or || op == Implies || op == Iff = (BoolS, BoolS)
-      | op == Union || op == Intersect || op == Diff        = (lSort, lSort)
-      | op == Member                                        = (SetS lSort, BoolS)
-      | op == Subset                                        = (lSort, BoolS)
+    right op lSort
+      | op == Times || op == Plus || op == Minus            = IntS
+      | op == Eq  || op == Neq                              = lSort
+      | op == Lt || op == Le || op == Gt || op == Ge        = lSort
+      | op == And || op == Or || op == Implies || op == Iff = BoolS
+      | op == Union || op == Intersect || op == Diff        = lSort
+      | op == Member                                        = SetS lSort
+      | op == Subset                                        = lSort
     
 resolveFormula targetSort valueSort (Ite cond l r) = do
   cond' <- resolveFormula BoolS valueSort cond
@@ -367,10 +370,8 @@ resolveFormula targetSort valueSort (Pred AnyS name argFmls) = do
       if length argFmls /= length argSorts
           then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate or measure", name, "and got", show (length argFmls)]
           else do
-            (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls
-            if complies targetSort resSort' 
-              then return $ Pred resSort' name argFmls'
-              else throwError $ unwords ["Encountered predicate or measure", name, "where", show targetSort, "was expected"]
+            (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls targetSort
+            return $ Pred resSort' name argFmls'
           
 resolveFormula targetSort valueSort (Cons AnyS name argFmls) = do
   syms <- uses environment allSymbols
@@ -383,21 +384,29 @@ resolveFormula targetSort valueSort (Cons AnyS name argFmls) = do
       if length argSorts /= length argFmls
         then throwError $ unwords ["Constructor", name, "expected", show (length argSorts), "arguments and got", show (length argFmls)]
         else do
-          (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls
-          if complies targetSort resSort' 
-            then return $ Cons resSort' name argFmls'
-            else throwError $ unwords ["Encountered constructor", name, "where", show targetSort, "was expected"]
+              (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls targetSort
+              return $ Cons resSort' name argFmls'
             
 resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type: check
   in if complies targetSort s
     then return fml
-    else throwError $ unwords ["Encountered", show s, "where", show targetSort, "was expected"]
+    else throwError $ unwords ["Encountered", show s, "where", show targetSort, "was expected"]            
+-- resolveFormula targetSort _ fml = -- Formula of a known type: check
+  -- case unifySorts [targetSort] [sortOf fml] of
+    -- Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y, "when resolving", show fml]
+    -- Right subst -> return $ sortSubstituteFml subst fml
 
 {- Misc -}
+
+-- | @s@ unified with @s'@; @s@ should not contain more unknowns than @s'@
+unifiedWith :: Sort -> Sort -> Resolver Sort
+unifiedWith s s' = case unifySorts [s] [s'] of
+  Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
+  Right subst -> return $ sortSubstitute subst s
       
-unifyArguments :: Sort -> [Sort] -> Sort -> [Formula] -> Resolver (Sort, [Formula])      
-unifyArguments valueSort argSorts resSort argFmls = do
-  let typeVars = Set.unions (map (typeVarsOf . fromSort) argSorts) -- Type variables of the argument sorts
+unifyArguments :: Sort -> [Sort] -> Sort -> [Formula] -> Sort -> Resolver (Sort, [Formula])
+unifyArguments valueSort argSorts resSort argFmls targetSort = do
+  let typeVars = Set.unions (map typeVarsOfSort (resSort : argSorts)) -- Type variables of the argument sorts
   let substAny = constMap typeVars AnyS
   let argSortsAny = map (sortSubstitute substAny) argSorts -- Argument sorts with unknown type parameters
   argFmls' <- zipWithM (flip resolveFormula valueSort) argSortsAny argFmls -- Resolve arguments against argument sorts with unknown type parameters
@@ -405,7 +414,7 @@ unifyArguments valueSort argSorts resSort argFmls = do
   let substUnique = Map.fromList $ zip (Set.toList typeVars) (map VarS deBrujns)
   let (resSortUnique : argSortsUnique) = map (sortSubstitute substUnique) (resSort : argSorts)
   
-  case unifySorts argSortsUnique (map sortOf argFmls') of -- Unify required and inferred argument sorts (this can fail if the same type variable has to match two different sorts)
+  case unifySorts (resSortUnique : argSortsUnique) (targetSort : map sortOf argFmls') of -- Unify required and inferred argument sorts (this can fail if the same type variable has to match two different sorts)
     Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
     Right subst -> return $ (sortSubstitute subst resSortUnique, argFmls')      
     

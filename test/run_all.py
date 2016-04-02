@@ -79,6 +79,8 @@ BENCHMARKS = [
     ('Evaluator',           []),
     ('AddressBook-Make',    ['-a=2']),
     ('AddressBook-Merge',   ['-a=2']),
+    # Synthesis from examples
+    ('Replicate-Examples',  []),
 ]
 
 AVL_BENCHMARKS = [

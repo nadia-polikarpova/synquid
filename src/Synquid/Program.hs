@@ -182,6 +182,7 @@ typeVarsOf t@(ScalarT baseT r) = case baseT of
   DatatypeT _ tArgs _ -> Set.unions (map typeVarsOf tArgs)
   _ -> Set.empty
 typeVarsOf (FunctionT _ tArg tRes) = typeVarsOf tArg `Set.union` typeVarsOf tRes
+typeVarsOf _ = Set.empty
 
 {- Refinement types -}
 
