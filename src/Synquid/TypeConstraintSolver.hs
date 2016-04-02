@@ -440,7 +440,7 @@ fresh env (ScalarT (DatatypeT name tArgs _) _) = do
   let substToUnique = Map.fromList $ zip tVars (map VarS deBrujns)
   let substFromUnique = asSortSubst $ Map.fromList $ zip deBrujns tArgs'
   
-  pArgs' <- mapM (freshPred env . map (sortSubstitute substFromUnique) . map (sortSubstitute substToUnique)) pVars  
+  pArgs' <- mapM (\(PredSig _ sorts _) -> freshPred env . map (sortSubstitute substFromUnique) . map (sortSubstitute substToUnique) $ sorts) pVars  
   return $ ScalarT (DatatypeT name tArgs' pArgs') (Unknown Map.empty k)
 fresh env (ScalarT baseT _) = do
   k <- freshId "u"
