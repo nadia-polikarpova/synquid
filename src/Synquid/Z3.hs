@@ -221,9 +221,9 @@ toAST expr = case expr of
       case varMb of
         Just v -> return v
         Nothing -> do
-          symb <- mkStringSymbol ident
+          symb <- mkStringSymbol ident'
           v <- mkConst symb z3s
-          vars %= Map.insert ident v
+          vars %= Map.insert ident' v
           return v
 
     -- | Lookup or create a function declaration with name `name', return type `resT', and argument types `argTypes'

@@ -124,10 +124,11 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
                                                               valInt |>=| IntLit 0  |&|  valInt |<=| intVar argName)
     terminationRefinement argName (ScalarT dt@(DatatypeT name _ _) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
-      Just mName -> let MeasureDef inSort outSort _ _ = (env ^. measures) Map.! mName
-                        metric x = Pred outSort mName [x]
-                    in Just ( metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<| metric (Var inSort argName),
-                              metric (Var inSort valueVarName) |>=| IntLit 0  |&| metric (Var inSort valueVarName) |<=| metric (Var inSort argName))
+      Just mName -> let 
+                      metric x = Pred IntS mName [x]
+                      argSort = toSort dt
+                    in Just ( metric (Var argSort valueVarName) |>=| IntLit 0  |&| metric (Var argSort valueVarName) |<| metric (Var argSort argName),
+                              metric (Var argSort valueVarName) |>=| IntLit 0  |&| metric (Var argSort valueVarName) |<=| metric (Var argSort argName))
     terminationRefinement _ _ = Nothing
 
 reconstructTopLevel (Goal _ env (Monotype t) impl depth) = local (set (_1 . auxDepth) depth) $ reconstructI env t impl
