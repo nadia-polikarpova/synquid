@@ -90,7 +90,7 @@ resolveDeclaration (DataDecl dataName typeParams predParams constructors) = do
   let
     datatype = DatatypeDef {
       _typeArgs = typeParams,
-      _predArgs = map (\(PredSig _ argSorts _) -> argSorts) predParams,
+      _predArgs = predParams,
       _constructors = map constructorName constructors,
       _wfMetric = Nothing
     }
@@ -109,9 +109,13 @@ resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermi
       environment %= addGlobalPredicate measureName [outSort', inSort']
       -- Possibly add as termination metric:      
       if isTermination
-        then environment %= addDatatype dtName datatype { _wfMetric = Just measureName }
+        then if (isJust $ datatype ^. wfMetric) 
+              then throwError $ unwords ["Multiple termination metrics defined for datatype", dtName]
+              else if outSort' == IntS
+                    then environment %= addDatatype dtName datatype { _wfMetric = Just measureName }
+                    else throwError $ unwords ["Output sort of termination measure", measureName, "must be Int"]  
         else return ()
-    _ -> throwError $ unwords $ ["Input sort of measure", measureName, "must be a datatype"]  
+    _ -> throwError $ unwords ["Input sort of measure", measureName, "must be a datatype"]  
                   
 resolveDeclaration (PredDecl sig) = void $ resolvePredSignature sig True
 resolveDeclaration (SynthesisGoal name impl) = do
@@ -142,14 +146,21 @@ resolveDeclaration (InlineDecl name args body) =
       
 resolveSignatures :: Declaration -> Resolver ()      
 resolveSignatures (FuncDecl funcName _)  = resolveSignature funcName
-resolveSignatures (DataDecl _ _ _ ctors) = mapM_ resolveConstructorSignature ctors
+resolveSignatures (DataDecl dtName tArgs pArgs ctors) = mapM_ resolveConstructorSignature ctors
   where
     resolveConstructorSignature (ConstructorSig name typ) = do
       sch <- uses environment ((Map.! name) . allSymbols)
       sch' <- resolveSchema sch
-      let dtSort = toSort $ baseTypeOf $ lastType typ
-      let sch'' = addRefinementToLastSch sch' (Var dtSort valueVarName |=| Cons dtSort name (allArgs typ))    
-      environment %= addPolyConstant name sch''
+      let lastBase = baseTypeOf $ lastType typ
+      let dtBase = DatatypeT dtName (map vartAll tArgs) (map predApp pArgs)
+      if dtBase == lastBase
+        then do
+          let dtSort = toSort dtBase      
+          let sch'' = addRefinementToLastSch sch' (Var dtSort valueVarName |=| Cons dtSort name (allArgs typ))    
+          environment %= addPolyConstant name sch''
+        else throwError $ unwords ["Constructor", name, "must return type", show dtBase]
+    
+    predApp (PredSig p sorts BoolS) = Pred BoolS p (zipWith Var sorts deBrujns)
   
 resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
   (outSort : (inSort@(DataS dtName tArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)
@@ -216,8 +227,8 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       fml' <- resolveFormula BoolS (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
-    resolvePredArg :: [Sort] -> Formula -> Resolver Formula
-    resolvePredArg sorts fml = do
+    resolvePredArg :: PredSig -> Formula -> Resolver Formula
+    resolvePredArg (PredSig _ sorts BoolS) fml = do
       oldEnv <- use environment
       let vars = zipWith Var sorts deBrujns
       environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars

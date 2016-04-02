@@ -277,10 +277,14 @@ typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
 typeApplySolution _ AnyT = AnyT
 
+-- | Predicate signature: name and argument sorts  
+data PredSig = PredSig Id [Sort] Sort
+  deriving (Eq, Ord)
+
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeArgs :: [Id],      -- ^ Number of type parameters
-  _predArgs :: [[Sort]],  -- ^ Signatures of predicate parameters
+  _typeArgs :: [Id],      -- ^ Type parameters
+  _predArgs :: [PredSig], -- ^ Signatures of predicate parameters
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
 } deriving (Eq, Ord)
@@ -605,10 +609,6 @@ typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute ta
 
 -- | Constructor signature: name and type
 data ConstructorSig = ConstructorSig Id RType
-  deriving (Eq)
-  
--- | Predicate signature: name and argument sorts  
-data PredSig = PredSig Id [Sort] Sort
   deriving (Eq)
 
 data Declaration =
