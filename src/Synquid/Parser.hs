@@ -227,10 +227,11 @@ parseScalarRefType = braces $ do
 
 parseFunctionType :: Parser RType
 parseFunctionType = do
-  argId <- option dontCare (try parseArgName)
+  argIdMb <- optionMaybe (try parseArgName)
   argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
   reservedOp "->"
   returnType <- parseType
+  let argId = maybe ("x" ++ show (arity returnType)) id argIdMb
   return $ FunctionT argId argType returnType
   where
     parseArgName = parseIdentifier <* reservedOp ":"
