@@ -261,7 +261,7 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
   = -- TODO: rename type vars
       if arity tArg1 == 0 
-        then simplifyConstraint (Subtype (addVariable y tArg1 env) (renameVar x y tArg1 tRes1) tRes2 True)
+        then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True)
         else simplifyConstraint (Subtype env tRes1 tRes2 True)
 simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
   = do

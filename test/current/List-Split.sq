@@ -22,7 +22,7 @@ measure elems :: List a -> Set a where
 inline abs x = if x >= 0 then x else -x
 	
 split :: xs: List a -> {Pair {List a | abs (len xs - len _v * 2) <= 1} (List a) | 
-  len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }
+  len xs == len (fst _v) + len (snd _v) && elems xs == elems (fst _v) + elems (snd _v) }
 split = ??
 
 	

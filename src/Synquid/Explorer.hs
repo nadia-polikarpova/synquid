@@ -449,9 +449,8 @@ enumerateAt env typ d = do
         generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
 
     generateApp genFun genArg = do
-      x <- freshId "x"
       (env', fun) <- inContext (\p -> Program (PApp p uHole) typ)
-                            $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
+                            $ genFun env (FunctionT dontCare AnyT typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
       (envfinal, pApp) <- if isFunctionType tArg
