@@ -26,6 +26,13 @@ isSetS _ = False
 isData (DataS _ _) = True
 isData _ = False
 
+-- | 'typeVarsOfSort' @s@ : all type variables in @s@
+typeVarsOfSort :: Sort -> Set Id
+typeVarsOfSort (VarS name) = Set.singleton name  
+typeVarsOfSort (DataS _ sArgs) = Set.unions (map typeVarsOfSort sArgs)
+typeVarsOfSort (SetS s) = typeVarsOfSort s
+typeVarsOfSort _ = Set.empty
+
 {- Formulas of the refinement logic -}
 
 -- | Unary operators
