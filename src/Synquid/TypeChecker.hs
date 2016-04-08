@@ -82,13 +82,11 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
     -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
     recursiveCalls t = do
       fixStrategy <- asks $ _fixStrategy . fst
-      recType <- case fixStrategy of
-        AllArguments -> fst <$> recursiveTypeTuple t ffalse
-        FirstArgument -> recursiveTypeFirst t
-        DisableFixpoint -> return t
-      if recType == t
-        then return []
-        else return $ [(funName, recType)]
+      case fixStrategy of
+        AllArguments -> do recType <- fst <$> recursiveTypeTuple t ffalse; if recType == t then return [] else return [(funName, recType)]
+        FirstArgument -> do recType <- recursiveTypeFirst t; if recType == t then return [] else return [(funName, recType)]
+        DisableFixpoint -> return []
+        Nonterminating -> return [(funName, t)]
 
     -- | 'recursiveTypeTuple' @t fml@: type of the recursive call to a function of type @t@ when a lexicographic tuple of all recursible arguments decreases;
     -- @fml@ denotes the disjunction @x1' < x1 || ... || xk' < xk@ of strict termination conditions on all previously seen recursible arguments to be added to the type of the last recursible argument;
