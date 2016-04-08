@@ -31,6 +31,7 @@ data FixpointStrategy =
     DisableFixpoint   -- ^ Do not use fixpoint
   | FirstArgument     -- ^ Fixpoint decreases the first well-founded argument
   | AllArguments      -- ^ Fixpoint decreases the lexicographical tuple of all well-founded argument in declaration order
+  | Nonterminating    -- ^ Fixpoint without termination check
 
 -- | Choices for the order of e-term enumeration
 data PickSymbolStrategy = PickDepthFirst | PickInterleave
