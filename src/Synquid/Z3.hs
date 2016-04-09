@@ -214,7 +214,7 @@ toAST expr = case expr of
 
     -- | Lookup or create a variable with name `ident' and sort `s'
     var s ident = do      
-      let ident' = ident ++ show s
+      let ident' = ident ++ show (asZ3Sort s)
       varMb <- uses vars (Map.lookup ident')
 
       case varMb of
@@ -228,7 +228,7 @@ toAST expr = case expr of
 
     -- | Lookup or create a function declaration with name `name', return type `resT', and argument types `argTypes'
     function resT name argTypes = do
-      let name' = name ++ show resT ++ concatMap show argTypes
+      let name' = name ++ concatMap (show . asZ3Sort) (resT : argTypes)
       declMb <- uses functions (Map.lookup name')
       case declMb of
         Just d -> return d
@@ -240,6 +240,14 @@ toAST expr = case expr of
           functions %= Map.insert name' decl
           -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
           return decl
+          
+    -- | Sort as Z3 sees it
+    asZ3Sort s = case s of
+      VarS name -> IntS
+      DataS name args -> IntS
+      SetS el -> SetS (asZ3Sort el)
+      _ -> s
+          
 
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
