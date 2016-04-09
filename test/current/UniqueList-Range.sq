@@ -1,0 +1,24 @@
+data PList a <p :: a -> a -> Bool> where
+	Nil :: PList a <p>
+	Cons :: x: a -> xs: PList {a | p x _v} <p> -> PList a <p>
+  
+termination measure len :: PList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+type UList a = PList a <{_0 != _1}>
+
+qualifier {x <= y, x != y}
+
+zero :: {Int | _v == 0}
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}
+
+type Nat = {Int | _v >= 0}
+	
+range :: size: Nat -> lo: Int -> {UList {Int | lo <= _v && _v <= lo + size} | len _v == size}
+range = ??
