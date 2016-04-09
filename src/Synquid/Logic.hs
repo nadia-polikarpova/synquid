@@ -54,10 +54,6 @@ data BinOp =
 -- | Variable substitution  
 type Substitution = Map Id Formula
 
--- | 'inverse' @s@ : inverse of substitution @s@, provided that the range of @s@ only contains variables
-inverse :: Substitution -> Substitution
-inverse s = Map.fromList [(y, Var b x) | (x, Var b y) <- Map.toList s]
-
 -- | Formulas of the refinement logic
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
