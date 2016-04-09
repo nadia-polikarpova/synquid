@@ -213,34 +213,32 @@ toAST expr = case expr of
     list2 o x y = o [x, y]
 
     -- | Lookup or create a variable with name `ident' and sort `s'
-    var s ident = do
-      z3s <- toZ3Sort s
-      suffix <- sortToString z3s
-      let ident' = ident ++ suffix
+    var s ident = do      
+      let ident' = ident ++ show s
       varMb <- uses vars (Map.lookup ident')
 
       case varMb of
         Just v -> return v
         Nothing -> do
           symb <- mkStringSymbol ident'
+          z3s <- toZ3Sort s
           v <- mkConst symb z3s
           vars %= Map.insert ident' v
           return v
 
     -- | Lookup or create a function declaration with name `name', return type `resT', and argument types `argTypes'
     function resT name argTypes = do
-      argSorts <- mapM toZ3Sort argTypes
-      resSort <- toZ3Sort resT
-      suffix <- concat <$> mapM sortToString (resSort : argSorts)
-      let name' = name ++ suffix
+      let name' = name ++ show resT ++ concatMap show argTypes
       declMb <- uses functions (Map.lookup name')
       case declMb of
         Just d -> return d
         Nothing -> do
           symb <- mkStringSymbol name'
+          argSorts <- mapM toZ3Sort argTypes
+          resSort <- toZ3Sort resT
           decl <- mkFuncDecl symb argSorts resSort
           functions %= Map.insert name' decl
-          -- return $ traceShow (text "DECLARE" <+> text name' <+> pretty argTypes <+> pretty resT) decl
+          -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
           return decl
 
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
