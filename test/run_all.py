@@ -46,6 +46,8 @@ BENCHMARKS = [
     ('List-Fold',           []),
     ('List-Fold-Length',    ['-m=0']),
     ('List-Fold-Append',    ['-m=0']),
+    ('List-Ith',            []),
+    ('List-ElemIndex',      []),
     ('List-Snoc',           []),
     ('List-Reverse',        []),
     # Unique lists
