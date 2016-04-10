@@ -1,0 +1,41 @@
+data Array a where
+  Array8 :: x0: a -> 
+            x1: {a | _v > x0} -> 
+            x2: {a | _v > x1} -> 
+            x3: {a | _v > x2} -> 
+            x4: {a | _v > x3} -> 
+            x5: {a | _v > x4} -> 
+            x6: {a | _v > x5} -> 
+            x7: {a | _v > x6} -> Array a
+
+qualifier {x < y, x > y}
+
+n0 :: {Int | _v == 0}
+n1 :: {Int | _v == 1}
+n2 :: {Int | _v == 2}
+n3 :: {Int | _v == 3}
+n4 :: {Int | _v == 4}
+n5 :: {Int | _v == 5}
+n6 :: {Int | _v == 6}
+n7 :: {Int | _v == 7}
+n8 :: {Int | _v == 8}
+
+measure at0 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x0
+measure at1 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x1
+measure at2 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x2
+measure at3 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x3
+measure at4 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x4
+measure at5 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x5
+measure at6 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x6
+measure at7 :: Array a -> a where Array8 x0 x1 x2 x3 x4 x5 x6 x7 -> x7
+
+findIdx :: arr: Array a -> k: a -> {Int | (k < at0 arr ==> _v == 0) && 
+                                          (k > at7 arr ==> _v == 8) && 
+                                          ((k > at0 arr && k < at1 arr) ==> _v == 1) && 
+                                          ((k > at1 arr && k < at2 arr) ==> _v == 2) && 
+                                          ((k > at2 arr && k < at3 arr) ==> _v == 3) && 
+                                          ((k > at3 arr && k < at4 arr) ==> _v == 4) && 
+                                          ((k > at4 arr && k < at5 arr) ==> _v == 5) && 
+                                          ((k > at5 arr && k < at6 arr) ==> _v == 6) && 
+                                          ((k > at6 arr && k < at7 arr) ==> _v == 7)}
+findIdx = ??
