@@ -21,10 +21,6 @@ TIMEOUT= '120'
 
 BENCHMARKS = [
     # Integers
-    ('Int-Max2',    []),
-    ('Int-Max3',    []),
-    ('Int-Max4',    []),
-    ('Int-Max5',    []),
     ('Int-Add',     []),
     # Lists
     ('List-Null',       []),
@@ -86,6 +82,19 @@ BENCHMARKS = [
     ('Replicate-Examples',  []),
 ]
 
+SYGUS_BENCHMARKS = [
+    ('Int-Max2',    []),
+    ('Int-Max3',    []),
+    ('Int-Max4',    []),
+    ('Int-Max5',    []),
+    ('Int-Max6',    []),
+    ('Array-Search-2', []),
+    ('Array-Search-3', []),
+    ('Array-Search-4', []),
+    ('Array-Search-5', []),
+    ('Array-Search-6', []),
+]
+
 AVL_BENCHMARKS = [
     # AVL trees
     ('AVL-BalL0',           ['-a 2']),
@@ -94,9 +103,11 @@ AVL_BENCHMARKS = [
     ('AVL-BalR0',           ['-a 2']),
     ('AVL-BalRL',           ['-a 2', '-u']),
     ('AVL-BalRR',           ['-a 2', '-u']),
-    ('AVL-BalanceL',        ['-a 2', '-e']),
-    ('AVL-BalanceR',        ['-a 2', '-e']),
+    ('AVL-Balance',         ['-a 2', '-e']),
     ('AVL-Insert',          ['-a 2']),
+    ('AVL-ExtractMin',      ['-a 2']),
+    ('AVL-Merge',           ['-a 2', '-m 1']),
+    ('AVL-Delete',          ['-a 2']),
 ]
 
 RBT_BENCHMARKS = [
@@ -121,6 +132,14 @@ class SynthesisResult:
     def str(self):
         return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', '
 
+def cmdline():
+    import argparse
+    a = argparse.ArgumentParser()
+    a.add_argument('--synquid', required=False)
+    a.add_argument('--unit', action='store_true')
+    a.add_argument('--sections', nargs="*", default=['all'])
+    return a.parse_args()
+
 def run_benchmark(name, opts, path='.'):
     global total_time
     print name,
@@ -135,10 +154,10 @@ def run_benchmark(name, opts, path='.'):
       print '{0:0.2f}'.format(t),
       total_time = total_time + t
       if return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
+          print Back.RED + Fore.LIGHTRED_EX + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
           results [name] = SynthesisResult(name, t)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
+          print Back.GREEN + Fore.LIGHTGREEN_EX + Style.BRIGHT + 'OK' + Style.RESET_ALL
           
 def run_test(name, path='.'):
     print name
@@ -170,32 +189,46 @@ if __name__ == '__main__':
     results = {}
     total_time = 0
 
-    if platform.system() == 'Linux':
+    a = cmdline()
+
+    if a.synquid:
+        synquid_path = a.synquid
+    if platform.system() in ['Linux', 'Darwin']:
         synquid_path = SYNQUID_PATH_LINUX
     else:
         synquid_path = SYNQUID_PATH_WINDOWS
+
+    sections = [s.lower() for s in a.sections]
         
-    if len(sys.argv) == 1:
+    if not a.unit:
         # Default: run synthesis benchmarks in 'current' directory, which must succeed; compare results with oracle
         os.chdir('current')
         if os.path.isfile(LOGFILE_NAME):
             os.remove(LOGFILE_NAME)
-            
-        for (name, args) in BENCHMARKS:
-            run_benchmark(name, args)
-            
-        for (name, args) in RBT_BENCHMARKS:
-            run_benchmark(name, args, 'RBT')
+        
+        if 'base' in sections or 'all' in sections:
+            for (name, args) in BENCHMARKS:
+                run_benchmark(name, args)
 
-        for (name, args) in AVL_BENCHMARKS:
-            run_benchmark(name, args, 'AVL')
+        if 'sygus' in sections or 'all' in sections:
+            for (name, args) in SYGUS_BENCHMARKS:
+                run_benchmark(name, args, 'sygus')
+            
+        if 'rbt' in sections or 'all' in sections:
+            for (name, args) in RBT_BENCHMARKS:
+                run_benchmark(name, args, 'RBT')
+
+        if 'avl' in sections or 'all' in sections:
+            for (name, args) in AVL_BENCHMARKS:
+                run_benchmark(name, args, 'AVL')
             
         print 'TOTAL', '{0:0.2f}'.format(total_time)
-            
-        write_times(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
-        show_diff()
         
-    elif sys.argv[1] == 'unit':
+        if sections == ['all']:
+            write_times(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
+            show_diff()
+        
+    else:
         # Run unit tests 
         os.chdir('unit')
         if os.path.isfile(LOGFILE_NAME):
@@ -207,6 +240,3 @@ if __name__ == '__main__':
                 run_test(filename)
         
         show_diff()
-    
-    else:
-        print 'Unknown command-line argument', sys.argv[1]
