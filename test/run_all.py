@@ -87,7 +87,6 @@ SYGUS_BENCHMARKS = [
     ('Int-Max3',    []),
     ('Int-Max4',    []),
     ('Int-Max5',    []),
-    ('Int-Max6',    []),
     ('Array-Search-2', []),
     ('Array-Search-3', []),
     ('Array-Search-4', []),
