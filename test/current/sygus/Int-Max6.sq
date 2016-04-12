@@ -1,0 +1,4 @@
+qualifier {x >= y, x <= y, x != y}
+
+max6 :: u:Int -> v:Int -> w:Int -> x:Int -> y:Int -> z:Int -> {Int | _v >= u && _v >= v && _v >= w && _v >= x && _v >= y && _v >= z}
+max6 = ??

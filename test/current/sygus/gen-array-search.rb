@@ -4,9 +4,9 @@ if n_str == nil
   exit
 end
 
-n = n_str.to_i
-newline="\n"
 
+def gen(n, filename)
+newline="\n"
 range = 0.upto(n-1)
 
 sig = range.map{|i| 
@@ -31,7 +31,7 @@ constraint = ([
   "((k > at#{i-1} arr && k < at#{i} arr) ==> _v == #{i})"
 }).join(" && #{newline}                                          ")
 
-puts <<-EOC
+out = <<-EOC
 data Array a where
   Array#{n} :: #{sig} -> Array a
 
@@ -45,4 +45,17 @@ findIdx :: arr: Array a -> k: a -> {Int | #{constraint}}
 findIdx = ??
 EOC
 
+if filename
+  File.open(filename, "w") {|file| file.puts out}
+else
+  puts out
+end
 
+end
+
+if n_str == "all"
+  2.upto(6).each{|n| gen(n, "Array-Search-#{n}.sq")}
+else
+  n = n_str.to_i
+  gen(n, nil)
+end
