@@ -138,7 +138,15 @@ ALL_BENCHMARKS = [
 
 # mapping by benchmark name looks sufficient
 SOLUTION_COMPONENTS = {
-  'Evaluator' : '3'
+  'RBT-Insert' : '3',
+  'AVL-RotateL' : '3',
+  'BST-Sort' : '5',
+  'RBT-BalanceL' : '2'
+  , 'List-Nub' : '2'
+  , 'AVL-Delete' : '2'
+  , 'RBT-BalanceR' : '2'
+  , 'AVL-RotateR' : '3'
+  , 'RBT-Insert' : '3'
 }
 
 class SynthesisResult:
