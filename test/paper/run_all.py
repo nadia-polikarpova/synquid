@@ -48,20 +48,20 @@ class BenchmarkGroup:
 ALL_BENCHMARKS = [
     BenchmarkGroup("List", [], [
         Benchmark('List-Null', 'is empty', 'true, false'),
-        Benchmark('List-Elem', 'is member', 'true, false'),
+        Benchmark('List-Elem', 'is member', 'true, false, $=$, $\neq$'),
         Benchmark('List-Stutter', 'duplicate each element'),
-        Benchmark('List-Replicate', '$n$ copies of value', '0, inc, dec'),
+        Benchmark('List-Replicate', '$n$ copies of value', '0, inc, dec, $\leq$, $\neq$'),
         Benchmark('List-Append', 'append two lists', '', ['-m=1']),
         Benchmark('List-Concat', 'concatenate list of lists', 'append'),
-        Benchmark('List-Take', 'take first $n$ elements', '0, inc, dec'),
-        Benchmark('List-Drop', 'drop first $n$ elements', '0, inc, dec'),
-        Benchmark('List-Delete', 'delete value'),
+        Benchmark('List-Take', 'take first $n$ elements', '0, inc, dec, $\leq$, $\neq$'),
+        Benchmark('List-Drop', 'drop first $n$ elements', '0, inc, dec, $\leq$, $\neq$'),
+        Benchmark('List-Delete', 'delete value', '$=$, $\neq$'),
         Benchmark('List-Map', 'map'),
         Benchmark('List-Zip', 'zip'),
         Benchmark('List-ZipWith', 'zip with function'),
         Benchmark('List-Product', 'cartesian product', 'append, map'),
-        Benchmark('List-Ith', 'element by index', '0, inc, dec'),
-        Benchmark('List-ElemIndex', '0, inc, dec'),
+        Benchmark('List-Ith', '$i$-th element', '0, inc, dec, $\leq$, $\neq$'),
+        Benchmark('List-ElemIndex', 'index of element', '0, inc, dec, $=$, $\neq$'),
         Benchmark('List-Snoc', 'insert at end'),
         Benchmark('List-Reverse', 'reverse', 'insert at end'),
         Benchmark('List-Foldr', 'foldr'),
@@ -69,65 +69,65 @@ ALL_BENCHMARKS = [
         Benchmark('List-Fold-Append', 'append using fold', '', ['-m=0'])
         ]),
     BenchmarkGroup("Unique list", [], [
-        Benchmark('UniqueList-Insert', 'insert'),
-        Benchmark('UniqueList-Delete', 'delete'),
+        Benchmark('UniqueList-Insert', 'insert', '$=$, $\neq$'),
+        Benchmark('UniqueList-Delete', 'delete', '$=$, $\neq$'),
         Benchmark('List-Nub', 'remove duplicates', 'is member', ['-m=1']),
-        Benchmark('List-Compress', 'remove adjacent dupl.'),
-        Benchmark('UniqueList-Range', 'integer range', '0, inc, dec'),
+        Benchmark('List-Compress', 'remove adjacent dupl.', '$=$, $\neq$'),
+        Benchmark('UniqueList-Range', 'integer range', '0, inc, dec, $\leq$, $\neq$'),
         ]),
     BenchmarkGroup("Strictly sorted list", [], [
-        Benchmark('StrictIncList-Insert', 'insert'),
-        Benchmark('StrictIncList-Delete', 'delete'),
-        Benchmark('StrictIncList-Intersect', 'intersect', '', ['-f=AllArguments']),
+        Benchmark('StrictIncList-Insert', 'insert', '$<$'),
+        Benchmark('StrictIncList-Delete', 'delete', '$<$'),
+        Benchmark('StrictIncList-Intersect', 'intersect', '$<$', ['-f=AllArguments']),
         ]),
     BenchmarkGroup("Sorting",  ['-a=2', '-m=3', '-f=AllArguments'], [
         # Insertion Sort
-        Benchmark('IncList-Insert', 'insert (sorted)'),
+        Benchmark('IncList-Insert', 'insert (sorted)', '$\leq$, $\neq$'),
         Benchmark('List-InsertSort', 'insertion sort', 'insert (sorted)'),
-        Benchmark('List-Fold-Sort', 'sort by folding', 'foldr', ['-m=1', '-a=2', '-e']),
+        Benchmark('List-Fold-Sort', 'sort by folding', 'foldr, $\leq$, $\neq$', ['-m=1', '-a=2', '-e']),
         # Selection Sort
-        Benchmark('List-ExtractMin', 'extract minimum', '', ['-a=2', '-m 3']),
+        Benchmark('List-ExtractMin', 'extract minimum', '$\leq$, $\neq$', ['-a=2', '-m 3']),
         Benchmark('List-SelectSort', 'selection sort', 'extract minimum'),        
         # Merge sort
         Benchmark('List-Split', 'balanced split', '', ['-m=3']),
-        Benchmark('IncList-Merge', 'merge', '', ['-f=AllArguments']),
+        Benchmark('IncList-Merge', 'merge', '$\leq$, $\neq$', ['-f=AllArguments']),
         Benchmark('List-MergeSort', 'merge sort', 'split, merge', ['-a=2', '-m=3']),
         # Quick sort
-        Benchmark('List-Partition', 'partition'),
+        Benchmark('List-Partition', 'partition', '$\leq$'),
         Benchmark('IncList-PivotAppend', 'append with pivot'),
         Benchmark('List-QuickSort', 'quick sort', 'partition, append w/pivot', ['-a=2'])
         ]),
     BenchmarkGroup("Trees",  [], [
-        Benchmark('Tree-Elem', 'is member', 'false, not, or'),
+        Benchmark('Tree-Elem', 'is member', 'false, not, or, $=$'),
         Benchmark('Tree-Count', 'node count', '0, 1, +'),
         Benchmark('Tree-ToList', 'preorder', 'append'),
-        Benchmark('Tree-BalancedReplicate', 'create balanced', '0, inc, dec')
+        Benchmark('Tree-BalancedReplicate', 'create balanced', '0, inc, dec, $\leq$, $\neq$')
         ]),
     BenchmarkGroup("BST", [], [
-        Benchmark('BST-Member', 'is member', 'true, false'),
-        Benchmark('BST-Insert', 'insert'),
-        Benchmark('BST-Delete', 'delete', '', ['-e']),
-        Benchmark('BST-Sort', 'BST sort')
+        Benchmark('BST-Member', 'is member', 'true, false, $\leq$, $\neq$'),
+        Benchmark('BST-Insert', 'insert', '$\leq$, $\neq$'),
+        Benchmark('BST-Delete', 'delete', '$\leq$, $\neq$', ['-e']),
+        Benchmark('BST-Sort', 'BST sort', '$\leq$, $\neq$')
         ]),
     BenchmarkGroup("Bin Heap", [], [
-        Benchmark('BinHeap-Member', 'is member', 'false, not, or'),
-        Benchmark('BinHeap-Insert', 'insert'),
-        Benchmark('BinHeap-Singleton', '1-element constructor'),
-        Benchmark('BinHeap-Doubleton', '2-element constructor'),
-        Benchmark('BinHeap-Tripleton', '3-element constructor')
+        Benchmark('BinHeap-Member', 'is member', 'false, not, or, $\leq$, $\neq$'),
+        Benchmark('BinHeap-Insert', 'insert', '$\leq$, $\neq$'),
+        Benchmark('BinHeap-Singleton', '1-element constructor', '$\leq$, $\neq$'),
+        Benchmark('BinHeap-Doubleton', '2-element constructor', '$\leq$, $\neq$'),
+        Benchmark('BinHeap-Tripleton', '3-element constructor', '$\leq$, $\neq$')
         ]),
     BenchmarkGroup("AVL", ['-a=2'], [
-        Benchmark('AVL-RotateL', 'rotate left', '', ['-a 2', '-u']),
-        Benchmark('AVL-RotateR', 'rotate right', '', ['-a 2', '-u']),
+        Benchmark('AVL-RotateL', 'rotate left', 'inc', ['-a 2', '-u']),
+        Benchmark('AVL-RotateR', 'rotate right', 'inc', ['-a 2', '-u']),
         Benchmark('AVL-Balance', 'balance', 'rotate left, rotate right', ['-a 2', '-e']),
-        Benchmark('AVL-Insert', 'insert', 'balance', ['-a 2']),
-        Benchmark('AVL-ExtractMin', 'extract minimum', '', ['-a 2']),
-        Benchmark('AVL-Delete', 'delete', 'extract minimum, balance', ['-a 2', '-m 1']),
+        Benchmark('AVL-Insert', 'insert', 'balance, $<$', ['-a 2']),
+        Benchmark('AVL-ExtractMin', 'extract minimum, $<$', '', ['-a 2']),
+        Benchmark('AVL-Delete', 'delete', 'extract minimum, balance, $<$', ['-a 2', '-m 1']),
         ]),        
     BenchmarkGroup("RBT", ['-m=1', '-a=2', '-u'], [
         Benchmark('RBT-BalanceL', 'balance left', '', ['-m=1', '-a=2', '-u']),
         Benchmark('RBT-BalanceR', 'balance right', '', ['-m=1', '-a=2', '-u']),
-        Benchmark('RBT-Insert', 'insert', 'balance left, right', ['-m=1', '-a=2', '-u'])
+        Benchmark('RBT-Insert', 'insert', 'balance left, right, $\leq$, $\neq$', ['-m=1', '-a=2', '-u'])
         ]),
     BenchmarkGroup("User", [], [
         Benchmark('Evaluator', 'desugar AST', '0, 1, 2'),

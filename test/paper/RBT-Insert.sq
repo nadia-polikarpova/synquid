@@ -1,5 +1,3 @@
-qualifier {x <= y, x != y}
-
 red   :: {Int | _v == 0}
 black :: {Int | _v == 1}
 
@@ -60,6 +58,9 @@ measure isOk :: WeakRBT a -> Bool where
 measure wcolor :: WeakRBT a -> {Int | _v >= 0 && _v <= 1} where
   Ok x c left right -> c
   Bad x lc left right -> 0
+  
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}  
 
 balanceL :: y: a ->
               c: {Int | 0 <= _v  && _v <= 1} ->

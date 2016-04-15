@@ -21,7 +21,7 @@ elem = \x . \xs .
 (Size: 18)
 (Spec size: 6)
 (#measures: 2)
-(#components: 2)
+(#components: 4)
 
 List-Stutter
 stutter :: <a> . xs:List a -> {List a|len _v == 2 * len xs}
@@ -45,7 +45,7 @@ replicate = \n . \x .
 (Size: 21)
 (Spec size: 7)
 (#measures: 1)
-(#components: 3)
+(#components: 5)
 
 List-Append
 append :: <a> . xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
@@ -87,7 +87,7 @@ take = \n . \xs .
 (Size: 27)
 (Spec size: 11)
 (#measures: 1)
-(#components: 3)
+(#components: 5)
 
 List-Drop
 drop :: <a> . n:{Int|_v >= 0} -> xs:{List a|len _v >= n} -> {List a|len _v == len xs - n}
@@ -101,7 +101,7 @@ drop = \n . \xs .
 (Size: 20)
 (Spec size: 14)
 (#measures: 1)
-(#components: 3)
+(#components: 5)
 
 List-Delete
 delete :: <a> . x:a -> xs:List a -> {List a|elems _v == elems xs - [x]}
@@ -115,7 +115,7 @@ delete = \x . \xs .
 (Size: 26)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 List-Map
 map :: <b> . <a> . f:(x0:a -> b) -> xs:List a -> {List b|len _v == len xs}
@@ -182,13 +182,13 @@ ith = \xs . \i .
     match xs with
       Nil -> error
       Cons x3 x4 -> 
-        if 0 == i
+        if i <= 0
           then x3
           else ith x4 (dec i)
 (Size: 20)
 (Spec size: 14)
 (#measures: 1)
-(#components: 3)
+(#components: 5)
 
 List-ElemIndex
 elemIndex :: <a> . <p :: Int -> a -> Bool> . x:a -> xs:{List a <p _0 _1>|x in elems _v} -> {Int|p _v x}
@@ -202,7 +202,7 @@ elemIndex = \x . \xs .
 (Size: 20)
 (Spec size: 10)
 (#measures: 2)
-(#components: 3)
+(#components: 5)
 
 List-Snoc
 snoc :: <a> . <p :: a -> a -> Bool> . x:a -> xs:List {a|p _v x} <p _0 _1> -> {List a <p _0 _1>|len _v == len xs + 1 && elems _v == elems xs + [x]}
@@ -274,7 +274,7 @@ insert = \x . \xs .
 (Size: 26)
 (Spec size: 18)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 UniqueList-Delete
 delete :: <a> . x:a -> xs:PList a <!(_0 in elems _1)> -> {PList a <!(_0 in elems _1)>|elems _v == elems xs - [x]}
@@ -288,22 +288,9 @@ delete = \x . \xs .
 (Size: 22)
 (Spec size: 18)
 (#measures: 2)
-(#components: 0)
-
-List-Nub
-elem :: <a> . x:a -> xs:PList a <True> -> {Bool|_v == (x in elems xs)}
-elem = \x . \xs . 
-    match xs with
-      Nil -> false
-      Cons x3 x4 -> 
-        if x3 == x
-          then true
-          else elem x x4
-(Size: 18)
-(Spec size: 6)
-(#measures: 2)
 (#components: 2)
 
+List-Nub
 nub' :: <a> . xs:PList a <True> -> acc:PList a <!(_0 in elems _1)> -> {PList a <!(_0 in elems _1)>|elems _v == elems acc + elems xs}
 nub' = \xs . \acc . 
     match xs with
@@ -318,7 +305,7 @@ nub' = \xs . \acc .
 (Size: 37)
 (Spec size: 18)
 (#measures: 2)
-(#components: 3)
+(#components: 1)
 
 nub :: <a> . xs:PList a <True> -> {PList a <!(_0 in elems _1)>|elems _v == elems xs}
 nub = \xs . 
@@ -328,7 +315,7 @@ nub = \xs .
 (Size: 10)
 (Spec size: 10)
 (#measures: 2)
-(#components: 4)
+(#components: 2)
 
 List-Compress
 compress :: <a> . xs:PList a <True> -> {PList a <!(_0 in heads _1)>|elems _v == elems xs}
@@ -345,7 +332,7 @@ compress = \xs .
 (Size: 32)
 (Spec size: 10)
 (#measures: 3)
-(#components: 0)
+(#components: 2)
 
 UniqueList-Range
 range :: size:{Int|_v >= 0} -> lo:Int -> {PList {Int|lo <= _v && _v <= lo + size} <_0 != _1>|len _v == size}
@@ -357,7 +344,7 @@ range = \size . \lo .
 (Size: 23)
 (Spec size: 19)
 (#measures: 2)
-(#components: 3)
+(#components: 5)
 
 StrictIncList-Insert
 insert :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs + [x]}
@@ -365,16 +352,16 @@ insert = \x . \xs .
     match xs with
       INil -> ICons x INil
       ICons x5 x6 -> 
-        if (x <= x5) && (x5 <= x)
-          then xs
+        if x5 < x
+          then ICons x5 (insert x x6)
           else 
-            if x5 <= x
-              then ICons x5 (insert x x6)
-              else ICons x (ICons x5 x6)
-(Size: 49)
+            if x < x5
+              then ICons x (ICons x5 x6)
+              else xs
+(Size: 41)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 1)
 
 StrictIncList-Delete
 delete :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs - [x]}
@@ -382,16 +369,16 @@ delete = \x . \xs .
     match xs with
       INil -> xs
       ICons x3 x4 -> 
-        if (x <= x3) && (x3 <= x)
-          then x4
+        if x < x3
+          then xs
           else 
-            if x <= x3
-              then xs
-              else ICons x3 (delete x x4)
-(Size: 37)
+            if x3 < x
+              then ICons x3 (delete x x4)
+              else x4
+(Size: 29)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 1)
 
 StrictIncList-Intersect
 intersect :: <a> . xs:SList a -> ys:SList a -> {SList a|elems _v == elems xs * elems ys}
@@ -411,7 +398,7 @@ intersect = \xs . \ys .
 (Size: 40)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 1)
 
 IncList-Insert
 insert :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs + [x]}
@@ -425,7 +412,7 @@ insert = \x . \xs .
 (Size: 34)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 List-InsertSort
 insertSort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
@@ -453,7 +440,7 @@ sort = let f0 = \x2 . \x3 .
 (Size: 47)
 (Spec size: 14)
 (#measures: 2)
-(#components: 1)
+(#components: 3)
 
 List-ExtractMin
 extractMin :: <a> . xs:{List a|len _v > 0} -> {MinPair a|elems xs == [min _v] + elems (rest _v) && len xs == 1 + len (rest _v)}
@@ -472,7 +459,7 @@ extractMin = \xs .
 (Size: 40)
 (Spec size: 23)
 (#measures: 4)
-(#components: 0)
+(#components: 2)
 
 List-SelectSort
 selectSort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
@@ -522,7 +509,7 @@ merge = \xs . \ys .
 (Size: 41)
 (Spec size: 17)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 List-MergeSort
 mergeSort :: <a> . xs:List a -> {IList a|ilen _v == len xs && ielems _v == elems xs}
@@ -555,7 +542,7 @@ partition = \p . \xs .
 (Size: 40)
 (Spec size: 27)
 (#measures: 4)
-(#components: 0)
+(#components: 1)
 
 IncList-PivotAppend
 pivotAppend :: <a> . p:a -> xs:IList {a|_v <= p} -> ys:IList {a|_v > p} -> {IList a|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == (ielems xs + ielems ys) + [p]}
@@ -631,7 +618,7 @@ replicate = \x . \h .
 (Size: 29)
 (Spec size: 7)
 (#measures: 2)
-(#components: 3)
+(#components: 5)
 
 BST-Member
 member :: <a> . x:a -> t:BST a -> {Bool|_v == (x in telems t)}
@@ -665,7 +652,7 @@ insert = \x . \t .
 (Size: 55)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 BST-Delete
 delete :: <a> . t:BST a -> x:a -> {BST a|telems _v == telems t - [x]}
@@ -686,7 +673,7 @@ delete = \t . \x .
 (Size: 68)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 BST-Sort
 insert :: <a> . x:a -> t:BST a -> {BST a|telems _v == telems t + [x]}
@@ -703,7 +690,7 @@ insert = \x . \t .
 (Size: 55)
 (Spec size: 8)
 (#measures: 6)
-(#components: 0)
+(#components: 2)
 
 toBST :: <a> . xs:List a -> {BST a|telems _v == elems xs}
 toBST = \xs . 
@@ -714,7 +701,7 @@ toBST = \xs .
 (Size: 12)
 (Spec size: 5)
 (#measures: 6)
-(#components: 1)
+(#components: 3)
 
 pivotAppend :: <a> . p:a -> xs:IList {a|_v < p} -> ys:IList {a|_v > p} -> {IList a|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == (ielems xs + ielems ys) + [p]}
 pivotAppend = \p . \xs . \ys . 
@@ -725,7 +712,7 @@ pivotAppend = \p . \xs . \ys .
 (Size: 22)
 (Spec size: 28)
 (#measures: 6)
-(#components: 2)
+(#components: 4)
 
 flatten :: <a> . t:BST a -> {IList a|ielems _v == telems t}
 flatten = \t . 
@@ -736,7 +723,7 @@ flatten = \t .
 (Size: 16)
 (Spec size: 5)
 (#measures: 6)
-(#components: 3)
+(#components: 5)
 
 sort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
 sort = \xs . 
@@ -746,7 +733,7 @@ sort = \xs .
 (Size: 10)
 (Spec size: 5)
 (#measures: 6)
-(#components: 4)
+(#components: 6)
 
 BinHeap-Member
 member :: <a> . x:a -> t:Heap a -> {Bool|_v == (x in elems t)}
@@ -781,7 +768,7 @@ insert = \t . \x .
 (Size: 55)
 (Spec size: 8)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 BinHeap-Singleton
 singleton :: <a> . x:a -> {Heap a|elems _v == [x]}
@@ -790,7 +777,7 @@ singleton = \x . Node x Empty
 (Size: 8)
 (Spec size: 5)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 BinHeap-Doubleton
 doubleton :: <a> . x:a -> y:a -> {Heap a|elems _v == [x, y]}
@@ -806,7 +793,7 @@ doubleton = \x . \y .
 (Size: 55)
 (Spec size: 6)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 BinHeap-Tripleton
 tripleton :: <a> . x:a -> y:a -> z:a -> {Heap a|elems _v == [x, y, z]}
@@ -842,7 +829,7 @@ tripleton = \x . \y . \z .
 (Size: 246)
 (Spec size: 7)
 (#measures: 2)
-(#components: 0)
+(#components: 2)
 
 AVL-RotateL
 rotLR :: <a> . x:a -> l:{AVL {a|_v < x}|balFac _v < 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == realHeight l && elems _v == ([x] + elems l) + elems r}
@@ -937,25 +924,25 @@ balance :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|(if realHeight l -
 balance = \x . \l . \r . 
       if (isSkewed l r) &&
            (isLeftHeavy l)
-        then balLL x l r
+        then rotLL x l r
         else 
           if (isSkewed l r) &&
                (isRightHeavy l)
-            then balLR x l r
+            then rotLR x l r
             else 
               if isSkewed l r
-                then balL0 x l r
+                then rotL0 x l r
                 else 
                   if (isSkewed r l) &&
                        (isLeftHeavy r)
-                    then balRL x l r
+                    then rotRL x l r
                     else 
                       if (isSkewed r l) &&
                            (isRightHeavy r)
-                        then balRR x l r
+                        then rotRR x l r
                         else 
                           if isSkewed r l
-                            then balR0 x l r
+                            then rotR0 x l r
                             else Node x l r (nodeHeight l r)
 (Size: 119)
 (Spec size: 103)
@@ -979,7 +966,7 @@ insert = \y . \t .
 (Size: 47)
 (Spec size: 22)
 (#measures: 3)
-(#components: 4)
+(#components: 3)
 
 AVL-ExtractMin
 extractMin :: <a> . t:AVL a -> {MinPair a|elems t == melems _v && (mheight _v <= realHeight t && realHeight t <= mheight _v + 1)}
@@ -989,12 +976,12 @@ extractMin = \t .
     Node x5 x6 x7 x8 -> 
       match extractMin x6 with
         Nothing -> MinPair x5 x7
-        MinPair x22 x23 -> MinPair x22
-                             (balance x5 x23 x7)
+        MinPair x14 x15 -> MinPair x14
+                             (balance x5 x15 x7)
 (Size: 25)
 (Spec size: 19)
 (#measures: 5)
-(#components: 4)
+(#components: 3)
 
 AVL-Delete
 merge :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|0 - 1 <= realHeight l - realHeight _v && realHeight l - realHeight _v <= 1} -> {AVL a|((if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && realHeight _v <= (if realHeight l >= realHeight r then realHeight l else realHeight r) + 1) && elems _v == elems l + elems r}
@@ -1005,7 +992,7 @@ merge = \x . \l . \r .
 (Size: 16)
 (Spec size: 61)
 (#measures: 5)
-(#components: 5)
+(#components: 4)
 
 delete :: <a> . y:a -> t:AVL a -> {AVL a|(realHeight _v <= realHeight t && realHeight t <= realHeight _v + 1) && elems t - [y] == elems _v}
 delete = \y . \t . 
@@ -1021,7 +1008,7 @@ delete = \y . \t .
 (Size: 47)
 (Spec size: 22)
 (#measures: 5)
-(#components: 6)
+(#components: 5)
 
 RBT-BalanceL
 rotateL :: <a> . x:a -> lx:{a|_v < x} -> llc:{Int|0 <= _v && _v <= 1} -> ll:{RBT {a|_v < lx}|color _v == llc} -> lr:{RBT {a|lx < _v && _v < x}|color _v != llc && blackHeight _v == blackHeight ll} -> r:{RBT {a|x < _v}|blackHeight _v == blackHeight ll} -> {WeakRBT a|(((isOk _v && wcolor _v == 0) && welems _v == (([x, lx] + elems ll) + elems lr) + elems r) && wheight _v == blackHeight r + 1) && wsize _v == ((2 + size ll) + size lr) + size r}
@@ -1044,7 +1031,7 @@ rotateL = \x . \lx . \llc .
 (Size: 69)
 (Spec size: 87)
 (#measures: 9)
-(#components: 1)
+(#components: 2)
 
 balanceL :: <a> . y:a -> c:{Int|0 <= _v && _v <= 1} -> l:{WeakRBT {a|_v < y}|c == 0 ==> isOk _v} -> r:{RBT {a|_v > y}|(c == 0 ==> color _v == 1) && blackHeight _v == wheight l} -> {WeakRBT a|((welems _v == ([y] + welems l) + elems r && wheight _v == blackHeight r + c) && wsize _v == (1 + wsize l) + size r) && (isOk _v || c == 0)}
 balanceL = \y . \c . \l . \r . 
@@ -1059,7 +1046,7 @@ balanceL = \y . \c . \l . \r .
 (Size: 68)
 (Spec size: 70)
 (#measures: 9)
-(#components: 2)
+(#components: 3)
 
 RBT-BalanceR
 rotateR :: <a> . x:a -> l:RBT {a|_v < x} -> rx:{a|x < _v} -> rlc:{Int|_v == 0 || _v == 1} -> rl:{RBT {a|x < _v && _v < rx}|color _v == rlc && blackHeight _v == blackHeight l} -> rr:{RBT {a|rx < _v}|color _v != rlc && blackHeight _v == blackHeight l} -> {WeakRBT a|(((isOk _v && wcolor _v == 0) && welems _v == (([x, rx] + elems l) + elems rl) + elems rr) && wheight _v == blackHeight l + 1) && wsize _v == ((2 + size l) + size rl) + size rr}
@@ -1082,7 +1069,7 @@ rotateR = \x . \l . \rx . \rlc .
 (Size: 69)
 (Spec size: 88)
 (#measures: 9)
-(#components: 1)
+(#components: 2)
 
 balanceR :: <a> . x:a -> c:{Int|0 <= _v && _v <= 1} -> l:{RBT {a|_v < x}|c == 0 ==> color _v == 1} -> r:{WeakRBT {a|_v > x}|(c == 0 ==> isOk _v) && wheight _v == blackHeight l} -> {WeakRBT a|((welems _v == ([x] + elems l) + welems r && wheight _v == blackHeight l + c) && wsize _v == (1 + size l) + wsize r) && (isOk _v || c == 0)}
 balanceR = \x . \c . \l . \r . 
@@ -1097,7 +1084,7 @@ balanceR = \x . \c . \l . \r .
 (Size: 68)
 (Spec size: 70)
 (#measures: 9)
-(#components: 2)
+(#components: 3)
 
 RBT-Insert
 ins :: <a> . x:a -> t:RBT a -> {WeakRBT a|(((welems _v == [x] + elems t && wheight _v == blackHeight t) && size t <= wsize _v) && wsize _v <= size t + 1) && (isOk _v || color t == 0)}
@@ -1116,7 +1103,7 @@ ins = \x . \t .
 (Size: 69)
 (Spec size: 36)
 (#measures: 9)
-(#components: 4)
+(#components: 6)
 
 mkBlack :: <a> . t:WeakRBT a -> {RBT a|elems _v == welems t}
 mkBlack = \t . 
@@ -1128,7 +1115,7 @@ mkBlack = \t .
 (Size: 22)
 (Spec size: 5)
 (#measures: 9)
-(#components: 5)
+(#components: 7)
 
 insert :: <a> . x:a -> t:RBT a -> {RBT a|elems _v == elems t + [x]}
 insert = \x . \t . 
@@ -1140,7 +1127,7 @@ insert = \x . \t .
 (Size: 21)
 (Spec size: 8)
 (#measures: 9)
-(#components: 6)
+(#components: 8)
 
 Evaluator
 transform :: x:AST -> {PAST|result2 _v == result x}

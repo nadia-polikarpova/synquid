@@ -12,13 +12,13 @@ measure elems :: PList a -> Set a where
 
 type UList a = PList a <{_0 != _1}>
 
-qualifier {x <= y, x != y}
+type Nat = {Int | _v >= 0}
 
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
 dec :: x: Int -> {Int | _v == x - 1}
-
-type Nat = {Int | _v >= 0}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}
 	
 range :: size: Nat -> lo: Int -> {UList {Int | lo <= _v && _v <= lo + size} | len _v == size}
 range = ??

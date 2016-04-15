@@ -30,8 +30,6 @@ measure min :: MinPair a -> a where
   
 measure rest :: MinPair a -> List a where
   MinPair x l -> l
-  
-qualifier {x <= y, x != y}
 
 extractMin :: xs: {List a | len _v > 0} -> {MinPair a | elems xs == [min _v] + elems (rest _v) && len xs == 1 + len (rest _v)}
 

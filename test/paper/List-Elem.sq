@@ -1,8 +1,3 @@
-qualifier {x == y, x != y}
-
-true :: {Bool | _v}
-false :: {Bool | !_v}
-
 data List a where
 	Nil :: List a
 	Cons :: x: a -> xs: List a -> List a
@@ -14,6 +9,11 @@ termination measure len :: List a -> {Int | _v >= 0} where
 measure elems :: List a -> Set a where
   Nil -> []
   Cons x xs -> [x] + elems xs
+  
+true :: {Bool | _v}
+false :: {Bool | !_v}
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}    
 	
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 elem = ??

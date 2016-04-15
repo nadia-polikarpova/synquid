@@ -10,11 +10,11 @@ measure elems :: List a -> Set a where
   Nil -> []
   Cons x xs -> [x] + elems xs
   
-qualifier {x == y}
-
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
 dec :: x: Int -> {Int | _v == x - 1}
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}
 
 elemIndex :: <p :: Int -> a -> Bool> . x: a -> xs: {List a <p> | x in elems _v} -> {Int | p _v x}
 elemIndex = ??

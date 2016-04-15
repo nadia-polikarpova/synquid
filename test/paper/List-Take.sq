@@ -1,10 +1,10 @@
-qualifier {x <= y, x != y}
-
 type Nat = {Int | _v >= 0}
 
 zero :: {Int | _v == 0}
 inc :: x:Int -> {Int | _v == x + 1}
 dec :: x:Int -> {Int | _v == x - 1}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}  
 
 data List a where
 	Nil :: List a

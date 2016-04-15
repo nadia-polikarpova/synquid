@@ -1,10 +1,4 @@
-qualifier {x <= y , x != y}
-
 type Nat = {Int | _v >= 0}
-
-zero :: {Int | _v == 0}
-inc :: x:Int -> {Int | _v == x + 1}
-dec :: x:Int -> {Int | _v == x - 1}
 
 data List a where
 	Nil :: List a
@@ -13,6 +7,12 @@ data List a where
 termination measure len :: List a -> {Int | _v >= 0} where
   Nil -> 0
   Cons x xs -> 1 + len xs  
+  
+zero :: {Int | _v == 0}
+inc :: x:Int -> {Int | _v == x + 1}
+dec :: x:Int -> {Int | _v == x - 1}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}  
 	
 drop :: n: Nat -> xs: {List a | len _v >= n} -> {List a | len _v == len xs - n}
 drop = ??

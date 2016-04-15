@@ -13,13 +13,7 @@ measure elems :: PList a -> Set a where
 type List a = PList a <{True}>
 type UList a = PList a <{!(_0 in elems _1)}>
 
-qualifier {x == y, x != y}
-
-true :: {Bool | _v}
-false :: {Bool | !_v}
-	
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
-elem = ??
 	
 nub' :: xs: List a -> acc: UList a -> {UList a | elems _v == elems acc + elems xs}
 nub' = ??
