@@ -240,10 +240,10 @@ def postprocess():
                 outfile.write (b.description)
                 outfile.write (' & ')
                 row = \
-                    result.spec_size + \
+                    b.components + \
+                    ' & ' + result.spec_size + \
                     ' & ' + result.measure_count + \
                     ' & ' + result.component_count + \
-                    ' & ' + b.components + \
                     ' & ' + result.code_size + \
                     ' & ' + '{0:0.2f}'.format(result.time) + \
                     ' & ' + '{0:0.2f}'.format(result.variant_times['def']) + \
