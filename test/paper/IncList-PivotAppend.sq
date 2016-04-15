@@ -12,3 +12,6 @@ measure ielems :: IList a -> Set a where
 		
 pivotAppend :: p: a -> xs: IList {a | _v <= p} -> ys: IList {a | _v > p} -> {IList a | ilen _v == ilen xs + ilen ys + 1 && ielems _v == ielems xs + ielems ys + [p] }
 pivotAppend = ??
+
+
+	

@@ -1,4 +1,4 @@
-{- @flags: -a=2 -m=1 -}
+{- @flags: -a=2 -}
 
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
@@ -64,20 +64,5 @@ balance :: x: a
 
 
 extractMin :: t: AVL a -> {MinPair a | elems t == melems _v && eqOrOneLess (mheight _v) (realHeight t)}
-
-merge :: x:a
-          -> l: AVL {a | _v < x}
-          -> r: {AVL {a | _v > x} | isBal l _v 1}
-          -> {AVL a | bigHt l r _v && elems _v == elems l + elems r}
-merge = ??
-
-delete :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight _v) (realHeight t) &&
-                                        elems t - [y] == elems _v}
-delete = ?? 
-
-{- \x. \l. \r.
-   match extractMin r with
-     Nothing -> l
-     MinPair y r' -> balance y l r'
- -}
+extractMin = ?? 
 

@@ -14,3 +14,5 @@ measure elems :: List a -> Set a where
 	
 delete :: x: a -> xs: List a -> {List a | elems _v == elems xs - [x]}
 delete = ??
+
+	

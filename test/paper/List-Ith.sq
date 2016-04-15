@@ -1,0 +1,16 @@
+data List a <p :: Int -> a -> Bool> where
+  Nil :: List a <p>
+  Cons :: x: {a | p 0 _v} -> xs: List a <{p (_0 + 1) _1}> -> List a <p>
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+qualifier {x == y}
+
+zero :: {Int | _v == 0}
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}
+
+ith :: <p :: Int -> a -> Bool> . xs: List a <p> -> i: {Int | 0 <= _v && _v < len xs} -> {a | p i _v}
+ith = ??

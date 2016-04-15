@@ -17,3 +17,5 @@ measure elems :: List a -> Set a where
 	
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 elem = ??
+
+	

@@ -9,17 +9,24 @@ from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
 # Globals
-SYNQUID_CMD = '../../dist/build/synquid/synquid'                                         # Command to call Synquid
+if platform.system() in ['Linux', 'Darwin']:
+    SYNQUID_CMD = 'synquid'                                     # Command to call Synquid
+    TIMEOUT_CMD = 'timeout'                                     # Timeout command
+    TIMEOUT = '120'                                             # Timeout value (seconds)    
+else:
+    SYNQUID_CMD = 'Synquid.exe'
+    TIMEOUT_CMD = ''
+    TIMEOUT = ''
+
 LOGFILE_NAME = 'run_all.log'                                    # Log file
 OUTFILE_NAME = 'results.tex'                                    # Latex table with experiment results
 ORACLE_NAME = 'solutions'                                       # Solutions file
-COMMON_OPTS = ['--print-solution-size', '--print-spec-size']    # Options to use for all benchmarks
-BFS_ON_OPT = ['--bfs']                                          # Option to disable UNSAT-core based solver
+COMMON_OPTS = ['--print-solution-size', 
+               '--print-spec-size',
+               '--memoize']                                     # Options to use for all benchmarks
+BFS_ON_OPT = ['--bfs-solver']                                   # Option to disable UNSAT-core based solver
 INCREMENTAL_OFF_OPT = ['--incremental=0']                       # Option to disable incremental solving
 CONSISTENCY_OFF_OPT = ['--consistency=0']                       # Option to disable consistency checks
-MEMOIZATION_ON_OPT = ['--use-memoization']                      # Option to disable memoization
-TIMEOUT_CMD = 'timeout'                                         # Timeout command
-TIMEOUT= '120'                                                  # Timeout value (seconds)
 FNULL = open(os.devnull, 'w')                                   # Null file
 
 class Benchmark:
@@ -39,13 +46,6 @@ class BenchmarkGroup:
         self.benchmarks = benchmarks            # List of benchmarks in this group
 
 ALL_BENCHMARKS = [
-    BenchmarkGroup('Integer', [], [
-        Benchmark('Int-Max2', 'maximum of 2'),
-        Benchmark('Int-Max3', 'maximum of 3'),
-        Benchmark('Int-Max4', 'maximum of 4'),
-        Benchmark('Int-Max5', 'maximum of 5'),
-        Benchmark('Int-Add', 'add using increment', '0, inc, dec')
-        ]),
     BenchmarkGroup("List", [], [
         Benchmark('List-Null', 'is empty', 'true, false'),
         Benchmark('List-Elem', 'is member', 'true, false'),
@@ -59,45 +59,55 @@ ALL_BENCHMARKS = [
         Benchmark('List-Map', 'map'),
         Benchmark('List-Zip', 'zip'),
         Benchmark('List-ZipWith', 'zip with function'),
-        Benchmark('List-ToNat', 'absolute values', 'neg, map'),
         Benchmark('List-Product', 'cartesian product', 'append, map'),
+        Benchmark('List-Ith', 'element by index', '0, inc, dec'),
+        Benchmark('List-ElemIndex', '0, inc, dec'),
         Benchmark('List-Snoc', 'insert at end'),
         Benchmark('List-Reverse', 'reverse', 'insert at end'),
-        Benchmark('List-Foldr', 'fold'),
+        Benchmark('List-Foldr', 'foldr'),
         Benchmark('List-Fold-Length', 'length using fold', '0, inc, dec', ['-m=0']),
         Benchmark('List-Fold-Append', 'append using fold', '', ['-m=0'])
         ]),
-    BenchmarkGroup("Unique list", ['-f=FirstArgument'], [
+    BenchmarkGroup("Unique list", [], [
         Benchmark('UniqueList-Insert', 'insert'),
         Benchmark('UniqueList-Delete', 'delete'),
-        Benchmark('List-Nub', 'remove duplicates', 'is member', ['-f=FirstArgument', '-m=1']),
-        Benchmark('List-Compress', 'remove adjacent dupl.', '', ['-h'])
+        Benchmark('List-Nub', 'remove duplicates', 'is member', ['-m=1']),
+        Benchmark('List-Compress', 'remove adjacent dupl.'),
+        Benchmark('UniqueList-Range', 'integer range', '0, inc, dec'),
         ]),
-    BenchmarkGroup("Sorting",  ['-a=2', '-m=3', '-s=1'], [
+    BenchmarkGroup("Strictly sorted list", [], [
+        Benchmark('StrictIncList-Insert', 'insert'),
+        Benchmark('StrictIncList-Delete', 'delete'),
+        Benchmark('StrictIncList-Intersect', 'intersect', '', ['-f=AllArguments']),
+        ]),
+    BenchmarkGroup("Sorting",  ['-a=2', '-m=3', '-f=AllArguments'], [
         # Insertion Sort
         Benchmark('IncList-Insert', 'insert (sorted)'),
-        Benchmark('IncList-InsertSort', 'insertion sort', 'insert (sorted)'),
-        Benchmark('StrictIncList-Insert', 'insert (strictly sorted)'),
-        Benchmark('StrictIncList-Delete', 'delete (strictly sorted)'),
+        Benchmark('List-InsertSort', 'insertion sort', 'insert (sorted)'),
+        Benchmark('List-Fold-Sort', 'sort by folding', 'foldr', ['-m=1', '-a=2', '-e']),
+        # Selection Sort
+        Benchmark('List-ExtractMin', 'extract minimum', '', ['-a=2', '-m 3']),
+        Benchmark('List-SelectSort', 'selection sort', 'extract minimum'),        
         # Merge sort
-        Benchmark('List-Split', 'balanced split', '', ['-s=1', '-m=3']),
-        Benchmark('IncList-Merge', 'merge', '', ['-h']),
-        Benchmark('IncList-MergeSort', 'merge sort', 'split, merge', ['-a=2', '-s=1', '-m=3']),
+        Benchmark('List-Split', 'balanced split', '', ['-m=3']),
+        Benchmark('IncList-Merge', 'merge', '', ['-f=AllArguments']),
+        Benchmark('List-MergeSort', 'merge sort', 'split, merge', ['-a=2', '-m=3']),
         # Quick sort
-        Benchmark('List-Partition', 'partition', '', ['-s=1']),
+        Benchmark('List-Partition', 'partition'),
         Benchmark('IncList-PivotAppend', 'append with pivot'),
-        Benchmark('IncList-QuickSort', 'quick sort', 'partition, append w/pivot', ['-a=2', '-s=1'])
+        Benchmark('List-QuickSort', 'quick sort', 'partition, append w/pivot', ['-a=2'])
         ]),
     BenchmarkGroup("Trees",  [], [
         Benchmark('Tree-Elem', 'is member', 'false, not, or'),
-        Benchmark('Tree-ToList', 'to a list', 'append'),
+        Benchmark('Tree-Count', 'node count', '0, 1, +'),
+        Benchmark('Tree-ToList', 'preorder', 'append'),
         Benchmark('Tree-BalancedReplicate', 'create balanced', '0, inc, dec')
         ]),
     BenchmarkGroup("BST", [], [
         Benchmark('BST-Member', 'is member', 'true, false'),
         Benchmark('BST-Insert', 'insert'),
-        Benchmark('BST-Delete', 'delete', '', ['-m=1', '-e', '-a=2']),
-        Benchmark('BST-Sort', 'BST sort', 'insert, append w/pivot')
+        Benchmark('BST-Delete', 'delete', '', ['-e']),
+        Benchmark('BST-Sort', 'BST sort')
         ]),
     BenchmarkGroup("Bin Heap", [], [
         Benchmark('BinHeap-Member', 'is member', 'false, not, or'),
@@ -106,6 +116,14 @@ ALL_BENCHMARKS = [
         Benchmark('BinHeap-Doubleton', '2-element constructor'),
         Benchmark('BinHeap-Tripleton', '3-element constructor')
         ]),
+    BenchmarkGroup("AVL", ['-a=2'], [
+        Benchmark('AVL-RotateL', 'rotate left', '', ['-a 2', '-u']),
+        Benchmark('AVL-RotateR', 'rotate right', '', ['-a 2', '-u']),
+        Benchmark('AVL-Balance', 'balance', 'rotate left, rotate right', ['-a 2', '-e']),
+        Benchmark('AVL-Insert', 'insert', 'balance', ['-a 2']),
+        Benchmark('AVL-ExtractMin', 'extract minimum', '', ['-a 2']),
+        Benchmark('AVL-Delete', 'delete', 'extract minimum, balance', ['-a 2', '-m 1']),
+        ]),        
     BenchmarkGroup("RBT", ['-m=1', '-a=2', '-u'], [
         Benchmark('RBT-BalanceL', 'balance left', '', ['-m=1', '-a=2', '-u']),
         Benchmark('RBT-BalanceR', 'balance right', '', ['-m=1', '-a=2', '-u']),
@@ -165,13 +183,13 @@ def run_benchmark(name, opts, default_opts):
             ('def', default_opts),
             ('nis', opts + INCREMENTAL_OFF_OPT),
             ('ncc', opts + CONSISTENCY_OFF_OPT),
-            ('nuc', opts + BFS_ON_OPT),
-            ('nm', opts + MEMOIZATION_ON_OPT)
+            ('nuc', opts + BFS_ON_OPT)
         ]
 
       # Run each variant:
-      for (variant_id, opts) in variant_options:
-        run_version(name, variant_id, opts, logfile)
+      if platform.system() in ['Linux', 'Darwin']:
+          for (variant_id, opts) in variant_options:
+            run_version(name, variant_id, opts, logfile)
 
       print
 
@@ -223,8 +241,7 @@ def postprocess():
                     ' & ' + '{0:0.2f}'.format(result.variant_times['def']) + \
                     ' & ' + '{0:0.2f}'.format(result.variant_times['nis']) + \
                     ' & ' + '{0:0.2f}'.format(result.variant_times['ncc']) + \
-                    ' & ' + '{0:0.2f}'.format(result.variant_times['nuc']) + \
-                    ' & ' + '{0:0.2f}'.format(result.variant_times['nm']) + ' \\\\'
+                    ' & ' + '{0:0.2f}'.format(result.variant_times['nuc']) + ' \\\\'
                 outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')

@@ -1,0 +1,25 @@
+data RList a <r :: a -> a -> Bool> where
+	Nil :: RList a <r>
+	Cons :: x: a -> xs: RList {a | r x _v} <r> -> RList a <r>
+  
+termination measure len :: RList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: RList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+type List a = RList a <{True}>
+type IncList a = RList a <{_0 <= _1}>
+
+qualifier {x <= y}
+  
+foldr :: <p :: RList a -> b -> Bool> .
+		f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->
+		seed: {b | p Nil _v} ->
+    ys: List a ->    
+		{b | p ys _v}
+
+sort :: xs: List a -> {IncList a | elems _v == elems xs && len _v == len xs}
+sort = ??
