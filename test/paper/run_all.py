@@ -124,10 +124,10 @@ ALL_BENCHMARKS = [
         Benchmark('AVL-ExtractMin', 'extract minimum', '$<$', ['-a 2']),
         Benchmark('AVL-Delete', 'delete', 'extract minimum, balance, $<$', ['-a 2', '-m 1']),
         ]),        
-    BenchmarkGroup("RBT", ['-m=1', '-a=2', '-u'], [
-        Benchmark('RBT-BalanceL', 'balance left', '', ['-m=1', '-a=2', '-u']),
-        Benchmark('RBT-BalanceR', 'balance right', '', ['-m=1', '-a=2', '-u']),
-        Benchmark('RBT-Insert', 'insert', 'balance left, right, $\\leq$, $\\neq$', ['-m=1', '-a=2', '-u'])
+    BenchmarkGroup("RBT", ['-m=1', '-a=2'], [
+        Benchmark('RBT-BalanceL', 'balance left', '', ['-m=1', '-a=2']),
+        Benchmark('RBT-BalanceR', 'balance right', '', ['-m=1', '-a=2']),
+        Benchmark('RBT-Insert', 'insert', 'balance left, right, $\\leq$, $\\neq$', ['-m=1', '-a=2'])
         ]),
     BenchmarkGroup("User", [], [
         Benchmark('Evaluator', 'desugar AST', '0, 1, 2'),
