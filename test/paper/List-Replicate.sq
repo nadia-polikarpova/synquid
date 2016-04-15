@@ -16,3 +16,5 @@ termination measure len :: List a -> {Int | _v >= 0} where
 	
 replicate :: n: Nat -> x: a -> {List a | len _v == n}
 replicate = ??
+
+	

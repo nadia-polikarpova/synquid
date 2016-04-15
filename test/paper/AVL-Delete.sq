@@ -35,7 +35,6 @@ data MinPair a where
   Nothing :: MinPair a
   MinPair :: x: a -> t: AVL {a | x < _v} -> MinPair a
   
-{- TODO: bug in Program.hs if you replace "Set a" with "a" -}
 measure melems :: MinPair a -> Set a where
   Nothing -> []
   MinPair x t -> [x] + elems t

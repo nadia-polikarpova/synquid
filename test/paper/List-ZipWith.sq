@@ -8,3 +8,5 @@ termination measure len :: List a -> {Int | _v >= 0} where
 	
 zipWith :: f: (a -> b -> c) -> xs: List a -> ys: {List b | len _v == len xs} -> {List c | len _v == len xs}
 zipWith = ??
+
+	

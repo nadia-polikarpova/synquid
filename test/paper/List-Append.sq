@@ -8,4 +8,5 @@ termination measure len :: List a -> {Int | _v >= 0} where
 	
 append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}
 append = ??
+
 	

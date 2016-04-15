@@ -11,3 +11,5 @@ termination measure len :: List a -> {Int | _v >= 0} where
 	
 null :: xs: List a -> {Bool | _v == (len xs == 0)}
 null = ??
+
+	

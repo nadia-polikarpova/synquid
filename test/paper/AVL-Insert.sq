@@ -1,5 +1,3 @@
-{- @flags: -a=2 -m=1 -}
-
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
 
@@ -28,22 +26,7 @@ measure elems :: AVL a -> Set a where
   Node x l r h -> [x] + elems l + elems r  
 
 getHeight :: t: AVL a -> {Int | _v == realHeight t}
-
-{- MinPair: represents a pair (x, t) :: (a, AVL a)
- -   s.t. x is less than all the elements of t -}
-data MinPair a where
-  Nothing :: MinPair a
-  MinPair :: x: a -> t: AVL {a | x < _v} -> MinPair a
-  
-{- TODO: bug in Program.hs if you replace "Set a" with "a" -}
-measure melems :: MinPair a -> Set a where
-  Nothing -> []
-  MinPair x t -> [x] + elems t
-
-measure mheight :: MinPair a -> {Int | _v >= -1} where
-  Nothing -> -1
-  MinPair x t -> realHeight t
-  
+        
 inline nodeHeightM l r = 1 + max (realHeight l) (realHeight r)
 inline isReal v l r = (v == nodeHeightM l r)
 inline isBal l r n = 0 - n <= realHeight l - realHeight r && realHeight l - realHeight r <= n
@@ -58,26 +41,10 @@ inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight
 qualifier {x < y}                        
 
 balance :: x: a
-         -> l: AVL {a | _v < x}
-         -> r: AVL {a | _v > x} {- | abs (realHeight l - realHeight _v) <= 2-}
+         -> l: AVL {a | _v < x}  {- {AVL {a | _v < x} | balFac _v > 0}     {- isLeftHeavy l -}
+         -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 2}
          -> {AVL a | balHt l r _v && bigHt l r _v && elems _v == [x] + elems l + elems r}
 
-
-extractMin :: t: AVL a -> {MinPair a | elems t == melems _v && eqOrOneLess (mheight _v) (realHeight t)}
-
-merge :: x:a
-          -> l: AVL {a | _v < x}
-          -> r: {AVL {a | _v > x} | isBal l _v 1}
-          -> {AVL a | bigHt l r _v && elems _v == elems l + elems r}
-merge = ??
-
-delete :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight _v) (realHeight t) &&
-                                        elems t - [y] == elems _v}
-delete = ?? 
-
-{- \x. \l. \r.
-   match extractMin r with
-     Nothing -> l
-     MinPair y r' -> balance y l r'
- -}
-
+insert :: y: a -> t: AVL a -> {AVL a | realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1 &&
+                                        elems _v == [y] + elems t}
+insert = ??

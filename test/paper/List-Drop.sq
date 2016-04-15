@@ -16,3 +16,5 @@ termination measure len :: List a -> {Int | _v >= 0} where
 	
 drop :: n: Nat -> xs: {List a | len _v >= n} -> {List a | len _v == len xs - n}
 drop = ??
+
+	

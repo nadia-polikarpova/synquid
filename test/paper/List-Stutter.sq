@@ -8,3 +8,5 @@ termination measure len :: List a -> {Int | _v >= 0} where
 	
 stutter :: xs: List a -> {List a | len _v == 2 * len xs}
 stutter = ??
+
+	

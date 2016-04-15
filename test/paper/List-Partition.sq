@@ -23,3 +23,5 @@ measure elems :: List a -> Set a where
 	
 partition :: p: a -> xs: List a -> {Pair (List {a | _v <= p}) (List {a | _v > p}) | len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }
 partition = ??
+
+	

@@ -1,78 +1,9 @@
-Int-Max2
-max2 :: x:Int -> y:Int -> {Int|_v >= x && _v >= y}
-max2 = \x . \y . if y <= x
-                   then x
-                   else y
-(Size: 11)
-(Spec size: 7)
-(#measures: 0)
-(#components: 0)
-
-Int-Max3
-max3 :: x:Int -> y:Int -> z:Int -> {Int|(_v >= x && _v >= y) && _v >= z}
-max3 = \x . \y . \z . if (y <=
-                            x) && (z <= x)
-                        then x
-                        else if z <= y
-                               then y
-                               else z
-(Size: 27)
-(Spec size: 11)
-(#measures: 0)
-(#components: 0)
-
-Int-Max4
-max4 :: w:Int -> x:Int -> y:Int -> z:Int -> {Int|((_v >= w && _v >= x) && _v >= y) && _v >= z}
-max4 = \w . \x . \y . \z .
-        if ((x <= w) && (y <= w)) && (z
-                                        <= w)
-          then w
-          else if (y <= x) && (z <= x)
-                 then x
-                 else if z <= y
-                        then y
-                        else z
-(Size: 51)
-(Spec size: 15)
-(#measures: 0)
-(#components: 0)
-
-Int-Max5
-max5 :: v:Int -> w:Int -> x:Int -> y:Int -> z:Int -> {Int|(((_v >= v && _v >= w) && _v >= x) && _v >= y) && _v >= z}
-max5 = \v . \w . \x . \y . \z .
-          if (((w <= v) && (x <= v)) && (y
-                                           <= v)) && (z <= v)
-            then v
-            else if ((x <= w) && (y <= w))
-                      && (z <= w)
-                   then w
-                   else if (y <= x) && (z <= x)
-                          then x
-                          else if z <= y
-                                 then y
-                                 else z
-(Size: 83)
-(Spec size: 19)
-(#measures: 0)
-(#components: 0)
-
-Int-Add
-add :: x:{Int|_v >= 0} -> y:{Int|_v >= 0} -> {Int|_v == x + y}
-add = \x . \y . if y <= 0
-                  then x
-                  else if x <= 0
-                         then y
-                         else inc (add x (dec y))
-(Size: 26)
-(Spec size: 11)
-(#measures: 0)
-(#components: 3)
-
 List-Null
 null :: <a> . xs:List a -> {Bool|_v == (len xs == 0)}
-null = \xs . match xs with
-               Nil -> true
-               Cons x3 x4 -> false
+null = \xs . 
+  match xs with
+    Nil -> true
+    Cons x3 x4 -> false
 (Size: 6)
 (Spec size: 6)
 (#measures: 1)
@@ -80,11 +11,13 @@ null = \xs . match xs with
 
 List-Elem
 elem :: <a> . x:a -> xs:List a -> {Bool|_v == (x in elems xs)}
-elem = \x . \xs . match xs with
-                    Nil -> false
-                    Cons x3 x4 -> if x3 == x
-                                    then true
-                                    else elem x x4
+elem = \x . \xs . 
+    match xs with
+      Nil -> false
+      Cons x3 x4 -> 
+        if x3 == x
+          then true
+          else elem x x4
 (Size: 18)
 (Spec size: 6)
 (#measures: 2)
@@ -92,10 +25,11 @@ elem = \x . \xs . match xs with
 
 List-Stutter
 stutter :: <a> . xs:List a -> {List a|len _v == 2 * len xs}
-stutter = \xs . match xs with
-                  Nil -> xs
-                  Cons x3 x4 -> Cons x3 (Cons x3
-                                           (stutter x4))
+stutter = \xs . 
+  match xs with
+    Nil -> xs
+    Cons x3 x4 -> Cons x3 (Cons x3
+                             (stutter x4))
 (Size: 16)
 (Spec size: 7)
 (#measures: 1)
@@ -103,10 +37,11 @@ stutter = \xs . match xs with
 
 List-Replicate
 replicate :: <a> . n:{Int|_v >= 0} -> x:a -> {List a|len _v == n}
-replicate = \n . \x . if n <= 0
-                        then Nil
-                        else Cons x (replicate (dec n)
-                                       x)
+replicate = \n . \x . 
+    if n <= 0
+      then Nil
+      else Cons x (replicate (dec n)
+                     x)
 (Size: 21)
 (Spec size: 7)
 (#measures: 1)
@@ -114,11 +49,11 @@ replicate = \n . \x . if n <= 0
 
 List-Append
 append :: <a> . xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
-append = \xs . \ys .
-    match ys with
-      Nil -> xs
-      Cons x4 x5 -> Cons x4 (append xs
-                               x5)
+append = \xs . \ys . 
+    match xs with
+      Nil -> ys
+      Cons x3 x4 -> Cons x3 (append x4
+                               ys)
 (Size: 15)
 (Spec size: 8)
 (#measures: 1)
@@ -126,10 +61,11 @@ append = \xs . \ys .
 
 List-Concat
 concat :: <a> . xss:ListOfLists a -> {List a|len _v == sumLen xss}
-concat = \xss . match xss with
-                  Nil2 -> Nil
-                  Cons2 x3 x4 -> append x3 (concat
-                                              x4)
+concat = \xss . 
+  match xss with
+    Nil2 -> Nil
+    Cons2 x3 x4 -> append x3 (concat
+                                x4)
 (Size: 12)
 (Spec size: 5)
 (#measures: 3)
@@ -137,14 +73,17 @@ concat = \xss . match xss with
 
 List-Take
 take :: <a> . n:{Int|_v >= 0} -> xs:{List a|len _v >= n} -> {List a|len _v == n}
-take = \n . \xs . if 0 != n
-                    then match xs with
-                           Nil -> error
-                           Cons x4 x5 -> Cons x4 (take (dec
-                                                          n) x5)
-                    else match xs with
-                           Nil -> xs
-                           Cons x18 x19 -> Nil
+take = \n . \xs . 
+    if 0 != n
+      then 
+        match xs with
+          Nil -> error
+          Cons x3 x4 -> Cons x3 (take (dec
+                                         n) x4)
+      else 
+        match xs with
+          Nil -> xs
+          Cons x12 x13 -> Nil
 (Size: 27)
 (Spec size: 11)
 (#measures: 1)
@@ -152,11 +91,13 @@ take = \n . \xs . if 0 != n
 
 List-Drop
 drop :: <a> . n:{Int|_v >= 0} -> xs:{List a|len _v >= n} -> {List a|len _v == len xs - n}
-drop = \n . \xs . if 0 != n
-                    then match xs with
-                           Nil -> error
-                           Cons x4 x5 -> drop (dec n) x5
-                    else xs
+drop = \n . \xs . 
+    if 0 != n
+      then 
+        match xs with
+          Nil -> error
+          Cons x3 x4 -> drop (dec n) x4
+      else xs
 (Size: 20)
 (Spec size: 14)
 (#measures: 1)
@@ -164,24 +105,26 @@ drop = \n . \xs . if 0 != n
 
 List-Delete
 delete :: <a> . x:a -> xs:List a -> {List a|elems _v == elems xs - [x]}
-delete = \x . \xs .
+delete = \x . \xs . 
     match xs with
       Nil -> xs
-      Cons x3 x4 -> if x3 == x
-                      then delete x x4
-                      else Cons x3 (delete x x4)
+      Cons x3 x4 -> 
+        if x3 == x
+          then delete x x4
+          else Cons x3 (delete x x4)
 (Size: 26)
 (Spec size: 8)
 (#measures: 2)
 (#components: 0)
 
 List-Map
-map :: <b> . <a> . f:(_:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map = let f0 = \x14 . f x14 in
-      \f . \xs . match xs with
-                   Nil -> Nil
-                   Cons x3 x4 -> Cons (f x3) (map
-                                                f0 x4)
+map :: <b> . <a> . f:(x0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+map = let f0 = \x9 . f x9 in
+      \f . \xs . 
+          match xs with
+            Nil -> Nil
+            Cons x3 x4 -> Cons (f x3) (map
+                                         f0 x4)
 (Size: 22)
 (Spec size: 5)
 (#measures: 1)
@@ -189,87 +132,111 @@ map = let f0 = \x14 . f x14 in
 
 List-Zip
 zip :: <b> . <a> . xs:List a -> ys:{List b|len _v == len xs} -> {List Pair a b|len _v == len xs}
-zip = \xs . \ys . match xs with
-                    Nil -> Nil
-                    Cons x4 x5 -> match ys with
-                                    Nil -> error
-                                    Cons x8 x9 -> Cons (Pair x4 x8)
-                                                    (zip x5 x9)
+zip = \xs . \ys . 
+    match xs with
+      Nil -> Nil
+      Cons x3 x4 -> 
+        match ys with
+          Nil -> error
+          Cons x7 x8 -> Cons (Pair x3 x7)
+                          (zip x4 x8)
 (Size: 22)
 (Spec size: 10)
 (#measures: 1)
 (#components: 0)
 
 List-ZipWith
-zipWith :: <c> . <b> . <a> . f:(_:a -> _:b -> c) -> xs:List a -> ys:{List b|len _v == len xs} -> {List c|len _v == len xs}
-zipWith = let f0 = \x22 . \x23 .
-                f x22 x23 in
-          \f . \xs . \ys . match xs with
-                             Nil -> Nil
-                             Cons x4 x5 -> match ys with
-                                             Nil -> error
-                                             Cons x8 x9 -> Cons (f x4 x8)
-                                                             (zipWith f0 x5 x9)
+zipWith :: <c> . <b> . <a> . f:(x1:a -> x0:b -> c) -> xs:List a -> ys:{List b|len _v == len xs} -> {List c|len _v == len xs}
+zipWith = let f0 = \x14 . \x15 .
+                f x14 x15 in
+          \f . \xs . \ys . 
+                match xs with
+                  Nil -> Nil
+                  Cons x3 x4 -> 
+                    match ys with
+                      Nil -> error
+                      Cons x7 x8 -> Cons (f x3 x7)
+                                      (zipWith f0 x4 x8)
 (Size: 33)
 (Spec size: 10)
 (#measures: 1)
 (#components: 0)
 
-List-ToNat
-toNat :: xs:List Int -> {List {Int|_v >= 0}|len _v == len xs}
-toNat = let f0 = \x4 . if x4 <=
-                            0
-                         then neg x4
-                         else x4 in
-        \xs . map f0 xs
-(Size: 19)
-(Spec size: 8)
-(#measures: 1)
-(#components: 2)
-
 List-Product
 product :: <b> . <a> . xs:List a -> ys:List b -> {List Pair a b|len _v == len xs * len ys}
-product = let f0 = \x13 . Pair
-                            x4 x13 in
-          \xs . \ys . match xs with
-                        Nil -> Nil
-                        Cons x4 x5 -> append (map f0 ys)
-                                        (product x5 ys)
+product = let f0 = \x8 . Pair x3
+                           x8 in
+          \xs . \ys . 
+              match xs with
+                Nil -> Nil
+                Cons x3 x4 -> append (map f0 ys)
+                                (product x4 ys)
 (Size: 26)
 (Spec size: 8)
 (#measures: 3)
 (#components: 2)
 
-List-Snoc
-snoc :: <a> . <p :: a -> a -> Bool> . x:a -> xs:List {a|p _v x} <p _0 _1> -> {List a <p _0 _1>|len _v == len xs + 1}
-snoc = \x . \xs . match xs with
-                    Nil -> Cons x Nil
-                    Cons x7 x8 -> Cons x7 (snoc x
-                                             x8)
-(Size: 19)
-(Spec size: 16)
+List-Ith
+ith :: <a> . <p :: Int -> a -> Bool> . xs:List a <p _0 _1> -> i:{Int|0 <= _v && _v < len xs} -> {a|p i _v}
+ith = \xs . \i . 
+    match xs with
+      Nil -> error
+      Cons x3 x4 -> 
+        if 0 == i
+          then x3
+          else ith x4 (dec i)
+(Size: 20)
+(Spec size: 14)
 (#measures: 1)
+(#components: 3)
+
+List-ElemIndex
+elemIndex :: <a> . <p :: Int -> a -> Bool> . x:a -> xs:{List a <p _0 _1>|x in elems _v} -> {Int|p _v x}
+elemIndex = \x . \xs . 
+    match xs with
+      Nil -> error
+      Cons x3 x4 -> 
+        if x3 == x
+          then zero
+          else inc (elemIndex x x4)
+(Size: 20)
+(Spec size: 10)
+(#measures: 2)
+(#components: 3)
+
+List-Snoc
+snoc :: <a> . <p :: a -> a -> Bool> . x:a -> xs:List {a|p _v x} <p _0 _1> -> {List a <p _0 _1>|len _v == len xs + 1 && elems _v == elems xs + [x]}
+snoc = \x . \xs . 
+    match xs with
+      Nil -> Cons x Nil
+      Cons x5 x6 -> Cons x5 (snoc x
+                               x6)
+(Size: 19)
+(Spec size: 25)
+(#measures: 2)
 (#components: 0)
 
 List-Reverse
-reverse :: <a> . <p :: a -> a -> Bool> . xs:List a <p _0 _1> -> {List a <p _1 _0>|len _v == len xs}
-reverse = \xs . match xs with
-                  Nil -> Nil
-                  Cons x3 x4 -> snoc x3 (reverse
-                                           x4)
+reverse :: <a> . <p :: a -> a -> Bool> . xs:List a <p _0 _1> -> {List a <p _1 _0>|len _v == len xs && elems _v == elems xs}
+reverse = \xs . 
+  match xs with
+    Nil -> Nil
+    Cons x3 x4 -> snoc x3 (reverse
+                             x4)
 (Size: 12)
-(Spec size: 11)
-(#measures: 1)
+(Spec size: 17)
+(#measures: 2)
 (#components: 1)
 
 List-Foldr
 foldr :: <b> . <a> . <p :: List (a) -> b -> Bool> . f:(xs:List a -> x:a -> acc:{b|p xs _v} -> {b|p ((Cons x xs)) _v}) -> seed:{b|p ((Nil)) _v} -> ys:List a -> {b|p ys _v}
-foldr = let f0 = \x15 . \x16 .
-              \x17 . f x15 x16 x17 in
-        \f . \seed . \ys . match ys with
-                             Nil -> seed
-                             Cons x3 x4 -> f x4 x3 (foldr f0
-                                                      seed x4)
+foldr = let f0 = \x9 . \x10 .
+              \x11 . f x9 x10 x11 in
+        \f . \seed . \ys . 
+              match ys with
+                Nil -> seed
+                Cons x3 x4 -> f x4 x3 (foldr f0
+                                         seed x4)
 (Size: 32)
 (Spec size: 14)
 (#measures: 2)
@@ -277,8 +244,8 @@ foldr = let f0 = \x15 . \x16 .
 
 List-Fold-Length
 length :: <a> . xs:List a -> {Int|_v == len xs}
-length = let f0 = \x5 . \x6 .
-               \x7 . inc x7 in
+length = let f0 = \x2 . \x3 .
+               \x4 . inc x4 in
          \xs . foldr f0 zero xs
 (Size: 17)
 (Spec size: 4)
@@ -287,8 +254,8 @@ length = let f0 = \x5 . \x6 .
 
 List-Fold-Append
 append :: <a> . xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
-append = let f0 = \x6 . \x7 .
-               \x8 . Cons x7 x6 in
+append = let f0 = \x2 . \x3 .
+               \x4 . Cons x3 x4 in
          \xs . \ys . foldr f0 xs ys
 (Size: 20)
 (Spec size: 8)
@@ -296,119 +263,114 @@ append = let f0 = \x6 . \x7 .
 (#components: 1)
 
 UniqueList-Insert
-insert :: <a> . x:a -> xs:UList a -> {UList a|uelems _v == uelems xs + [x]}
-insert = \x . \xs .
+insert :: <a> . x:a -> xs:PList a <!(_0 in elems _1)> -> {PList a <!(_0 in elems _1)>|elems _v == elems xs + [x]}
+insert = \x . \xs . 
     match xs with
-      UNil -> UCons x UNil
-      UCons x7 x8 -> if x7 == x
-                       then xs
-                       else UCons x7 (insert x x8)
+      Nil -> Cons x xs
+      Cons x5 x6 -> 
+        if x5 == x
+          then xs
+          else Cons x5 (insert x x6)
 (Size: 26)
-(Spec size: 8)
+(Spec size: 18)
 (#measures: 2)
 (#components: 0)
 
 UniqueList-Delete
-delete :: <a> . x:a -> xs:UList a -> {UList a|uelems _v == uelems xs - [x]}
-delete = \x . \xs .
+delete :: <a> . x:a -> xs:PList a <!(_0 in elems _1)> -> {PList a <!(_0 in elems _1)>|elems _v == elems xs - [x]}
+delete = \x . \xs . 
     match xs with
-      UNil -> xs
-      UCons x3 x4 -> if x3 == x
-                       then x4
-                       else UCons x3 (delete x x4)
+      Nil -> xs
+      Cons x3 x4 -> 
+        if x3 == x
+          then x4
+          else Cons x3 (delete x x4)
 (Size: 22)
-(Spec size: 8)
+(Spec size: 18)
 (#measures: 2)
 (#components: 0)
 
 List-Nub
-strengthen :: <a> . x:a -> xs:{UList a|!(x in uelems _v)} -> {UList {a|_v != x}|uelems _v == uelems xs && ulen _v == ulen xs}
-strengthen = \x . \xs .
+elem :: <a> . x:a -> xs:PList a <True> -> {Bool|_v == (x in elems xs)}
+elem = \x . \xs . 
     match xs with
-      UNil -> UNil
-      UCons x3 x4 -> UCons x3
-                       (strengthen x x4)
-(Size: 15)
-(Spec size: 19)
-(#measures: 4)
-(#components: 1)
-
-nub' :: <a> . xs:List a -> acc:UList a -> {UList a|uelems _v == uelems acc + elems xs}
-nub' = \xs . \acc .
-    match xs with
-      Nil -> acc
-      Cons x3 x4 -> if elem x3 acc
-                      then nub' x4 acc
-                      else nub' x4 (UCons x3
-                                      (strengthen x3 acc))
-(Size: 30)
-(Spec size: 8)
-(#measures: 4)
+      Nil -> false
+      Cons x3 x4 -> 
+        if x3 == x
+          then true
+          else elem x x4
+(Size: 18)
+(Spec size: 6)
+(#measures: 2)
 (#components: 2)
 
-nub :: <a> . xs:List a -> {UList a|uelems _v == elems xs}
-nub = \xs . match xs with
-              Nil -> UNil
-              Cons x3 x4 -> nub' xs UNil
-(Size: 10)
-(Spec size: 5)
-(#measures: 4)
+nub' :: <a> . xs:PList a <True> -> acc:PList a <!(_0 in elems _1)> -> {PList a <!(_0 in elems _1)>|elems _v == elems acc + elems xs}
+nub' = \xs . \acc . 
+    match xs with
+      Nil -> acc
+      Cons x3 x4 -> 
+        if elem x3 x4
+          then nub' x4 acc
+          else 
+            if elem x3 acc
+              then nub' x4 acc
+              else Cons x3 (nub' x4 acc)
+(Size: 37)
+(Spec size: 18)
+(#measures: 2)
 (#components: 3)
 
-List-Compress
-compress :: <a> . xs:List a -> {CList a|celems _v == elems xs}
-compress = \xs . match xs with
-                   Nil -> CNil
-                   Cons x3 x4 -> match compress
-                                         x4 with
-                                   CNil -> CCons x3 CNil
-                                   CCons x13 x14 -> if x3 == x13
-                                                      then CCons x13 x14
-                                                      else CCons x3 (CCons x13
-                                                                       x14)
-(Size: 34)
-(Spec size: 5)
-(#measures: 5)
-(#components: 0)
-
-IncList-Insert
-insert :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs + [x]}
-insert = \x . \xs .
-    match xs with
-      INil -> ICons x INil
-      ICons x7 x8 -> if (x <= x7) &&
-                          (x7 <= x)
-                       then xs
-                       else if x7 <= x
-                              then ICons x7 (insert x x8)
-                              else ICons x (ICons x7 x8)
-(Size: 49)
-(Spec size: 8)
+nub :: <a> . xs:PList a <True> -> {PList a <!(_0 in elems _1)>|elems _v == elems xs}
+nub = \xs . 
+  match xs with
+    Nil -> Nil
+    Cons x3 x4 -> nub' xs Nil
+(Size: 10)
+(Spec size: 10)
 (#measures: 2)
+(#components: 4)
+
+List-Compress
+compress :: <a> . xs:PList a <True> -> {PList a <!(_0 in heads _1)>|elems _v == elems xs}
+compress = \xs . 
+  match xs with
+    Nil -> Nil
+    Cons x3 x4 -> 
+      match compress x4 with
+        Nil -> Cons x3 Nil
+        Cons x10 x11 -> 
+          if x3 == x10
+            then compress x4
+            else Cons x3 (Cons x10 x11)
+(Size: 32)
+(Spec size: 10)
+(#measures: 3)
 (#components: 0)
 
-IncList-InsertSort
-insertSort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
-insertSort = \xs . match xs with
-                     Nil -> INil
-                     Cons x3 x4 -> insert x3
-                                     (insertSort x4)
-(Size: 12)
-(Spec size: 5)
-(#measures: 4)
-(#components: 1)
+UniqueList-Range
+range :: size:{Int|_v >= 0} -> lo:Int -> {PList {Int|lo <= _v && _v <= lo + size} <_0 != _1>|len _v == size}
+range = \size . \lo . 
+    if size <= 0
+      then Nil
+      else Cons lo (range (dec size)
+                      (inc lo))
+(Size: 23)
+(Spec size: 19)
+(#measures: 2)
+(#components: 3)
 
 StrictIncList-Insert
 insert :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs + [x]}
-insert = \x . \xs .
+insert = \x . \xs . 
     match xs with
       INil -> ICons x INil
-      ICons x7 x8 -> if (x <= x7) &&
-                          (x7 <= x)
-                       then xs
-                       else if x7 <= x
-                              then ICons x7 (insert x x8)
-                              else ICons x (ICons x7 x8)
+      ICons x5 x6 -> 
+        if (x <= x5) && (x5 <= x)
+          then xs
+          else 
+            if x5 <= x
+              then ICons x5 (insert x x6)
+              else ICons x (ICons x5 x6)
 (Size: 49)
 (Spec size: 8)
 (#measures: 2)
@@ -416,73 +378,164 @@ insert = \x . \xs .
 
 StrictIncList-Delete
 delete :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs - [x]}
-delete = \x . \xs .
+delete = \x . \xs . 
     match xs with
       INil -> xs
-      ICons x3 x4 -> if (x <= x3) &&
-                          (x3 <= x)
-                       then x4
-                       else if x <= x3
-                              then xs
-                              else ICons x3 (delete x x4)
+      ICons x3 x4 -> 
+        if (x <= x3) && (x3 <= x)
+          then x4
+          else 
+            if x <= x3
+              then xs
+              else ICons x3 (delete x x4)
 (Size: 37)
 (Spec size: 8)
 (#measures: 2)
 (#components: 0)
 
+StrictIncList-Intersect
+intersect :: <a> . xs:SList a -> ys:SList a -> {SList a|elems _v == elems xs * elems ys}
+intersect = \xs . \ys . 
+    match xs with
+      Nil -> xs
+      Cons x4 x5 -> 
+        match ys with
+          Nil -> ys
+          Cons x8 x9 -> 
+            if x4 < x8
+              then intersect x5 ys
+              else 
+                if x8 < x4
+                  then intersect xs x9
+                  else Cons x4 (intersect x5 x9)
+(Size: 40)
+(Spec size: 8)
+(#measures: 2)
+(#components: 0)
+
+IncList-Insert
+insert :: <a> . x:a -> xs:IList a -> {IList a|ielems _v == ielems xs + [x]}
+insert = \x . \xs . 
+    match xs with
+      INil -> ICons x INil
+      ICons x5 x6 -> 
+        if x5 <= x
+          then ICons x5 (insert x x6)
+          else ICons x (ICons x5 x6)
+(Size: 34)
+(Spec size: 8)
+(#measures: 2)
+(#components: 0)
+
+List-InsertSort
+insertSort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
+insertSort = \xs . 
+  match xs with
+    Nil -> INil
+    Cons x3 x4 -> insert x3
+                    (insertSort x4)
+(Size: 12)
+(Spec size: 5)
+(#measures: 4)
+(#components: 1)
+
+List-Fold-Sort
+sort :: <a> . xs:RList a <True> -> {RList a <_0 <= _1>|elems _v == elems xs && len _v == len xs}
+sort = let f0 = \x2 . \x3 .
+             \x4 . 
+               match x4 with
+                 Nil -> Cons x3 Nil
+                 Cons x12 x13 -> 
+                   if x3 <= x12
+                     then Cons x3 (Cons x12 x13)
+                     else Cons x12 (f0 x13 x3 x13) in
+       \xs . foldr f0 Nil xs
+(Size: 47)
+(Spec size: 14)
+(#measures: 2)
+(#components: 1)
+
+List-ExtractMin
+extractMin :: <a> . xs:{List a|len _v > 0} -> {MinPair a|elems xs == [min _v] + elems (rest _v) && len xs == 1 + len (rest _v)}
+extractMin = \xs . 
+  match xs with
+    Nil -> error
+    Cons x3 x4 -> 
+      match x4 with
+        Nil -> MinPair x3 Nil
+        Cons x9 x10 -> 
+          match extractMin x4 with
+            MinPair x14 x15 -> 
+              if x14 <= x3
+                then MinPair x14 (Cons x3 x15)
+                else MinPair x3 (Cons x14 x15)
+(Size: 40)
+(Spec size: 23)
+(#measures: 4)
+(#components: 0)
+
+List-SelectSort
+selectSort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
+selectSort = \xs . 
+  match xs with
+    Nil -> INil
+    Cons x3 x4 -> 
+      match extractMin xs with
+        MinPair x8 x9 -> ICons x8
+                           (selectSort x9)
+(Size: 16)
+(Spec size: 5)
+(#measures: 6)
+(#components: 1)
+
 List-Split
-split :: <a> . xs:List a -> {Pair {List a|~(len xs - len _v * 2) <= 1} List a|len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs}
-split = \xs . match xs with
-                Nil -> Pair xs xs
-                Cons x7 x8 -> match x8 with
-                                Nil -> Pair x8 xs
-                                Cons x15 x16 -> match split
-                                                        x16 with
-                                                  Pair x21 x22 -> Pair (Cons x15
-                                                                          x21)
-                                                                    (Cons x7
-                                                                       x22)
+split :: <a> . xs:List a -> {Pair {List a|(if len xs - len _v * 2 >= 0 then len xs - len _v * 2 else -(len xs - len _v * 2)) <= 1} List a|len xs == len (fst _v) + len (snd _v) && elems xs == elems (fst _v) + elems (snd _v)}
+split = \xs . 
+  match xs with
+    Nil -> Pair xs xs
+    Cons x5 x6 -> 
+      match x6 with
+        Nil -> Pair x6 xs
+        Cons x11 x12 -> 
+          match split x12 with
+            Pair x16 x17 -> Pair (Cons x11
+                                    x16) (Cons x5 x17)
 (Size: 33)
-(Spec size: 31)
+(Spec size: 48)
 (#measures: 4)
 (#components: 0)
 
 IncList-Merge
 merge :: <a> . xs:IList a -> ys:IList a -> {IList a|ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
-merge = \xs . \ys .
+merge = \xs . \ys . 
     match ys with
       INil -> xs
-      ICons x4 x5 -> match xs with
-                       INil -> ICons x4 x5
-                       ICons x12 x13 -> if (x12 <= x4)
-                                             && (x4 <= x12)
-                                          then ICons x12 (ICons x12 (merge
-                                                                       x13 x5))
-                                          else if x4 <= x12
-                                                 then ICons x4 (merge (ICons x12
-                                                                         x13)
-                                                                  x5)
-                                                 else ICons x12 (merge x13
-                                                                   (ICons x4
-                                                                      x5))
-(Size: 72)
+      ICons x4 x5 -> 
+        match xs with
+          INil -> ys
+          ICons x8 x9 -> 
+            if x4 <= x8
+              then ICons x4 (merge (ICons x8
+                                      x9) x5)
+              else ICons x8 (merge x9 (ICons
+                                         x4 x5))
+(Size: 41)
 (Spec size: 17)
 (#measures: 2)
 (#components: 0)
 
-IncList-MergeSort
+List-MergeSort
 mergeSort :: <a> . xs:List a -> {IList a|ilen _v == len xs && ielems _v == elems xs}
-mergeSort = \xs . match xs with
-                    Nil -> INil
-                    Cons x3 x4 -> match x4 with
-                                    Nil -> ICons x3 INil
-                                    Cons x11 x12 -> match split
-                                                            xs with
-                                                      Pair x17 x18 -> merge
-                                                                        (mergeSort
-                                                                           x17)
-                                                                        (mergeSort
-                                                                           x18)
+mergeSort = \xs . 
+  match xs with
+    Nil -> INil
+    Cons x3 x4 -> 
+      match x4 with
+        Nil -> ICons x3 INil
+        Cons x9 x10 -> 
+          match split xs with
+            Pair x14 x15 -> merge (mergeSort
+                                     x14) (mergeSort x15)
 (Size: 25)
 (Spec size: 11)
 (#measures: 6)
@@ -490,14 +543,15 @@ mergeSort = \xs . match xs with
 
 List-Partition
 partition :: <a> . p:a -> xs:List a -> {Pair List {a|_v <= p} List {a|_v > p}|len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs}
-partition = \p . \xs .
+partition = \p . \xs . 
     match xs with
       Nil -> Pair Nil Nil
-      Cons x7 x8 -> match partition p
-                            x8 with
-                      Pair x15 x16 -> if x7 <= p
-                                        then Pair (Cons x7 x15) x16
-                                        else Pair x15 (Cons x7 x16)
+      Cons x5 x6 -> 
+        match partition p x6 with
+          Pair x11 x12 -> 
+            if x5 <= p
+              then Pair (Cons x5 x11) x12
+              else Pair x11 (Cons x5 x12)
 (Size: 40)
 (Spec size: 27)
 (#measures: 4)
@@ -505,25 +559,25 @@ partition = \p . \xs .
 
 IncList-PivotAppend
 pivotAppend :: <a> . p:a -> xs:IList {a|_v <= p} -> ys:IList {a|_v > p} -> {IList a|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == (ielems xs + ielems ys) + [p]}
-pivotAppend = \p . \xs . \ys .
+pivotAppend = \p . \xs . \ys . 
       match xs with
         INil -> ICons p ys
-        ICons x8 x9 -> ICons x8
-                         (pivotAppend p x9 ys)
+        ICons x5 x6 -> ICons x5
+                         (pivotAppend p x6 ys)
 (Size: 22)
 (Spec size: 28)
 (#measures: 2)
 (#components: 0)
 
-IncList-QuickSort
+List-QuickSort
 quickSort :: <a> . xs:List a -> {IList a|ilen _v == len xs && ielems _v == elems xs}
-quickSort = \xs . match xs with
-                    Nil -> INil
-                    Cons x3 x4 -> match partition x3
-                                          x4 with
-                                    Pair x11 x12 -> pivotAppend x3
-                                                      (quickSort x11) (quickSort
-                                                                         x12)
+quickSort = \xs . 
+  match xs with
+    Nil -> INil
+    Cons x3 x4 -> 
+      match partition x3 x4 with
+        Pair x9 x10 -> pivotAppend x3
+                         (quickSort x9) (quickSort x10)
 (Size: 22)
 (Spec size: 11)
 (#measures: 6)
@@ -531,22 +585,37 @@ quickSort = \xs . match xs with
 
 Tree-Elem
 elem :: <a> . x:a -> t:Tree a -> {Bool|_v == (x in telems t)}
-elem = \x . \t . match t with
-                   Empty -> false
-                   Node x4 x5 x6 -> if x4 == x
-                                      then not false
-                                      else or (elem x x5) (elem x x6)
+elem = \x . \t . 
+    match t with
+      Empty -> false
+      Node x4 x5 x6 -> 
+        if x4 == x
+          then not false
+          else or (elem x x5) (elem x x6)
 (Size: 28)
 (Spec size: 6)
 (#measures: 2)
 (#components: 3)
 
+Tree-Count
+countNodes :: <a> . t:Tree a -> {Int|_v == size t}
+countNodes = \t . 
+  match t with
+    Empty -> zero
+    Node x4 x5 x6 -> plus one (plus
+                                 (countNodes x5) (countNodes x6))
+(Size: 18)
+(Spec size: 4)
+(#measures: 1)
+(#components: 3)
+
 Tree-ToList
 toList :: <a> . t:Tree a -> {List a|len _v == size t}
-toList = \t . match t with
-                Empty -> Nil
-                Node x4 x5 x6 -> Cons x4 (append
-                                            (toList x5) (toList x6))
+toList = \t . 
+  match t with
+    Empty -> Nil
+    Node x4 x5 x6 -> Cons x4 (append
+                                (toList x5) (toList x6))
 (Size: 18)
 (Spec size: 5)
 (#measures: 2)
@@ -554,10 +623,11 @@ toList = \t . match t with
 
 Tree-BalancedReplicate
 replicate :: <a> . x:a -> h:{Int|_v >= 0} -> {BalTree a|height _v == h}
-replicate = \x . \h . if h <= 0
-                        then Empty
-                        else Node x (replicate x (dec
-                                                    h)) (replicate x (dec h))
+replicate = \x . \h . 
+    if h <= 0
+      then Empty
+      else Node x (replicate x (dec
+                                  h)) (replicate x (dec h))
 (Size: 29)
 (Spec size: 7)
 (#measures: 2)
@@ -565,14 +635,16 @@ replicate = \x . \h . if h <= 0
 
 BST-Member
 member :: <a> . x:a -> t:BST a -> {Bool|_v == (x in telems t)}
-member = \x . \t . match t with
-                     Empty -> false
-                     Node x4 x5 x6 -> if (x <= x4) &&
-                                           (x4 <= x)
-                                        then true
-                                        else if x <= x4
-                                               then member x x5
-                                               else member x x6
+member = \x . \t . 
+    match t with
+      Empty -> false
+      Node x4 x5 x6 -> 
+        if (x <= x4) && (x4 <= x)
+          then true
+          else 
+            if x <= x4
+              then member x x5
+              else member x x6
 (Size: 37)
 (Spec size: 6)
 (#measures: 2)
@@ -580,73 +652,97 @@ member = \x . \t . match t with
 
 BST-Insert
 insert :: <a> . x:a -> t:BST a -> {BST a|telems _v == telems t + [x]}
-insert = \x . \t . match t with
-                     Empty -> Node x Empty Empty
-                     Node x10 x11 x12 -> if (x <=
-                                               x10) && (x10 <= x)
-                                           then t
-                                           else if x10 <= x
-                                                  then Node x10 x11 (insert x
-                                                                       x12)
-                                                  else Node x10 (insert x x11)
-                                                         x12
+insert = \x . \t . 
+    match t with
+      Empty -> Node x Empty Empty
+      Node x7 x8 x9 -> 
+        if (x <= x7) && (x7 <= x)
+          then t
+          else 
+            if x7 <= x
+              then Node x7 x8 (insert x x9)
+              else Node x7 (insert x x8) x9
 (Size: 55)
 (Spec size: 8)
 (#measures: 2)
 (#components: 0)
 
 BST-Delete
-mergePivot :: <a> . p:a -> t1:BST {a|_v < p} -> t2:BST {a|_v > p} -> {BST a|telems _v == telems t1 + telems t2}
-mergePivot = \p . \t1 . \t2 .
-      match t1 with
-        Empty -> t2
-        Node x5 x6 x7 -> Node x5 x6
-                           (mergePivot p x7 t2)
-(Size: 20)
-(Spec size: 14)
+delete :: <a> . t:BST a -> x:a -> {BST a|telems _v == telems t - [x]}
+delete = \t . \x . 
+    match t with
+      Empty -> t
+      Node x4 x5 x6 -> 
+        if (x4 != x) && (x4 <= x)
+          then Node x4 x5 (delete x6 x)
+          else 
+            if x4 != x
+              then Node x4 (delete x5 x) x6
+              else 
+                match x5 with
+                  Empty -> x6
+                  Node x20 x21 x22 -> Node x20 x21
+                                        (delete (Node x x22 x6) x4)
+(Size: 68)
+(Spec size: 8)
 (#measures: 2)
 (#components: 0)
 
-delete :: <a> . t:BST a -> x:a -> {BST a|telems _v == telems t - [x]}
-delete = \t . \x . match t with
-                     Empty -> t
-                     Node x4 x5 x6 -> if (x <= x4) &&
-                                           (x4 <= x)
-                                        then mergePivot x x5 x6
-                                        else if x4 <= x
-                                               then Node x4 x5 (delete x6 x)
-                                               else Node x4 (delete x5 x) x6
+BST-Sort
+insert :: <a> . x:a -> t:BST a -> {BST a|telems _v == telems t + [x]}
+insert = \x . \t . 
+    match t with
+      Empty -> Node x Empty Empty
+      Node x7 x8 x9 -> 
+        if (x <= x7) && (x7 <= x)
+          then t
+          else 
+            if x7 <= x
+              then Node x7 x8 (insert x x9)
+              else Node x7 (insert x x8) x9
 (Size: 55)
 (Spec size: 8)
-(#measures: 2)
-(#components: 1)
+(#measures: 6)
+(#components: 0)
 
-BST-Sort
-fromList :: <a> . xs:List a -> {BST a|telems _v == elems xs}
-fromList = \xs . match xs with
-                   Nil -> Empty
-                   Cons x3 x4 -> insert x3
-                                   (fromList x4)
+toBST :: <a> . xs:List a -> {BST a|telems _v == elems xs}
+toBST = \xs . 
+  match xs with
+    Nil -> Empty
+    Cons x3 x4 -> insert x3 (toBST
+                               x4)
 (Size: 12)
 (Spec size: 5)
 (#measures: 6)
+(#components: 1)
+
+pivotAppend :: <a> . p:a -> xs:IList {a|_v < p} -> ys:IList {a|_v > p} -> {IList a|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == (ielems xs + ielems ys) + [p]}
+pivotAppend = \p . \xs . \ys . 
+      match xs with
+        INil -> ICons p ys
+        ICons x5 x6 -> ICons x5
+                         (pivotAppend p x6 ys)
+(Size: 22)
+(Spec size: 28)
+(#measures: 6)
 (#components: 2)
 
-toList :: <a> . t:BST a -> {IList a|ielems _v == telems t}
-toList = \t . match t with
-                Empty -> INil
-                Node x4 x5 x6 -> pivotAppend x4
-                                   (toList x5) (toList x6)
+flatten :: <a> . t:BST a -> {IList a|ielems _v == telems t}
+flatten = \t . 
+  match t with
+    Empty -> INil
+    Node x4 x5 x6 -> pivotAppend x4
+                       (flatten x5) (flatten x6)
 (Size: 16)
 (Spec size: 5)
 (#measures: 6)
 (#components: 3)
 
 sort :: <a> . xs:List a -> {IList a|ielems _v == elems xs}
-sort = \xs . match xs with
-               Nil -> INil
-               Cons x3 x4 -> toList (fromList
-                                       xs)
+sort = \xs . 
+  match xs with
+    Nil -> INil
+    Cons x3 x4 -> flatten (toBST xs)
 (Size: 10)
 (Spec size: 5)
 (#measures: 6)
@@ -654,15 +750,17 @@ sort = \xs . match xs with
 
 BinHeap-Member
 member :: <a> . x:a -> t:Heap a -> {Bool|_v == (x in elems t)}
-member = \x . \t . match t with
-                     Empty -> false
-                     Node x4 x5 x6 -> if (x4 != x) &&
-                                           (x <= x4)
-                                        then false
-                                        else if x <= x4
-                                               then not false
-                                               else or (member x x5) (member x
-                                                                        x6)
+member = \x . \t . 
+    match t with
+      Empty -> false
+      Node x4 x5 x6 -> 
+        if (x4 != x) && (x <= x4)
+          then false
+          else 
+            if x <= x4
+              then not false
+              else or (member x x5) (member x
+                                       x6)
 (Size: 43)
 (Spec size: 6)
 (#measures: 2)
@@ -670,16 +768,16 @@ member = \x . \t . match t with
 
 BinHeap-Insert
 insert :: <a> . t:Heap a -> x:a -> {Heap a|elems _v == elems t + [x]}
-insert = \t . \x . match t with
-                     Empty -> Node x Empty Empty
-                     Node x10 x11 x12 -> if (x <=
-                                               x10) && (x10 <= x)
-                                           then t
-                                           else if x10 <= x
-                                                  then Node x10 x11 (insert x12
-                                                                       x)
-                                                  else Node x x11 (insert x12
-                                                                     x10)
+insert = \t . \x . 
+    match t with
+      Empty -> Node x Empty Empty
+      Node x7 x8 x9 -> 
+        if (x <= x7) && (x7 <= x)
+          then t
+          else 
+            if x7 <= x
+              then Node x7 x8 (insert x9 x)
+              else Node x x8 (insert x9 x7)
 (Size: 55)
 (Spec size: 8)
 (#measures: 2)
@@ -696,14 +794,15 @@ singleton = \x . Node x Empty
 
 BinHeap-Doubleton
 doubleton :: <a> . x:a -> y:a -> {Heap a|elems _v == [x, y]}
-doubleton = \x . \y . if (x <=
-                            y) && (y <= x)
-                        then Node x Empty Empty
-                        else if y <= x
-                               then Node y Empty (Node x Empty
-                                                    Empty)
-                               else Node x Empty (Node y Empty
-                                                    Empty)
+doubleton = \x . \y . 
+    if (x <= y) && (y <= x)
+      then Node x Empty Empty
+      else 
+        if y <= x
+          then Node y Empty (Node x Empty
+                               Empty)
+          else Node x Empty (Node y Empty
+                               Empty)
 (Size: 55)
 (Spec size: 6)
 (#measures: 2)
@@ -711,95 +810,252 @@ doubleton = \x . \y . if (x <=
 
 BinHeap-Tripleton
 tripleton :: <a> . x:a -> y:a -> z:a -> {Heap a|elems _v == [x, y, z]}
-tripleton = \x . \y . \z .
+tripleton = \x . \y . \z . 
       if (((x <= z) && (y <= z)) && (z
                                        <= x)) && (z <= y)
         then Node x Empty Empty
-        else if (((z != y) && (x <= z))
-                   && (y <= z)) && (z <= x)
-               then Node y Empty (Node z Empty
-                                    Empty)
-               else if (((y != x) && (x <= y))
-                          && (y <= z)) && (z <= y)
-                      then Node x Empty (Node y Empty
-                                           Empty)
-                      else if (((z != x) && (y <= z))
-                                 && (z <= x)) && (z <= y)
-                             then Node z Empty (Node x Empty
-                                                  Empty)
-                             else if ((x <= y) && (y <= x))
-                                       && (y <= z)
-                                    then Node y Empty (Node z Empty
-                                                         Empty)
-                                    else if (((y != x) && (x <= y))
-                                               && (x <= z)) && (z <= x)
-                                           then Node x Empty (Node y Empty
-                                                                Empty)
-                                           else if ((x <= y) && (y <= x))
-                                                     && (z <= x)
-                                                  then Node z Empty (Node x
-                                                                       Empty
-                                                                       Empty)
-                                                  else if (y <= x) && (y <= z)
-                                                         then Node y (Node z
-                                                                        Empty
-                                                                        Empty)
-                                                                (Node x Empty
-                                                                   Empty)
-                                                         else if (z <= x) && (z
-                                                                                <=
-                                                                                y)
-                                                                then Node z
-                                                                       (Node y
-                                                                          Empty
-                                                                          Empty)
-                                                                       (Node x
-                                                                          Empty
-                                                                          Empty)
-                                                                else Node x
-                                                                       (Node y
-                                                                          Empty
-                                                                          Empty)
-                                                                       (Node z
-                                                                          Empty
-                                                                          Empty)
-(Size: 367)
+        else 
+          if (((z != x) && (y <= z)) && (z
+                                           <= x)) && (z <= y)
+            then Node z Empty (Node x Empty
+                                 Empty)
+            else 
+              if ((x <= y) && (y <= x)) && (y
+                                              <= z)
+                then Node y Empty (Node z Empty
+                                     Empty)
+                else 
+                  if (((y != x) && (x <= y)) && (x
+                                                   <= z)) && (z <= x)
+                    then Node x Empty (Node y Empty
+                                         Empty)
+                    else 
+                      if (y <= x) && (y <= z)
+                        then Node y (Node z Empty Empty)
+                               (Node x Empty Empty)
+                        else 
+                          if (z <= x) && (z <= y)
+                            then Node z (Node y Empty Empty)
+                                   (Node x Empty Empty)
+                            else Node x (Node y Empty Empty)
+                                   (Node z Empty Empty)
+(Size: 246)
 (Spec size: 7)
 (#measures: 2)
 (#components: 0)
 
+AVL-RotateL
+rotLR :: <a> . x:a -> l:{AVL {a|_v < x}|balFac _v < 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == realHeight l && elems _v == ([x] + elems l) + elems r}
+rotLR = \x . \l . \r . 
+      match l with
+        Leaf -> error
+        Node x5 x6 x7 x8 -> 
+          match x7 with
+            Leaf -> error
+            Node x13 x14 x15 x16 -> Node x13
+                                      (Node x5 x6 x14 x16) (Node x x15
+                                                              r x16) x8
+(Size: 35)
+(Spec size: 34)
+(#measures: 3)
+(#components: 1)
+
+rotLL :: <a> . x:a -> l:{AVL {a|_v < x}|balFac _v > 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == realHeight l && elems _v == ([x] + elems l) + elems r}
+rotLL = \x . \l . \r . 
+      match l with
+        Leaf -> error
+        Node x5 x6 x7 x8 -> 
+          match x6 with
+            Leaf -> error
+            Node x13 x14 x15 x16 -> Node x5
+                                      x6 (Node x x7 r x16) x8
+(Size: 27)
+(Spec size: 34)
+(#measures: 3)
+(#components: 2)
+
+rotL0 :: <a> . x:a -> l:{AVL {a|_v < x}|balFac _v == 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == 1 + realHeight l && elems _v == ([x] + elems l) + elems r}
+rotL0 = \x . \l . \r . 
+      match l with
+        Leaf -> error
+        Node x5 x6 x7 x8 -> 
+          match x7 with
+            Leaf -> error
+            Node x13 x14 x15 x16 -> Node x5
+                                      x6 (Node x x7 r x8) (inc x8)
+(Size: 29)
+(Spec size: 36)
+(#measures: 3)
+(#components: 3)
+
+AVL-RotateR
+rotRR :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v < 0} -> {AVL a|realHeight _v == realHeight r && elems _v == ([x] + elems l) + elems r}
+rotRR = \x . \l . \r . 
+      match r with
+        Leaf -> error
+        Node x5 x6 x7 x8 -> 
+          match x7 with
+            Leaf -> error
+            Node x13 x14 x15 x16 -> Node x5
+                                      (Node x l x6 x16) x7 x8
+(Size: 27)
+(Spec size: 35)
+(#measures: 3)
+(#components: 1)
+
+rotRL :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v > 0} -> {AVL a|realHeight _v == realHeight r && elems _v == ([x] + elems l) + elems r}
+rotRL = \x . \l . \r . 
+      match r with
+        Leaf -> error
+        Node x5 x6 x7 x8 -> 
+          match x6 with
+            Leaf -> error
+            Node x13 x14 x15 x16 -> Node x13
+                                      (Node x l x14 x16) (Node x5 x15
+                                                            x7 x16) x8
+(Size: 35)
+(Spec size: 35)
+(#measures: 3)
+(#components: 2)
+
+rotR0 :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v == 0} -> {AVL a|realHeight _v == 1 + realHeight r && elems _v == ([x] + elems l) + elems r}
+rotR0 = \x . \l . \r . 
+      match r with
+        Leaf -> error
+        Node x5 x6 x7 x8 -> 
+          match x7 with
+            Leaf -> error
+            Node x13 x14 x15 x16 -> Node x5
+                                      (Node x l x6 x8) x7 (inc x8)
+(Size: 29)
+(Spec size: 37)
+(#measures: 3)
+(#components: 3)
+
+AVL-Balance
+balance :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|(if realHeight l - realHeight _v >= 0 then realHeight l - realHeight _v else -(realHeight l - realHeight _v)) <= 2} -> {AVL a|((!(0 - 1 <= realHeight l - realHeight r && realHeight l - realHeight r <= 1) || realHeight _v == 1 + (if realHeight l >= realHeight r then realHeight l else realHeight r)) && ((if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && realHeight _v <= (if realHeight l >= realHeight r then realHeight l else realHeight r) + 1)) && elems _v == ([x] + elems l) + elems r}
+balance = \x . \l . \r . 
+      if (isSkewed l r) &&
+           (isLeftHeavy l)
+        then balLL x l r
+        else 
+          if (isSkewed l r) &&
+               (isRightHeavy l)
+            then balLR x l r
+            else 
+              if isSkewed l r
+                then balL0 x l r
+                else 
+                  if (isSkewed r l) &&
+                       (isLeftHeavy r)
+                    then balRL x l r
+                    else 
+                      if (isSkewed r l) &&
+                           (isRightHeavy r)
+                        then balRR x l r
+                        else 
+                          if isSkewed r l
+                            then balR0 x l r
+                            else Node x l r (nodeHeight l r)
+(Size: 119)
+(Spec size: 103)
+(#measures: 4)
+(#components: 10)
+
+AVL-Insert
+insert :: <a> . y:a -> t:AVL a -> {AVL a|(realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1) && elems _v == [y] + elems t}
+insert = \y . \t . 
+    match t with
+      Leaf -> balance y Leaf Leaf
+      Node x8 x9 x10 x11 -> 
+        if x8 < y
+          then balance x8 x9 (insert y
+                                x10)
+          else 
+            if y < x8
+              then balance x8 (insert y x9)
+                     x10
+              else t
+(Size: 47)
+(Spec size: 22)
+(#measures: 3)
+(#components: 4)
+
+AVL-ExtractMin
+extractMin :: <a> . t:AVL a -> {MinPair a|elems t == melems _v && (mheight _v <= realHeight t && realHeight t <= mheight _v + 1)}
+extractMin = \t . 
+  match t with
+    Leaf -> Nothing
+    Node x5 x6 x7 x8 -> 
+      match extractMin x6 with
+        Nothing -> MinPair x5 x7
+        MinPair x22 x23 -> MinPair x22
+                             (balance x5 x23 x7)
+(Size: 25)
+(Spec size: 19)
+(#measures: 5)
+(#components: 4)
+
+AVL-Delete
+merge :: <a> . x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|0 - 1 <= realHeight l - realHeight _v && realHeight l - realHeight _v <= 1} -> {AVL a|((if realHeight l >= realHeight r then realHeight l else realHeight r) <= realHeight _v && realHeight _v <= (if realHeight l >= realHeight r then realHeight l else realHeight r) + 1) && elems _v == elems l + elems r}
+merge = \x . \l . \r . 
+      match extractMin l with
+        Nothing -> r
+        MinPair x4 x5 -> balance x4 l x5
+(Size: 16)
+(Spec size: 61)
+(#measures: 5)
+(#components: 5)
+
+delete :: <a> . y:a -> t:AVL a -> {AVL a|(realHeight _v <= realHeight t && realHeight t <= realHeight _v + 1) && elems t - [y] == elems _v}
+delete = \y . \t . 
+    match t with
+      Leaf -> t
+      Node x5 x6 x7 x8 -> 
+        if x5 < y
+          then balance x5 x6 (delete y x7)
+          else 
+            if y < x5
+              then balance x5 (delete y x6) x7
+              else merge x5 x6 x7
+(Size: 47)
+(Spec size: 22)
+(#measures: 5)
+(#components: 6)
+
 RBT-BalanceL
 rotateL :: <a> . x:a -> lx:{a|_v < x} -> llc:{Int|0 <= _v && _v <= 1} -> ll:{RBT {a|_v < lx}|color _v == llc} -> lr:{RBT {a|lx < _v && _v < x}|color _v != llc && blackHeight _v == blackHeight ll} -> r:{RBT {a|x < _v}|blackHeight _v == blackHeight ll} -> {WeakRBT a|(((isOk _v && wcolor _v == 0) && welems _v == (([x, lx] + elems ll) + elems lr) + elems r) && wheight _v == blackHeight r + 1) && wsize _v == ((2 + size ll) + size lr) + size r}
 rotateL = \x . \lx . \llc .
-      \ll . \lr . \r . if llc == 0
-                         then match ll with
-                                Empty -> error
-                                Node x8 x9 x10 x11 -> Ok lx llc
-                                                        (Node x8 black x10 x11)
-                                                        (Node x black lr r)
-                         else match lr with
-                                Empty -> error
-                                Node x40 x41 x42 x43 -> Ok x40
-                                                          x41 (Node lx llc ll
-                                                                 x42) (Node x
-                                                                         llc x43
-                                                                         r)
+      \ll . \lr . \r . 
+            if llc == 0
+              then 
+                match ll with
+                  Empty -> error
+                  Node x5 x6 x7 x8 -> Ok lx llc
+                                        (Node x5 black x7 x8) (Node x
+                                                                 black lr r)
+              else 
+                match lr with
+                  Empty -> error
+                  Node x25 x26 x27 x28 -> Ok x25
+                                            x26 (Node lx llc ll x27) (Node x
+                                                                        llc x28
+                                                                        r)
 (Size: 69)
 (Spec size: 87)
 (#measures: 9)
 (#components: 1)
 
 balanceL :: <a> . y:a -> c:{Int|0 <= _v && _v <= 1} -> l:{WeakRBT {a|_v < y}|c == 0 ==> isOk _v} -> r:{RBT {a|_v > y}|(c == 0 ==> color _v == 1) && blackHeight _v == wheight l} -> {WeakRBT a|((welems _v == ([y] + welems l) + elems r && wheight _v == blackHeight r + c) && wsize _v == (1 + wsize l) + size r) && (isOk _v || c == 0)}
-balanceL = \y . \c . \l . \r .
+balanceL = \y . \c . \l . \r . 
         match l with
-          Ok x7 x8 x9 x10 -> if (c == 0)
-                                  && (x8 == 0)
-                               then Bad x7 black x9 (Node y c
-                                                       x10 r)
-                               else Ok y c (Node x7 x8 x9 x10)
-                                      r
-          Bad x47 x48 x49 x50 -> rotateL y
-                                   x47 x48 x49 x50 r
+          Ok x5 x6 x7 x8 -> 
+            if (c == 0) && (x6 == 0)
+              then Bad x5 black x7 (Node y c
+                                      x8 r)
+              else Ok y c (Node x5 x6 x7 x8) r
+          Bad x29 x30 x31 x32 -> rotateL y
+                                   x29 x30 x31 x32 r
 (Size: 68)
 (Spec size: 70)
 (#measures: 9)
@@ -808,36 +1064,36 @@ balanceL = \y . \c . \l . \r .
 RBT-BalanceR
 rotateR :: <a> . x:a -> l:RBT {a|_v < x} -> rx:{a|x < _v} -> rlc:{Int|_v == 0 || _v == 1} -> rl:{RBT {a|x < _v && _v < rx}|color _v == rlc && blackHeight _v == blackHeight l} -> rr:{RBT {a|rx < _v}|color _v != rlc && blackHeight _v == blackHeight l} -> {WeakRBT a|(((isOk _v && wcolor _v == 0) && welems _v == (([x, rx] + elems l) + elems rl) + elems rr) && wheight _v == blackHeight l + 1) && wsize _v == ((2 + size l) + size rl) + size rr}
 rotateR = \x . \l . \rx . \rlc .
-        \rl . \rr . if rlc == 0
-                      then match rl with
-                             Empty -> error
-                             Node x8 x9 x10 x11 -> Ok x8 rlc
-                                                     (Node x black l x10) (Node
-                                                                             rx
-                                                                             black
-                                                                             x11
-                                                                             rr)
-                      else match rr with
-                             Empty -> error
-                             Node x40 x41 x42 x43 -> Ok rx
-                                                       x41 (Node x rlc l rl)
-                                                       (Node x40 rlc x42 x43)
+        \rl . \rr . 
+            if rlc == 0
+              then 
+                match rl with
+                  Empty -> error
+                  Node x5 x6 x7 x8 -> Ok x5 rlc
+                                        (Node x black l x7) (Node rx
+                                                               black x8 rr)
+              else 
+                match rr with
+                  Empty -> error
+                  Node x25 x26 x27 x28 -> Ok rx
+                                            x26 (Node x rlc l rl) (Node x25
+                                                                     rlc x27
+                                                                     x28)
 (Size: 69)
 (Spec size: 88)
 (#measures: 9)
 (#components: 1)
 
 balanceR :: <a> . x:a -> c:{Int|0 <= _v && _v <= 1} -> l:{RBT {a|_v < x}|c == 0 ==> color _v == 1} -> r:{WeakRBT {a|_v > x}|(c == 0 ==> isOk _v) && wheight _v == blackHeight l} -> {WeakRBT a|((welems _v == ([x] + elems l) + welems r && wheight _v == blackHeight l + c) && wsize _v == (1 + size l) + wsize r) && (isOk _v || c == 0)}
-balanceR = \x . \c . \l . \r .
+balanceR = \x . \c . \l . \r . 
         match r with
-          Ok x7 x8 x9 x10 -> if (c == 0)
-                                  && (x8 == 0)
-                               then Bad x7 c (Node x c l x9)
-                                      x10
-                               else Ok x c l (Node x7 x8 x9
-                                                x10)
-          Bad x47 x48 x49 x50 -> rotateR x
-                                   l x47 x48 x49 x50
+          Ok x5 x6 x7 x8 -> 
+            if (c == 0) && (x6 == 0)
+              then Bad x black l (Node x5 c x7
+                                    x8)
+              else Ok x c l (Node x5 x6 x7 x8)
+          Bad x29 x30 x31 x32 -> rotateR x
+                                   l x29 x30 x31 x32
 (Size: 68)
 (Spec size: 70)
 (#measures: 9)
@@ -845,61 +1101,61 @@ balanceR = \x . \c . \l . \r .
 
 RBT-Insert
 ins :: <a> . x:a -> t:RBT a -> {WeakRBT a|(((welems _v == [x] + elems t && wheight _v == blackHeight t) && size t <= wsize _v) && wsize _v <= size t + 1) && (isOk _v || color t == 0)}
-ins = \x . \t . match t with
-                  Empty -> Ok x red Empty Empty
-                  Node x13 x14 x15 x16 -> if (x <=
-                                                x13) && (x13 <= x)
-                                            then Ok x13 x14 x15 x16
-                                            else if x13 <= x
-                                                   then balanceR x13 x14 x15
-                                                          (ins x x16)
-                                                   else balanceL x13 x14 (ins x
-                                                                            x15)
-                                                          x16
+ins = \x . \t . 
+    match t with
+      Empty -> Ok x red Empty Empty
+      Node x9 x10 x11 x12 -> 
+        if (x <= x9) && (x9 <= x)
+          then Ok x9 x10 x11 x12
+          else 
+            if x9 <= x
+              then balanceR x9 x10 x11 (ins x
+                                          x12)
+              else balanceL x9 x10 (ins x x11)
+                     x12
 (Size: 69)
 (Spec size: 36)
 (#measures: 9)
 (#components: 4)
 
 mkBlack :: <a> . t:WeakRBT a -> {RBT a|elems _v == welems t}
-mkBlack = \t . match t with
-                 Ok x5 x6 x7 x8 -> Node x5 x6 x7
-                                     x8
-                 Bad x21 x22 x23 x24 -> if 1 <=
-                                             x22
-                                          then Node x21 x22 x23 x24
-                                          else Node x21 black x23 x24
-(Size: 37)
+mkBlack = \t . 
+  match t with
+    Ok x5 x6 x7 x8 -> Node x5 x6 x7
+                        x8
+    Bad x17 x18 x19 x20 -> Node x17
+                             black x19 x20
+(Size: 22)
 (Spec size: 5)
 (#measures: 9)
 (#components: 5)
 
 insert :: <a> . x:a -> t:RBT a -> {RBT a|elems _v == elems t + [x]}
-insert = \x . \t . match t with
-                     Empty -> Node x black Empty
-                                Empty
-                     Node x13 x14 x15 x16 -> if (x <=
-                                                   x13) && (x13 <= x)
-                                               then t
-                                               else mkBlack (ins x t)
-(Size: 36)
+insert = \x . \t . 
+    match t with
+      Empty -> Node x black Empty
+                 Empty
+      Node x9 x10 x11 x12 -> mkBlack
+                               (ins x t)
+(Size: 21)
 (Spec size: 8)
 (#measures: 9)
 (#components: 6)
 
 Evaluator
 transform :: x:AST -> {PAST|result2 _v == result x}
-transform = \x . match x with
-                   Zero -> IntNode zero
-                   One -> IntNode one
-                   Two -> IntNode two
-                   PlusNode x9 x10 -> OpNode zero
-                                        (transform x10) (transform x9)
-                   MinusNode x23 x24 -> OpNode one
-                                          (transform x23) (transform x24)
-                   ProductNode x37 x38 -> OpNode
-                                            two (transform x37) (transform
-                                                                   x38)
+transform = \x . 
+  match x with
+    Zero -> IntNode zero
+    One -> IntNode one
+    Two -> IntNode two
+    PlusNode x6 x7 -> OpNode zero
+                        (transform x6) (transform x7)
+    MinusNode x15 x16 -> OpNode one
+                           (transform x15) (transform x16)
+    ProductNode x24 x25 -> OpNode
+                             two (transform x24) (transform
+                                                    x25)
 (Size: 46)
 (Spec size: 5)
 (#measures: 4)
@@ -907,17 +1163,17 @@ transform = \x . match x with
 
 AddressBook-Make
 mkAddressBook :: adds:List Address -> {AddressBook|size _v == len adds}
-mkAddressBook = \adds .
+mkAddressBook = \adds . 
   match adds with
     Nil -> AddressBook Nil Nil
-    Cons x7 x8 ->
-      match mkAddressBook x8 with
-        AddressBook x13 x14 ->
-          if getPriv x7
-            then AddressBook x13 (Cons x7
-                                    x14)
-            else AddressBook (Cons x7 x13)
-                   x14
+    Cons x5 x6 -> 
+      match mkAddressBook x6 with
+        AddressBook x10 x11 -> 
+          if getPriv x5
+            then AddressBook x10 (Cons x5
+                                    x11)
+            else AddressBook (Cons x5 x10)
+                   x11
 (Size: 35)
 (Spec size: 5)
 (#measures: 3)
@@ -925,9 +1181,9 @@ mkAddressBook = \adds .
 
 AddressBook-Merge
 mergeAddressBooks :: a:AddressBook -> b:AddressBook -> {AddressBook|size _v == size a + size b}
-mergeAddressBooks = \a . \b .
+mergeAddressBooks = \a . \b . 
     match a with
-      AddressBook x2 x3 ->
+      AddressBook x2 x3 -> 
         match b with
           AddressBook x6 x7 -> AddressBook
                                  (append x2 x6) (append x3 x7)

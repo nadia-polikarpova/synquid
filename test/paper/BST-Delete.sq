@@ -1,5 +1,3 @@
-qualifier {x <= y, x != y}
-
 data BST a where
 	Empty :: BST a
 	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
@@ -11,9 +9,8 @@ termination measure size :: BST a -> {Int | _v >= 0} where
 measure telems :: BST a -> Set a where
   Empty -> []
   Node x l r -> telems l + telems r + [x]
-
-mergePivot :: p: a -> t1: BST {a | _v < p} -> t2: BST {a | _v > p} -> {BST a | telems _v == telems t1 + telems t2}
-mergePivot = ??
+  
+qualifier {x <= y, x != y}
 
 delete :: t: BST a -> x: a -> {BST a | telems _v == telems t - [x]}
 delete = ??
