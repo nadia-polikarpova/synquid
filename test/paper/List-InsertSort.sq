@@ -1,5 +1,3 @@
-qualifier {x <= y, x != y}
-
 data List a where
 	Nil :: List a
 	Cons :: x: a -> xs: List a -> List a
@@ -23,7 +21,7 @@ termination measure ilen :: IList a -> {Int | _v >= 0} where
 measure ielems :: IList a -> Set a where
   INil -> []
   ICons x xs -> [x] + ielems xs
-	
+  	
 insert :: x: a -> xs: IList a -> {IList a | ielems _v == ielems xs + [x]}
 
 insertSort :: xs: List a -> {IList a | ielems _v == elems xs}

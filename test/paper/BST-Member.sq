@@ -1,7 +1,6 @@
-qualifier {x <= y, x != y}
-
 true :: {Bool | _v}
 false :: {Bool | !_v}
+qualifier {x <= y, x != y}
 
 data BST a where
 	Empty :: BST a

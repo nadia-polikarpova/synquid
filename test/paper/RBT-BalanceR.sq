@@ -1,6 +1,5 @@
-qualifier {x == 0}
-
 black :: {Int | _v == 1}
+isRed :: x: Int -> {Bool | _v == (x == 0)}
 
 data RBT a where
     Empty :: RBT a

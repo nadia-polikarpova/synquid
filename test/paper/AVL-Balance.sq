@@ -2,7 +2,6 @@ inline max x y = if x >= y then x else y
 inline abs x = if x >= 0 then x else -x
 inline eqOrOneLess x y = x <= y && y <= x + 1 
 
-
 data AVL a where
   Leaf :: AVL a
   Node :: x: a 
@@ -37,43 +36,35 @@ isRightHeavy :: t: AVL a -> {Bool | _v == (balFac t < 0)}
 
 
 
-balL0 :: x: a 
+rotL0 :: x: a 
           -> l: {AVL {a | _v < x} | balFac _v == 0} 
           -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
           -> {AVL a | realHeight _v == 1 + realHeight l && elems _v == [x] + elems l + elems r}
     
-balLL :: x: a
+rotLL :: x: a
           -> l: {AVL {a | _v < x} | balFac _v > 0} 
           -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
           -> {AVL a | realHeight _v == realHeight l && elems _v == [x] + elems l + elems r}
     
-balLR :: x:a
+rotLR :: x:a
           -> l: {AVL {a | _v < x} | balFac _v < 0}
           -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
           -> {AVL a | realHeight _v == realHeight l && elems _v == [x] + elems l + elems r}
 
-balR0 :: x: a 
+rotR0 :: x: a 
           -> l: AVL {a | _v < x}
           -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v == 0} 
           -> {AVL a | realHeight _v == 1 + realHeight r && elems _v == [x] + elems l + elems r}
 
-balRL :: x: a 
+rotRL :: x: a 
           -> l: AVL {a | _v < x}
           -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v > 0} 
           -> {AVL a | realHeight _v == realHeight r && elems _v == [x] + elems l + elems r}
 
-balRR :: x: a 
+rotRR :: x: a 
           -> l: AVL {a | _v < x}
           -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v < 0} 
           -> {AVL a | realHeight _v == realHeight r && elems _v == [x] + elems l + elems r}
-{-
-balanceL :: x: a
-          -> l: AVL {a | _v < x}
-          -> l': {AVL {a | _v < x} | eqOrOneLess (realHeight l) (realHeight _v)}          
-          -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1 }
-          -> {AVL a | eqOrOneLess (1 + max (realHeight l) (realHeight r)) (realHeight _v) && elems _v == [x] + elems l' + elems r}          
-balanceL = ??
--}
 
 inline nodeHeightM l r = 1 + max (realHeight l) (realHeight r)
 inline isReal v l r = (v == nodeHeightM l r)
@@ -88,10 +79,6 @@ inline balHt l r t = (!(isBal l r 1) || isReal (realHeight t) l r)
 
 {- bigHt: The height of t is the same or one bigger than the larger of l and r -}
 inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight t)
-
-{-
-  (!(realHeight l >= realHeight r) || eqOrUp l t) && (realHeight l >= realHeight r || eqOrUp r t)
--}
 
 balance :: x: a
          -> l: AVL {a | _v < x}  {- {AVL {a | _v < x} | balFac _v > 0}     {- isLeftHeavy l -}

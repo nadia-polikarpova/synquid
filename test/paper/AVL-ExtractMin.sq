@@ -1,7 +1,4 @@
-{- @flags: -a=2 -}
-
-zero :: {Int | _v == 0}
-inc :: x: Int -> {Int | _v == x + 1}
+lt :: x: a -> y: a -> {Bool | _v == (x < y)}
 
 inline max x y = if x >= y then x else y
 inline abs x = if x >= 0 then x else -x
@@ -35,7 +32,6 @@ data MinPair a where
   Nothing :: MinPair a
   MinPair :: x: a -> t: AVL {a | x < _v} -> MinPair a
   
-{- TODO: bug in Program.hs if you replace "Set a" with "a" -}
 measure melems :: MinPair a -> Set a where
   Nothing -> []
   MinPair x t -> [x] + elems t
@@ -55,11 +51,9 @@ inline balHt l r t = (!(isBal l r 1) || isReal (realHeight t) l r)
 {- bigHt: The height of t is the same or one bigger than the larger of l and r -}
 inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight t)
 
-qualifier {x < y}                        
-
 balance :: x: a
          -> l: AVL {a | _v < x}
-         -> r: AVL {a | _v > x} {- | abs (realHeight l - realHeight _v) <= 2-}
+         -> r: AVL {a | _v > x}
          -> {AVL a | balHt l r _v && bigHt l r _v && elems _v == [x] + elems l + elems r}
 
 

@@ -12,7 +12,8 @@ measure elems :: PList a -> Set a where
 
 type UList a = PList a <{!(_0 in elems _1)}>
 
-qualifier {x == y, x != y}
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}
 	
 insert :: x: a -> xs: UList a -> {UList a | elems _v == elems xs + [x]}
 insert = ??

@@ -6,11 +6,11 @@ termination measure len :: List a -> {Int | _v >= 0} where
   Nil -> 0
   Cons x xs -> 1 + len xs
   
-qualifier {x == y}
-
 zero :: {Int | _v == 0}
 inc :: x: Int -> {Int | _v == x + 1}
 dec :: x: Int -> {Int | _v == x - 1}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}  
 
 ith :: <p :: Int -> a -> Bool> . xs: List a <p> -> i: {Int | 0 <= _v && _v < len xs} -> {a | p i _v}
 ith = ??

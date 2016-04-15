@@ -1,5 +1,3 @@
-qualifier {x <= y, x != y}
-
 zero :: {Int | _v == 0}
 one :: {Int | _v == 1}
 two :: {Int | _v == 2}

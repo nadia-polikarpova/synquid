@@ -1,8 +1,7 @@
-qualifier {x <= y, x != y}
-
 false :: {Bool | !_v}
 not :: x: Bool -> {Bool | _v == !x}
 or :: x: Bool -> y: Bool -> {Bool | _v == (x || y)}
+qualifier {x <= y, x != y}
 
 data Heap a where
 	Empty :: Heap a

@@ -13,7 +13,8 @@ measure elems :: RList a -> Set a where
 type List a = RList a <{True}>
 type IncList a = RList a <{_0 <= _1}>
 
-qualifier {x <= y}
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}  
   
 foldr :: <p :: RList a -> b -> Bool> .
 		f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->
