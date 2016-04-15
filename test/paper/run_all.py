@@ -10,7 +10,7 @@ from colorama import init, Fore, Back, Style
 
 # Globals
 if platform.system() in ['Linux', 'Darwin']:
-    SYNQUID_CMD = 'synquid'                                     # Command to call Synquid
+    SYNQUID_CMD = './synquid'                                     # Command to call Synquid
     TIMEOUT_CMD = 'timeout'                                     # Timeout command
     TIMEOUT = '120'                                             # Timeout value (seconds)    
 else:
@@ -269,3 +269,13 @@ if __name__ == '__main__':
         diff = difflib.unified_diff(fromlines, tolines, n=0)
         print
         sys.stdout.writelines(diff)
+
+    # Print additional info about experiments
+    num_benchmarks = sum([len(g.benchmarks) for g in ALL_BENCHMARKS])
+    # TODO -- get rid of hardcoded 5
+    sys.stdout.write('Total number of benchmarks: ' + str(num_benchmarks * 5) + '\n')
+    num_TOs = sum([sum([len([r for r in results[n.name].variant_times.values() if r < 0.0]) for n
+      in g.benchmarks]) for g in ALL_BENCHMARKS])
+    #num_TOs = [[[r for r in filter(lambda k: k >= 0, results[n.name].variant_times.values())] for n
+    #  in g.benchmarks] for g in ALL_BENCHMARKS]
+    sys.stdout.write('Total number of timeouts: ' + str(num_TOs) + '\n')
