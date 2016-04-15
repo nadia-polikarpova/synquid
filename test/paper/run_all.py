@@ -12,7 +12,7 @@ from colorama import init, Fore, Back, Style
 if platform.system() in ['Linux', 'Darwin']:
     SYNQUID_CMD = './synquid'                                     # Command to call Synquid
     TIMEOUT_CMD = 'timeout'                                     # Timeout command
-    TIMEOUT = '120'                                             # Timeout value (seconds)    
+    TIMEOUT = '1'                                             # Timeout value (seconds)    
 else:
     SYNQUID_CMD = 'Synquid.exe'
     TIMEOUT_CMD = ''
@@ -136,14 +136,21 @@ ALL_BENCHMARKS = [
         ])
 ]
 
+# mapping by benchmark name looks sufficient
+SOLUTION_COMPONENTS = {
+  'Evaluator' : '3'
+}
+
 class SynthesisResult:
-    def __init__(self, name, time, code_size, spec_size, measure_count, component_count):
+    def __init__(self, name, time, code_size, spec_size, measure_count, component_count = '1'):
         self.name = name                        # Benchmark name
         self.time = time                        # Synthesis time (seconds)
         self.code_size = code_size              # Synthesized code size (in AST nodes)
         self.spec_size = spec_size              # Specification size (in AST nodes)
         self.measure_count = measure_count      # Number of measures defined
-        self.component_count = component_count  # Number of components provided
+        # Number of components provided
+        if name in SOLUTION_COMPONENTS: self.component_count = SOLUTION_COMPONENTS[name]
+        else: self.component_count = component_count  
         self.variant_times = {                  # Synthesis times for Synquid variants:
                                 'def': 0.0,         # in common context
                                 'nis': 0.0,         # with no incremental solving
@@ -175,8 +182,9 @@ def run_benchmark(name, opts, default_opts):
           solution_size = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
           spec_size = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
           measures = re.match("\(#measures: (\d+)\).*$", lastLines[2]).group(1)
-          components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
-          results [name] = SynthesisResult(name, (end - start), solution_size, spec_size, measures, components)
+          # components of the solution (rather than synthesis components)          
+          #components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
+          results [name] = SynthesisResult(name, (end - start), solution_size, spec_size, measures)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
       variant_options = [   # Command-line options to use for each variant of Synquid
