@@ -12,7 +12,7 @@ from colorama import init, Fore, Back, Style
 if platform.system() in ['Linux', 'Darwin']:
     SYNQUID_CMD = './synquid'                                     # Command to call Synquid
     TIMEOUT_CMD = 'timeout'                                     # Timeout command
-    TIMEOUT = '1'                                             # Timeout value (seconds)    
+    TIMEOUT = '120'                                             # Timeout value (seconds)    
 else:
     SYNQUID_CMD = 'Synquid.exe'
     TIMEOUT_CMD = ''
