@@ -11,7 +11,7 @@ from colorama import init, Fore, Back, Style
 
 # Globals
 if platform.system() in ['Linux', 'Darwin']:
-    SYNQUID_CMD = 'synquid'                                     # Command to call Synquid
+    SYNQUID_CMD = './synquid'                                     # Command to call Synquid
     TIMEOUT_CMD = 'timeout'                                     # Timeout command
     TIMEOUT = '120'                                             # Timeout value (seconds)    
 else:
@@ -250,7 +250,7 @@ def write_latex():
         for group in ALL_BENCHMARKS:
             outfile.write ('\multirow{')
             outfile.write (str(group.benchmarks.__len__()))
-            outfile.write ('}{*}{\\parbox{1cm}{\center{')
+            outfile.write ('}{*}{\\parbox{1cm}{\vspace{-0.85\baselineskip}\center{')
             outfile.write (group.name)
             outfile.write ('}}}')            
 
