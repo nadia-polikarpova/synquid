@@ -431,6 +431,7 @@ unifyArguments valueSort argSorts resSort argFmls targetSort = do
 addNewSignature name sch = do
   ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of function", name]) (return ())
   environment %= addPolyConstant name sch
+  environment %= addUnresolvedConstant name sch
   
 resolveSignature name = do
   sch <- uses environment ((Map.! name) . allSymbols)

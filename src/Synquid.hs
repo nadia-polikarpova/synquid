@@ -19,7 +19,7 @@ import System.Exit
 import System.Console.CmdArgs
 import System.Console.ANSI
 import Data.Time.Calendar
-import Data.Map (size, elems, keys)
+import qualified Data.Map as Map
 
 programName = "synquid"
 versionName = "0.3"
@@ -211,10 +211,10 @@ runOnFile synquidParams explorerParams solverParams file = do
           pdoc empty
           return (goal, prog)
     printStats results = do
-      let measureCount = size $ _measures $ gEnvironment (fst $ head results)
-      let specSize = sum $ map (typeNodeCount . toMonotype . gSpec . fst) results
+      let measureCount = Map.size $ _measures $ gEnvironment (fst $ head results)
+      let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst) results
       let solutuionSize = sum $ map (programNodeCount . snd) results
-      pdoc $ vsep [ 
+      pdoc $ vsep [
               parens (text "Goals:" <+> pretty (length results)),
               parens (text "Measures:" <+> pretty measureCount),
               parens (text "Spec size:" <+> pretty specSize),

@@ -440,7 +440,8 @@ data Environment = Environment {
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
   _globalPredicates :: Map Id [Sort],      -- ^ Signatures of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
-  _typeSynonyms :: Map Id ([Id], RType)    -- ^ Type synonym definitions
+  _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
+  _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
 }
 
 makeLenses ''Environment
@@ -465,7 +466,8 @@ emptyEnv = Environment {
   _globalPredicates = Map.empty,
   _datatypes = Map.empty,
   _measures = Map.empty,
-  _typeSynonyms = Map.empty
+  _typeSynonyms = Map.empty,
+  _unresolvedConstants = Map.empty
 }
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
@@ -527,6 +529,9 @@ addConstant name t = addPolyConstant name (Monotype t)
 -- | 'addPolyConstant' @name sch env@ : add type binding @name@ :: @sch@ to @env@
 addPolyConstant :: Id -> RSchema -> Environment -> Environment
 addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert name)
+
+addUnresolvedConstant :: Id -> RSchema -> Environment -> Environment
+addUnresolvedConstant name sch = unresolvedConstants %~ Map.insert name sch
 
 removeVariable :: Id -> Environment -> Environment
 removeVariable name env = case Map.lookup name (allSymbols env) of
@@ -643,4 +648,6 @@ data Goal = Goal {
   gImpl :: UProgram,            -- ^ Implementation template
   gDepth :: Int                 -- ^ Maximum level of auxiliary goal nesting allowed inside this goal
 } deriving (Eq, Ord)
+
+unresolvedSpec goal = (gEnvironment goal ^. unresolvedConstants) Map.! gName goal
   

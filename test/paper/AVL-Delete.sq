@@ -24,8 +24,6 @@ measure elems :: AVL a -> Set a where
   Leaf -> []
   Node x l r h -> [x] + elems l + elems r  
 
-getHeight :: t: AVL a -> {Int | _v == realHeight t}
-
 {- MinPair: represents a pair (x, t) :: (a, AVL a)
  -   s.t. x is less than all the elements of t -}
 data MinPair a where

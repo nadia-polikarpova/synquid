@@ -379,7 +379,7 @@ instance Pretty Goal where
 instance Show Goal where
   show = show. pretty
   
-prettySpec (Goal name _ spec _ _) = text name <+> operator "::" <+> pretty spec
+prettySpec g@(Goal name _ _ _ _) = text name <+> operator "::" <+> pretty (unresolvedSpec g)
 prettySolution (Goal name _ _ _ _) prog = text name <+> operator "=" </> pretty prog
 
 {- Input language -}

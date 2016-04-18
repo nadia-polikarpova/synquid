@@ -121,7 +121,7 @@ ALL_BENCHMARKS = [
     BenchmarkGroup("AVL", ['-a=2'], [
         Benchmark('AVL-RotateL', 'rotate left', 'inc', ['-a 2', '-u']),
         Benchmark('AVL-RotateR', 'rotate right', 'inc', ['-a 2', '-u']),
-        Benchmark('AVL-Balance', 'balance', 'rotate left, rotate right', ['-a 2', '-e']),
+        Benchmark('AVL-Balance', 'balance', 'rotate, nodeHeight, isSkewed, isLHeavy, isRHeavy', ['-a 2', '-e']),
         Benchmark('AVL-Insert', 'insert', 'balance, $<$', ['-a 2']),
         Benchmark('AVL-ExtractMin', 'extract minimum', '$<$', ['-a 2']),
         Benchmark('AVL-Delete', 'delete', 'extract minimum, balance, $<$', ['-a 2', '-m 1']),
