@@ -5,6 +5,7 @@ import shutil
 import time
 import re
 import difflib
+import pickle
 from subprocess import call, check_output, STDOUT
 from colorama import init, Fore, Back, Style
 
@@ -18,14 +19,15 @@ else:
     TIMEOUT_CMD = ''
     TIMEOUT = ''
 
-LOGFILE_NAME = 'run_all.log'                                    # Log file
-OUTFILE_NAME = 'results.tex'                                    # Latex table with experiment results
-ORACLE_NAME = 'solutions'                                       # Solutions file
-COMMON_OPTS = ['--print-solution-size', 
-               '--print-spec-size',
+LOGFILE = 'results.log'                                         # Log file
+DUMPFILE = 'results'                                            # Result serialization file
+CSV_FILE = 'result.csv'                                         # CSV-output file
+LATEX_FILE = 'results.tex'                                      # Latex-output file
+ORACLE_FILE = 'solutions'                                       # Solutions file
+COMMON_OPTS = ['--print-stats', 
                '--memoize']                                     # Options to use for all benchmarks
-BFS_ON_OPT = ['--bfs-solver']                                   # Option to disable UNSAT-core based solver
-INCREMENTAL_OFF_OPT = ['--incremental=0']                       # Option to disable incremental solving
+BFS_ON_OPT = ['--bfs-solver']                                   # Option to disable MUSFix
+INCREMENTAL_OFF_OPT = ['--incremental=0']                       # Option to disable round-trip type checking
 CONSISTENCY_OFF_OPT = ['--consistency=0']                       # Option to disable consistency checks
 FNULL = open(os.devnull, 'w')                                   # Null file
 
@@ -50,7 +52,7 @@ ALL_BENCHMARKS = [
         Benchmark('List-Null', 'is empty', 'true, false'),
         Benchmark('List-Elem', 'is member', 'true, false, $=$, $\\neq$'),
         Benchmark('List-Stutter', 'duplicate each element'),
-        Benchmark('List-Replicate', '$n$ copies of value', '0, inc, dec, $\\leq$, $\\neq$'),
+        Benchmark('List-Replicate', 'replicate', '0, inc, dec, $\\leq$, $\\neq$'),
         Benchmark('List-Append', 'append two lists', '', ['-m=1']),
         Benchmark('List-Concat', 'concatenate list of lists', 'append'),
         Benchmark('List-Take', 'take first $n$ elements', '0, inc, dec, $\\leq$, $\\neq$'),
@@ -97,7 +99,7 @@ ALL_BENCHMARKS = [
         Benchmark('IncList-PivotAppend', 'append with pivot'),
         Benchmark('List-QuickSort', 'quick sort', 'partition, append w/pivot', ['-a=2'])
         ]),
-    BenchmarkGroup("Trees",  [], [
+    BenchmarkGroup("Tree",  [], [
         Benchmark('Tree-Elem', 'is member', 'false, not, or, $=$'),
         Benchmark('Tree-Count', 'node count', '0, 1, +'),
         Benchmark('Tree-ToList', 'preorder', 'append'),
@@ -109,7 +111,7 @@ ALL_BENCHMARKS = [
         Benchmark('BST-Delete', 'delete', '$\\leq$, $\\neq$', ['-e']),
         Benchmark('BST-Sort', 'BST sort', '$\\leq$, $\\neq$')
         ]),
-    BenchmarkGroup("Bin Heap", [], [
+    BenchmarkGroup("Binary Heap", [], [
         Benchmark('BinHeap-Member', 'is member', 'false, not, or, $\\leq$, $\\neq$'),
         Benchmark('BinHeap-Insert', 'insert', '$\\leq$, $\\neq$'),
         Benchmark('BinHeap-Singleton', '1-element constructor', '$\\leq$, $\\neq$'),
@@ -137,28 +139,27 @@ ALL_BENCHMARKS = [
 ]
 
 class SynthesisResult:
-    def __init__(self, name, time, code_size, spec_size, measure_count, component_count):
+    def __init__(self, name, time, goal_count, code_size, spec_size, measure_count):
         self.name = name                        # Benchmark name
         self.time = time                        # Synthesis time (seconds)
-        self.code_size = code_size              # Synthesized code size (in AST nodes)
-        self.spec_size = spec_size              # Specification size (in AST nodes)
+        self.goal_count = goal_count            # Number of synthesis goals 
+        self.code_size = code_size              # Cumulative synthesized code size (in AST nodes)
+        self.spec_size = spec_size              # Cumulative specification size (in AST nodes)
         self.measure_count = measure_count      # Number of measures defined
-        self.component_count = component_count  # Number of components provided
         self.variant_times = {                  # Synthesis times for Synquid variants:
-                                'def': 0.0,         # in common context
-                                'nis': 0.0,         # with no incremental solving
-                                'ncc': 0.0,         # with no consistency checks
-                                'nuc': 0.0,         # with no UNSAT-core based solving
-                                'nm': 0.0           # with no memoization
+                                'def': -3.0,         # default exploration bounds
+                                'nrt': -3.0,         # round-trip checking disabled
+                                'ncc': -3.0,         # consistency checks disabled
+                                'nmus': -3.0,        # MUSFix disabled
                              }
 
     def str(self):
-        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.code_size + ', ' + self.spec_size + ', ' + self.measure_count + ', ' + self.component_count
+        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', ' + self.goal_count + ', ' + self.code_size + ', ' + self.spec_size + ', ' + self.measure_count
 
 def run_benchmark(name, opts, default_opts):
     '''Run benchmark name with command-line options opts (use default_opts with running the common context variant); record results in the results dictionary'''
 
-    with open(LOGFILE_NAME, 'a+') as logfile:
+    with open(LOGFILE, 'a+') as logfile:
       start = time.time()
       logfile.write(name + '\n')
       logfile.seek(0, os.SEEK_END)
@@ -171,19 +172,19 @@ def run_benchmark(name, opts, default_opts):
           print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
           results [name] = SynthesisResult(name, (end - start), '-', '-', '-', '-')
       else: # Synthesis succeeded: code metrics from the output and record synthesis time
-          lastLines = os.popen("tail -n 5 %s" % LOGFILE_NAME).read().split('\n')
-          solution_size = re.match("\(Size: (\d+)\).*$", lastLines[0]).group(1)
-          spec_size = re.match("\(Spec size: (\d+)\).*$", lastLines[1]).group(1)
-          measures = re.match("\(#measures: (\d+)\).*$", lastLines[2]).group(1)
-          components = re.match("\(#components: (\d+)\).*$", lastLines[3]).group(1)
-          results [name] = SynthesisResult(name, (end - start), solution_size, spec_size, measures, components)
+          lastLines = os.popen("tail -n 4 %s" % LOGFILE).read().split('\n')
+          goal_count = re.match("\(Goals: (\d+)\).*$", lastLines[0]).group(1)
+          measure_count = re.match("\(Measures: (\d+)\).*$", lastLines[1]).group(1)
+          spec_size = re.match("\(Spec size: (\d+)\).*$", lastLines[2]).group(1)
+          solution_size = re.match("\(Solution size: (\d+)\).*$", lastLines[3]).group(1)                    
+          results [name] = SynthesisResult(name, (end - start), goal_count, solution_size, spec_size, measure_count)
           print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
 
       variant_options = [   # Command-line options to use for each variant of Synquid
             ('def', default_opts),
-            ('nis', opts + INCREMENTAL_OFF_OPT),
+            ('nrt', opts + INCREMENTAL_OFF_OPT),
             ('ncc', opts + CONSISTENCY_OFF_OPT),
-            ('nuc', opts + BFS_ON_OPT)
+            ('nmus', opts + BFS_ON_OPT)
         ]
 
       # Run each variant:
@@ -213,59 +214,91 @@ def run_version(name, variant_id, variant_opts, logfile):
     else: # Synthesis succeeded: record time for variant
       results[name].variant_times[variant_id] = (end - start)
       print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+      
+def format_time(t):
+    if t < 0:
+        return '-'
+    else:
+        return '{0:0.2f}'.format(t)
 
+def write_csv():
+    '''Generate CSV file from the results dictionary'''
+    with open(CSV_FILE, 'w') as outfile:
+        for group in ALL_BENCHMARKS:
+            for b in group.benchmarks:
+                outfile.write (b.name + ',')
+                result = results [b.name]
+                outfile.write (result.spec_size + ',')
+                outfile.write (result.code_size + ',')
+                outfile.write (format_time(result.time) + ',')
+                outfile.write (format_time(result.variant_times['def']) + ',')
+                outfile.write (format_time(result.variant_times['nrt']) + ',')
+                outfile.write (format_time(result.variant_times['ncc']) + ',')
+                outfile.write (format_time(result.variant_times['nmus']) + ',')
+                outfile.write ('\n')
 
-def postprocess():
+def write_latex():
     '''Generate Latex table from the results dictionary'''
 
-    with open(OUTFILE_NAME, 'w') as outfile:
+    with open(LATEX_FILE, 'w') as outfile:
         for group in ALL_BENCHMARKS:
             outfile.write ('\multirow{')
             outfile.write (str(group.benchmarks.__len__()))
-            outfile.write ('}{*}[-2pt]{\\rotatebox{90}{')
+            outfile.write ('}{*}{\\parbox{1cm}{\center{')
             outfile.write (group.name)
-            outfile.write ('}}')
+            outfile.write ('}}}')            
 
             for b in group.benchmarks:
                 result = results [b.name]
-                outfile.write (' & ')
-                outfile.write (b.description)
-                outfile.write (' & ')
                 row = \
-                    result.spec_size + \
-                    ' & ' + result.measure_count + \
-                    ' & ' + result.component_count + \
+                    ' & ' + b.description +\
+                    ' & ' + result.goal_count +\
                     ' & ' + b.components + \
+                    ' & ' + result.measure_count + \
+                    ' & ' + result.spec_size + \
                     ' & ' + result.code_size + \
-                    ' & ' + '{0:0.2f}'.format(result.time) + \
-                    ' & ' + '{0:0.2f}'.format(result.variant_times['def']) + \
-                    ' & ' + '{0:0.2f}'.format(result.variant_times['nis']) + \
-                    ' & ' + '{0:0.2f}'.format(result.variant_times['ncc']) + \
-                    ' & ' + '{0:0.2f}'.format(result.variant_times['nuc']) + ' \\\\'
+                    ' & ' + format_time(result.time) + \
+                    ' & ' + format_time(result.variant_times['def']) + \
+                    ' & ' + format_time(result.variant_times['nrt']) + \
+                    ' & ' + format_time(result.variant_times['ncc']) + \
+                    ' & ' + format_time(result.variant_times['nmus']) + ' \\\\'
                 outfile.write (row)
                 outfile.write ('\n')
             outfile.write ('\\hline')
 
 if __name__ == '__main__':
     init()
-    results = {}
+    
+    # Check if there are serialized results
+    if os.path.isfile(DUMPFILE):
+        results = pickle.load(open(DUMPFILE, 'r'))
+    else:
+        results = dict()
 
     # Delete old log file
-    if os.path.isfile(LOGFILE_NAME):
-      os.remove(LOGFILE_NAME)
+    if os.path.isfile(LOGFILE):
+      os.remove(LOGFILE)
 
     # Run experiments
     for group in ALL_BENCHMARKS:
-        for b in group.benchmarks:
-            print b.str()
-            run_benchmark(b.name, b.options, group.default_options)
+        for b in group.benchmarks: 
+            if b.name in results:
+                print b.str() + Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'SKIPPED' + Style.RESET_ALL
+            else:
+                print b.str()
+                run_benchmark(b.name, b.options, group.default_options)
+                with open(DUMPFILE, 'w') as data_dump:
+                    pickle.dump(results, data_dump)    
+            
+    # Generate CSV
+    write_csv()            
     # Generate Latex table
-    postprocess()
+    write_latex()
 
     # Compare with previous solutions and print the diff
-    if os.path.isfile(ORACLE_NAME):
-        fromlines = open(ORACLE_NAME).readlines()
-        tolines = open(LOGFILE_NAME, 'U').readlines()
+    if os.path.isfile(ORACLE_FILE):
+        fromlines = open(ORACLE_FILE).readlines()
+        tolines = open(LOGFILE, 'U').readlines()
         diff = difflib.unified_diff(fromlines, tolines, n=0)
         print
         sys.stdout.writelines(diff)
