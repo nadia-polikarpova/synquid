@@ -1,10 +1,11 @@
+type Color = {Int | 0 <= _v && _v <= 1}
 black :: {Int | _v == 1}
 isRed :: x: Int -> {Bool | _v == (x == 0)}
 
 data RBT a where
     Empty :: RBT a
     Node  :: x: a ->
-             col: {Int | 0 <= _v && _v <= 1} ->
+             col: Color ->
              left:  { RBT {a | _v < x} | col == 0 ==> color _v == 1 } ->                -- left keys are less than this key; a red node must have black children
              right: { RBT {a | x < _v} | (col == 0 ==> color _v == 1) &&               	-- right keys are greater than this key; a red node must have black children
                                         (blackHeight _v == blackHeight left)} ->        -- blackHeight the same as of left
@@ -28,13 +29,13 @@ measure blackHeight :: RBT a -> {Int | _v >= 0} where
   
 data WeakRBT a where
     Ok :: x: a ->
-             c: {Int | 0 <= _v && _v <= 1} ->
+             c: Color ->
              left:  { RBT {a | _v < x} | c == 0 ==> color _v == 1 } ->
              right: { RBT {a | x < _v} | (c == 0 ==> color _v == 1) &&
                                         (blackHeight _v == blackHeight left)} ->
              WeakRBT a
     Bad :: x: a ->
-              lc:    {Int | 0 <= _v  && _v <= 1 } ->
+              lc:    Color ->
               left:  { RBT {a | _v < x} | color _v == lc} ->
               right: { RBT {a | x < _v } | color _v != lc && blackHeight _v == blackHeight left} ->
               WeakRBT a
@@ -73,7 +74,7 @@ measure wcolor :: WeakRBT a -> {Int | _v >= 0 && _v <= 1} where
 --==========================================================================================    
 rotateL :: x: a ->                
             lx: {a | _v < x} ->
-            llc: {Int | 0 <= _v && _v <= 1} ->
+            llc: Color ->
             ll: {RBT {a | _v < lx} | color _v == llc} ->
             lr: {RBT {a | lx < _v && _v < x} | color _v != llc && blackHeight _v == blackHeight ll} -> 
             r: {RBT {a | x < _v} | blackHeight _v == blackHeight ll} ->
@@ -81,7 +82,7 @@ rotateL :: x: a ->
 rotateL = ??
         
 balanceL :: y: a ->
-              c: {Int | 0 <= _v  && _v <= 1} ->
+              c: Color ->
               l: {WeakRBT {a | _v < y} | c == 0 ==> isOk _v} ->
               r: {RBT {a | _v > y} | (c == 0 ==> color _v == 1) && blackHeight _v == wheight l} ->
               {WeakRBT a | welems _v == [y] + welems l + elems r && 
