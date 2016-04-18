@@ -77,7 +77,7 @@ ALL_BENCHMARKS = [
         Benchmark('List-Compress', 'remove adjacent dupl.', '$=$, $\\neq$'),
         Benchmark('UniqueList-Range', 'integer range', '0, inc, dec, $\\leq$, $\\neq$'),
         ]),
-    BenchmarkGroup("Strictly sorted list", [], [
+    BenchmarkGroup("Strictly sorted list", ['-f=AllArguments'], [
         Benchmark('StrictIncList-Insert', 'insert', '$<$'),
         Benchmark('StrictIncList-Delete', 'delete', '$<$'),
         Benchmark('StrictIncList-Intersect', 'intersect', '$<$', ['-f=AllArguments']),
