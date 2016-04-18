@@ -239,6 +239,12 @@ def write_csv():
 
 def write_latex():
     '''Generate Latex table from the results dictionary'''
+    
+    total_count = 0
+    to_def = 0
+    to_nrt = 0
+    to_ncc = 0
+    to_nmus = 0
 
     with open(LATEX_FILE, 'w') as outfile:
         for group in ALL_BENCHMARKS:
@@ -249,7 +255,7 @@ def write_latex():
             outfile.write ('}}}')            
 
             for b in group.benchmarks:
-                result = results [b.name]
+                result = results [b.name]                
                 row = \
                     ' & ' + b.description +\
                     ' & ' + result.goal_count +\
@@ -264,7 +270,24 @@ def write_latex():
                     ' & ' + format_time(result.variant_times['nmus']) + ' \\\\'
                 outfile.write (row)
                 outfile.write ('\n')
+                
+                total_count = total_count + 1
+                if result.variant_times['def'] < 0.0:
+                   to_def = to_def + 1 
+                if result.variant_times['nrt'] < 0.0:
+                   to_nrt = to_nrt + 1 
+                if result.variant_times['ncc'] < 0.0:
+                   to_ncc = to_ncc + 1 
+                if result.variant_times['nmus'] < 0.0:
+                   to_nmus = to_nmus + 1 
+                
             outfile.write ('\\hline')
+            
+    print 'Total:', total_count
+    print 'TO def:', to_def
+    print 'TO nrt:', to_nrt
+    print 'TO ncc:', to_ncc
+    print 'TO nmus:', to_nmus
 
 if __name__ == '__main__':
     init()
