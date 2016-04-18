@@ -44,8 +44,7 @@ main = do
                    bfs
                    outFormat
                    print_spec
-                   print_spec_size
-                   print_solution_size) <- cmdArgs cla
+                   print_stats) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -68,8 +67,7 @@ main = do
   let synquidParams = defaultSynquidParams {
     outputFormat = outFormat,
     showSpec = print_spec,
-    showSpecSize = print_spec_size,
-    showSolutionSize = print_solution_size
+    showStats = print_stats
   }
   runOnFile synquidParams explorerParams solverParams file
 
@@ -103,8 +101,7 @@ data CommandLineArgs
         -- | Output
         output :: OutputFormat,
         print_spec :: Bool,
-        print_spec_size :: Bool,
-        print_solution_size :: Bool
+        print_stats :: Bool
       }
   deriving (Data, Typeable, Show, Eq)
 
@@ -126,8 +123,7 @@ cla = CommandLineArgs {
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
-  print_spec_size     = False           &= help ("Show specification size (default: False)"),
-  print_solution_size = False           &= help ("Show solution size (default: False)")
+  print_stats         = False           &= help ("Show specification and solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
     where
       defaultFormat = outputFormat defaultSynquidParams
@@ -179,15 +175,13 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
   showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
-  showSpecSize :: Bool,                        -- ^ Print specification size
-  showSolutionSize :: Bool                     -- ^ Print solution size
+  showStats :: Bool                            -- ^ Print specification and solution size
 }
 
 defaultSynquidParams = SynquidParams {
   outputFormat = Plain,
   showSpec = True,
-  showSpecSize = False,
-  showSolutionSize = False
+  showStats = False
 }
 
 -- | Parse and resolve file, then synthesize the specified goals
@@ -199,7 +193,9 @@ runOnFile synquidParams explorerParams solverParams file = do
     -- Right ast -> print $ vsep $ map pretty ast
     Right decls -> case resolveDecls decls of
       Left resolutionError -> (pdoc $ errorDoc $ text resolutionError) >> pdoc empty >> exitFailure
-      Right (goals, cquals, tquals) -> mapM_ (synthesizeGoal cquals tquals) goals
+      Right (goals, cquals, tquals) -> do
+        results <- mapM (synthesizeGoal cquals tquals) goals
+        when (not (null results) && showStats synquidParams) $ printStats results
   where
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
@@ -212,13 +208,17 @@ runOnFile synquidParams explorerParams solverParams file = do
         Left err -> pdoc err >> pdoc empty >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
-          when (showSolutionSize synquidParams) $ pdoc (parens (text "Size:" <+> pretty (programNodeCount prog)))
-          when (showSpecSize synquidParams) $ pdoc specSizeDoc
-          where
-            specSizeDoc = let allConstructors = concatMap _constructors $ elems $ _datatypes $ gEnvironment goal in
-                parens (text "Spec size:" <+> pretty (typeNodeCount $ toMonotype $ gSpec goal)) $+$
-                  parens (text "#measures:" <+> pretty (size $ _measures $ gEnvironment goal)) $+$
-                  parens (text "#components:" <+>
-                    pretty (length $ filter (not . flip elem allConstructors) $ keys $ allSymbols $ gEnvironment goal)) -- we only solve one goal
-      pdoc empty
+          pdoc empty
+          return (goal, prog)
+    printStats results = do
+      let measureCount = size $ _measures $ gEnvironment (fst $ head results)
+      let specSize = sum $ map (typeNodeCount . toMonotype . gSpec . fst) results
+      let solutuionSize = sum $ map (programNodeCount . snd) results
+      pdoc $ vsep [ 
+              parens (text "Goals:" <+> pretty (length results)),
+              parens (text "Measures:" <+> pretty measureCount),
+              parens (text "Spec size:" <+> pretty specSize),
+              parens (text "Solution size:" <+> pretty solutuionSize),
+              empty
+              ]
       
