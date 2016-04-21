@@ -153,10 +153,10 @@ def run_benchmark(name, opts, path='.'):
       print '{0:0.2f}'.format(t),
       total_time = total_time + t
       if return_code:
-          print Back.RED + Fore.LIGHTRED_EX + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
           results [name] = SynthesisResult(name, t)
-          print Back.GREEN + Fore.LIGHTGREEN_EX + Style.BRIGHT + 'OK' + Style.RESET_ALL
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
           
 def run_test(name, path='.'):
     print name

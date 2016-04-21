@@ -188,7 +188,7 @@ def run_benchmark(name, opts, default_opts):
         ]
 
       # Run each variant:
-      if platform.system() in ['Linux', 'Darwin']:
+      if (not (cl_opts.medium or cl_opts.small)) and (platform.system() in ['Linux', 'Darwin']):
           for (variant_id, opts) in variant_options:
             run_version(name, variant_id, opts, logfile)
 
@@ -224,7 +224,7 @@ def format_time(t):
 def write_csv():
     '''Generate CSV file from the results dictionary'''
     with open(CSV_FILE, 'w') as outfile:
-        for group in ALL_BENCHMARKS:
+        for group in groups:
             for b in group.benchmarks:
                 outfile.write (b.name + ',')
                 result = results [b.name]
@@ -247,7 +247,7 @@ def write_latex():
     to_nmus = 0
 
     with open(LATEX_FILE, 'w') as outfile:
-        for group in ALL_BENCHMARKS:
+        for group in groups:
             outfile.write ('\multirow{')
             outfile.write (str(group.benchmarks.__len__()))
             outfile.write ('}{*}{\\parbox{1cm}{\center{')
@@ -288,9 +288,18 @@ def write_latex():
     print 'TO nrt:', to_nrt
     print 'TO ncc:', to_ncc
     print 'TO nmus:', to_nmus
+    
+def cmdline():
+    import argparse
+    a = argparse.ArgumentParser()
+    a.add_argument('--medium', action='store_true')
+    a.add_argument('--small', action='store_true')
+    return a.parse_args()    
 
 if __name__ == '__main__':
     init()
+    
+    cl_opts = cmdline()
     
     # Check if there are serialized results
     if os.path.isfile(DUMPFILE):
@@ -303,7 +312,9 @@ if __name__ == '__main__':
       os.remove(LOGFILE)
 
     # Run experiments
-    for group in ALL_BENCHMARKS:
+    groups = ALL_BENCHMARKS[:1] if cl_opts.small else ALL_BENCHMARKS
+        
+    for group in groups:
         for b in group.benchmarks: 
             if b.name in results:
                 print b.str() + Back.YELLOW + Fore.YELLOW + Style.BRIGHT + 'SKIPPED' + Style.RESET_ALL
@@ -319,7 +330,7 @@ if __name__ == '__main__':
     write_latex()
 
     # Compare with previous solutions and print the diff
-    if os.path.isfile(ORACLE_FILE):
+    if os.path.isfile(ORACLE_FILE) and (not cl_opts.small):
         fromlines = open(ORACLE_FILE).readlines()
         tolines = open(LOGFILE, 'U').readlines()
         diff = difflib.unified_diff(fromlines, tolines, n=0)
