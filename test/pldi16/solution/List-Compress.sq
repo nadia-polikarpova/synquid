@@ -1,0 +1,34 @@
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}  
+
+data PList a <p :: a -> PList a -> Bool> where
+	Nil :: PList a <p>
+	Cons :: x: a -> xs: {PList a <p> | p x _v} -> PList a <p>
+  
+termination measure len :: PList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+measure heads :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x]
+
+type List a = PList a <{True}>  
+type CList a = PList a <{!(_0 in heads _1)}>
+
+compress :: xs: List a -> {CList a | elems _v == elems xs}
+compress = \xs . 
+  match xs with
+    Nil -> Nil
+    Cons x3 x4 -> 
+      match compress x4 with
+        Nil -> Cons x3 Nil
+        Cons x10 x11 -> 
+          if x3 == x10
+            then compress x4
+            else Cons x3 (Cons x10 x11)
+

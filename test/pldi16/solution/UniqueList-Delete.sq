@@ -1,0 +1,27 @@
+data PList a <p :: a -> PList a -> Bool> where
+	Nil :: PList a <p>
+	Cons :: x: a -> xs: {PList a <p> | p x _v} -> PList a <p>
+  
+termination measure len :: PList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+type UList a = PList a <{!(_0 in elems _1)}>
+
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}
+
+delete :: x: a -> xs: UList a -> {UList a | elems _v == elems xs - [x]}
+delete = \x . \xs . 
+    match xs with
+      Nil -> xs
+      Cons x3 x4 -> 
+        if x3 == x
+          then x4
+          else Cons x3 (delete x x4)
+
+	
