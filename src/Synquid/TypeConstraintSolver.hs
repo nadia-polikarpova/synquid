@@ -22,6 +22,7 @@ module Synquid.TypeConstraintSolver (
   matchConsType,
   hasPotentialScrutinees,
   freshId,
+  freshVar,
   currentAssignment,
   finalizeType,
   finalizeProgram,
@@ -429,6 +430,13 @@ freshId prefix = do
   i <- uses idCount (Map.findWithDefault 0 prefix)
   idCount %= Map.insert prefix (i + 1)
   return $ prefix ++ show i
+  
+freshVar :: Monad s => Environment -> String -> TCSolver s String 
+freshVar env prefix = do
+  x <- freshId prefix
+  if Map.member x (allSymbols env)
+    then freshVar env prefix
+    else return x
 
 -- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType

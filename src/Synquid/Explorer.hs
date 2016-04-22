@@ -6,8 +6,8 @@ module Synquid.Explorer where
 import Synquid.Logic
 import Synquid.Program
 import Synquid.SolverMonad
-import Synquid.TypeConstraintSolver hiding (freshId)
-import qualified Synquid.TypeConstraintSolver as TCSolver (freshId)
+import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
+import qualified Synquid.TypeConstraintSolver as TCSolver (freshId, freshVar)
 import Synquid.Util
 import Synquid.Pretty
 import Synquid.Tokens
@@ -207,7 +207,7 @@ generateFirstCase env scrVar pScrutinee t consName = do
       consT <- instantiate env consSch True
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
-      binders <- replicateM (arity consT') (freshId "x")
+      binders <- replicateM (arity consT') (freshVar env "x")
       (syms, ass) <- caseSymbols scrVar binders consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
 
@@ -232,7 +232,7 @@ generateCase env scrVar pScrutinee t consName = do
       consT <- instantiate env consSch True
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
-      binders <- replicateM (arity consT') (freshId "x")
+      binders <- replicateM (arity consT') (freshVar env "x")
       (syms, ass) <- caseSymbols scrVar binders consT'
       unfoldSyms <- asks $ _unfoldLocals . fst
       let caseEnv = (if unfoldSyms then unfoldAllVariables else id) $ foldr (uncurry addVariable) (addAssumption ass env) syms
@@ -499,12 +499,11 @@ generateError env = do
 toVar (Program (PSymbol name) t) env 
   | not (isConstant name env)  = return (env, Var (toSort $ baseTypeOf t) name)
 toVar (Program _ t) env = do
-  g <- freshId "g"
+  g <- freshId "G"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
 enqueueGoal env typ impl depth = do
-  g <- freshId "f"
-  -- env' <- (set boundTypeVars (env ^. boundTypeVars ) . set boundPredicates (env ^. boundPredicates )) <$> runInSolver (use initEnv)
+  g <- freshVar env "f"
   auxGoals %= ((Goal g env (Monotype typ) impl depth) :)
   return $ Program (PSymbol g) typ
 
@@ -560,6 +559,9 @@ solveLocally c = do
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
 
+freshVar :: MonadHorn s => Environment -> String -> Explorer s String
+freshVar env prefix = runInSolver $ TCSolver.freshVar env prefix
+
 currentValuation :: MonadHorn s => Formula -> Explorer s (Set Formula)
 currentValuation u = do
   results <- runInSolver $ currentValuations u
@@ -594,7 +596,7 @@ instantiate env sch top = do
       instantiate' subst (Map.insert p fml pSubst) sch        
     instantiate' subst pSubst (Monotype t) = go subst pSubst t
     go subst pSubst (FunctionT x tArg tRes) = do
-      x' <- freshId "x"
+      x' <- freshVar env "x"
       liftM2 (FunctionT x') (go subst pSubst tArg) (go subst pSubst (renameVar x x' tArg tRes))
     go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
     
