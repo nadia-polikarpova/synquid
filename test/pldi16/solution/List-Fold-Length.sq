@@ -21,6 +21,6 @@ foldr :: <p :: List a -> b -> Bool> .
 		{b | p ys _v}
 
 length :: xs: List a -> {Int | _v == len xs}
-length = let f0 = \x2 . \x3 .
-               \x4 . inc x4 in
-         \xs . foldr f0 zero xs
+length = \xs . let f0 = \x2 .
+                   \x3 . \x4 . inc x4 in
+               foldr f0 zero xs

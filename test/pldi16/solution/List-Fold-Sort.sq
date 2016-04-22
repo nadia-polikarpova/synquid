@@ -24,12 +24,12 @@ foldr :: <p :: RList a -> b -> Bool> .
 
 sort :: xs: List a -> {IncList a | elems _v == elems xs && len _v == len xs}
 sort :: xs:List a -> {IncList a|elems _v == elems xs && len _v == len xs}
-sort = let f0 = \x2 . \x3 .
-             \x4 . 
-               match x4 with
-                 Nil -> Cons x3 Nil
-                 Cons x12 x13 -> 
-                   if x3 <= x12
-                     then Cons x3 (Cons x12 x13)
-                     else Cons x12 (f0 x13 x3 x13) in
-       \xs . foldr f0 Nil xs
+sort = \xs . let f0 = \x2 .
+                 \x3 . \x4 . 
+                     match x4 with
+                       Nil -> Cons x3 Nil
+                       Cons x12 x13 -> 
+                         if x3 <= x12
+                           then Cons x3 (Cons x12 x13)
+                           else Cons x12 (f0 x13 x3 x13) in
+             foldr f0 Nil xs

@@ -7,11 +7,10 @@ termination measure len :: List a -> {Int | _v >= 0} where
   Cons x xs -> 1 + len xs  
 	
 map :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
-map = let f0 = \x9 . f x9 in
-      \f . \xs . 
-          match xs with
-            Nil -> Nil
-            Cons x3 x4 -> Cons (f x3) (map
-                                         f0 x4)
-
+map = \f . \xs . 
+    match xs with
+      Nil -> Nil
+      Cons x3 x4 -> let f0 = \x9 . f
+                                     x9 in
+                    Cons (f x3) (map f0 x4)
 	

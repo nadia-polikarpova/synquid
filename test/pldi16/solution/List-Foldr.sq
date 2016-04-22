@@ -15,10 +15,9 @@ foldr :: <p :: List a -> b -> Bool> .
 		seed: {b | p Nil _v} ->
     ys: List a ->    
 		{b | p ys _v}
-foldr = let f0 = \x9 . \x10 .
-              \x11 . f x9 x10 x11 in
-        \f . \seed . \ys . 
-              match ys with
-                Nil -> seed
-                Cons x3 x4 -> f x4 x3 (foldr f0
-                                         seed x4)
+foldr = \f . \seed . \ys . 
+      match ys with
+        Nil -> seed
+        Cons x3 x4 -> let f0 = \x9 .
+                          \x10 . \x11 . f x9 x10 x11 in
+                      f x4 x3 (foldr f0 seed x4)
