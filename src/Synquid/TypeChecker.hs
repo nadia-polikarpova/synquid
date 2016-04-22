@@ -40,7 +40,7 @@ reconstruct eParams tParams goal = do
       writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
       case goals of
         [] -> return []
-        (g : gs) -> do -- g has a proper spec: reconstruct
+        (g : gs) -> do
             auxGoals .= gs
             let g' = g {
                           gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
@@ -195,7 +195,8 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
       Nothing -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
       Just consSch -> do
-                        consT <- instantiate env consSch True
+                        consT <- renameAsImpl (foldr (\x p -> untyped $ PFun x p) uHole args) 
+                                    <$> instantiate env consSch True -- Set argument names in constructor type to user-provided binders
                         case lastType consT of
                           (ScalarT (DatatypeT dtName _ _) _) -> do
                             case mName of

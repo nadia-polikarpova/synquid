@@ -244,6 +244,14 @@ addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinemen
 addRefinementToLastSch (Monotype t) fml = Monotype $ addRefinementToLast t fml
 addRefinementToLastSch (ForallT a sch) fml = ForallT a $ addRefinementToLastSch sch fml
 addRefinementToLastSch (ForallP p sorts sch) fml = ForallP p sorts $ addRefinementToLastSch sch fml
+
+-- | Apply variable substitution in all formulas inside a type
+substituteInType :: Substitution -> RType -> RType
+substituteInType subst (ScalarT baseT fml) = case baseT of
+  DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (substituteInType subst) tArgs) (map (substitute subst) pArgs)) (substitute subst fml)
+  _ -> ScalarT baseT (substitute subst fml)
+substituteInType subst (FunctionT x tArg tRes) = FunctionT x (substituteInType subst tArg) (substituteInType subst tRes)
+substituteInType subst AnyT = AnyT
       
 -- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: Id -> Id -> RType -> RType -> RType
@@ -252,11 +260,7 @@ renameVar old new (ScalarT b _)       t = renameVarFml old (Var (toSort b) new) 
 
 -- | 'renameVarFml' @old new typ@: rename all occurrences of @old@ in @typ@ into @new@ (represented as a formula)
 renameVarFml :: Id -> Formula -> RType -> RType
-renameVarFml old new (ScalarT baseT fml) = let subst = substitute (Map.singleton old new)
-  in case baseT of
-        DatatypeT name tArgs pArgs -> ScalarT (DatatypeT name (map (renameVarFml old new) tArgs) (map subst pArgs)) (subst fml)
-        _ -> ScalarT baseT (subst fml)
-renameVarFml old new (FunctionT x tArg tRes) = FunctionT x (renameVarFml old new tArg) (renameVarFml old new tRes)
+renameVarFml old new = substituteInType (Map.singleton old new)
     
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
@@ -418,11 +422,10 @@ fmlToProgram fml@(Binary op e1 e2) = let
 renameAsImpl :: UProgram -> RType -> RType
 renameAsImpl p t = renameAsImpl' Map.empty p t
   where
-    renameAsImpl' subst  _                        (ScalarT baseT fml)     = ScalarT baseT (substitute subst fml)      
     renameAsImpl' subst (Program (PFun y pRes) _) (FunctionT x tArg tRes) = case tArg of
-      FunctionT _ _ _ -> FunctionT y tArg (renameAsImpl' subst pRes tRes)
-      ScalarT baseT fml -> FunctionT y (ScalarT baseT (substitute subst fml)) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)    
-    renameAsImpl' _     _                         t                       = t    
+      ScalarT baseT fml -> FunctionT y (substituteInType subst tArg) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)    
+      _ -> FunctionT y (substituteInType subst tArg) (renameAsImpl' subst pRes tRes)      
+    renameAsImpl' subst  _ t = substituteInType subst t      
 
 {- Evaluation environment -}
 
