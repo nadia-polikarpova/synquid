@@ -17,6 +17,6 @@ foldr :: <p :: List a -> b -> Bool> .
 		{b | p ys _v}
 
 append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}
-append = let f0 = \x2 . \x3 .
-               \x4 . Cons x3 x4 in
-         \xs . \ys . foldr f0 xs ys
+append = \xs . \ys . let f0 =
+                       \x2 . \x3 . \x4 . Cons x3 x4 in
+                     foldr f0 xs ys

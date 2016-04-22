@@ -20,10 +20,10 @@ map :: f: (a -> b) -> xs: List a -> { List b | len _v == len xs }
 append :: xs: List a -> ys: List a -> { List a | len _v == len xs + len ys }
 
 product :: xs: List a -> ys: List b -> {List (Pair (a) (b)) | len _v == len xs * len ys}
-product = let f0 = \x8 . Pair x3
-                           x8 in
-          \xs . \ys . 
-              match xs with
-                Nil -> Nil
-                Cons x3 x4 -> append (map f0 ys)
-                                (product x4 ys)
+product = \xs . \ys . 
+    match xs with
+      Nil -> Nil
+      Cons x3 x4 -> let f0 = \x8 .
+                        Pair x3 x8 in
+                    append (map f0 ys) (product x4
+                                          ys)

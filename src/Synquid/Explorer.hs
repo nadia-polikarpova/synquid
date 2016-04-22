@@ -62,7 +62,8 @@ makeLenses ''ExplorerParams
 data ExplorerState = ExplorerState {
   _typingState :: TypingState,                     -- ^ Type-checking state
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
-  _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local function bindings to be checked upon use (in type checking mode)
+  _newAuxGoals :: [Id],                            -- ^ Higher-order arguments that have been synthesized but not yet let-bound
+  _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local function bindings to be checked upon use (in type checking mode)  
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
@@ -111,7 +112,7 @@ runExplorer eParams tParams initTS go = do
     [] -> return $ Left $ if null errs then text "No solution" else head errs
     (res : _) -> return $ Right res
   where
-    initExplorerState = ExplorerState initTS [] Map.empty Map.empty
+    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
@@ -297,7 +298,14 @@ generateE env typ = do
   (finalEnv, Program pTerm pTyp) <- generateEUpTo env typ d
   pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
   cleanupTypeVars
-  return (finalEnv, Program pTerm pTyp')
+  pTerm' <- addLambdaLets pTyp' (Program pTerm pTyp')
+  return (finalEnv, pTerm')
+  where
+    addLambdaLets t body = do
+      newGoals <- use newAuxGoals      
+      newAuxGoals .= []
+      return $ foldr (\f p -> Program (PLet f uHole p) t) body newGoals
+
 
 -- | Forget free type variables, which cannot escape an E-term
 -- (after substituting outstanding auxiliary goals)
@@ -309,7 +317,7 @@ cleanupTypeVars = do
   where
     goalSubstituteTypes g = do
       spec' <- runInSolver $ currentAssignment (toMonotype $ gSpec g)
-      return g { gSpec = Monotype spec' }
+      return g { gSpec = Monotype spec' }      
   
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
 generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
@@ -462,6 +470,7 @@ enumerateAt env typ d = do
           d <- asks $ _auxDepth . fst
           when (d <= 0) $ writeLog 1 (text "Cannot synthesize higher-order argument: no auxiliary functions allowed") >> mzero
           arg <- enqueueGoal env' tArg (untyped PHole) (d - 1)
+          newAuxGoals %= (++ [symbolName arg])
           return (env', Program (PApp fun arg) tRes)
         else do -- First-order argument: generate now
           (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))

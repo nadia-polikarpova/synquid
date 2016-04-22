@@ -119,12 +119,12 @@ delete = \x . \xs .
 (Solution size: 26)
 List-Map
 map :: f:(x0:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map = let f0 = \x9 . f x9 in
-      \f . \xs . 
-          match xs with
-            Nil -> Nil
-            Cons x3 x4 -> Cons (f x3) (map
-                                         f0 x4)
+map = \f . \xs . 
+    match xs with
+      Nil -> Nil
+      Cons x3 x4 -> let f0 = \x9 . f
+                                     x9 in
+                    Cons (f x3) (map f0 x4)
 
 (Goals: 1)
 (Measures: 1)
@@ -147,16 +147,16 @@ zip = \xs . \ys .
 (Solution size: 22)
 List-ZipWith
 zipWith :: f:(x1:a -> x0:b -> c) -> xs:List a -> ys:{List b|len _v == len xs} -> {List c|len _v == len xs}
-zipWith = let f0 = \x14 . \x15 .
-                f x14 x15 in
-          \f . \xs . \ys . 
-                match xs with
-                  Nil -> Nil
-                  Cons x3 x4 -> 
-                    match ys with
-                      Nil -> error
-                      Cons x7 x8 -> Cons (f x3 x7)
-                                      (zipWith f0 x4 x8)
+zipWith = \f . \xs . \ys . 
+      match xs with
+        Nil -> Nil
+        Cons x3 x4 -> 
+          match ys with
+            Nil -> error
+            Cons x7 x8 -> let f0 = \x14 .
+                              \x15 . f x14 x15 in
+                          Cons (f x3 x7) (zipWith f0 x4
+                                            x8)
 
 (Goals: 1)
 (Measures: 1)
@@ -164,13 +164,13 @@ zipWith = let f0 = \x14 . \x15 .
 (Solution size: 33)
 List-Product
 product :: xs:List a -> ys:List b -> {List Pair a b|len _v == len xs * len ys}
-product = let f0 = \x8 . Pair x3
-                           x8 in
-          \xs . \ys . 
-              match xs with
-                Nil -> Nil
-                Cons x3 x4 -> append (map f0 ys)
-                                (product x4 ys)
+product = \xs . \ys . 
+    match xs with
+      Nil -> Nil
+      Cons x3 x4 -> let f0 = \x8 .
+                        Pair x3 x8 in
+                    append (map f0 ys) (product x4
+                                          ys)
 
 (Goals: 1)
 (Measures: 3)
@@ -230,13 +230,12 @@ reverse = \xs .
 (Solution size: 12)
 List-Foldr
 foldr :: <p :: List (a) -> b -> Bool> . f:(xs:List a -> x:a -> acc:{b|p xs _v} -> {b|p ((Cons x xs)) _v}) -> seed:{b|p ((Nil)) _v} -> ys:List a -> {b|p ys _v}
-foldr = let f0 = \x9 . \x10 .
-              \x11 . f x9 x10 x11 in
-        \f . \seed . \ys . 
-              match ys with
-                Nil -> seed
-                Cons x3 x4 -> f x4 x3 (foldr f0
-                                         seed x4)
+foldr = \f . \seed . \ys . 
+      match ys with
+        Nil -> seed
+        Cons x3 x4 -> let f0 = \x9 .
+                          \x10 . \x11 . f x9 x10 x11 in
+                      f x4 x3 (foldr f0 seed x4)
 
 (Goals: 1)
 (Measures: 2)
@@ -244,9 +243,9 @@ foldr = let f0 = \x9 . \x10 .
 (Solution size: 32)
 List-Fold-Length
 length :: xs:List a -> {Int|_v == len xs}
-length = let f0 = \x2 . \x3 .
-               \x4 . inc x4 in
-         \xs . foldr f0 zero xs
+length = \xs . let f0 = \x2 .
+                   \x3 . \x4 . inc x4 in
+               foldr f0 zero xs
 
 (Goals: 1)
 (Measures: 2)
@@ -254,9 +253,9 @@ length = let f0 = \x2 . \x3 .
 (Solution size: 17)
 List-Fold-Append
 append :: xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
-append = let f0 = \x2 . \x3 .
-               \x4 . Cons x3 x4 in
-         \xs . \ys . foldr f0 xs ys
+append = \xs . \ys . let f0 =
+                       \x2 . \x3 . \x4 . Cons x3 x4 in
+                     foldr f0 xs ys
 
 (Goals: 1)
 (Measures: 2)
@@ -424,15 +423,15 @@ insertSort = \xs .
 (Solution size: 12)
 List-Fold-Sort
 sort :: xs:List a -> {IncList a|elems _v == elems xs && len _v == len xs}
-sort = let f0 = \x2 . \x3 .
-             \x4 . 
-               match x4 with
-                 Nil -> Cons x3 Nil
-                 Cons x12 x13 -> 
-                   if x3 <= x12
-                     then Cons x3 (Cons x12 x13)
-                     else Cons x12 (f0 x13 x3 x13) in
-       \xs . foldr f0 Nil xs
+sort = \xs . let f0 = \x2 .
+                 \x3 . \x4 . 
+                     match x4 with
+                       Nil -> Cons x3 Nil
+                       Cons x12 x13 -> 
+                         if x3 <= x12
+                           then Cons x3 (Cons x12 x13)
+                           else Cons x12 (f0 x13 x3 x13) in
+             foldr f0 Nil xs
 
 (Goals: 1)
 (Measures: 2)
