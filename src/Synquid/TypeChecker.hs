@@ -291,7 +291,6 @@ reconstructE' env typ (PApp iFun iArg) = do
   return (envfinal, pApp)
   where
     generateHOArg env d tArg iArg = case content iArg of
-      PFun _ _ -> enqueueGoal env tArg iArg d -- HO argument is an abstraction: enqueue a fresh goal      
       PSymbol f -> do
         lets <- use lambdaLets
         case Map.lookup f lets of
@@ -301,6 +300,7 @@ reconstructE' env typ (PApp iFun iArg) = do
                       return ()
           Just (env', def) -> auxGoals %= ((Goal f env' (Monotype tArg) def d ) :) -- This is a locally defined function: add an aux goal with its body
         return iArg
+      _ -> enqueueGoal env tArg iArg d -- HO argument is an abstraction: enqueue a fresh goal              
       
 reconstructE' env typ impl = throwError $ errorText "Expected application term of type" </> squotes (pretty typ) </>
                                           errorText "and got" </> squotes (pretty $ untyped impl)
