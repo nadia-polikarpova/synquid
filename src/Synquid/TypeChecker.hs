@@ -4,7 +4,7 @@ module Synquid.TypeChecker where
 import Synquid.Logic
 import Synquid.Program
 import Synquid.SolverMonad
-import Synquid.TypeConstraintSolver hiding (freshId)
+import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import Synquid.Explorer
 import Synquid.Util
 import Synquid.Pretty
@@ -88,7 +88,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
           (tRes', seenLast) <- recursiveTypeTuple tRes fml
           return (FunctionT x tArg tRes', seenLast)
         Just (argLt, argLe) -> do
-          y <- freshId "x"
+          y <- freshVar env "x"
           let yForVal = Map.singleton valueVarName (Var (toSort $ baseTypeOf tArg) y)
           (tRes', seenLast) <- recursiveTypeTuple (renameVar x y tArg tRes) (fml `orClean` substitute yForVal argLt)
           if seenLast
@@ -104,7 +104,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
       case terminationRefinement x tArg of
         Nothing -> FunctionT x tArg <$> recursiveTypeFirst tRes
         Just (argLt, _) -> do
-          y <- freshId "x"
+          y <- freshVar env "x"
           return $ FunctionT y (addRefinement tArg argLt) (renameVar x y tArg tRes)
     recursiveTypeFirst t = return t
 
@@ -273,7 +273,7 @@ reconstructE' env typ (PSymbol name) = do
       then instantiate env sch False -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
       else instantiate env sch True
 reconstructE' env typ (PApp iFun iArg) = do
-  x <- freshId "x"
+  x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
 
@@ -356,7 +356,7 @@ insertAuxSolution x pAux prog@(Program body t) = flip Program t $
     ins = insertAuxSolution x pAux
 
 etaExpand t f = do    
-  args <- replicateM (arity t) (freshId "x")
+  args <- replicateM (arity t) (freshId "X")
   let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped (PSymbol f)) (map (untyped . PSymbol) args)
   return $ foldr (\x p -> untyped $ PFun x p) body args
     
