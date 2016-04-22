@@ -136,6 +136,7 @@ def cmdline():
     a = argparse.ArgumentParser()
     a.add_argument('--synquid', required=False)
     a.add_argument('--unit', action='store_true')
+    a.add_argument('--checking', action='store_true')
     a.add_argument('--sections', nargs="*", default=['all'])
     return a.parse_args()
 
@@ -199,7 +200,7 @@ if __name__ == '__main__':
 
     sections = [s.lower() for s in a.sections]
         
-    if not a.unit:
+    if not a.unit and not a.checking:
         # Default: run synthesis benchmarks in 'current' directory, which must succeed; compare results with oracle
         os.chdir('current')
         if os.path.isfile(LOGFILE_NAME):
@@ -220,14 +221,14 @@ if __name__ == '__main__':
         if 'avl' in sections or 'all' in sections:
             for (name, args) in AVL_BENCHMARKS:
                 run_benchmark(name, args, 'AVL')
-            
+                            
         print 'TOTAL', '{0:0.2f}'.format(total_time)
         
         if sections == ['all']:
             write_times(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
             show_diff()
         
-    else:
+    elif a.unit:
         # Run unit tests 
         os.chdir('unit')
         if os.path.isfile(LOGFILE_NAME):
@@ -239,3 +240,14 @@ if __name__ == '__main__':
                 run_test(filename)
         
         show_diff()
+        
+    else: 
+        # Run checking benchmarks
+        os.chdir('checking')
+        if os.path.isfile(LOGFILE_NAME):
+            os.remove(LOGFILE_NAME)
+        for (name, args) in CHECKING_BENCHMARKS:
+            run_benchmark(name, args)
+            
+            
+        
