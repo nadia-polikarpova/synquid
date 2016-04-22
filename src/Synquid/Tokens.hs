@@ -6,7 +6,7 @@ import Data.Map (Map, fromList)
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "else", "False", "if", "in", "inline", "Int", "let", "match", "measure", "predicate", "qualifier", "Set", "termination", "then", "True", "type", "with", "where"]
+keywords = ["Bool", "data", "else", "error", "False", "if", "in", "inline", "Int", "let", "match", "measure", "predicate", "qualifier", "Set", "termination", "then", "True", "type", "with", "where"]
 
 -- | Names of unary operators    
 unOpTokens :: Map UnOp String

@@ -338,7 +338,8 @@ data BareProgram t =
   PMatch (Program t) [Case t] |               -- ^ Pattern match on datatypes
   PFix [Id] (Program t) |                     -- ^ Fixpoint
   PLet Id (Program t) (Program t) |           -- ^ Let binding
-  PHole                                       -- ^ Hole (program to fill in)
+  PHole |                                     -- ^ Hole (program to fill in)
+  PErr                                        -- ^ Error
   deriving (Eq, Ord, Functor)
   
 -- | Programs annotated with types  
@@ -369,8 +370,8 @@ eraseTypes = fmap (const AnyT)
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
 
-errorProgram = Program (PSymbol "error") (vart dontCare ftrue)
-isError (Program (PSymbol x) _) = x == "error"
+errorProgram = Program PErr (vart dontCare ftrue)
+isError (Program PErr _) = True
 isError _ = False
     
 -- | Substitute a symbol for a subterm in a program    
@@ -420,7 +421,7 @@ renameAsImpl p t = renameAsImpl' Map.empty p t
     renameAsImpl' subst (Program (PFun y pRes) _) (FunctionT x tArg tRes) = case tArg of
       FunctionT _ _ _ -> FunctionT y tArg (renameAsImpl' subst pRes tRes)
       ScalarT baseT fml -> FunctionT y (ScalarT baseT (substitute subst fml)) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)    
-    renameAsImpl' _     _                         t                       = t
+    renameAsImpl' _     _                         t                       = t    
 
 {- Evaluation environment -}
 

@@ -60,9 +60,10 @@ makeLenses ''ExplorerParams
 
 -- | State of program exploration
 data ExplorerState = ExplorerState {
-  _typingState :: TypingState,    -- ^ Type-checking state
-  _auxGoals :: [Goal],            -- ^ Subterms to be synthesized independently
-  _symbolUseCount :: Map Id Int   -- ^ Number of times each symbol has been used in the program so far
+  _typingState :: TypingState,                     -- ^ Type-checking state
+  _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
+  _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local function bindings to be checked upon use (in type checking mode)
+  _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
 makeLenses ''ExplorerState
@@ -105,10 +106,12 @@ type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (
 -- | 'runExplorer' @eParams tParams initTS go@ : execute exploration @go@ with explorer parameters @eParams@, typing parameters @tParams@ in typing state @initTS@
 runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either TypeError a)
 runExplorer eParams tParams initTS go = do
-  (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go (ExplorerState initTS [] Map.empty)) (eParams, tParams)) (PersistentState Map.empty Map.empty [])
+  (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go initExplorerState) (eParams, tParams)) (PersistentState Map.empty Map.empty [])
   case ress of
     [] -> return $ Left $ if null errs then text "No solution" else head errs
     (res : _) -> return $ Right res
+  where
+    initExplorerState = ExplorerState initTS [] Map.empty Map.empty
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
@@ -490,14 +493,6 @@ toVar (Program _ t) env = do
   g <- freshId "g"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
-enqueueGoal _ typ (Program (PSymbol f) _) depth = do -- Known goal, must have been defined before with a let
- goalsByName <- uses auxGoals (filter (\g -> gName g == f))
- if null goalsByName
-  then throwError $ errorText "Not in scope: function" </> squotes (text f)
-  else do
-    let goal@(Goal _ env _ impl _) = head goalsByName
-    auxGoals %= ((Goal f env (Monotype typ) impl depth) :) . delete goal
-    return $ Program (PSymbol f) typ  
 enqueueGoal env typ impl depth = do
   g <- freshId "f"
   -- env' <- (set boundTypeVars (env ^. boundTypeVars ) . set boundPredicates (env ^. boundPredicates )) <$> runInSolver (use initEnv)

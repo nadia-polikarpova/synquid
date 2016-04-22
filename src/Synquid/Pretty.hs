@@ -326,6 +326,7 @@ prettyProgram (Program p typ) = case p of
     PFix fs e -> prettyProgram e
     PLet x e e' -> align $ hang tab (keyword "let" <+> text x <+> operator "=" </> prettyProgram e </> keyword "in") $+$ prettyProgram e'
     PHole -> if show (pretty typ) == dontCare then operator "??" else hlParens $ operator "?? ::" <+> pretty typ
+    PErr -> keyword "error"
 
 instance (Pretty t) => Pretty (Program t) where
   pretty = prettyProgram
@@ -440,3 +441,4 @@ programNodeCount (Program p _) = case p of
   PFix _ e -> 1 + programNodeCount e
   PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
   PHole -> 0
+  PErr -> 1
