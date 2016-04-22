@@ -105,8 +105,7 @@ AVL_BENCHMARKS = [
     ('AVL-Balance',         ['-a 2', '-e']),
     ('AVL-Insert',          ['-a 2']),
     ('AVL-ExtractMin',      ['-a 2']),
-    ('AVL-Merge',           ['-a 2', '-m 1']),
-    ('AVL-Delete',          ['-a 2']),
+    ('AVL-Delete',          ['-a 2', '-m 1']),
 ]
 
 RBT_BENCHMARKS = [
