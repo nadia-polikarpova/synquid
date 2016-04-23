@@ -205,7 +205,11 @@ runOnFile synquidParams explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> pdoc err >> pdoc empty >> exitFailure
+        Left err -> pdoc (errorDoc $ text "No solution. Last candidate failed with error:\n")
+                    >> pdoc empty
+                    >> pdoc err
+                    >> pdoc empty 
+                    >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
           pdoc empty
