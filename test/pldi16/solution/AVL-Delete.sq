@@ -1,7 +1,4 @@
-{- @flags: -a=2 -m=1 -}
-
-zero :: {Int | _v == 0}
-inc :: x: Int -> {Int | _v == x + 1}
+lt :: x: a -> y: a -> {Bool | _v == (x < y)}
 
 inline max x y = if x >= y then x else y
 inline abs x = if x >= 0 then x else -x
@@ -27,15 +24,12 @@ measure elems :: AVL a -> Set a where
   Leaf -> []
   Node x l r h -> [x] + elems l + elems r  
 
-getHeight :: t: AVL a -> {Int | _v == realHeight t}
-
 {- MinPair: represents a pair (x, t) :: (a, AVL a)
  -   s.t. x is less than all the elements of t -}
 data MinPair a where
   Nothing :: MinPair a
   MinPair :: x: a -> t: AVL {a | x < _v} -> MinPair a
   
-{- TODO: bug in Program.hs if you replace "Set a" with "a" -}
 measure melems :: MinPair a -> Set a where
   Nothing -> []
   MinPair x t -> [x] + elems t
@@ -55,11 +49,9 @@ inline balHt l r t = (!(isBal l r 1) || isReal (realHeight t) l r)
 {- bigHt: The height of t is the same or one bigger than the larger of l and r -}
 inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight t)
 
-qualifier {x < y}                        
-
 balance :: x: a
          -> l: AVL {a | _v < x}
-         -> r: AVL {a | _v > x} {- | abs (realHeight l - realHeight _v) <= 2-}
+         -> r: AVL {a | _v > x}
          -> {AVL a | balHt l r _v && bigHt l r _v && elems _v == [x] + elems l + elems r}
 
 
@@ -69,15 +61,22 @@ merge :: x:a
           -> l: AVL {a | _v < x}
           -> r: {AVL {a | _v > x} | isBal l _v 1}
           -> {AVL a | bigHt l r _v && elems _v == elems l + elems r}
-merge = ??
+merge = \x . \l . \r . 
+      match extractMin l with
+        Nothing -> r
+        MinPair x4 x5 -> balance x4 l x5
 
 delete :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight _v) (realHeight t) &&
                                         elems t - [y] == elems _v}
-delete = ?? 
+delete = \y . \t . 
+    match t with
+      Leaf -> t
+      Node x5 x6 x7 x8 -> 
+        if x5 < y
+          then balance x5 x6 (delete y x7)
+          else 
+            if y < x5
+              then balance x5 (delete y x6) x7
+              else merge x5 x6 x7
 
-{- \x. \l. \r.
-   match extractMin r with
-     Nothing -> l
-     MinPair y r' -> balance y l r'
- -}
 

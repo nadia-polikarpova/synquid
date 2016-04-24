@@ -189,7 +189,7 @@ strengthen quals extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
         (do
-          let pruneAssumptions = if rhs == ffalse then Set.empty else usedLhsQuals -- TODO: is this dangeorous??? the result might not cover the pruned alternatives in a different context!
+          let pruneAssumptions = if rhs == ffalse then Set.empty else usedLhsQuals -- TODO: is this dangerous??? the result might not cover the pruned alternatives in a different context!
           valuations' <- pruneValuations pruneAssumptions (Map.keys splitting)
           writeLog 2 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
@@ -226,7 +226,7 @@ strengthen quals extractAssumptions fml@(Binary Implies lhs rhs) sol = do
 
     -- | Given an unknown @[subst]u@ and its valuation @quals@, get all possible valuations of @u@
     unsubst :: Formula -> Set Formula -> [(Id, Set Formula)]
-    unsubst u@(Unknown s name) quals = map (\inv -> (name, Set.map (substitute inv) quals)) (inverses s)
+    unsubst u@(Unknown s name) quals = nub $ map (\inv -> (name, Set.map (substitute inv) quals)) (inverses s)
         
     -- | All inverses of a substitution, assuming its range only contains unknowns; 
     -- duplicates in the range result in multiple inverses
