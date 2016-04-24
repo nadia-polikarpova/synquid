@@ -105,8 +105,7 @@ AVL_BENCHMARKS = [
     ('AVL-Balance',         ['-a 2', '-e']),
     ('AVL-Insert',          ['-a 2']),
     ('AVL-ExtractMin',      ['-a 2']),
-    ('AVL-Merge',           ['-a 2', '-m 1']),
-    ('AVL-Delete',          ['-a 2']),
+    ('AVL-Delete',          ['-a 2', '-m 1']),
 ]
 
 RBT_BENCHMARKS = [
@@ -136,6 +135,7 @@ def cmdline():
     a = argparse.ArgumentParser()
     a.add_argument('--synquid', required=False)
     a.add_argument('--unit', action='store_true')
+    a.add_argument('--checking', action='store_true')
     a.add_argument('--sections', nargs="*", default=['all'])
     return a.parse_args()
 
@@ -153,10 +153,10 @@ def run_benchmark(name, opts, path='.'):
       print '{0:0.2f}'.format(t),
       total_time = total_time + t
       if return_code:
-          print Back.RED + Fore.LIGHTRED_EX + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
       else:
           results [name] = SynthesisResult(name, t)
-          print Back.GREEN + Fore.LIGHTGREEN_EX + Style.BRIGHT + 'OK' + Style.RESET_ALL
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
           
 def run_test(name, path='.'):
     print name
@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
     sections = [s.lower() for s in a.sections]
         
-    if not a.unit:
+    if not a.unit and not a.checking:
         # Default: run synthesis benchmarks in 'current' directory, which must succeed; compare results with oracle
         os.chdir('current')
         if os.path.isfile(LOGFILE_NAME):
@@ -220,14 +220,14 @@ if __name__ == '__main__':
         if 'avl' in sections or 'all' in sections:
             for (name, args) in AVL_BENCHMARKS:
                 run_benchmark(name, args, 'AVL')
-            
+                            
         print 'TOTAL', '{0:0.2f}'.format(total_time)
         
         if sections == ['all']:
             write_times(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
             show_diff()
         
-    else:
+    elif a.unit:
         # Run unit tests 
         os.chdir('unit')
         if os.path.isfile(LOGFILE_NAME):
@@ -239,3 +239,14 @@ if __name__ == '__main__':
                 run_test(filename)
         
         show_diff()
+        
+    else: 
+        # Run checking benchmarks
+        os.chdir('checking')
+        if os.path.isfile(LOGFILE_NAME):
+            os.remove(LOGFILE_NAME)
+        for (name, args) in CHECKING_BENCHMARKS:
+            run_benchmark(name, args)
+            
+            
+        

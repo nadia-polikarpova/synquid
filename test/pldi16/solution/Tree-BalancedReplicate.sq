@@ -1,0 +1,26 @@
+data BalTree a where
+	Empty :: BalTree a
+	Node :: x: a -> l: BalTree a -> r: {BalTree a | height l == height _v} -> BalTree a
+  
+termination measure size :: BalTree a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+
+measure height :: BalTree a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> height l + 1
+
+zero :: {Int | _v == 0}
+inc :: x:Int -> {Int | _v == x + 1}
+dec :: x:Int -> {Int | _v == x - 1}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}  
+
+replicate :: x: a -> h: { Int | _v >= 0 } -> {BalTree a | height _v == h }
+replicate = \x . \h . 
+    if h <= 0
+      then Empty
+      else Node x (replicate x (dec
+                                  h)) (replicate x (dec h))
+
+

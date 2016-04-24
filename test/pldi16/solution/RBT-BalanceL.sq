@@ -1,0 +1,115 @@
+type Color = {Int | 0 <= _v && _v <= 1}
+black :: {Int | _v == 1}
+isRed :: x: Int -> {Bool | _v == (x == 0)}
+
+data RBT a where
+    Empty :: RBT a
+    Node  :: x: a ->
+             col: Color ->
+             left:  { RBT {a | _v < x} | col == 0 ==> color _v == 1 } ->                -- left keys are less than this key; a red node must have black children
+             right: { RBT {a | x < _v} | (col == 0 ==> color _v == 1) &&               	-- right keys are greater than this key; a red node must have black children
+                                        (blackHeight _v == blackHeight left)} ->        -- blackHeight the same as of left
+             RBT a
+                      
+termination measure size :: RBT a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x c l r -> 1 + size l + size r
+  
+measure color :: RBT a -> {Int | 0 <= _v && _v <= 1} where
+  Empty -> 1
+  Node x c l r -> c
+  
+measure elems :: RBT a -> Set a where
+  Empty -> []
+  Node x c l r -> [x] + elems l + elems r
+
+measure blackHeight :: RBT a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x c l r -> c + blackHeight l
+  
+data WeakRBT a where
+    Ok :: x: a ->
+             c: Color ->
+             left:  { RBT {a | _v < x} | c == 0 ==> color _v == 1 } ->
+             right: { RBT {a | x < _v} | (c == 0 ==> color _v == 1) &&
+                                        (blackHeight _v == blackHeight left)} ->
+             WeakRBT a
+    Bad :: x: a ->
+              lc:    Color ->
+              left:  { RBT {a | _v < x} | color _v == lc} ->
+              right: { RBT {a | x < _v } | color _v != lc && blackHeight _v == blackHeight left} ->
+              WeakRBT a
+
+termination measure wsize :: WeakRBT a -> {Int | _v >= 0} where
+  Ok x c left right -> 1 + size left + size right
+  Bad x lc left right -> 1 + size left + size right
+
+measure welems :: WeakRBT a -> Set a where
+  Ok x c left right -> [x] + elems left + elems right
+  Bad x lc left right -> [x] + elems left + elems right
+  
+measure wheight :: WeakRBT a -> {Int | _v >= 0} where
+  Ok x c left right -> c + blackHeight left
+  Bad x lc left right -> blackHeight left
+
+measure isOk :: WeakRBT a -> Bool where
+  Ok x c left right -> True
+  Bad x lc left right -> False
+  
+measure wcolor :: WeakRBT a -> {Int | _v >= 0 && _v <= 1} where
+  Ok x c left right -> c
+  Bad x lc left right -> 0
+  
+--==========================================================================================
+-- Rotate when left subtree is broken (two cases):
+--
+--       B                R         |       B                R
+--      / \             /   \       |      / \             /   \
+--     R   r           B     B      |     R   r           B     B
+--    / \     --->    / \   / \     |    / \     --->    / \   / \
+--   R  lr         lll llr lr  r    |   ll  R          ll lrl lrr r 
+--  / \                             |      / \
+--lll llr                           |    lrl lrr
+--
+--==========================================================================================    
+rotateL :: x: a ->                
+            lx: {a | _v < x} ->
+            llc: Color ->
+            ll: {RBT {a | _v < lx} | color _v == llc} ->
+            lr: {RBT {a | lx < _v && _v < x} | color _v != llc && blackHeight _v == blackHeight ll} -> 
+            r: {RBT {a | x < _v} | blackHeight _v == blackHeight ll} ->
+            {WeakRBT a | isOk _v && wcolor _v == 0 && welems _v == [x, lx] + elems ll + elems lr + elems r && wheight _v == blackHeight r + 1 && wsize _v == 2 + size ll + size lr + size r}
+rotateL = \x . \lx . \llc .
+      \ll . \lr . \r . 
+            if llc == 0
+              then 
+                match ll with
+                  Empty -> error
+                  Node x5 x6 x7 x8 -> Ok lx llc
+                                        (Node x5 black x7 x8) (Node x
+                                                                 black lr r)
+              else 
+                match lr with
+                  Empty -> error
+                  Node x25 x26 x27 x28 -> Ok x25
+                                            x26 (Node lx llc ll x27) (Node x
+                                                                        llc x28
+                                                                        r)
+        
+balanceL :: y: a ->
+              c: Color ->
+              l: {WeakRBT {a | _v < y} | c == 0 ==> isOk _v} ->
+              r: {RBT {a | _v > y} | (c == 0 ==> color _v == 1) && blackHeight _v == wheight l} ->
+              {WeakRBT a | welems _v == [y] + welems l + elems r && 
+                            wheight _v == blackHeight r + c && 
+                            wsize _v == 1 + wsize l + size r &&
+                            (isOk _v || c == 0)}
+balanceL = \y . \c . \l . \r . 
+        match l with
+          Ok x5 x6 x7 x8 -> 
+            if (c == 0) && (x6 == 0)
+              then Bad x5 black x7 (Node y c
+                                      x8 r)
+              else Ok y c (Node x5 x6 x7 x8) r
+          Bad x29 x30 x31 x32 -> rotateL y
+                                   x29 x30 x31 x32 r

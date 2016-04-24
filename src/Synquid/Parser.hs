@@ -323,7 +323,9 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
 {- Implementations -}
 
 parseImpl :: Parser UProgram
-parseImpl = withPos (parseLet <|> parseFun <|> parseMatch <|> parseIf <|> parseETerm)
+parseImpl = withPos (parseError <|> parseLet <|> parseFun <|> parseMatch <|> parseIf <|> parseETerm)
+
+parseError = reserved "error" >> return (untyped PErr)
 
 parseFun = do
   reservedOp "\\"

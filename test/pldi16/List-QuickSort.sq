@@ -31,7 +31,8 @@ measure ielems :: IList a -> Set a where
   INil -> []
   ICons x xs -> [x] + ielems xs
   
-partition :: p: a -> xs: List a -> {Pair {List {a | _v <= p} | len _v >= 0} {List {a | _v > p} | len _v >= 0} | len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }
+partition :: p: a -> xs: List a -> {Pair (List {a | _v <= p}) (List {a | _v > p}) | len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs }
+
 pivotAppend :: p: a -> xs: IList {a | _v <= p} -> ys: IList {a | _v > p} -> {IList a | ilen _v == ilen xs + ilen ys + 1 && ielems _v == ielems xs + ielems ys + [p] }
 
 quickSort :: xs: List a -> {IList a | ilen _v == len xs && ielems _v == elems xs }
