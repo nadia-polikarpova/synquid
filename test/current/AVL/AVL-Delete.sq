@@ -48,6 +48,8 @@ inline balHt l r t = (!(isBal l r 1) || isReal (realHeight t) l r)
 {- bigHt: The height of t is the same or one bigger than the larger of l and r -}
 inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight t)
 
+qualifier {x < y}
+
 balance :: x: a
          -> l: AVL {a | _v < x}
          -> r: AVL {a | _v > x} {- | abs (realHeight l - realHeight _v) <= 2-}
