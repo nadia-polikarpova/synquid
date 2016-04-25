@@ -107,8 +107,8 @@ parseDataDecl :: Parser Declaration
 parseDataDecl = do
   reserved "data"
   typeName <- parseTypeName
-  typeParams <- many parseIdentifier
-  predParams <- many $ angles parsePredSig
+  typeParams <- many (sameOrIndented >> parseIdentifier)
+  predParams <- many (sameOrIndented >> angles parsePredSig)
   constructors <- option [] (reserved "where" >> indented >> block parseConstructorSig) 
   return $ DataDecl typeName typeParams predParams constructors  
 

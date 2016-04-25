@@ -265,7 +265,10 @@ renameVarFml old new = substituteInType (Map.singleton old new)
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
 intersection AnyT t = t
-intersection t (ScalarT _ fml) = addRefinement t fml
+intersection (ScalarT baseT fml) (ScalarT baseT' fml') = case baseT of
+  DatatypeT name tArgs pArgs -> let DatatypeT _ tArgs' pArgs' = baseT' in
+                                  ScalarT (DatatypeT name (zipWith intersection tArgs tArgs') (zipWith andClean pArgs pArgs')) (fml `andClean` fml')
+  _ -> ScalarT baseT (fml `andClean` fml')
 intersection (FunctionT x tArg tRes) (FunctionT y tArg' tRes') = FunctionT x tArg (intersection tRes (renameVar y x tArg tRes')) 
 
 -- | 'unknownsOfType' @t: all unknowns in @t@

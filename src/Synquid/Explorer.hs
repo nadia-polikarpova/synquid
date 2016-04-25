@@ -601,8 +601,9 @@ instantiate env sch top = do
     go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
     
 symbolType env x t@(ScalarT b _)
-  | isConstant x env = t -- x is a constant, use it's type (it must be very precise)
-  | otherwise        = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable, use _v = x
+  -- | isConstant x env = t -- x is a constant, use it's type (it must be very precise)
+  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
+  | otherwise = t
 symbolType _ _ t = t
   
 -- | Perform an exploration, and once it succeeds, do not backtrack it  
