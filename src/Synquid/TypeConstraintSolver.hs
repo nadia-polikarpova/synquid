@@ -406,16 +406,14 @@ embedding env vars measures = do
       if Set.null vars
         then fmls
         else let (x, rest) = Set.deleteFindMin vars in
-              if Set.member x (env ^. constants)
-                then addBindings tass pass qmap fmls rest -- Ignore constants
-                else case Map.lookup x allSymbols of
-                  Nothing -> addBindings tass pass qmap  fmls rest -- Variable not found (useful to ignore value variables)
-                  Just (Monotype t) -> case typeSubstitute tass t of
-                    ScalarT baseT fml -> 
-                      let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                                            ((substitutePredicate pass fml) : allMeasurePostconditions measures baseT env) in
-                      addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` potentialVars qmap fml)
-                    _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
+              case Map.lookup x allSymbols of
+                Nothing -> addBindings tass pass qmap  fmls rest -- Variable not found (useful to ignore value variables)
+                Just (Monotype t) -> case typeSubstitute tass t of
+                  ScalarT baseT fml -> 
+                    let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
+                                          ((substitutePredicate pass fml) : allMeasurePostconditions measures baseT env) in
+                    addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` potentialVars qmap fml)
+                  _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
 
 -- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
