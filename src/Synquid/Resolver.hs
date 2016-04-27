@@ -291,7 +291,8 @@ resolveFormula targetSort valueSort (Var AnyS varName) =
           case toMonotype varType of
             ScalarT baseType _ -> flip Var varName <$> (toSort baseType `unifiedWith` targetSort)
             FunctionT _ _ _ -> error "The impossible happened: function in a formula"
-        Nothing -> throwError $ printf "Var `%s` is not in scope." varName
+        Nothing -> resolveFormula targetSort valueSort (Pred AnyS varName []) `catchError` -- Maybe it's a zero-argument predicate?
+                      const (throwError $ printf "Var `%s` is not in scope." varName)      -- but if not, throw this error to avoid confusion
       
 resolveFormula targetSort valueSort (Unary op fml) = fmap (Unary op) $ 
     do
