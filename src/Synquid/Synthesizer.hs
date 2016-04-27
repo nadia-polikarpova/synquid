@@ -90,6 +90,7 @@ extractCondQGen qual (env, syms) = filter (not . isDataEq) $ -- TODO: disallowin
     isDataEq (Binary op e1 _)
       | op == Eq || op == Neq = isData (sortOf e1)
       | otherwise = False
+    isDataEq _ = False
 
 extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
 extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = 
