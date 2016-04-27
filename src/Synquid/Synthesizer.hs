@@ -114,7 +114,7 @@ extractQGenFromType True (ScalarT baseT fml) (env, syms) =
       in substitute (Map.singleton (varName lastVar) (Var (sortOf lastVar) valueVarName)) pArg    
     extractFromBase (DatatypeT _ tArgs pArgs) = 
       let
-        ps = Set.toList $ Set.unions (map (conjunctsOf . replaceWithValueVar) pArgs)
+        ps = Set.toList $ Set.unions (map (conjunctsOf . replaceWithValueVar) . filter (not . null . varsOf) $ pArgs)
         res = concatMap (flip extractTypeQGen (env, syms)) ps
       in concatMap (flip (extractQGenFromType True) (env, syms)) tArgs ++ res
     extractFromBase _ = []

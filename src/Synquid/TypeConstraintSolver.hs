@@ -300,13 +300,18 @@ processPredicate c@(WellFormedPredicate env sorts p) = do
     then do
       writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
       modify $ addTypingConstraint c -- Still has type variables: cannot determine shape
-    else  do                 
+    else do                 
       u <- freshId "u"
       addPredAssignment p (Unknown Map.empty u)
       let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
       let vars = zipWith Var sorts' deBrujns
-      tq <- asks _typeQualsGen
-      addQuals u (tq (env, last vars : (init vars ++ allScalars env tass)))
+      if null vars
+        then do -- TODO: this is a hack
+          cq <- asks _condQualsGen
+          addQuals u (cq (env, allScalars env tass))
+        else do
+          tq <- asks _typeQualsGen
+          addQuals u (tq (env, last vars : (init vars ++ allScalars env tass)))        
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
