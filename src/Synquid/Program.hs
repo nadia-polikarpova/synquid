@@ -28,7 +28,9 @@ data TypeSkeleton r =
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r) |
   AnyT
   deriving (Eq, Ord)
-    
+
+isScalarType (ScalarT _ _) = True
+isScalarType _ = False
 baseTypeOf (ScalarT baseT _) = baseT
 baseTypeOf _ = error "baseTypeOf: applied to a function type"
 isFunctionType (FunctionT _ _ _) = True
@@ -255,8 +257,8 @@ substituteInType subst AnyT = AnyT
       
 -- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: Id -> Id -> RType -> RType -> RType
-renameVar old new (FunctionT _ _ _)   t = t -- function arguments cannot occur in types
 renameVar old new (ScalarT b _)       t = renameVarFml old (Var (toSort b) new) t
+renameVar old new _                   t = t -- function arguments cannot occur in types (and AnyT is assumed to be function)
 
 -- | 'renameVarFml' @old new typ@: rename all occurrences of @old@ in @typ@ into @new@ (represented as a formula)
 renameVarFml :: Id -> Formula -> RType -> RType

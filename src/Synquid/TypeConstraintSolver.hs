@@ -212,7 +212,7 @@ simplifyConstraint c = do
   simplifyConstraint' tass pass c
 
 -- Any type: drop
-simplifyConstraint' _ _ (Subtype _ t AnyT _) = return ()
+simplifyConstraint' _ _ (Subtype _ _ AnyT _) = return ()
 simplifyConstraint' _ _ c@(Subtype _ AnyT _ _) = return ()
 simplifyConstraint' _ _ c@(WellFormed _ AnyT) = return ()
 -- Well-formedness of a known predicate drop  
@@ -241,8 +241,10 @@ simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstr
   
 -- Unknown free variable and a type: extend type assignment
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) t _) | not (isBound a env) 
+  -- = if isFunctionType t then return () else unify env a t >> simplifyConstraint c
   = unify env a t >> simplifyConstraint c
 simplifyConstraint' _ _ c@(Subtype env t (ScalarT (TypeVarT a) _) _) | not (isBound a env) 
+  -- = if isFunctionType t then return () else unify env a t >> simplifyConstraint c
   = unify env a t >> simplifyConstraint c
 
 -- Compound types: decompose
@@ -258,10 +260,12 @@ simplifyConstraint' _ _ (Subtype env (ScalarT (DatatypeT name [] (pArg:pArgs)) f
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False)
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
-      simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg2 tRes1) tRes2 False)
+      if isScalarType tArg1
+        then simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg1 tRes1) tRes2 False)
+        else simplifyConstraint (Subtype env tRes1 tRes2 False)
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
   = -- TODO: rename type vars
-      if arity tArg1 == 0 
+      if isScalarType tArg1
         then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True)
         else simplifyConstraint (Subtype env tRes1 tRes2 True)
 simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
@@ -420,7 +424,8 @@ embedding env vars measures = do
                     let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
                                           ((substitutePredicate pass fml) : allMeasurePostconditions measures baseT env) in
                     addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` potentialVars qmap fml)
-                  _ -> error "embedding: encountered non-scalar variable in 0-arity bucket"
+                  AnyT -> Set.singleton ffalse
+                  _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
 
 -- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
