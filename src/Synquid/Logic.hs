@@ -236,6 +236,36 @@ substitutePredicate pSubst fml = case fml of
   Ite e0 e1 e2 -> Ite (substitutePredicate pSubst e0) (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   All v@(Var _ x) e -> All v (substitutePredicate pSubst e)
   _ -> fml
+  
+-- | Negation normal form of a formula:
+-- no negation above boolean connectives, no boolean connectives except @&&@ and @||@
+negationNF :: Formula -> Formula
+negationNF fml = case fml of
+  Unary Not e -> case e of
+    Unary Not e' -> negationNF e'
+    Binary And e1 e2 -> negationNF (fnot e1) ||| negationNF (fnot e2)
+    Binary Or e1 e2 -> negationNF (fnot e1) |&| negationNF (fnot e2)
+    Binary Implies e1 e2 -> negationNF e1 |&| negationNF (fnot e2)
+    Binary Iff e1 e2 -> (negationNF e1 |&| negationNF (fnot e2)) |&| (negationNF (fnot e1) |&| negationNF e2)
+    _ -> fml
+  Binary Implies e1 e2 -> negationNF (fnot e1) ||| negationNF e2
+  Binary Iff e1 e2 -> (negationNF e1 |&| negationNF e2) ||| (negationNF (fnot e1) |&| negationNF (fnot e2))
+  Binary op e1 e2 
+    | op == And || op == Or -> Binary op (negationNF e1) (negationNF e2)
+    | otherwise -> fml
+  Ite cond e1 e2 -> (negationNF cond |&| negationNF e1) ||| (negationNF (fnot cond) |&| negationNF e2)
+  _ -> fml
+
+-- | Disjunctive normal form (list of disjuncts)  
+dnf :: Formula -> [Formula]
+dnf = dnf' . negationNF
+  where
+    dnf' (Binary Or e1 e2) = dnf' e1 ++ dnf' e2
+    dnf' (Binary And e1 e2) = do
+                                lClause <- dnf' e1
+                                rClause <- dnf' e2
+                                return $ lClause |&| rClause
+    dnf' fml = [fml]
 
 {- Qualifiers -}
 

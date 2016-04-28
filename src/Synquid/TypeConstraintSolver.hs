@@ -330,9 +330,11 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
             let relevantVars = potentialVars qmap (l' |&| r')
-            ass <- embedding env relevantVars (predsOf r')
-            let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' ass) |=>| r')
-            hornClauses %= (clause :)
+            emb <- embedding env relevantVars (predsOf r')
+            let sSubst = sortSubstituteFml (asSortSubst tass)
+            let lhss = dnf $ sSubst $ conjunction (Set.insert l' emb)
+            let clauses = map (|=>| sSubst r') lhss
+            hornClauses %= (clauses ++)
           else modify $ addTypingConstraint c -- Constraint contains free predicate: add back and wait until more type variables get unified, so predicate variables can be instantiated
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
   = do -- TODO: abs ref here
@@ -345,8 +347,8 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
         then return ()
         else do
           let relevantVars = potentialVars qmap (l' |&| r')
-          ass <- embedding env relevantVars Set.empty
-          let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' $ Set.insert r' ass))
+          emb <- embedding env relevantVars Set.empty
+          let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' $ Set.insert r' emb))
           consistencyChecks %= (clause :)
 processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
