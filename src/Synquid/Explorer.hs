@@ -419,18 +419,12 @@ checkE env typ p@(Program pTerm pTyp) md = do
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
-  -- case soleConstructor (lastType typ) of
-    -- Just (name, sch) -> do -- @typ@ is a datatype with only on constructor, so all terms must start with that constructor
-      -- guard $ arity (toMonotype sch) == arity typ
-      -- pickSymbol (name, sch)
-
-    -- Nothing -> do
-      let symbols = Map.toList $ symbolsOfArity (arity typ) env
-      useCounts <- use symbolUseCount
-      let symbols' = if arity typ == 0
-                        then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
-                        else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
-      msum $ map pickSymbol symbols'
+    let symbols = Map.toList $ symbolsOfArity (arity typ) env
+    useCounts <- use symbolUseCount
+    let symbols' = if arity typ == 0
+                      then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
+                      else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
+    msum $ map pickSymbol symbols'
   where
     pickSymbol (name, sch) = do
       t <- freshInstance sch
@@ -499,7 +493,7 @@ generateError env = do
 -- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
 toVar (Program (PSymbol name) t) env 
   | not (isConstant name env)  = return (env, Var (toSort $ baseTypeOf t) name)
-toVar (Program _ t) env = do
+toVar p@(Program _ t) env = do
   g <- freshId "G"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
