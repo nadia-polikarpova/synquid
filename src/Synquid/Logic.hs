@@ -155,6 +155,18 @@ posNegUnknowns _ = (Set.empty, Set.empty)
 posUnknowns = fst . posNegUnknowns
 negUnknowns = snd . posNegUnknowns
 
+posNegPreds :: Formula -> (Set Id, Set Id)
+posNegPreds (Pred BoolS p es) = (Set.singleton p, Set.empty)
+posNegPreds (Unary Not e) = swap $ posNegPreds e
+posNegPreds (Binary Implies e1 e2) = both2 Set.union (swap $ posNegPreds e1) (posNegPreds e2)
+posNegPreds (Binary Iff e1 e2) = both2 Set.union (posNegPreds $ e1 |=>| e2) (posNegPreds $ e2 |=>| e1)
+posNegPreds (Binary _ e1 e2) = both2 Set.union (posNegPreds e1) (posNegPreds e2)
+posNegPreds (Ite e e1 e2) = both2 Set.union (posNegPreds $ e |=>| e1) (posNegPreds $ fnot e |=>| e2)
+posNegPreds _ = (Set.empty, Set.empty)
+
+posPreds = fst . posNegPreds
+negPreds = snd . posNegPreds
+
 predsOf :: Formula -> Set Id
 predsOf (Pred _ p es) = Set.insert p (Set.unions $ map predsOf es)
 predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
@@ -246,7 +258,7 @@ negationNF fml = case fml of
     Binary And e1 e2 -> negationNF (fnot e1) ||| negationNF (fnot e2)
     Binary Or e1 e2 -> negationNF (fnot e1) |&| negationNF (fnot e2)
     Binary Implies e1 e2 -> negationNF e1 |&| negationNF (fnot e2)
-    Binary Iff e1 e2 -> (negationNF e1 |&| negationNF (fnot e2)) |&| (negationNF (fnot e1) |&| negationNF e2)
+    Binary Iff e1 e2 -> (negationNF e1 |&| negationNF (fnot e2)) ||| (negationNF (fnot e1) |&| negationNF e2)
     _ -> fml
   Binary Implies e1 e2 -> negationNF (fnot e1) ||| negationNF e2
   Binary Iff e1 e2 -> (negationNF e1 |&| negationNF e2) ||| (negationNF (fnot e1) |&| negationNF (fnot e2))
@@ -256,11 +268,13 @@ negationNF fml = case fml of
   Ite cond e1 e2 -> (negationNF cond |&| negationNF e1) ||| (negationNF (fnot cond) |&| negationNF e2)
   _ -> fml
 
--- | Disjunctive normal form (list of disjuncts)  
-dnf :: Formula -> [Formula]
-dnf = dnf' . negationNF
+-- | Disjunctive normal form for unknowns (known predicates treated as atoms)
+uDNF :: Formula -> [Formula]
+uDNF = dnf' . negationNF
   where
-    dnf' (Binary Or e1 e2) = dnf' e1 ++ dnf' e2
+    dnf' e@(Binary Or e1 e2) = if (Set.null $ unknownsOf e1) || (Set.null $ unknownsOf e2) 
+                                then return e
+                                else dnf' e1 ++ dnf' e2
     dnf' (Binary And e1 e2) = do
                                 lClause <- dnf' e1
                                 rClause <- dnf' e2

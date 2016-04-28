@@ -332,7 +332,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
             let relevantVars = potentialVars qmap (l' |&| r')
             emb <- embedding env relevantVars (predsOf r')
             let sSubst = sortSubstituteFml (asSortSubst tass)
-            let lhss = dnf $ sSubst $ conjunction (Set.insert l' emb)
+            let lhss = uDNF $ sSubst $ conjunction (Set.insert l' emb)
             let clauses = map (|=>| sSubst r') lhss
             hornClauses %= (clauses ++)
           else modify $ addTypingConstraint c -- Constraint contains free predicate: add back and wait until more type variables get unified, so predicate variables can be instantiated

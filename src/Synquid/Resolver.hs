@@ -69,7 +69,7 @@ resolveDecls declarations =
       in Goal name env' spec impl 0
       
 resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
-resolveRefinement env valueSort fml = runExcept (evalStateT (resolveFormula BoolS valueSort fml) (initResolverState {_environment = env}))
+resolveRefinement env valueSort fml = runExcept (evalStateT (resolveTypeRefinement valueSort fml) (initResolverState {_environment = env}))
 
 resolveRefinedType :: Environment -> RType -> Either ErrMsg RType
 resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
@@ -164,7 +164,7 @@ resolveSignatures (DataDecl dtName tArgs pArgs ctors) = mapM_ resolveConstructor
 resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
   (outSort : (inSort@(DataS dtName tArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)
   datatype <- uses (environment . datatypes) (Map.! dtName)
-  post' <- resolveFormula BoolS outSort post
+  post' <- resolveTypeRefinement outSort post
   let ctors = datatype ^. constructors  
   if length defCases /= length ctors
     then throwError $ unwords $ ["Definition of measure", measureName, "must include one case per constructor of", dtName]
@@ -214,7 +214,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
   case Map.lookup name ds of
     Nothing -> do
       t' <- substituteTypeSynonym name tArgs >>= resolveType      
-      fml' <- resolveFormula BoolS (toSort $ baseTypeOf t') fml
+      fml' <- resolveTypeRefinement (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
     Just (DatatypeDef tVars pVars _ _) -> do
       let n = length tVars
@@ -223,7 +223,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       tArgs' <- mapM resolveType tArgs
       pArgs' <- zipWithM resolvePredArg pVars pArgs
       let baseT' = DatatypeT name tArgs' pArgs'      
-      fml' <- resolveFormula BoolS (toSort baseT') fml
+      fml' <- resolveTypeRefinement (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
     resolvePredArg :: PredSig -> Formula -> Resolver Formula
@@ -232,11 +232,11 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       let vars = zipWith Var sorts deBrujns
       environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
       res <- case fml of
-                Pred _ p [] -> resolveFormula BoolS AnyS (Pred BoolS p vars)
-                _ -> resolveFormula BoolS AnyS fml
+                Pred _ p [] -> resolveTypeRefinement AnyS (Pred BoolS p vars)
+                _ -> resolveTypeRefinement AnyS fml
       environment .= oldEnv      
       return res      
-resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveFormula BoolS (toSort baseT) fml
+resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveTypeRefinement (toSort baseT) fml
       
 resolveType (FunctionT x tArg tRes) = do
   when (x == valueVarName) $ throwError $
@@ -265,7 +265,16 @@ resolveSort (DataS name sArgs) = do
       return $ DataS name sArgs'
 resolveSort s = return s
   
-{- Formulas -}  
+{- Formulas -}
+
+resolveTypeRefinement :: Sort -> Formula -> Resolver Formula
+resolveTypeRefinement valueSort fml = do
+  fml' <- resolveFormula BoolS valueSort fml
+  env <- use environment
+  let invalidPreds = negPreds fml' `Set.intersection` (Map.keysSet $ env ^. boundPredicates)
+  when (not $ Set.null invalidPreds) $ 
+    throwError $ unwords ["Bound predicate(s)", show (commaSep (map text $ Set.toList invalidPreds)), "occur negatively in a refinement", show fml']
+  return fml'
 
 resolveFormula :: Sort -> Sort -> Formula -> Resolver Formula
 resolveFormula targetSort valueSort (SetLit AnyS memberFmls) = do
