@@ -1,21 +1,26 @@
-- Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
+- Faithful round-trip type checking
+- Complete vs. incomplete goal types:
+  After checking function type <: False -> T, also check <: Pre -> T; if true, then Pre is a complete goal for the argument and arg exploration should be cut
+  (replicate x n: is length requirement fails, no need to reconsider x)
+- Split subtyping constraints with multiple measures?  
 - More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
+  - Better resolver: global type constraint solving? (test case: list split)
+  - Better qualifier extraction for abstract refinements
   - Re-enable sort checking in substitute (sometimes wrong in applications, test case: List-Fold-Sort)
   - Use unifySorts for qualifier substitution instead of complies
   - Qualifier discovery should be local (otherwise doesn't work for abstract refinements?)
+- Multisets
+- Source lines in resolver
+
+
+- Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
 - Named arguments for abstract predicates
 - Collapse lambda-expansions in aux goals
-- Parametrization by non-boolean predicates
 - Mutual recursion
 - Type classes (for type variables and abstract datatypes)
 - Default components
-- Solve the keys measure mystery in BST-delete
-- Remove subsumed components (0 + x -> x, x + y -> y + x)
-- Field measures (and other independent measures): is it possible to split type-checking per conjunct?
-- replicate x n: is length requirement fails, no need to reconsider x 
 - Intersection types (carry multiple environments and type constraint checkers), good example: allPos :: (List Int -> Bool) &&& (List Pos -> {Bool | _v}) &&& ({List Nonpos | len _v > 0} -> {Bool | !_v})
 
-- Better resolver: global type constraint solving? (test case: list split)
 - Irrefutable type errors (like symbol not in scope)
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
