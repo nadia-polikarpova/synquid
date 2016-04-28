@@ -12,6 +12,7 @@ import Synquid.Util
 import Synquid.Pretty
 import Synquid.Tokens
 
+import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -601,7 +602,7 @@ instantiate env sch top = do
     go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
     
 symbolType env x t@(ScalarT b _)
-  -- | isConstant x env = t -- x is a constant, use it's type (it must be very precise)
+  | isJust (asInteger x) = t -- x is an integer literal, it's type is precise
   | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
   | otherwise = t
 symbolType _ _ t = t

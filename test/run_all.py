@@ -224,7 +224,7 @@ if __name__ == '__main__':
         print 'TOTAL', '{0:0.2f}'.format(total_time)
         
         if sections == ['all']:
-            write_times(BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
+            write_times(BENCHMARKS + SYGUS_BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
             show_diff()
         
     elif a.unit:
