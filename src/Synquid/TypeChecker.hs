@@ -266,7 +266,7 @@ reconstructE' env typ (PSymbol name) = do
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False
+        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False
       checkE env typ p Nothing
       return (env, p)
   where    

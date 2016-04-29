@@ -12,7 +12,6 @@ import Synquid.Util
 import Synquid.Pretty
 import Synquid.Tokens
 
-import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -366,9 +365,8 @@ generateEAt env typ d = do
 
     joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
 
--- | Perform a gradual check that @p@ has type @typ@ in @env@:
--- if @p@ is a scalar, perform a full subtyping check;
--- if @p@ is a (partially applied) function, check as much as possible with unknown arguments
+-- | Check that @p@ has type @typ@ in @env@:
+-- if @p@ is a (partially applied) function, also check consistency
 checkE :: MonadHorn s => Environment -> RType -> RProgram -> Maybe Int -> Explorer s ()
 checkE env typ p@(Program pTerm pTyp) md = do
   ctx <- asks $ _context . fst
@@ -426,7 +424,7 @@ enumerateAt env typ 0 = do
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False      
+        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False      
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -590,7 +588,7 @@ instantiate env sch top = do
     go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
     
 symbolType env x t@(ScalarT b _)
-  | isJust (asInteger x) = t -- x is an integer literal, it's type is precise
+  | isLiteral x = t -- x is a literal of a primitive type, it's type is precise
   | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
   | otherwise = t
 symbolType _ _ t = t

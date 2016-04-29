@@ -2,6 +2,8 @@
 module Synquid.Tokens where
 
 import Synquid.Logic
+import Synquid.Util
+import Data.Maybe
 import Data.Map (Map, fromList)
 
 -- | Keywords
@@ -48,3 +50,6 @@ commentStart = "{-"
 commentEnd = "-}"
 -- | Start of a single-line comment
 commentLine = "--"
+
+-- | 'isLiteral' @str@ : Is string @str@ a literal of a primitive type?
+isLiteral str = isJust (asInteger str) || str == "True" || str == "False"
