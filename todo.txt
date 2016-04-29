@@ -1,4 +1,3 @@
-- Faithful round-trip type checking
 - Complete vs. incomplete goal types:
   After checking function type <: False -> T, also check <: Pre -> T; if true, then Pre is a complete goal for the argument and arg exploration should be cut
   (replicate x n: is length requirement fails, no need to reconsider x)

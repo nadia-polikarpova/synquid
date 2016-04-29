@@ -241,10 +241,8 @@ simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstr
   
 -- Unknown free variable and a type: extend type assignment
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) t _) | not (isBound a env) 
-  -- = if isFunctionType t then return () else unify env a t >> simplifyConstraint c
   = unify env a t >> simplifyConstraint c
 simplifyConstraint' _ _ c@(Subtype env t (ScalarT (TypeVarT a) _) _) | not (isBound a env) 
-  -- = if isFunctionType t then return () else unify env a t >> simplifyConstraint c
   = unify env a t >> simplifyConstraint c
 
 -- Compound types: decompose
