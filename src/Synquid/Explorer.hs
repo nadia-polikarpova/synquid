@@ -460,9 +460,10 @@ enumerateAt env typ d = do
           newAuxGoals %= (++ [symbolName arg])
           return (env', Program (PApp fun arg) tRes)
         else do -- First-order argument: generate now
+          let mbCut = if Set.member x (varsOfType tRes) then id else cut
           (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
                             $ inContext (\p -> Program (PApp fun p) tRes)
-                            $ genArg env' tArg
+                            $ mbCut (genArg env' tArg)
           writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
           return (env''', Program (PApp fun arg) (renameVarFml x y tRes))

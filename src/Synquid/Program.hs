@@ -100,6 +100,15 @@ allArgTypes _ = []
 allArgs (ScalarT _ _) = []
 allArgs (FunctionT x (ScalarT baseT _) tRes) = (Var (toSort baseT) x) : (allArgs tRes)
 allArgs (FunctionT x _ tRes) = (allArgs tRes)
+
+-- | Free variables of a type
+varsOfType :: RType -> Set Id
+varsOfType (ScalarT baseT fml) = varsOfBase baseT `Set.union` (Set.map varName $ varsOf fml)
+  where
+    varsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map varsOfType tArgs) `Set.union` (Set.map varName $ Set.unions (map varsOf pArgs))
+    varsOfBase _ = Set.empty
+varsOfType (FunctionT x tArg tRes) = varsOfType tArg `Set.union` (Set.delete x $ varsOfType tRes)
+varsOfType AnyT = Set.empty    
   
 varRefinement x s = Var s valueVarName |=| Var s x
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName
