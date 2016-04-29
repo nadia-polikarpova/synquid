@@ -267,7 +267,7 @@ reconstructE' env typ (PSymbol name) = do
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False
-      checkE env typ p Nothing
+      checkE env typ p
       return (env, p)
   where    
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -287,7 +287,7 @@ reconstructE' env typ (PApp iFun iArg) = do
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
       return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
-  checkE envfinal typ pApp Nothing
+  checkE envfinal typ pApp
   return (envfinal, pApp)
   where
     generateHOArg env d tArg iArg = case content iArg of
