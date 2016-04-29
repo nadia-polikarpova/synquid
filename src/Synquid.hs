@@ -41,6 +41,7 @@ main = do
                    consistency 
                    log_ 
                    memoize 
+                   symmetry
                    bfs
                    outFormat
                    print_spec
@@ -58,6 +59,7 @@ main = do
     _incrementalChecking = incremental,
     _consistencyChecking = consistency,
     _useMemoization = memoize,
+    _symmetryReduction = symmetry,
     _explorerLogLevel = log_
     }
   let solverParams = defaultHornSolverParams {
@@ -96,6 +98,7 @@ data CommandLineArgs
         consistency :: Bool,
         log_ :: Int,
         memoize :: Bool,
+        symmetry :: Bool,
         -- | Solver params
         bfs_solver :: Bool,
         -- | Output
@@ -120,6 +123,7 @@ cla = CommandLineArgs {
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
   log_                = 0               &= help ("Logger verboseness level (default: 0)"),
   memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
+  symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
