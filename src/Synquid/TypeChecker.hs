@@ -280,7 +280,7 @@ reconstructE' env typ (PSymbol name) = do
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sch -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sch) False
-      checkE env typ p Nothing
+      checkE env typ p
       return (env, p)
   where    
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -300,7 +300,7 @@ reconstructE' env typ (PApp iFun iArg) = do
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
       return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
-  checkE envfinal typ pApp Nothing
+  checkE envfinal typ pApp
   return (envfinal, pApp)
 reconstructE' env typ impl = throwError $ errorText "Expected application term of type" </> squotes (pretty typ) </>
                                           errorText "and got" </> squotes (pretty $ untyped impl)
