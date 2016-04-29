@@ -375,14 +375,7 @@ checkE env typ p@(Program pTerm pTyp) md = do
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx p)
   
   ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
-
-  -- if arity typ == 0
-    -- then addConstraint $ Subtype env pTyp typ False
-    -- else do
-      -- addConstraint $ Subtype env (removeDependentRefinements (Set.fromList $ allArgs pTyp) (lastType pTyp)) (lastType typ) False
-      -- ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)  
   
-  -- goalTyp <- getGoalType typ pTyp
   addConstraint $ Subtype env pTyp typ False
   when (arity typ > 0) $
     ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
@@ -391,21 +384,7 @@ checkE env typ p@(Program pTerm pTyp) md = do
   typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
   solveIncrementally
   typingState . errorContext .= empty
-    where
-      -- getGoalType t@(FunctionT x _ tRes) t' = 
-        -- case argType t' of
-          -- ScalarT baseT fml -> do
-            -- a <- flip vart ffalse <$> freshId "a"
-            -- addConstraint $ WellFormed env a
-            -- return $ FunctionT x a tRes
-          -- _ -> return t
-      -- getGoalType t _ = return t
-    
-      removeDependentRefinements argNames (ScalarT (DatatypeT name typeArgs pArgs) fml) = 
-        ScalarT (DatatypeT name (map (removeDependentRefinements argNames) typeArgs) (map (removeFrom argNames) pArgs)) (removeFrom argNames fml)
-      removeDependentRefinements argNames (ScalarT baseT fml) = ScalarT baseT (removeFrom argNames fml)
-      removeFrom argNames fml = if varsOf fml `disjoint` argNames then fml else ffalse
-      
+    where      
       checkSymmetry = 
         case md of
           Just d -> do          
@@ -470,9 +449,7 @@ enumerateAt env typ d = do
         generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
 
     generateApp genFun genArg = do
-      -- a <- flip vart ffalse <$> freshId "a"
-      -- addConstraint $ WellFormed env a
-      x <- freshId "x"
+      x <- freshId "A"
       (env', fun) <- inContext (\p -> Program (PApp p uHole) typ)
                             $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
