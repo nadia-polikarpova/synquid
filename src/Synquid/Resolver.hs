@@ -204,7 +204,7 @@ resolveSchema sch = do
   let tvs = Set.toList $ typeVarsOf (toMonotype sch)
   sch' <- withLocalEnv $ do
     environment . boundTypeVars %= (tvs ++)
-    resolveSchema' sch
+    resolveSchema' sch  
   return $ Foldable.foldl (flip ForallT) sch' tvs
   where
     resolveSchema' (ForallP predName sorts sch) = do
@@ -228,14 +228,19 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]
       when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
       tArgs' <- mapM resolveType tArgs
-      pArgs' <- zipWithM resolvePredArg pVars pArgs
+      
+      let substToUnique = Map.fromList $ zip tVars (map VarS deBrujns)
+      let substFromUnique = asSortSubst $ Map.fromList $ zip deBrujns tArgs'
+      
+      
+      pArgs' <- zipWithM (resolvePredArg (sortSubstitute substFromUnique . sortSubstitute substToUnique)) pVars pArgs
       let baseT' = DatatypeT name tArgs' pArgs'      
       fml' <- resolveTypeRefinement (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
-    resolvePredArg :: PredSig -> Formula -> Resolver Formula
-    resolvePredArg (PredSig _ sorts BoolS) fml = withLocalEnv $ do
-      let vars = zipWith Var sorts deBrujns
+    resolvePredArg :: (Sort -> Sort) -> PredSig -> Formula -> Resolver Formula
+    resolvePredArg subst (PredSig _ sorts BoolS) fml = withLocalEnv $ do
+      let vars = zipWith Var (map subst sorts) deBrujns
       environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
       case fml of
           Pred _ p [] -> resolveTypeRefinement AnyS (Pred BoolS p vars)

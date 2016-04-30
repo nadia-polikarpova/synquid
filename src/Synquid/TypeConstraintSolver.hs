@@ -313,7 +313,9 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
           addQuals u (cq (env, allScalars env tass))
         else do
           tq <- asks _typeQualsGen
-          addQuals u (tq (env, last vars : (init vars ++ allScalars env tass)))        
+          let argVars = init vars
+          let env' = foldr (\(Var s x) -> addVariable x (fromSort s)) env argVars
+          addQuals u (tq (env', last vars : (argVars ++ allScalars env tass)))        
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
