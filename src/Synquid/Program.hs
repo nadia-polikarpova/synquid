@@ -49,8 +49,8 @@ fromSort (VarS name) = ScalarT (TypeVarT name) ftrue
 fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) ftrue -- TODO: what to do with pArgs?
 fromSort AnyS = AnyT
 
-unifySorts :: [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
-unifySorts = unifySorts' Map.empty
+unifySorts :: Set Id -> [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
+unifySorts boundTvs = unifySorts' Map.empty
   where
     unifySorts' subst [] []                                 
       = Right subst
@@ -64,15 +64,17 @@ unifySorts = unifySorts' Map.empty
                 then unifySorts' subst (args ++ xs) (args' ++ ys) 
                 else error $ unwords ["unifySorts: different number of arguments for datatype", name, show (length args), "and", show (length args')]
           else Left (DataS name [], DataS name' [])
-    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys
+    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys -- TODO: do we still need these?
     unifySorts' subst (_ : xs) (AnyS : ys) = unifySorts' subst xs ys
     unifySorts' subst (VarS x : xs) (y : ys)                 
+      | not (Set.member x boundTvs)
       = case Map.lookup x subst of
-          Just s -> unifySorts' subst (s : xs) (y : ys)
-          Nothing -> if x `Set.member` typeVarsOf (fromSort y) 
-            then Left (VarS x, y) 
-            else unifySorts' (Map.insert x y subst) xs ys
-    unifySorts' subst (x : xs) (VarS y : ys)                 
+            Just s -> unifySorts' subst (s : xs) (y : ys)
+            Nothing -> if x `Set.member` typeVarsOf (fromSort y) 
+              then Left (VarS x, y) 
+              else unifySorts' (Map.insert x y subst) xs ys
+    unifySorts' subst (x : xs) (VarS y : ys)
+      | not (Set.member y boundTvs)
       = unifySorts' subst (VarS y : ys) (x:xs)
     unifySorts' subst (x: _) (y: _)                 
       = Left (x, y)
@@ -449,7 +451,7 @@ data Environment = Environment {
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types), indexed by arity
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
-  _boundPredicates :: Map Id [Sort],       -- ^ Signatures of bound abstract refinements
+  _boundPredicates :: Map Id [Sort],       -- ^ Argument sorts of bound abstract refinements
   _assumptions :: Set Formula,             -- ^ Unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
@@ -457,7 +459,7 @@ data Environment = Environment {
   -- | Constant part:
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
-  _globalPredicates :: Map Id [Sort],      -- ^ Signatures of module-level logic functions (measures, predicates) 
+  _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
   _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
@@ -569,7 +571,7 @@ addBoundPredicate :: Id -> [Sort] -> Environment -> Environment
 addBoundPredicate predName argSorts = over boundPredicates (Map.insert predName argSorts)
 
 addGlobalPredicate :: Id -> [Sort] -> Environment -> Environment
-addGlobalPredicate predName argSorts = over globalPredicates (Map.insert predName argSorts)
+addGlobalPredicate predName sorts = over globalPredicates (Map.insert predName sorts)
 
 addTypeSynonym :: Id -> [Id] -> RType -> Environment -> Environment
 addTypeSynonym name tvs t = over typeSynonyms (Map.insert name (tvs, t))
@@ -597,7 +599,7 @@ addAssumption f = assumptions %~ Set.insert f
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
-allPredicates env = (env ^. boundPredicates) `Map.union` (env ^. globalPredicates)
+allPredicates env = (Map.map (BoolS:) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures
