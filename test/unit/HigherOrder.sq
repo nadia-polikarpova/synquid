@@ -13,7 +13,7 @@ measure elems :: List a -> Set a where
 type Nat = {Int | _v >= 0}    
 type Pos = {Int | _v > 0}  
   
-and :: x: Bool -> y: Bool -> {Bool | _v == x && y}
+and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 
 all :: <p :: a -> Bool> . (x: a -> {Bool | _v == p x}) -> List {a | p _v} -> {Bool | _v}
 all = \f . \xs .

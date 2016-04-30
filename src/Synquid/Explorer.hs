@@ -570,7 +570,7 @@ instantiate env sch top = do
   return t
   where
     instantiate' subst pSubst (ForallT a sch) = do
-      a' <- freshId "a"
+      a' <- freshId "A"
       addConstraint $ WellFormed env (vart a' ftrue)
       instantiate' (Map.insert a (vart a' (BoolLit top)) subst) pSubst sch
     instantiate' subst pSubst (ForallP p argSorts sch) = do

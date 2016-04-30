@@ -295,9 +295,9 @@ unify env a t = if a `Set.member` typeVarsOf t
     addTypeAssignment a t'
     
 -- Predicate well-formedness: shapeless or simple depending on type variables  
-processPredicate c@(WellFormedPredicate env sorts p) = do
+processPredicate c@(WellFormedPredicate env argSorts p) = do
   tass <- use typeAssignment
-  let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
+  let typeVars = Set.toList $ Set.unions $ map typeVarsOfSort argSorts
   if any (isFreeVariable tass) typeVars
     then do
       writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
@@ -305,8 +305,8 @@ processPredicate c@(WellFormedPredicate env sorts p) = do
     else do                 
       u <- freshId "u"
       addPredAssignment p (Unknown Map.empty u)
-      let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
-      let vars = zipWith Var sorts' deBrujns
+      let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
+      let vars = zipWith Var argSorts' deBrujns
       if null vars
         then do -- TODO: this is a hack
           cq <- asks _condQualsGen
@@ -449,7 +449,7 @@ freshVar env prefix = do
 -- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType
 fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
-  a' <- freshId "a"
+  a' <- freshId "A"
   return $ ScalarT (TypeVarT a') ftrue
 fresh env (ScalarT (DatatypeT name tArgs _) _) = do
   k <- freshId "u"
@@ -529,7 +529,7 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
       let sArgs = sortArgsOf inSort in
       let uniqueSubst = Map.fromList $ zip (map varSortName sArgs) (map VarS deBrujns) in
       let inSort' = sortSubstitute uniqueSubst inSort in
-      let (Right sortSubst) = unifySorts [inSort'] [resS] in
+      let (Right sortSubst) = unifySorts Set.empty [inSort'] [resS] in
       let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in      
       substitute subst (sortSubstituteFml sortSubst . sortSubstituteFml uniqueSubst $ body)
     
