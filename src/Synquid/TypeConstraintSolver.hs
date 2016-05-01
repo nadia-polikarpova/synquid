@@ -266,10 +266,10 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
       if isScalarType tArg1
         then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True)
         else simplifyConstraint (Subtype env tRes1 tRes2 True)
-simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
+simplifyConstraint' _ _ c@(WellFormed env (ScalarT (DatatypeT name tArgs _) fml))
   = do
-      simplifyConstraint (WellFormed env tArg)
-      simplifyConstraint (WellFormed env (ScalarT (DatatypeT name tArgs pArgs) fml))
+      mapM_ (simplifyConstraint . WellFormed env) tArgs
+      simpleConstraints %= (c :)
 simplifyConstraint' _ _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)
