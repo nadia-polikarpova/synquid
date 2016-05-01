@@ -280,7 +280,7 @@ instance Pretty SSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
     ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
+    ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
 
 instance Show SSchema where
  show = show . pretty
@@ -289,7 +289,7 @@ instance Pretty RSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
     ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
+    ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
 
 instance Show RSchema where
   show = show . pretty

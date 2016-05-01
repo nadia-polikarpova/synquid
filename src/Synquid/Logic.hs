@@ -35,8 +35,9 @@ typeVarsOfSort (DataS _ sArgs) = Set.unions (map typeVarsOfSort sArgs)
 typeVarsOfSort (SetS s) = typeVarsOfSort s
 typeVarsOfSort _ = Set.empty
 
-data SortConstraint = SameSort Sort Sort 
-  | IsOrd Sort
+-- | Constraints generated during formula resolution
+data SortConstraint = SameSort Sort Sort  -- Two sorts must be the same
+  | IsOrd Sort                            -- Sort must have comparisons
 
 {- Formulas of the refinement logic -}
 
