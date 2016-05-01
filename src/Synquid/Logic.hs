@@ -46,10 +46,12 @@ sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) 
 sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
 sortSubstitute _ s = s
 
+distinctTypeVars = map (\i -> "A" ++ show i) [0..] 
+
 noncaptureSortSubst :: [Id] -> [Sort] -> Sort -> Sort  
 noncaptureSortSubst sVars sArgs s = 
-  let sFresh = sortSubstitute (Map.fromList $ zip sVars (map VarS deBrujns)) s
-  in sortSubstitute (Map.fromList $ zip deBrujns sArgs) sFresh
+  let sFresh = sortSubstitute (Map.fromList $ zip sVars (map VarS distinctTypeVars)) s
+  in sortSubstitute (Map.fromList $ zip distinctTypeVars sArgs) sFresh
 
 -- | Constraints generated during formula resolution
 data SortConstraint = SameSort Sort Sort  -- Two sorts must be the same
@@ -270,6 +272,11 @@ sortSubstituteFml subst fml = case fml of
   Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)  
   All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   _ -> fml
+  
+noncaptureSortSubstFml :: [Id] -> [Sort] -> Formula -> Formula  
+noncaptureSortSubstFml sVars sArgs fml = 
+  let fmlFresh = sortSubstituteFml (Map.fromList $ zip sVars (map VarS distinctTypeVars)) fml
+  in sortSubstituteFml (Map.fromList $ zip distinctTypeVars sArgs) fmlFresh  
                   
 substitutePredicate :: Substitution -> Formula -> Formula
 substitutePredicate pSubst fml = case fml of
