@@ -172,8 +172,8 @@ typeSubstitute _ AnyT = AnyT
 
 noncaptureTypeSubst :: [Id] -> [RType] -> RType -> RType  
 noncaptureTypeSubst tVars tArgs t =
-  let tFresh = typeSubstitute (Map.fromList $ zip tVars (map vartAll deBrujns)) t
-  in typeSubstitute (Map.fromList $ zip deBrujns tArgs) tFresh  
+  let tFresh = typeSubstitute (Map.fromList $ zip tVars (map vartAll distinctTypeVars)) t
+  in typeSubstitute (Map.fromList $ zip distinctTypeVars tArgs) tFresh  
 
 schemaSubstitute :: TypeSubstitution -> RSchema -> RSchema
 schemaSubstitute tass (Monotype t) = Monotype $ typeSubstitute tass t

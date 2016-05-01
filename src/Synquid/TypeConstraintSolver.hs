@@ -329,15 +329,15 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         tass <- use typeAssignment
         pass <- use predAssignment
         qmap <- use qualifierMap
-        let l' = substitutePredicate pass l
-        let r' = substitutePredicate pass r
+        let subst = sortSubstituteFml (asSortSubst tass) . substitutePredicate pass
+        let l' = subst l
+        let r' = subst r
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
             let relevantVars = potentialVars qmap (l' |&| r')
             emb <- embedding env relevantVars (predsOf r')
-            let sSubst = sortSubstituteFml (asSortSubst tass)
-            let lhss = uDNF $ sSubst $ conjunction (Set.insert l' emb)
-            let clauses = map (|=>| sSubst r') lhss
+            let lhss = uDNF $ conjunction (Set.insert l' emb)
+            let clauses = map (|=>| r') lhss
             hornClauses %= (clauses ++)
           else modify $ addTypingConstraint c -- Constraint contains free predicate: add back and wait until more type variables get unified, so predicate variables can be instantiated
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
@@ -345,14 +345,15 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
       tass <- use typeAssignment
       pass <- use predAssignment
       qmap <- use qualifierMap
-      let l' = substitutePredicate pass l
-      let r' = substitutePredicate pass r
+      let subst = sortSubstituteFml (asSortSubst tass) . substitutePredicate pass
+      let l' = subst l
+      let r' = subst r
       if l' == ftrue || r' == ftrue
         then return ()
         else do
           let relevantVars = potentialVars qmap (l' |&| r')
           emb <- embedding env relevantVars Set.empty
-          let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' $ Set.insert r' emb))
+          let clause = conjunction (Set.insert l' $ Set.insert r' emb)
           consistencyChecks %= (clause :)
 processConstraint (WellFormed env (ScalarT baseT fml)) 
   = case fml of
@@ -523,19 +524,17 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
     Unary op e -> inst e
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
-    -- SetLit s elems -> ?
+    SetLit _ elems -> Set.unions (map inst elems)
     Pred _ p args -> Set.unions $ map inst args
-    -- All x e -> ?
     _ -> Set.empty  
   where
     measureAxiom resS ctor args (MeasureDef inSort _ defs _) = 
       let MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs in
-      let sArgs = sortArgsOf inSort in
-      let uniqueSubst = Map.fromList $ zip (map varSortName sArgs) (map VarS deBrujns) in
-      let inSort' = sortSubstitute uniqueSubst inSort in
-      let (Right sortSubst) = unifySorts Set.empty [inSort'] [resS] in
-      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in      
-      substitute subst (sortSubstituteFml sortSubst . sortSubstituteFml uniqueSubst $ body)
+      let sParams = map varSortName (sortArgsOf inSort) in -- sort parameters in the datatype declaration
+      let sArgs = sortArgsOf resS in -- actual sort argument in the constructor application
+      let body' = noncaptureSortSubstFml sParams sArgs body in -- measure definition with actual sorts for all subexpressions
+      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in -- substitute formals for actuals and constructor application for _v    
+      substitute subst body'
     
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 
