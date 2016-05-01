@@ -430,7 +430,8 @@ solveSortConstraints = do
   tvs <- uses (environment . boundTypeVars) Set.fromList
   sortConstraints .= []
   idCount .= 0
-  subst <- case uncurry (unifySorts tvs) (unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs) of
+  let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs  
+  subst <- case unifySorts tvs sls srs of
     Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
     Right subst -> return subst
   mapM_ (checkTypeClass subst) typeClassCs
