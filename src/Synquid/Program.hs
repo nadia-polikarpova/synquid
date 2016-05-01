@@ -131,12 +131,24 @@ toMonotype (ForallP _ t) = toMonotype t
 boundVarsOf :: SchemaSkeleton r -> [Id]
 boundVarsOf (ForallT a sch) = a : boundVarsOf sch
 boundVarsOf _ = []
+
+-- | Building types
+bool = ScalarT BoolT  
+bool_ = bool ()
+boolAll = bool ftrue
+
+int = ScalarT IntT
+int_ = int ()
+intAll = int ftrue
+nat = int (valInt |>=| IntLit 0)
+pos = int (valInt |>| IntLit 0)
+
+vart n = ScalarT (TypeVarT n)
+vart_ n = vart n ()
+vartAll n = vart n ftrue
   
 -- | Mapping from type variables to types
 type TypeSubstitution = Map Id RType
-
--- Mapping from type variables to sorts
-type SortSubstitution = Map Id Sort
 
 asSortSubst :: TypeSubstitution -> SortSubstitution
 asSortSubst = Map.map (toSort . baseTypeOf)
@@ -158,31 +170,15 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubst
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
 typeSubstitute _ AnyT = AnyT
 
+noncaptureTypeSubst :: [Id] -> [RType] -> RType -> RType  
+noncaptureTypeSubst tVars tArgs t =
+  let tFresh = typeSubstitute (Map.fromList $ zip tVars (map vartAll deBrujns)) t
+  in typeSubstitute (Map.fromList $ zip deBrujns tArgs) tFresh  
+
 schemaSubstitute :: TypeSubstitution -> RSchema -> RSchema
 schemaSubstitute tass (Monotype t) = Monotype $ typeSubstitute tass t
 schemaSubstitute tass (ForallT a sch) = ForallT a $ schemaSubstitute (Map.delete a tass) sch
 schemaSubstitute tass (ForallP sig sch) = ForallP sig $ schemaSubstitute tass sch
-
-sortSubstituteFml :: SortSubstitution -> Formula -> Formula
-sortSubstituteFml subst fml = case fml of 
-  SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
-  Var s name -> Var (sortSubstitute subst s) name
-  Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
-  Unary op e -> Unary op (sortSubstituteFml subst e)
-  Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
-  Ite c l r -> Ite (sortSubstituteFml subst c) (sortSubstituteFml subst l) (sortSubstituteFml subst r)
-  Pred s name es -> Pred (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
-  Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)  
-  All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
-  _ -> fml
-  
-sortSubstitute :: SortSubstitution -> Sort -> Sort
-sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
-  Just s' -> sortSubstitute subst s'
-  Nothing -> s
-sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
-sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
-sortSubstitute _ s = s
 
 typeSubstitutePred :: Substitution -> RType -> RType
 typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
@@ -331,21 +327,6 @@ data MeasureDef = MeasureDef {
 } deriving (Eq, Ord)
 
 makeLenses ''MeasureDef
-
--- | Building types
-bool = ScalarT BoolT  
-bool_ = bool ()
-boolAll = bool ftrue
-
-int = ScalarT IntT
-int_ = int ()
-intAll = int ftrue
-nat = int (valInt |>=| IntLit 0)
-pos = int (valInt |>| IntLit 0)
-
-vart n = ScalarT (TypeVarT n)
-vart_ n = vart n ()
-vartAll n = vart n ftrue
 
 {- Program terms -}    
     

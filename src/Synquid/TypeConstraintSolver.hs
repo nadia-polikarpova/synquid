@@ -448,24 +448,26 @@ freshVar env prefix = do
     then freshVar env prefix
     else return x
 
--- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
+-- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables, fresh predicate variables, and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType
 fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
+  -- Free type variable: replace with fresh free type variable
   a' <- freshId "A"
   return $ ScalarT (TypeVarT a') ftrue
-fresh env (ScalarT (DatatypeT name tArgs _) _) = do
-  k <- freshId "u"
-  tArgs' <- mapM (fresh env) tArgs
-  
-  let (DatatypeDef tVars pVars _ _) = (env ^. datatypes) Map.! name
-  let substToUnique = Map.fromList $ zip tVars (map VarS deBrujns)
-  let substFromUnique = asSortSubst $ Map.fromList $ zip deBrujns tArgs'
-  
-  pArgs' <- mapM (\(PredSig _ sorts _) -> freshPred env . map (sortSubstitute substFromUnique) . map (sortSubstitute substToUnique) $ sorts) pVars  
-  return $ ScalarT (DatatypeT name tArgs' pArgs') (Unknown Map.empty k)
 fresh env (ScalarT baseT _) = do
+  baseT' <- freshBase baseT
+  -- Replace refinement with fresh predicate unknown:
   k <- freshId "u"
-  return $ ScalarT baseT (Unknown Map.empty k)
+  return $ ScalarT baseT' (Unknown Map.empty k)
+  where
+    freshBase (DatatypeT name tArgs _) = do
+      -- Replace type arguments with fresh types:
+      tArgs' <- mapM (fresh env) tArgs
+      -- Replace predicate arguments with fresh predicate variables:
+      let (DatatypeDef tParams pParams _ _) = (env ^. datatypes) Map.! name
+      pArgs' <- mapM (\sig -> freshPred env . map (noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')) . predSigArgSorts $ sig) pParams  
+      return $ DatatypeT name tArgs' pArgs'
+    freshBase baseT = return baseT
 fresh env (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
   

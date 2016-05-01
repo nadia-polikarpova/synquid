@@ -250,9 +250,9 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       fml' <- resolveTypeRefinement (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
-    resolvePredArg :: (Sort -> Resolver Sort) -> PredSig -> Formula -> Resolver Formula
+    resolvePredArg :: (Sort -> Sort) -> PredSig -> Formula -> Resolver Formula
     resolvePredArg subst (PredSig _ argSorts BoolS) fml = withLocalEnv $ do
-      argSorts' <- mapM subst argSorts
+      let argSorts' = map subst argSorts
       let vars = zipWith Var argSorts' deBrujns
       environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
       case fml of
@@ -457,7 +457,7 @@ substituteTypeSynonym name tArgs = do
     Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
     Just (tVars, t) -> do
       when (length tArgs /= length tVars) $ throwError $ unwords ["Type synonym", name, "expected", show (length tVars), "type arguments and got", show (length tArgs)]
-      noncaptureTypeSubst tVars tArgs t
+      return $ noncaptureTypeSubst tVars tArgs t
       
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshSort :: Resolver Sort
@@ -472,19 +472,7 @@ instantiate sorts = do
   let tvs = Set.toList $ Set.unions (map typeVarsOfSort sorts)
   freshTvs <- replicateM (length tvs) freshSort
   return $ map (sortSubstitute $ Map.fromList $ zip tvs freshTvs) sorts
-  
-noncaptureSortSubst :: [Id] -> [Sort] -> Sort -> Resolver Sort  
-noncaptureSortSubst sVars sArgs s = do
-  freshTVars <- replicateM (length sVars) freshSort
-  let sFresh = sortSubstitute (Map.fromList $ zip sVars freshTVars) s
-  return $ sortSubstitute (Map.fromList $ zip (map varSortName freshTVars) sArgs) sFresh
-  
-noncaptureTypeSubst :: [Id] -> [RType] -> RType -> Resolver RType  
-noncaptureTypeSubst tVars tArgs t = do
-  freshTVars <- replicateM (length tVars) freshSort
-  let tFresh = typeSubstitute (Map.fromList $ zip tVars (map fromSort freshTVars)) t
-  return $ typeSubstitute (Map.fromList $ zip (map varSortName freshTVars) tArgs) tFresh  
-  
+
 enforceSame :: Sort -> Sort -> Resolver ()  
 enforceSame sl sr
   | sl == sr    = return ()
