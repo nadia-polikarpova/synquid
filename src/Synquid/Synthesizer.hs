@@ -1,8 +1,5 @@
 -- | Top-level synthesizer interface
-module Synquid.Synthesizer (
-  synthesize,
-  (|++|)
-) where
+module Synquid.Synthesizer (synthesize) where
 
 import Synquid.Util
 import Synquid.Logic
@@ -45,97 +42,138 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _condQualsGen = condQuals,
                         _matchQualsGen = matchQuals,
                         _typeQualsGen = typeQuals,
+                        _predQualsGen = predQuals,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
       in reconstruct explorerParams typingParams goal
       
     -- | Qualifier generator for conditionals
     condQuals :: QualsGen
-    condQuals = toSpace . foldl (|++|) (const []) 
-      (map extractCondQGen cquals ++
-       map extractCondFromType (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal))
+    condQuals env vars = toSpace $ concat $
+      map (\q -> instantiateCondQualifier q env vars) cquals 
+      ++ map (\t -> extractCondFromType t env vars) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)
 
+    -- | Qualifier generator for match scrutinees
     matchQuals :: QualsGen
-    matchQuals = toSpace . foldl (|++|) (const []) (map extractMatchQGen (Map.toList $ (gEnvironment goal) ^. datatypes))
+    matchQuals env vars = toSpace $ concatMap (\dt -> extractMatchQGen dt env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
 
     -- | Qualifier generator for types
     typeQuals :: QualsGen
-    typeQuals = toSpace . foldl1 (|++|)
-      ([extractQGenFromType False (toMonotype $ gSpec goal), extractQGenFromType True (toMonotype $ gSpec goal)] -- extract from spec: both positive and negative
-        ++ map extractTypeQGen tquals -- extract from given qualifiers
-        ++ map (extractQGenFromType False) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)) -- extract from components: only negative
+    typeQuals env vars = toSpace $ concat $
+        [ extractQGenFromType False (toMonotype $ gSpec goal) env vars, 
+          extractQGenFromType True (toMonotype $ gSpec goal) env vars ] -- extract from spec: both positive and negative
+        ++ map (\q -> instantiateTypeQualifier q env vars) tquals -- extract from given qualifiers
+        ++ map (\t -> extractQGenFromType False t env vars) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal) -- extract from components: only negative
+        
+    -- | Qualifier generator for bound predicates
+    predQuals :: QualsGen
+    predQuals env vars = toSpace $ concatMap
+      (\sch -> extractPredQGenFromType (toMonotype sch) env vars) (gSpec goal : (Map.elems $ allSymbols $ gEnvironment goal))
 
 {- Qualifier Generators -}
 
-(|++|) gen gen' = \(env, symbs) -> nub $ gen (env, symbs) ++ gen' (env, symbs)
-infixr 5  |++|
+-- | 'instantiateTypeQualifier ' @qual@: qualifier generator that treats free variables of @qual@ except _v as parameters
+instantiateTypeQualifier :: Formula -> Environment -> [Formula] -> [Formula]
+instantiateTypeQualifier (BoolLit True) _ _ = []
+instantiateTypeQualifier qual env vars =
+  let formals = map varName . Set.toList . Set.filter (\v -> varName v /= valueVarName) . varsOf $ qual in
+  allSubstitutions env qual formals vars
 
--- | 'extractTypeQGen' @qual@: qualifier generator that treats free variables of @qual@ except the value variable as parameters
-extractTypeQGen (BoolLit True) _ = []
-extractTypeQGen qual (env, (val@(Var s valName) : syms)) =
-  let (vals, other) = Set.partition (\v -> varName v == valueVarName) (varsOf qual)
-  in if Set.null vals
-      then [] -- No _v in a refinement, happens sometimes
-      else let (Var s' _) = Set.findMin vals
-           in if complies s s'
-                then if valName == valueVarName
-                       then allSubstitutions env qual s (Set.toList other) syms
-                       else map (substitute (Map.singleton valueVarName val)) $ allSubstitutions env qual s (Set.toList other) syms
-                else []
-
--- | 'extractCondQGen' @qual@: qualifier generator that treats free variables of @qual@ as parameters
-extractCondQGen qual (env, syms) = filter (not . isDataEq) $ -- TODO: disallowing datatype equality in conditionals, this is a bit of a hack
-    allSubstitutions env qual AnyS (Set.toList $ varsOf qual) syms
+-- | 'instantiateCondQualifier' @qual@: qualifier generator that treats free variables of @qual@ as parameters
+instantiateCondQualifier :: Formula -> Environment -> [Formula] -> [Formula]
+instantiateCondQualifier qual env vars = filter (not . isDataEq) $ -- TODO: disallowing datatype equality in conditionals, this is a bit of a hack
+    allSubstitutions env qual (map varName . Set.toList . varsOf $ qual) vars
   where
     isDataEq (Binary op e1 _)
       | op == Eq || op == Neq = isData (sortOf e1)
       | otherwise = False
     isDataEq _ = False
 
-extractMatchQGen (_, (DatatypeDef _ _ [] _)) (_, _) = []
-extractMatchQGen (dtName, (DatatypeDef _ _ ctors _)) (env, syms) = 
-  let baseCaseCtor = head ctors in
-  case toMonotype $ allSymbols env Map.! baseCaseCtor of
-    ScalarT baseT fml -> 
-      let s = toSort baseT in
-      let v = Var s valueVarName in
-      allSubstitutions env fml s [v] syms
-    _ -> []
+-- | 'extractMatchQGen' @(dtName, dtDef)@: qualifier generator that generates qualifiers of the form x == ctor, for all scalar constructors ctor of datatype @dtName@
+extractMatchQGen :: (Id, DatatypeDef) -> Environment -> [Formula] -> [Formula]    
+extractMatchQGen (dtName, (DatatypeDef tParams _ ctors _)) env vars = concatMap extractForCtor ctors
+  where
+    -- Extract formulas x == @ctor@ for each x in @vars@
+    extractForCtor ctor = case toMonotype $ allSymbols env Map.! ctor of
+      ScalarT baseT fml -> 
+        let fml' = sortSubstituteFml sortInst fml in
+        allSubstitutions env fml' [valueVarName] vars
+      _ -> []
+    sortInst = Map.fromList $ zip tParams (map VarS distinctTypeVars)
 
 -- | 'extractQGenFromType' @positive t@: qualifier generator that extracts all conjuncts from refinements of @t@ and treats their free variables as parameters;
 -- extracts from positively or negatively occurring refinements depending on @positive@
-extractQGenFromType :: Bool -> RType -> (Environment, [Formula]) -> [Formula]
-extractQGenFromType False (ScalarT _ _) _ = []
-extractQGenFromType True (ScalarT baseT fml) (env, syms) =
-  let
-    -- fs = if isJust (sortOf fml) then Set.toList $ conjunctsOf fml else [] -- Excluding ill-types terms
-    -- fs = map (sortSubstituteFml subst) $ Set.toList $ conjunctsOf fml
-    fs = Set.toList $ conjunctsOf fml -- TODO: this treats polymorphic formulas incorrectly
-    replaceWithValueVar pArg = let lastVar = last $ Set.toList $ varsOf pArg
-      in substitute (Map.singleton (varName lastVar) (Var (sortOf lastVar) valueVarName)) pArg    
-    extractFromBase (DatatypeT _ tArgs pArgs) = 
+extractQGenFromType :: Bool -> RType -> Environment -> [Formula] -> [Formula]
+extractQGenFromType positive t = extractQGenFromType' positive t
+  where
+    sortInst =  Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
+    
+    extractQGenFromType' :: Bool -> RType -> Environment -> [Formula] -> [Formula]
+    extractQGenFromType' False  (ScalarT _ _) _ _ = []
+    extractQGenFromType' True   (ScalarT baseT fml) env vars =
       let
-        ps = Set.toList $ Set.unions (map (conjunctsOf . replaceWithValueVar) . filter (not . null . varsOf) $ pArgs)
-        res = concatMap (flip extractTypeQGen (env, syms)) ps
-      in concatMap (flip (extractQGenFromType True) (env, syms)) tArgs ++ res
-    extractFromBase _ = []
-  in concatMap (flip extractTypeQGen (env, syms)) fs ++ extractFromBase baseT
-extractQGenFromType False (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType True tArg (env, syms) ++ extractQGenFromType False tRes (env, syms)
-extractQGenFromType True (FunctionT _ tArg tRes) (env, syms) = extractQGenFromType True tRes (env, syms)
+        extractFromBase (DatatypeT _ tArgs pArgs) = concatMap (\t -> extractQGenFromType' True t env vars) tArgs
+        extractFromBase _ = []
+        fmls = Set.toList $ conjunctsOf (sortSubstituteFml sortInst fml)        
+      in concatMap (\q -> instantiateTypeQualifier q env vars) fmls ++ extractFromBase baseT
+    extractQGenFromType' False  (FunctionT _ tArg tRes) env vars = extractQGenFromType' True tArg env vars ++ extractQGenFromType' False tRes env vars
+    extractQGenFromType' True   (FunctionT _ tArg tRes) env vars = extractQGenFromType' True tRes env vars
     
 -- | Extract conditional qualifiers from the types of Boolean functions    
-extractCondFromType :: RType -> (Environment, [Formula]) -> [Formula]
-extractCondFromType t@(FunctionT _ _ _) (env, syms) = case lastType t of
-  ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName -> allSubstitutions env fml AnyS (Set.toList $ varsOf fml) syms
+extractCondFromType :: RType -> Environment -> [Formula] -> [Formula]
+extractCondFromType t@(FunctionT _ _ _) env vars = case lastType t of
+  ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName ->
+    let 
+      sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
+      fml' = sortSubstituteFml sortInst fml 
+    in allSubstitutions env fml' (map varName . Set.toList . varsOf $ fml) vars
   _ -> []
-extractCondFromType _ _ = []  
+extractCondFromType _ _ _ = []
 
--- | 'allSubstitutions' @qual valueSort vars syms@: all well-typed substitutions of @syms@ for @vars@ in a qualifier @qual@ with value sort @valueSort@
-allSubstitutions :: Environment -> Formula -> Sort -> [Formula] -> [Formula] -> [Formula]
-allSubstitutions env qual valueSort vars syms = do
-  let pickSubstForVar var = [Map.singleton (varName var) v | v <- syms, complies (sortOf v) (sortOf var)]
-  subst <- Map.unions <$> mapM pickSubstForVar vars
-  guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values (qualifiers are unlikely to have duplicate variables)
-  case resolveRefinement env valueSort (substitute subst qual) of
+extractBoundPreds :: RSchema -> Environment -> [Formula] -> [Formula]
+extractBoundPreds = extractBoundPreds' []
+  where
+    extractBoundPreds' :: [Id] -> RSchema -> Environment -> [Formula] -> [Formula]
+    extractBoundPreds' tvs (ForallT a sch) env vars = extractBoundPreds' (a:tvs) sch env vars
+    extractBoundPreds' tvs (ForallP sig sch) env vars = let
+        sortInst = Map.fromList $ zip tvs (map VarS distinctTypeVars)
+        resolvedNominal = allSubstitutions env (sortSubstituteFml sortInst (nominalPredApp sig)) [] [] -- no actual substitution happening, we do this to resolve the formula
+      in resolvedNominal ++ extractBoundPreds' tvs sch env vars
+    extractBoundPreds' _ _ _ _ = []
+
+extractPredQGenFromType :: RType -> Environment -> [Formula] -> [Formula]
+extractPredQGenFromType t env vars = extractPredQGenFromType' t
+  where
+    sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
+    
+    isParam (Var _ name) = take 1 name == dontCare
+    
+    (actualParams, actualsVars) = partition isParam vars
+    
+    extractFromRefinement fml = 
+      let fml' = sortSubstituteFml sortInst fml
+      in -- filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
+          allSubstitutions env fml' (map varName $ Set.toList $ varsOf fml') vars
+    
+    extractPredQGenFromType' :: RType -> [Formula]
+    extractPredQGenFromType' (ScalarT (DatatypeT dtName tArgs pArgs) fml) =
+      let extractFromPArg pArg = 
+            let
+              pArg' = sortSubstituteFml sortInst pArg
+              (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
+            in allSubstitutions env pArg' (map varName formalVars) actualsVars -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
+      in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
+    extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
+    extractPredQGenFromType' (FunctionT _ tArg tRes) = extractPredQGenFromType' tArg ++ extractPredQGenFromType' tRes
+
+-- | 'allSubstitutions' @env qual nonsubstActuals formals actuals@: 
+-- all well-typed substitutions of @actuals@ for @formals@ in a qualifier @qual@
+allSubstitutions :: Environment -> Formula -> [Id] -> [Formula] -> [Formula]
+allSubstitutions _ (BoolLit True) _ _ = []
+allSubstitutions env qual formals actuals = do
+  let pickSubstForVar var = [Map.singleton var v | v <- actuals]
+  subst <- Map.unions <$> mapM pickSubstForVar formals
+  guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values
+  case resolveWithSubstitution env subst qual of
     Left _ -> [] -- Variable sort mismatch
-    Right qual' -> return qual'
+    Right resolved -> return resolved

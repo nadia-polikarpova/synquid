@@ -466,7 +466,7 @@ enumerateAt env typ d = do
                             $ mbCut (genArg env' tArg)
           writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
-          return (env''', Program (PApp fun arg) (renameVarFml x y tRes))
+          return (env''', Program (PApp fun arg) (substituteInType (Map.singleton x y) tRes))
       return (envfinal, pApp)
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)      

@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, ResolverState (..)) where
+module Synquid.Resolver (resolveDecls, resolveWithSubstitution, resolveRefinedType, addAllVariables, ResolverState (..)) where
 
 import Synquid.Program
 import Synquid.Logic
@@ -35,6 +35,7 @@ data ResolverState = ResolverState {
   _mutuals :: Map Id [Id],
   _inlines :: Map Id ([Id], Formula),
   _sortConstraints :: [SortConstraint],
+  _fmlSubstitution :: Substitution,
   _idCount :: Int
 }
 
@@ -48,6 +49,7 @@ initResolverState = ResolverState {
   _mutuals = Map.empty,
   _inlines = Map.empty,
   _sortConstraints = [],
+  _fmlSubstitution = Map.empty,
   _idCount = 0
 }
 
@@ -72,11 +74,14 @@ resolveDecls declarations =
         env' = foldr removeVariable env toRemove
       in Goal name env' spec impl 0
       
-resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
-resolveRefinement env valueSort fml = runExcept (evalStateT (resolveTypeRefinement valueSort fml) (initResolverState {_environment = env}))
+resolveWithSubstitution :: Environment -> Substitution -> Formula -> Either ErrMsg Formula
+resolveWithSubstitution env subst fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env, _fmlSubstitution = subst}))
 
 resolveRefinedType :: Environment -> RType -> Either ErrMsg RType
 resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
+
+addAllVariables :: [Formula] -> Environment -> Environment
+addAllVariables = flip (foldr (\(Var s x) -> addVariable x (fromSort s)))
     
 {- Implementation -}    
 
@@ -198,7 +203,7 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
               let fml = Pred AnyS measureName [Var AnyS valueVarName] |=| substitute subst body
               fml' <- withLocalEnv $ do
                 environment  . boundTypeVars .= boundVarsOf consSch
-                environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env ctorParams
+                environment %= addAllVariables ctorParams
                 resolveTypeRefinement (toSort $ baseTypeOf $ lastType consT) fml
               return $ MeasureCase ctorName (map varName ctorParams) fml'
 resolveSignatures _                      = return ()   
@@ -254,7 +259,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
     resolvePredArg subst (PredSig _ argSorts BoolS) fml = withLocalEnv $ do
       let argSorts' = map subst argSorts
       let vars = zipWith Var argSorts' deBrujns
-      environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
+      environment %= addAllVariables vars
       case fml of
         Pred _ p [] -> resolveTypeRefinement AnyS (Pred BoolS p vars)
         _ -> resolveTypeRefinement AnyS fml
@@ -315,16 +320,24 @@ resolveTypeRefinement valueSort fml = do
   return resolvedFml
 
 resolveFormula :: Formula -> Resolver Formula
-resolveFormula (Var _ x) = do
-  env <- use environment
-  case Map.lookup x (symbolsOfArity 0 env) of
-    Just sch ->
-      case sch of
-        Monotype (ScalarT baseType _) -> return $ Var (toSort baseType) x
-        _ -> error $ unwords ["resolveFormula: encountered non-scalar variable", x, "in a formula"]
-    Nothing -> resolveFormula (Pred AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
-                  const (throwError $ printf "Var `%s` is not in scope." x)      -- but if not, throw this error to avoid confusion
-
+resolveFormula (Var s x) = do
+  subst <- use fmlSubstitution
+  case Map.lookup x subst of
+    Just fml -> do -- This variable is to be substituted:
+      enforceSame s (sortOf fml) -- and check that sorts match
+      return fml
+    Nothing -> do -- The variable stays
+      env <- use environment
+      case Map.lookup x (symbolsOfArity 0 env) of
+        Just sch ->
+          case sch of
+            Monotype (ScalarT baseType _) -> do
+              let s' = (toSort baseType)
+              return $ Var s' x
+            _ -> error $ unwords ["resolveFormula: encountered non-scalar variable", x, "in a formula"]
+        Nothing -> resolveFormula (Pred AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
+                      const (throwError $ printf "Var `%s` is not in scope." x)      -- but if not, throw this error to avoid confusion
+                      
 resolveFormula (SetLit _ elems) = do
   elemSort <- freshSort
   elems' <- mapM resolveFormula elems
@@ -485,6 +498,4 @@ withLocalEnv c = do
   res <- c
   environment .= oldEnv
   return res
-
-nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Var argSorts deBrujns)
   
