@@ -377,6 +377,7 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
       ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False      
       ScalarT b _ -> Just $ Var (toSort b) x
+      _ -> Nothing
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
