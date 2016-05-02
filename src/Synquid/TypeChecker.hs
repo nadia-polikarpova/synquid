@@ -286,7 +286,7 @@ reconstructE' env typ (PApp iFun iArg) = do
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
-      return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
+      return (env''', Program (PApp pFun pArg) (substituteInType (Map.singleton x y) tRes))
   checkE envfinal typ pApp Nothing
   return (envfinal, pApp)
   where

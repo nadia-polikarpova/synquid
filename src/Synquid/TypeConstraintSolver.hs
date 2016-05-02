@@ -4,7 +4,6 @@
 module Synquid.TypeConstraintSolver (
   TypeError,
   QualsGen,
-  emptyGen,
   TypingParams (..),
   TypingState,
   typingConstraints,
@@ -36,6 +35,7 @@ import Synquid.Program
 import Synquid.Pretty
 import Synquid.SolverMonad
 import Synquid.Util
+import Synquid.Resolver (addAllVariables)
 
 import Data.Maybe
 import Data.List
@@ -55,18 +55,15 @@ import Debug.Trace
 -- | Type error description
 type TypeError = Doc
 
--- | State space generator (returns a state space for a list of symbols in scope)
-type QualsGen = (Environment, [Formula]) -> QSpace
-
--- | Empty state space generator
-emptyGen = const emptyQSpace
+type QualsGen = Environment -> [Formula] -> QSpace
 
 -- | Parameters of type constraint solving
 data TypingParams = TypingParams {
-  _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
-  _matchQualsGen :: QualsGen,             -- ^ Qualifier generator for match scrutinees
-  _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
-  _tcSolverLogLevel :: Int                -- ^ How verbose logging is  
+  _condQualsGen :: QualsGen,  -- ^ Qualifier generator for conditionals
+  _matchQualsGen :: QualsGen, -- ^ Qualifier generator for match scrutinees
+  _typeQualsGen :: QualsGen,  -- ^ Qualifier generator for types
+  _predQualsGen :: QualsGen,  -- ^ Qualifier generator for bound predicates
+  _tcSolverLogLevel :: Int    -- ^ How verbose logging is  
 }
 
 makeLenses ''TypingParams
@@ -307,15 +304,8 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       addPredAssignment p (Unknown Map.empty u)
       let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
       let vars = zipWith Var argSorts' deBrujns
-      if null vars
-        then do -- TODO: this is a hack
-          cq <- asks _condQualsGen
-          addQuals u (cq (env, allScalars env tass))
-        else do
-          tq <- asks _typeQualsGen
-          let argVars = init vars
-          let env' = foldr (\(Var s x) -> addVariable x (fromSort s)) env argVars
-          addQuals u (tq (env', last vars : (argVars ++ allScalars env tass)))        
+      pq <- asks _predQualsGen
+      addQuals u (pq (addAllVariables vars env) (vars ++ allScalars env tass))
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
@@ -355,25 +345,26 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
           emb <- embedding env relevantVars Set.empty
           let clause = conjunction (Set.insert l' $ Set.insert r' emb)
           consistencyChecks %= (clause :)
-processConstraint (WellFormed env (ScalarT baseT fml)) 
+processConstraint (WellFormed env t@(ScalarT baseT fml)) 
   = case fml of
       Unknown _ u -> do      
         qmap <- use qualifierMap
         tass <- use typeAssignment
         tq <- asks _typeQualsGen
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
-        when (not $ Map.member u qmap) $ addQuals u (tq (env, Var (toSort baseT) valueVarName : allScalars env tass))
+        let env' = addVariable valueVarName t env
+        when (not $ Map.member u qmap) $ addQuals u (tq env' (allScalars env tass))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       cq <- asks _condQualsGen
-      addQuals u (cq (env, allScalars env tass))
+      addQuals u (cq env (allScalars env tass))
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       mq <- asks _matchQualsGen
-      addQuals u (mq (env, allPotentialScrutinees env tass))
+      addQuals u (mq env (allPotentialScrutinees env tass))
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@

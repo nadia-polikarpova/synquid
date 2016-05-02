@@ -268,12 +268,8 @@ substituteInType subst AnyT = AnyT
       
 -- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: Id -> Id -> RType -> RType -> RType
-renameVar old new (ScalarT b _)       t = renameVarFml old (Var (toSort b) new) t
+renameVar old new (ScalarT b _)       t = substituteInType (Map.singleton old (Var (toSort b) new)) t
 renameVar old new _                   t = t -- function arguments cannot occur in types (and AnyT is assumed to be function)
-
--- | 'renameVarFml' @old new typ@: rename all occurrences of @old@ in @typ@ into @new@ (represented as a formula)
-renameVarFml :: Id -> Formula -> RType -> RType
-renameVarFml old new = substituteInType (Map.singleton old new)
     
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
@@ -303,6 +299,8 @@ data PredSig = PredSig {
   predSigArgSorts :: [Sort],
   predSigResSort :: Sort
 } deriving (Eq, Ord)
+
+nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Var argSorts deBrujns)
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
