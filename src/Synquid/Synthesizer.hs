@@ -104,20 +104,35 @@ extractMatchQGen (dtName, (DatatypeDef tParams _ ctors _)) env vars = concatMap 
 -- | 'extractQGenFromType' @positive t@: qualifier generator that extracts all conjuncts from refinements of @t@ and treats their free variables as parameters;
 -- extracts from positively or negatively occurring refinements depending on @positive@
 extractQGenFromType :: Bool -> RType -> Environment -> [Formula] -> [Formula]
-extractQGenFromType positive t = extractQGenFromType' positive t
+extractQGenFromType positive t env vars = extractQGenFromType' positive t
   where
     sortInst =  Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
     
-    extractQGenFromType' :: Bool -> RType -> Environment -> [Formula] -> [Formula]
-    extractQGenFromType' False  (ScalarT _ _) _ _ = []
-    extractQGenFromType' True   (ScalarT baseT fml) env vars =
+    extractQGenFromType' :: Bool -> RType -> [Formula]
+    extractQGenFromType' False  (ScalarT _ _) = []
+    extractQGenFromType' True   (ScalarT baseT fml) =
       let
-        extractFromBase (DatatypeT _ tArgs pArgs) = concatMap (\t -> extractQGenFromType' True t env vars) tArgs
+        -- Datatype: extract from tArgs and pArgs
+        extractFromBase (DatatypeT dtName tArgs pArgs) =
+          let (DatatypeDef _ pParams _ _) = (env ^. datatypes) Map.! dtName
+          in concatMap (extractQGenFromType' True) tArgs ++ concat (zipWith extractQGenFromPred pParams pArgs)
+        -- Otherwise: no formulas
         extractFromBase _ = []
         fmls = Set.toList $ conjunctsOf (sortSubstituteFml sortInst fml)        
       in concatMap (\q -> instantiateTypeQualifier q env vars) fmls ++ extractFromBase baseT
-    extractQGenFromType' False  (FunctionT _ tArg tRes) env vars = extractQGenFromType' True tArg env vars ++ extractQGenFromType' False tRes env vars
-    extractQGenFromType' True   (FunctionT _ tArg tRes) env vars = extractQGenFromType' True tRes env vars
+    extractQGenFromType' False  (FunctionT _ tArg tRes) = extractQGenFromType' True tArg ++ extractQGenFromType' False tRes
+    extractQGenFromType' True   (FunctionT _ tArg tRes) = extractQGenFromType' True tRes
+    
+    -- Extract type qualifiers from a predicate argument of a datatype:
+    -- if the predicate has parameters, turn in to a type qualifier where the last parameter is replaced with _v
+    extractQGenFromPred (PredSig _ argSorts _) fml = 
+      if null argSorts
+        then []
+        else let
+              lastSort = last argSorts
+              lastParam = deBrujns !! (length argSorts - 1)
+              fmls = Set.toList $ conjunctsOf $ sortSubstituteFml sortInst $ substitute (Map.singleton lastParam (Var lastSort valueVarName)) fml        
+             in concatMap (\q -> instantiateTypeQualifier q env vars) fmls
     
 -- | Extract conditional qualifiers from the types of Boolean functions    
 extractCondFromType :: RType -> Environment -> [Formula] -> [Formula]
@@ -130,30 +145,29 @@ extractCondFromType t@(FunctionT _ _ _) env vars = case lastType t of
   _ -> []
 extractCondFromType _ _ _ = []
 
-extractBoundPreds :: RSchema -> Environment -> [Formula] -> [Formula]
-extractBoundPreds = extractBoundPreds' []
-  where
-    extractBoundPreds' :: [Id] -> RSchema -> Environment -> [Formula] -> [Formula]
-    extractBoundPreds' tvs (ForallT a sch) env vars = extractBoundPreds' (a:tvs) sch env vars
-    extractBoundPreds' tvs (ForallP sig sch) env vars = let
-        sortInst = Map.fromList $ zip tvs (map VarS distinctTypeVars)
-        resolvedNominal = allSubstitutions env (sortSubstituteFml sortInst (nominalPredApp sig)) [] [] -- no actual substitution happening, we do this to resolve the formula
-      in resolvedNominal ++ extractBoundPreds' tvs sch env vars
-    extractBoundPreds' _ _ _ _ = []
-
 extractPredQGenFromType :: RType -> Environment -> [Formula] -> [Formula]
 extractPredQGenFromType t env vars = extractPredQGenFromType' t
   where
     sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
     
     isParam (Var _ name) = take 1 name == dontCare
+    isParam _ = False
     
-    (actualParams, actualsVars) = partition isParam vars
+    (actualParams, actualVars) = partition isParam vars
     
-    extractFromRefinement fml = 
-      let fml' = sortSubstituteFml sortInst fml
-      in -- filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
-          allSubstitutions env fml' (map varName $ Set.toList $ varsOf fml') vars
+    -- Extract predicate qualifiers from a type refinement:
+    -- only allow replacing _v with the last parameter of the refinement
+    extractFromRefinement fml = if null actualParams 
+      then []
+      else
+        let
+          formals = map varName $ Set.toList $ varsOf fml
+          fml' = sortSubstituteFml sortInst $ substitute (Map.singleton valueVarName (last actualParams)) fml -- Allow mapping _v only to the last parameter of the predicate
+          fmls = Set.toList $ conjunctsOf $ fml'
+          extractFromConjunct c = 
+            filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
+            allSubstitutions env c formals (init actualParams ++ actualVars)
+        in concatMap extractFromConjunct fmls
     
     extractPredQGenFromType' :: RType -> [Formula]
     extractPredQGenFromType' (ScalarT (DatatypeT dtName tArgs pArgs) fml) =
@@ -161,7 +175,7 @@ extractPredQGenFromType t env vars = extractPredQGenFromType' t
             let
               pArg' = sortSubstituteFml sortInst pArg
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
-            in allSubstitutions env pArg' (map varName formalVars) actualsVars -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
+            in allSubstitutions env pArg' (map varName formalVars) actualVars -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
     extractPredQGenFromType' (FunctionT _ tArg tRes) = extractPredQGenFromType' tArg ++ extractPredQGenFromType' tRes

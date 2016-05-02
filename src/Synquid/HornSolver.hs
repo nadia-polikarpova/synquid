@@ -183,9 +183,9 @@ strengthen quals extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize quals sol unknowns
     writeLog 2 (text "Instantiated axioms for" <+> pretty fml $+$ commaSep (map pretty $ Set.toList assumptions))
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) (usedLhsQuals `Set.union` assumptions) rhs -- all minimal valid valuations of the whole antecedent
-    writeLog 2 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))
+    writeLog 2 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))    
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
-    let allSolutions = concat $ Map.elems splitting
+    let allSolutions = concat $ Map.elems splitting            
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
         (do
@@ -224,9 +224,15 @@ strengthen quals extractAssumptions fml@(Binary Implies lhs rhs) sol = do
       guard $ isValidsplit unknownsVal lhsVal
       Map.fromListWith Set.union <$> zipWithM unsubst unknownsList unknownsVal
 
-    -- | Given an unknown @[subst]u@ and its valuation @quals@, get all possible valuations of @u@
+    -- | Given an unknown @[subst]u@ and its valuation @val@, get all possible valuations of @u@
     unsubst :: Formula -> Set Formula -> [(Id, Set Formula)]
-    unsubst u@(Unknown s name) quals = nub $ map (\inv -> (name, Set.map (substitute inv) quals)) (inverses s)
+    unsubst u@(Unknown s name) val = do
+      option <- mapM (unsubstQual u) (Set.toList val)
+      return (name, Set.fromList option)
+    
+    unsubstQual :: Formula -> Formula -> [Formula]
+    unsubstQual u@(Unknown s name) qual = [q | q <- lookupQuals quals qualifiers u, substitute s q == qual]
+    -- nub $ map (\inv -> (name, Set.map (substitute inv) quals)) (inverses s)
         
     -- | All inverses of a substitution, assuming its range only contains unknowns; 
     -- duplicates in the range result in multiple inverses
