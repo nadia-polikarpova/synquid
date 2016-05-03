@@ -50,17 +50,17 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
       
     -- | Qualifier generator for conditionals
     condQuals :: QualsGen
-    condQuals env vars = toSpace $ concat $
+    condQuals env vars = toSpace Nothing $ concat $
       map (\q -> instantiateCondQualifier q env vars) cquals 
       ++ map (\t -> extractCondFromType t env vars) (map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal)
 
     -- | Qualifier generator for match scrutinees
     matchQuals :: QualsGen
-    matchQuals env vars = toSpace $ concatMap (\dt -> extractMatchQGen dt env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
+    matchQuals env vars = toSpace (Just 1) $ concatMap (\dt -> extractMatchQGen dt env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
 
     -- | Qualifier generator for types
     typeQuals :: QualsGen
-    typeQuals env vars = toSpace $ concat $
+    typeQuals env vars = toSpace Nothing $ concat $
         [ extractQGenFromType False (toMonotype $ gSpec goal) env vars, 
           extractQGenFromType True (toMonotype $ gSpec goal) env vars ] -- extract from spec: both positive and negative
         ++ map (\q -> instantiateTypeQualifier q env vars) tquals -- extract from given qualifiers
@@ -68,7 +68,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
         
     -- | Qualifier generator for bound predicates
     predQuals :: QualsGen
-    predQuals env vars = toSpace $ concatMap
+    predQuals env vars = toSpace Nothing $ concatMap
       (\sch -> extractPredQGenFromType (toMonotype sch) env vars) (gSpec goal : (Map.elems $ allSymbols $ gEnvironment goal))
 
 {- Qualifier Generators -}

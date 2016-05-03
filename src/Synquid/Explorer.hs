@@ -136,7 +136,7 @@ generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (genera
       cUnknown <- Unknown Map.empty <$> freshId "u"
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
-      cond <- conjunction <$> currentValuation cUnknown
+      cond <- conjunction <$> weakestValuation cUnknown
       return (cond, pThen)
 
 -- | Proceed after solution @pThen@ has been found under assumption @cond@
@@ -215,7 +215,7 @@ generateFirstCase env scrVar pScrutinee t consName = do
               deadUnknown <- Unknown Map.empty <$> freshId "u"
               addConstraint $ WellFormedCond env deadUnknown
               err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
-              deadValuation <- currentValuation deadUnknown
+              deadValuation <- weakestValuation deadUnknown
               return (err, conjunction deadValuation)) 
             (\(err, deadCond) -> return $ (Case consName binders err, deadCond)) 
             (do
@@ -259,9 +259,9 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
       addConstraint $ WellFormedCond env condUnknown
       cut $ do
         p0 <- generateEOrError (addAssumption matchUnknown . addAssumption condUnknown $ env) t
-        matchValuation <- Set.toList <$> currentValuation matchUnknown
+        matchValuation <- Set.toList <$> weakestValuation matchUnknown
         let matchVars = Set.toList $ Set.unions (map varsOf matchValuation)
-        condValuation <- currentValuation condUnknown
+        condValuation <- weakestValuation condUnknown
         let badError = isError p0 && length matchVars /= 1 -- null matchValuation && (not $ Set.null condValuation) -- Have we abduced a nontrivial vacuousness condition that is not a match branch?
         writeLog 2 $ text "Match valuation" <+> pretty matchValuation <+> if badError then text ": discarding error" else empty
         guard $ not badError -- Such vacuousness conditions are not productive (do not add to the environment assumptions and can be discovered over and over infinitely)        
@@ -550,14 +550,19 @@ freshId = runInSolver . TCSolver.freshId
 freshVar :: MonadHorn s => Environment -> String -> Explorer s String
 freshVar env prefix = runInSolver $ TCSolver.freshVar env prefix
 
-currentValuation :: MonadHorn s => Formula -> Explorer s (Set Formula)
-currentValuation u = do
-  results <- runInSolver $ currentValuations u
-  msum $ map pickCandidiate (zip [0..] results)
+-- | Return the current valuation of @u@;
+-- in case there are multiple solutions,
+-- order them from weakest to strongest in terms of valuation of @u@ and split the computation
+weakestValuation :: MonadHorn s => Formula -> Explorer s Valuation
+weakestValuation u = do
+  cands <- use (typingState . candidates)
+  let candGroups = groupBy (\c1 c2 -> val c1 == val c2) $ sortBy (\c1 c2 -> setCompare (val c1) (val c2)) cands
+  msum $ map pickCandidiate candGroups
   where
-    pickCandidiate (i, res)  = do
-      typingState . candidates %= take 1 . drop i
-      return res
+    val c = valuation (solution c) u
+    pickCandidiate cands' = do
+      typingState . candidates .= cands'
+      return $ val (head cands')    
 
 inContext ctx f = local (over (_1 . context) (. ctx)) f
     

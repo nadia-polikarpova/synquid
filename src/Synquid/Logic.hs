@@ -6,6 +6,7 @@ module Synquid.Logic where
 import Synquid.Util
 
 import Data.Tuple
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -333,7 +334,10 @@ makeLenses ''QSpace
 
 emptyQSpace = QSpace [] 0
 
-toSpace quals = QSpace quals (length quals)
+toSpace mbN quals = let quals' = nub quals in 
+  case mbN of
+    Nothing -> QSpace quals' (length quals')
+    Just n -> QSpace quals' n
   
 -- | Mapping from unknowns to their search spaces
 type QMap = Map Id QSpace

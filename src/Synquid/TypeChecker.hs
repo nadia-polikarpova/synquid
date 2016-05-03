@@ -160,7 +160,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
-    cond <- conjunction <$> currentValuation cUnknown
+    cond <- conjunction <$> weakestValuation cUnknown
     pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
     return $ Program (PIf pCond pThen pElse) t
@@ -233,7 +233,7 @@ reconstructECond env typ impl = if hasUnknownAssumptions
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     (env', p) <- reconstructETopLevel (addAssumption cUnknown env) typ impl
-    cond <- conjunction <$> currentValuation cUnknown
+    cond <- conjunction <$> weakestValuation cUnknown
     let env'' = over assumptions (Set.delete cUnknown . Set.insert cond) env' -- Replace @cUnknown@ with its valuation: it's not allowed to be strngthened anymore
     return (env'', cond, p)
   where

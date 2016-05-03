@@ -25,7 +25,6 @@ module Synquid.TypeConstraintSolver (
   currentAssignment,
   finalizeType,
   finalizeProgram,
-  currentValuations,
   initEnv,
   allScalars
 ) where
@@ -558,10 +557,6 @@ finalizeProgram p = do
   pass <- use predAssignment
   sol <- uses candidates (solution . head)
   return $ fmap (typeApplySolution sol . typeSubstitutePred pass . typeSubstitute tass) p
-  
--- | Current valuation of a predicate unknown  
-currentValuations :: Monad s => Formula -> TCSolver s [Set Formula]
-currentValuations u = uses candidates (map $ flip valuation u . solution)  
 
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    
