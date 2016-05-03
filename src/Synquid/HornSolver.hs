@@ -190,7 +190,7 @@ strengthen quals extractAssumptions fml@(Binary Implies lhs rhs) sol = do
       (ifM (asks agressivePrune)
         (do
           let pruneAssumptions = if rhs == ffalse then Set.empty else usedLhsQuals -- TODO: is this dangerous??? the result might not cover the pruned alternatives in a different context!
-          valuations' <- pruneValuations pruneAssumptions (Map.keys splitting)
+          valuations' <- pruneValuations (conjunction pruneAssumptions) (Map.keys splitting)
           writeLog 2 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
@@ -300,8 +300,14 @@ pruneSolutions unknowns = let isSubsumed sol sols = anyM (\s -> allM
   in prune isSubsumed
   
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another pValuation in @vals@   
-pruneValuations :: MonadSMT s => Set Formula -> [Valuation] -> FixPointSolver s [Valuation] 
-pruneValuations assumptions = let isSubsumed val vals = let fml = conjunction (val `Set.union` assumptions) in anyM (\v -> isValidFml $ fml |=>| conjunction v) vals
+pruneValuations :: MonadSMT s => Formula -> [Valuation] -> FixPointSolver s [Valuation] 
+pruneValuations assumption = 
+  let 
+      strictlyImplies l r = do
+        res1 <- isValidFml $ (assumption |&| l) |=>| r
+        res2 <- isValidFml $ (assumption |&| r) |=>| l
+        return $ res1 && not res2
+      isSubsumed val vals = anyM (\v -> strictlyImplies (conjunction val) (conjunction v)) vals
   in prune isSubsumed
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
