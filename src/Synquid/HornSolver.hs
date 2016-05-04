@@ -312,11 +312,12 @@ pruneQSpace qSpace = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |
   
 -- | 'prune' @isSubsumed xs@ : prune all elements of @xs@ subsumed by another element according to @isSubsumed@  
 prune :: MonadSMT s => (a -> [a] -> FixPointSolver s Bool) -> [a] -> FixPointSolver s [a]
-prune isSubsumed xs = prune' [] xs
+prune _ [] = return []
+prune isSubsumed (x:xs) = prune' [] x xs
   where
-    prune' seen [] = return seen
-    prune' seen (x:xs) = ifM (isSubsumed x seen) (prune' seen xs) (prune' (x : seen) xs)
-              
+    prune' lefts x [] = ifM (isSubsumed x lefts) (return lefts) (return $ x:lefts)
+    prune' lefts x rights@(y:ys) = ifM (isSubsumed x (lefts ++ rights)) (prune' lefts y ys) (prune' (lefts ++ [x]) y ys)
+    
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: MonadSMT s => Formula -> FixPointSolver s Bool
 isValidFml = lift . isValid
