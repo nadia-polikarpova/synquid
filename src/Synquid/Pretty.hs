@@ -212,7 +212,7 @@ instance Pretty Solution where
   pretty = hMapDoc text pretty
 
 instance Pretty QSpace where
-  pretty space = braces $ commaSep $ map pretty $ view qualifiers space
+  pretty space = (braces $ commaSep $ map pretty $ view qualifiers space) <+> hsep (map pretty $ view equivQualifiers space)
 
 instance Show QSpace where
   show = show . pretty
