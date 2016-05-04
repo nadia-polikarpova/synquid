@@ -327,18 +327,17 @@ uDNF = dnf' . negationNF
 -- | Search space for valuations of a single unknown
 data QSpace = QSpace {
     _qualifiers :: [Formula],         -- ^ Qualifiers
-    _equivQualifiers :: [[Formula]],  -- ^ For each qualifier, known semantic duplicates
     _maxCount :: Int                  -- ^ Maximum number of qualifiers in a valuation
   } deriving (Eq, Ord)
 
 makeLenses ''QSpace  
 
-emptyQSpace = QSpace [] [] 0
+emptyQSpace = QSpace [] 0
 
 toSpace mbN quals = let quals' = nub quals in 
   case mbN of
-    Nothing -> QSpace quals' [] (length quals')
-    Just n -> QSpace quals' [] n
+    Nothing -> QSpace quals' (length quals')
+    Just n -> QSpace quals' n
   
 -- | Mapping from unknowns to their search spaces
 type QMap = Map Id QSpace
@@ -349,14 +348,10 @@ lookupQuals qmap g (Unknown _ u) = case Map.lookup u qmap of
   Just qs -> view g qs
   Nothing -> error $ unwords ["lookupQuals: missing qualifiers for unknown", u]
   
-getAllQuals :: QMap -> Formula -> [Formula]  
-getAllQuals qmap u = lookupQuals qmap qualifiers u ++ concat (lookupQuals qmap equivQualifiers u)
-  
-lookupQualsSubst :: Bool -> QMap -> Formula -> [Formula]
-lookupQualsSubst redundant qmap u@(Unknown s _) = let quals = if redundant then getAllQuals qmap u else lookupQuals qmap qualifiers u
-  in concatMap go $ map (substitute s) quals
+lookupQualsSubst :: QMap -> Formula -> [Formula]
+lookupQualsSubst qmap u@(Unknown s _) = concatMap go $ map (substitute s) (lookupQuals qmap qualifiers u)
   where
-    go u@(Unknown _ _) = lookupQualsSubst redundant qmap u
+    go u@(Unknown _ _) = lookupQualsSubst qmap u
     go fml = [fml]
     
 type ExtractAssumptions = Formula -> Set Formula
