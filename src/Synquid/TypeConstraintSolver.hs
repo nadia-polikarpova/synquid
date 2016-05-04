@@ -424,7 +424,7 @@ embedding env vars measures = do
 potentialVars :: QMap -> Formula -> Set Id
 potentialVars qmap fml = Set.map varName $ Set.unions (varsOf fml : map (uVars qmap) (Set.toList $ unknownsOf fml))
   where
-    uVars qmap u@(Unknown subst name) = Set.unions (map (varsOf . substitute subst) (lookupQuals qmap qualifiers u)) -- TODO: should we use redundant qualifiers? Unlikely to have different variables
+    uVars qmap u@(Unknown subst name) = Set.unions (map (varsOf . substitute subst) (lookupQuals qmap qualifiers u))
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> TCSolver s String

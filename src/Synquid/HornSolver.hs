@@ -201,7 +201,7 @@ strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     unknowns = unknownsOf lhs
     knownConjuncts = conjunctsOf lhs Set.\\ unknowns
     unknownsList = Set.toList unknowns
-    lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst False qmap) unknowns   -- available qualifiers for the whole antecedent
+    lhsQuals = setConcatMap (Set.fromList . lookupQualsSubst qmap) unknowns   -- available qualifiers for the whole antecedent
     usedLhsQuals = setConcatMap (valuation sol) unknowns `Set.union` knownConjuncts      -- already used qualifiers for the whole antecedent
     rhsVars = Set.map varName $ varsOf rhs
     assumptions = setConcatMap extractAssumptions lhsQuals `Set.union`
@@ -210,7 +210,7 @@ strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
         
       -- | All possible additional valuations of @u@ that are subsets of $lhsVal@.
     singleUnknownCandidates lhsVal u = let           
-          qs = lookupQualsSubst True qmap u
+          qs = lookupQualsSubst qmap u
           max = lookupQuals qmap maxCount u
           used = valuation sol u
           n = Set.size used
@@ -231,19 +231,7 @@ strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
       return (name, Set.fromList option)
     
     unsubstQual :: Formula -> Formula -> [Formula]
-    unsubstQual u@(Unknown s name) qual = 
-      let 
-        primaryQualifiers = lookupQuals qmap qualifiers u
-        equivClasses = Map.fromList $ zip primaryQualifiers (lookupQuals qmap equivQualifiers u)
-      in [q | q <- primaryQualifiers, substitute s q == qual || any (\q' -> substitute s q' == qual) (equivClasses Map.! q)]
-    -- nub $ map (\inv -> (name, Set.map (substitute inv) qmap)) (inverses s)
-        
-    -- -- | All inverses of a substitution, assuming its range only contains unknowns; 
-    -- -- duplicates in the range result in multiple inverses
-    -- inverses :: Substitution -> [Substitution]
-    -- inverses s = let pairs = [(y, Var b x) | (x, Var b y) <- Map.toList s] in
-                 -- let byKey = groupBy ((==) `on` fst) . sortBy (compare `on` fst) $ pairs in
-                 -- map Map.fromList $ sequence byKey    
+    unsubstQual u@(Unknown s name) qual = [q | q <- lookupQuals qmap qualifiers u, substitute s q == qual]
           
 strengthen _ _ fml _ = error $ unwords ["strengthen: encountered ill-formed constraint", show fml]
 
@@ -300,52 +288,34 @@ filterSubsets check n = go [] [Set.empty]
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
 pruneSolutions :: MonadSMT s => [Formula] -> [Solution] -> FixPointSolver s [Solution]
 pruneSolutions unknowns solutions = 
-  let isSubsumed sol sols = findM (\s -> allM (\u -> isValidFml $ (conjunction $ valuation sol u) |=>| (conjunction $ valuation s u)) unknowns) sols
-  in Map.keys <$> prune isSubsumed solutions
+  let isSubsumed sol sols = anyM (\s -> allM (\u -> isValidFml $ (conjunction $ valuation sol u) |=>| (conjunction $ valuation s u)) unknowns) sols
+  in prune isSubsumed solutions
   
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another pValuation in @vals@   
 pruneValuations :: MonadSMT s => Formula -> [Valuation] -> FixPointSolver s [Valuation] 
 pruneValuations assumption vals = 
   let 
-      -- strictlyImplies l r = do
-        -- res1 <- isValidFml $ (assumption |&| l) |=>| r
-        -- res2 <- isValidFml $ (assumption |&| r) |=>| l
-        -- return $ res1 && not res2
-      -- isSubsumed val vals = findM (\v -> strictlyImplies (conjunction val) (conjunction v)) vals
-      isSubsumed val vals = findM (\v -> isValidFml $ (assumption |&| conjunction val) |=>| conjunction v) vals      
-  in Map.keys <$> prune isSubsumed vals
+      strictlyImplies l r = do
+        res1 <- isValidFml $ (assumption |&| l) |=>| r
+        res2 <- isValidFml $ (assumption |&| r) |=>| l
+        return $ res1 && not res2
+      isSubsumed val vals = anyM (\v -> strictlyImplies (conjunction val) (conjunction v)) vals
+  in prune isSubsumed vals
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
 pruneQSpace :: MonadSMT s => QSpace -> FixPointSolver s QSpace 
-pruneQSpace qSpace = let isSubsumed qual quals = findM (\q -> isValidFml $ qual |<=>| q) quals
+pruneQSpace qSpace = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
   in do
     quals' <- filterM (\q -> ifM (isValidFml q) (return False) (not <$> isValidFml (fnot q))) (qSpace ^. qualifiers) 
-    equivalnceClasses <- prune isSubsumed quals'
-    return $ set qualifiers (Map.keys equivalnceClasses) . set equivQualifiers (Map.elems equivalnceClasses) $ qSpace
+    quals <- prune isSubsumed quals'
+    return $ set qualifiers quals qSpace
   
 -- | 'prune' @isSubsumed xs@ : prune all elements of @xs@ subsumed by another element according to @isSubsumed@  
-prune :: (MonadSMT s, Ord a) => (a -> [a] -> FixPointSolver s (Maybe a)) -> [a] -> FixPointSolver s (Map a [a])
-prune isSubsumed xs = prune' Map.empty xs
+prune :: MonadSMT s => (a -> [a] -> FixPointSolver s Bool) -> [a] -> FixPointSolver s [a]
+prune isSubsumed xs = prune' [] xs
   where
     prune' seen [] = return seen
-    prune' seen (x:xs) = do
-      mbZ <- isSubsumed x (Map.keys seen)
-      case mbZ of
-        Nothing -> prune' (Map.insert x [] seen) xs
-        Just z -> prune' (Map.insertWith (++) z [x] seen) xs 
--- prune _ [] = return Map.empty
--- prune isSubsumed (x:xs) = prune' Map.empty x xs
-  -- where
-    -- prune' lefts x [] = do
-      -- mbZ <- isSubsumed x (Map.keys lefts)
-      -- case mbZ of
-        -- Nothing -> return $ Map.insert x [] lefts
-        -- Just z -> return $ Map.insertWith (++) z [x] lefts        
-    -- prune' lefts x rights@(y:ys) = do
-      -- mbZ <- isSubsumed x (Map.keys lefts ++ rights)
-      -- case mbZ of
-        -- Nothing -> prune' (Map.insert x [] lefts) y ys
-        -- Just z -> prune' (Map.insertWith (++) z [x] lefts) y ys
+    prune' seen (x:xs) = ifM (isSubsumed x seen) (prune' seen xs) (prune' (x : seen) xs)
               
 -- | 'isValid' lifted to FixPointSolver      
 isValidFml :: MonadSMT s => Formula -> FixPointSolver s Bool
