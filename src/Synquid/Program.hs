@@ -49,8 +49,8 @@ fromSort (VarS name) = ScalarT (TypeVarT name) ftrue
 fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) ftrue -- TODO: what to do with pArgs?
 fromSort AnyS = AnyT
 
-unifySorts :: [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
-unifySorts = unifySorts' Map.empty
+unifySorts :: Set Id -> [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
+unifySorts boundTvs = unifySorts' Map.empty
   where
     unifySorts' subst [] []                                 
       = Right subst
@@ -64,15 +64,17 @@ unifySorts = unifySorts' Map.empty
                 then unifySorts' subst (args ++ xs) (args' ++ ys) 
                 else error $ unwords ["unifySorts: different number of arguments for datatype", name, show (length args), "and", show (length args')]
           else Left (DataS name [], DataS name' [])
-    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys
+    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys -- TODO: do we still need these?
     unifySorts' subst (_ : xs) (AnyS : ys) = unifySorts' subst xs ys
     unifySorts' subst (VarS x : xs) (y : ys)                 
+      | not (Set.member x boundTvs)
       = case Map.lookup x subst of
-          Just s -> unifySorts' subst (s : xs) (y : ys)
-          Nothing -> if x `Set.member` typeVarsOf (fromSort y) 
-            then Left (VarS x, y) 
-            else unifySorts' (Map.insert x y subst) xs ys
-    unifySorts' subst (x : xs) (VarS y : ys)                 
+            Just s -> unifySorts' subst (s : xs) (y : ys)
+            Nothing -> if x `Set.member` typeVarsOf (fromSort y) 
+              then Left (VarS x, y) 
+              else unifySorts' (Map.insert x y subst) xs ys
+    unifySorts' subst (x : xs) (VarS y : ys)
+      | not (Set.member y boundTvs)
       = unifySorts' subst (VarS y : ys) (x:xs)
     unifySorts' subst (x: _) (y: _)                 
       = Left (x, y)
@@ -118,19 +120,35 @@ isVarRefinemnt _ = False
 data SchemaSkeleton r = 
   Monotype (TypeSkeleton r) |
   ForallT Id (SchemaSkeleton r) |       -- Type-polymorphic
-  ForallP Id [Sort] (SchemaSkeleton r)  -- Predicate-polymorphic
+  ForallP PredSig (SchemaSkeleton r)    -- Predicate-polymorphic
   deriving (Eq, Ord)
   
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t
 toMonotype (ForallT _ t) = toMonotype t
-toMonotype (ForallP _ _ t) = toMonotype t
+toMonotype (ForallP _ t) = toMonotype t
+
+boundVarsOf :: SchemaSkeleton r -> [Id]
+boundVarsOf (ForallT a sch) = a : boundVarsOf sch
+boundVarsOf _ = []
+
+-- | Building types
+bool = ScalarT BoolT  
+bool_ = bool ()
+boolAll = bool ftrue
+
+int = ScalarT IntT
+int_ = int ()
+intAll = int ftrue
+nat = int (valInt |>=| IntLit 0)
+pos = int (valInt |>| IntLit 0)
+
+vart n = ScalarT (TypeVarT n)
+vart_ n = vart n ()
+vartAll n = vart n ftrue
   
 -- | Mapping from type variables to types
 type TypeSubstitution = Map Id RType
-
--- Mapping from type variables to sorts
-type SortSubstitution = Map Id Sort
 
 asSortSubst :: TypeSubstitution -> SortSubstitution
 asSortSubst = Map.map (toSort . baseTypeOf)
@@ -152,31 +170,15 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubst
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
 typeSubstitute _ AnyT = AnyT
 
+noncaptureTypeSubst :: [Id] -> [RType] -> RType -> RType  
+noncaptureTypeSubst tVars tArgs t =
+  let tFresh = typeSubstitute (Map.fromList $ zip tVars (map vartAll distinctTypeVars)) t
+  in typeSubstitute (Map.fromList $ zip distinctTypeVars tArgs) tFresh  
+
 schemaSubstitute :: TypeSubstitution -> RSchema -> RSchema
 schemaSubstitute tass (Monotype t) = Monotype $ typeSubstitute tass t
 schemaSubstitute tass (ForallT a sch) = ForallT a $ schemaSubstitute (Map.delete a tass) sch
-schemaSubstitute tass (ForallP p sorts sch) = ForallP p sorts $ schemaSubstitute tass sch
-
-sortSubstituteFml :: SortSubstitution -> Formula -> Formula
-sortSubstituteFml subst fml = case fml of 
-  SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
-  Var s name -> Var (sortSubstitute subst s) name
-  Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
-  Unary op e -> Unary op (sortSubstituteFml subst e)
-  Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
-  Ite c l r -> Ite (sortSubstituteFml subst c) (sortSubstituteFml subst l) (sortSubstituteFml subst r)
-  Pred s name es -> Pred (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
-  Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)  
-  All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
-  _ -> fml
-  
-sortSubstitute :: SortSubstitution -> Sort -> Sort
-sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
-  Just s' -> sortSubstitute subst s'
-  Nothing -> s
-sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
-sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
-sortSubstitute _ s = s
+schemaSubstitute tass (ForallP sig sch) = ForallP sig $ schemaSubstitute tass sch
 
 typeSubstitutePred :: Substitution -> RType -> RType
 typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
@@ -254,7 +256,7 @@ addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinemen
 
 addRefinementToLastSch (Monotype t) fml = Monotype $ addRefinementToLast t fml
 addRefinementToLastSch (ForallT a sch) fml = ForallT a $ addRefinementToLastSch sch fml
-addRefinementToLastSch (ForallP p sorts sch) fml = ForallP p sorts $ addRefinementToLastSch sch fml
+addRefinementToLastSch (ForallP sig sch) fml = ForallP sig $ addRefinementToLastSch sch fml
 
 -- | Apply variable substitution in all formulas inside a type
 substituteInType :: Substitution -> RType -> RType
@@ -266,12 +268,8 @@ substituteInType subst AnyT = AnyT
       
 -- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: Id -> Id -> RType -> RType -> RType
-renameVar old new (ScalarT b _)       t = renameVarFml old (Var (toSort b) new) t
+renameVar old new (ScalarT b _)       t = substituteInType (Map.singleton old (Var (toSort b) new)) t
 renameVar old new _                   t = t -- function arguments cannot occur in types (and AnyT is assumed to be function)
-
--- | 'renameVarFml' @old new typ@: rename all occurrences of @old@ in @typ@ into @new@ (represented as a formula)
-renameVarFml :: Id -> Formula -> RType -> RType
-renameVarFml old new = substituteInType (Map.singleton old new)
     
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection t AnyT = t
@@ -296,12 +294,17 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 typeApplySolution _ AnyT = AnyT
 
 -- | Predicate signature: name and argument sorts  
-data PredSig = PredSig Id [Sort] Sort
-  deriving (Eq, Ord)
+data PredSig = PredSig {
+  predSigName :: Id,
+  predSigArgSorts :: [Sort],
+  predSigResSort :: Sort
+} deriving (Eq, Ord)
+
+nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Var argSorts deBrujns)
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeArgs :: [Id],      -- ^ Type parameters
+  _typeParams :: [Id],    -- ^ Type parameters
   _predArgs :: [PredSig], -- ^ Signatures of predicate parameters
   _constructors :: [Id],  -- ^ Constructor names
   _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
@@ -322,21 +325,6 @@ data MeasureDef = MeasureDef {
 } deriving (Eq, Ord)
 
 makeLenses ''MeasureDef
-
--- | Building types
-bool = ScalarT BoolT  
-bool_ = bool ()
-boolAll = bool ftrue
-
-int = ScalarT IntT
-int_ = int ()
-intAll = int ftrue
-nat = int (valInt |>=| IntLit 0)
-pos = int (valInt |>| IntLit 0)
-
-vart n = ScalarT (TypeVarT n)
-vart_ n = vart n ()
-vartAll n = vart n ftrue
 
 {- Program terms -}    
     
@@ -449,7 +437,7 @@ data Environment = Environment {
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types), indexed by arity
   _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
-  _boundPredicates :: Map Id [Sort],       -- ^ Signatures of bound abstract refinements
+  _boundPredicates :: [PredSig],           -- ^ Argument sorts of bound abstract refinements
   _assumptions :: Set Formula,             -- ^ Unknown assumptions
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
@@ -457,7 +445,7 @@ data Environment = Environment {
   -- | Constant part:
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
-  _globalPredicates :: Map Id [Sort],      -- ^ Signatures of module-level logic functions (measures, predicates) 
+  _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
   _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
@@ -476,7 +464,7 @@ emptyEnv = Environment {
   _symbols = Map.empty,
   _ghosts = Map.empty,
   _boundTypeVars = [],
-  _boundPredicates = Map.empty,
+  _boundPredicates = [],
   _assumptions = Set.empty,
   _shapeConstraints = Map.empty,
   _usedScrutinees = [],
@@ -565,11 +553,11 @@ addGhost name t = over ghosts (Map.insert name t)
 addMeasure :: Id -> MeasureDef -> Environment -> Environment
 addMeasure measureName m = over measures (Map.insert measureName m)
 
-addBoundPredicate :: Id -> [Sort] -> Environment -> Environment
-addBoundPredicate predName argSorts = over boundPredicates (Map.insert predName argSorts)
+addBoundPredicate :: PredSig -> Environment -> Environment
+addBoundPredicate sig = over boundPredicates (sig :)
 
-addGlobalPredicate :: Id -> [Sort] -> Environment -> Environment
-addGlobalPredicate predName argSorts = over globalPredicates (Map.insert predName argSorts)
+addGlobalPredicate :: Id -> Sort -> [Sort] -> Environment -> Environment
+addGlobalPredicate predName resSort argSorts = over globalPredicates (Map.insert predName (resSort : argSorts))
 
 addTypeSynonym :: Id -> [Id] -> RType -> Environment -> Environment
 addTypeSynonym name tvs t = over typeSynonyms (Map.insert name (tvs, t))
@@ -597,7 +585,7 @@ addAssumption f = assumptions %~ Set.insert f
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
-allPredicates env = (env ^. boundPredicates) `Map.union` (env ^. globalPredicates)
+allPredicates env = (Map.fromList $ map (\(PredSig pName argSorts resSort) -> (pName, resSort:argSorts)) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures

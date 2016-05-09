@@ -280,7 +280,7 @@ instance Pretty SSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
     ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
+    ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
 
 instance Show SSchema where
  show = show . pretty
@@ -289,7 +289,7 @@ instance Pretty RSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
     ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP p sorts sch' -> hlAngles (text p <+> operator "::" <+> hsep (map (\s -> pretty s <+> operator "->") sorts) <+> pretty BoolS) <+> operator "." <+> pretty sch'
+    ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
 
 instance Show RSchema where
   show = show . pretty
@@ -353,6 +353,16 @@ prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
 
 instance Pretty Environment where
   pretty env = prettyBindings env <+> prettyGhosts env <+> prettyAssumptions env
+  
+prettySortConstraint :: SortConstraint -> Doc
+prettySortConstraint (SameSort sl sr) = pretty sl <+> text "=" <+> pretty sr
+prettySortConstraint (IsOrd s) = text "Ord" <+> pretty s
+
+instance Pretty SortConstraint where
+  pretty = prettySortConstraint
+
+instance Show SortConstraint where
+  show = show . pretty
 
 prettyConstraint :: Constraint -> Doc
 prettyConstraint (Subtype env t1 t2 False) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2

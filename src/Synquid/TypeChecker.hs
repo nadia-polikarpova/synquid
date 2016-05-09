@@ -52,7 +52,7 @@ reconstruct eParams tParams goal = do
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth)
-reconstructTopLevel (Goal funName env (ForallP pName pSorts sch) impl depth) = reconstructTopLevel (Goal funName (addBoundPredicate pName pSorts env) sch impl depth)
+reconstructTopLevel (Goal funName env (ForallP sig sch) impl depth) = reconstructTopLevel (Goal funName (addBoundPredicate sig env) sch impl depth)
 reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth) = local (set (_1 . auxDepth) depth) $ reconstructFix
   where
     reconstructFix = do
@@ -62,7 +62,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
       predPolymorphic <- asks $ _predPolyRecursion . fst
       let tvs = env ^. boundTypeVars
       let pvs = env ^. boundPredicates      
-      let predGeneralized sch = if predPolymorphic then foldr (uncurry ForallP) sch (Map.toList pvs) else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function
+      let predGeneralized sch = if predPolymorphic then foldr ForallP sch pvs else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function          
       let typeGeneralized sch = if polymorphic then foldr ForallT sch tvs else sch -- Version of @t'@ generalized in bound type variables of the enclosing function
       
       let env' = foldr (\(f, t) -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t) . (shapeConstraints %~ Map.insert f (shape typ'))) env recCalls
@@ -160,7 +160,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
-    cond <- conjunction <$> currentValuation cUnknown
+    cond <- conjunction <$> weakestValuation cUnknown
     pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
     return $ Program (PIf pCond pThen pElse) t
@@ -233,7 +233,7 @@ reconstructECond env typ impl = if hasUnknownAssumptions
     cUnknown <- Unknown Map.empty <$> freshId "u"
     addConstraint $ WellFormedCond env cUnknown
     (env', p) <- reconstructETopLevel (addAssumption cUnknown env) typ impl
-    cond <- conjunction <$> currentValuation cUnknown
+    cond <- conjunction <$> weakestValuation cUnknown
     let env'' = over assumptions (Set.delete cUnknown . Set.insert cond) env' -- Replace @cUnknown@ with its valuation: it's not allowed to be strngthened anymore
     return (env'', cond, p)
   where
@@ -286,7 +286,7 @@ reconstructE' env typ (PApp iFun iArg) = do
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
-      return (env''', Program (PApp pFun pArg) (renameVarFml x y tRes))
+      return (env''', Program (PApp pFun pArg) (substituteInType (Map.singleton x y) tRes))
   checkE envfinal typ pApp
   return (envfinal, pApp)
   where

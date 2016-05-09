@@ -134,10 +134,10 @@ parseMeasureDecl = do
   where
     parseDefCase = do
       ctor <- parseTypeName
-      args <- many parseIdentifier
+      binders <- many parseIdentifierOrBlank
       reservedOp "->"
       body <- parseFormula
-      return $ MeasureCase ctor args body  
+      return $ MeasureCase ctor binders body  
   
 parsePredDecl :: Parser Declaration
 parsePredDecl = do
@@ -184,10 +184,10 @@ parseSchema = parseForall <|> (Monotype <$> parseType)
 
 parseForall :: Parser RSchema
 parseForall = do
-  (PredSig p argSorts _) <- angles parsePredSig
+  sig <- angles parsePredSig
   dot
   sch <- parseSchema
-  return $ ForallP p argSorts sch
+  return $ ForallP sig sch
 
 parseType :: Parser RType
 parseType = withPos (choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type")
@@ -231,7 +231,7 @@ parseFunctionType = do
   argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
   reservedOp "->"
   returnType <- parseType
-  let argId = maybe ("x" ++ show (arity returnType)) id argIdMb
+  let argId = maybe ("arg" ++ show (arity returnType)) id argIdMb
   return $ FunctionT argId argType returnType
   where
     parseArgName = parseIdentifier <* reservedOp ":"
@@ -329,14 +329,14 @@ parseError = reserved "error" >> return (untyped PErr)
 
 parseFun = do
   reservedOp "\\"
-  x <- parseIdentifier
+  x <- parseIdentifierOrBlank
   reservedOp "."
   body <- parseImpl
   return $ untyped $ PFun x body
 
 parseLet = do
   reserved "let"
-  x <- parseIdentifier
+  x <- parseIdentifierOrBlank
   reservedOp "="
   e1 <- parseImpl
   reserved "in"
@@ -352,7 +352,7 @@ parseMatch = do
   where
     parseCase = do
       ctor <- parseTypeName
-      args <- many parseIdentifier
+      args <- many parseIdentifierOrBlank
       reservedOp "->"
       body <- parseImpl
       return $ Case ctor args body
@@ -403,7 +403,14 @@ parsePredSig = do
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do
   name <- identifier
-  if isUpper $ head name then unexpected ("capitalized " ++ show name) else return name
+  if isUpper $ head name 
+    then unexpected ("capitalized " ++ show name) 
+    else if name == dontCare then unexpected ("blank") else return name
+  
+parseIdentifierOrBlank :: Parser Id
+parseIdentifierOrBlank = try $ do
+  name <- identifier
+  if isUpper $ head name then unexpected ("capitalized " ++ show name) else return name  
 
 parseTypeName :: Parser Id
 parseTypeName = try $ do
