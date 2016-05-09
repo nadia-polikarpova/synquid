@@ -35,7 +35,7 @@ BENCHMARKS = [
     ('List-Map',        []),
     ('List-ZipWith',    []),
     ('List-Zip',        []),
-    ('List-ToNat',      []),
+    ('List-ToNat',      ['-m 0']),
     ('List-Product',    []),
     ('List-ExtractMin',     ['-a=2', '-m 3']),
     ('List-Intersection',   ['-a=2', '-e']),

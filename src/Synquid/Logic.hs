@@ -6,6 +6,7 @@ module Synquid.Logic where
 import Synquid.Util
 
 import Data.Tuple
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -34,6 +35,28 @@ typeVarsOfSort (VarS name) = Set.singleton name
 typeVarsOfSort (DataS _ sArgs) = Set.unions (map typeVarsOfSort sArgs)
 typeVarsOfSort (SetS s) = typeVarsOfSort s
 typeVarsOfSort _ = Set.empty
+
+-- Mapping from type variables to sorts
+type SortSubstitution = Map Id Sort
+  
+sortSubstitute :: SortSubstitution -> Sort -> Sort
+sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
+  Just s' -> sortSubstitute subst s'
+  Nothing -> s
+sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
+sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
+sortSubstitute _ s = s
+
+distinctTypeVars = map (\i -> "A" ++ show i) [0..] 
+
+noncaptureSortSubst :: [Id] -> [Sort] -> Sort -> Sort  
+noncaptureSortSubst sVars sArgs s = 
+  let sFresh = sortSubstitute (Map.fromList $ zip sVars (map VarS distinctTypeVars)) s
+  in sortSubstitute (Map.fromList $ zip distinctTypeVars sArgs) sFresh
+
+-- | Constraints generated during formula resolution
+data SortConstraint = SameSort Sort Sort  -- Two sorts must be the same
+  | IsOrd Sort                            -- Sort must have comparisons
 
 {- Formulas of the refinement logic -}
 
@@ -237,6 +260,24 @@ substitute subst fml = case fml of
     removeId = Map.filterWithKey (\x fml -> not $ isVar fml && varName fml == x)
                   
 deBrujns = map (\i -> dontCare ++ show i) [0..] 
+
+sortSubstituteFml :: SortSubstitution -> Formula -> Formula
+sortSubstituteFml subst fml = case fml of 
+  SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
+  Var s name -> Var (sortSubstitute subst s) name
+  Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
+  Unary op e -> Unary op (sortSubstituteFml subst e)
+  Binary op l r -> Binary op (sortSubstituteFml subst l) (sortSubstituteFml subst r)
+  Ite c l r -> Ite (sortSubstituteFml subst c) (sortSubstituteFml subst l) (sortSubstituteFml subst r)
+  Pred s name es -> Pred (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
+  Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)  
+  All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
+  _ -> fml
+  
+noncaptureSortSubstFml :: [Id] -> [Sort] -> Formula -> Formula  
+noncaptureSortSubstFml sVars sArgs fml = 
+  let fmlFresh = sortSubstituteFml (Map.fromList $ zip sVars (map VarS distinctTypeVars)) fml
+  in sortSubstituteFml (Map.fromList $ zip distinctTypeVars sArgs) fmlFresh  
                   
 substitutePredicate :: Substitution -> Formula -> Formula
 substitutePredicate pSubst fml = case fml of
@@ -285,7 +326,7 @@ uDNF = dnf' . negationNF
 
 -- | Search space for valuations of a single unknown
 data QSpace = QSpace {
-    _qualifiers :: [Formula],         -- ^ Qualifiers 
+    _qualifiers :: [Formula],         -- ^ Qualifiers
     _maxCount :: Int                  -- ^ Maximum number of qualifiers in a valuation
   } deriving (Eq, Ord)
 
@@ -293,21 +334,24 @@ makeLenses ''QSpace
 
 emptyQSpace = QSpace [] 0
 
-toSpace quals = QSpace quals (length quals)
+toSpace mbN quals = let quals' = nub quals in 
+  case mbN of
+    Nothing -> QSpace quals' (length quals')
+    Just n -> QSpace quals' n
   
 -- | Mapping from unknowns to their search spaces
 type QMap = Map Id QSpace
 
--- | 'lookupQuals' @quals g u@: get @g@ component of the search space for unknown @u@ in @quals@
+-- | 'lookupQuals' @qmap g u@: get @g@ component of the search space for unknown @u@ in @qmap@
 lookupQuals :: QMap -> Getter QSpace a -> Formula -> a
-lookupQuals quals g (Unknown _ u) = case Map.lookup u quals of
+lookupQuals qmap g (Unknown _ u) = case Map.lookup u qmap of
   Just qs -> view g qs
   Nothing -> error $ unwords ["lookupQuals: missing qualifiers for unknown", u]
   
 lookupQualsSubst :: QMap -> Formula -> [Formula]
-lookupQualsSubst quals u@(Unknown s _) = concatMap go $ lookupQuals quals (to (over qualifiers (map (substitute s))) . qualifiers) u
+lookupQualsSubst qmap u@(Unknown s _) = concatMap go $ map (substitute s) (lookupQuals qmap qualifiers u)
   where
-    go u@(Unknown _ _) = lookupQualsSubst quals u
+    go u@(Unknown _ _) = lookupQualsSubst qmap u
     go fml = [fml]
     
 type ExtractAssumptions = Formula -> Set Formula

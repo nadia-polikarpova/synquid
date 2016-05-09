@@ -4,7 +4,6 @@
 module Synquid.TypeConstraintSolver (
   TypeError,
   QualsGen,
-  emptyGen,
   TypingParams (..),
   TypingState,
   typingConstraints,
@@ -26,7 +25,6 @@ module Synquid.TypeConstraintSolver (
   currentAssignment,
   finalizeType,
   finalizeProgram,
-  currentValuations,
   initEnv,
   allScalars
 ) where
@@ -36,6 +34,7 @@ import Synquid.Program
 import Synquid.Pretty
 import Synquid.SolverMonad
 import Synquid.Util
+import Synquid.Resolver (addAllVariables)
 
 import Data.Maybe
 import Data.List
@@ -55,18 +54,15 @@ import Debug.Trace
 -- | Type error description
 type TypeError = Doc
 
--- | State space generator (returns a state space for a list of symbols in scope)
-type QualsGen = (Environment, [Formula]) -> QSpace
-
--- | Empty state space generator
-emptyGen = const emptyQSpace
+type QualsGen = Environment -> [Formula] -> QSpace
 
 -- | Parameters of type constraint solving
 data TypingParams = TypingParams {
-  _condQualsGen :: QualsGen,              -- ^ Qualifier generator for conditionals
-  _matchQualsGen :: QualsGen,             -- ^ Qualifier generator for match scrutinees
-  _typeQualsGen :: QualsGen,              -- ^ Qualifier generator for types
-  _tcSolverLogLevel :: Int                -- ^ How verbose logging is  
+  _condQualsGen :: QualsGen,  -- ^ Qualifier generator for conditionals
+  _matchQualsGen :: QualsGen, -- ^ Qualifier generator for match scrutinees
+  _typeQualsGen :: QualsGen,  -- ^ Qualifier generator for types
+  _predQualsGen :: QualsGen,  -- ^ Qualifier generator for bound predicates
+  _tcSolverLogLevel :: Int    -- ^ How verbose logging is  
 }
 
 makeLenses ''TypingParams
@@ -266,10 +262,10 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
       if isScalarType tArg1
         then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True)
         else simplifyConstraint (Subtype env tRes1 tRes2 True)
-simplifyConstraint' _ _ (WellFormed env (ScalarT (DatatypeT name (tArg:tArgs) pArgs) fml))
+simplifyConstraint' _ _ c@(WellFormed env (ScalarT (DatatypeT name tArgs _) fml))
   = do
-      simplifyConstraint (WellFormed env tArg)
-      simplifyConstraint (WellFormed env (ScalarT (DatatypeT name tArgs pArgs) fml))
+      mapM_ (simplifyConstraint . WellFormed env) tArgs
+      simpleConstraints %= (c :)
 simplifyConstraint' _ _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)
@@ -295,9 +291,9 @@ unify env a t = if a `Set.member` typeVarsOf t
     addTypeAssignment a t'
     
 -- Predicate well-formedness: shapeless or simple depending on type variables  
-processPredicate c@(WellFormedPredicate env sorts p) = do
+processPredicate c@(WellFormedPredicate env argSorts p) = do
   tass <- use typeAssignment
-  let typeVars = Set.toList $ Set.unions $ map (typeVarsOf . fromSort) sorts
+  let typeVars = Set.toList $ Set.unions $ map typeVarsOfSort argSorts
   if any (isFreeVariable tass) typeVars
     then do
       writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
@@ -305,15 +301,10 @@ processPredicate c@(WellFormedPredicate env sorts p) = do
     else do                 
       u <- freshId "u"
       addPredAssignment p (Unknown Map.empty u)
-      let sorts' = map (sortSubstitute $ asSortSubst tass) sorts
-      let vars = zipWith Var sorts' deBrujns
-      if null vars
-        then do -- TODO: this is a hack
-          cq <- asks _condQualsGen
-          addQuals u (cq (env, allScalars env tass))
-        else do
-          tq <- asks _typeQualsGen
-          addQuals u (tq (env, last vars : (init vars ++ allScalars env tass)))        
+      let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
+      let vars = zipWith Var argSorts' deBrujns
+      pq <- asks _predQualsGen
+      addQuals u (pq (addAllVariables vars env) (vars ++ allScalars env tass))
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
@@ -327,15 +318,15 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         tass <- use typeAssignment
         pass <- use predAssignment
         qmap <- use qualifierMap
-        let l' = substitutePredicate pass l
-        let r' = substitutePredicate pass r
+        let subst = sortSubstituteFml (asSortSubst tass) . substitutePredicate pass
+        let l' = subst l
+        let r' = subst r
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
             let relevantVars = potentialVars qmap (l' |&| r')
             emb <- embedding env relevantVars (predsOf r')
-            let sSubst = sortSubstituteFml (asSortSubst tass)
-            let lhss = uDNF $ sSubst $ conjunction (Set.insert l' emb)
-            let clauses = map (|=>| sSubst r') lhss
+            let lhss = uDNF $ conjunction (Set.insert l' emb)
+            let clauses = map (|=>| r') lhss
             hornClauses %= (clauses ++)
           else modify $ addTypingConstraint c -- Constraint contains free predicate: add back and wait until more type variables get unified, so predicate variables can be instantiated
 processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | baseTL == baseTR
@@ -343,34 +334,36 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
       tass <- use typeAssignment
       pass <- use predAssignment
       qmap <- use qualifierMap
-      let l' = substitutePredicate pass l
-      let r' = substitutePredicate pass r
+      let subst = sortSubstituteFml (asSortSubst tass) . substitutePredicate pass
+      let l' = subst l
+      let r' = subst r
       if l' == ftrue || r' == ftrue
         then return ()
         else do
           let relevantVars = potentialVars qmap (l' |&| r')
           emb <- embedding env relevantVars Set.empty
-          let clause = sortSubstituteFml (asSortSubst tass) (conjunction (Set.insert l' $ Set.insert r' emb))
+          let clause = conjunction (Set.insert l' $ Set.insert r' emb)
           consistencyChecks %= (clause :)
-processConstraint (WellFormed env (ScalarT baseT fml)) 
+processConstraint (WellFormed env t@(ScalarT baseT fml)) 
   = case fml of
       Unknown _ u -> do      
         qmap <- use qualifierMap
         tass <- use typeAssignment
         tq <- asks _typeQualsGen
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
-        when (not $ Map.member u qmap) $ addQuals u (tq (env, Var (toSort baseT) valueVarName : allScalars env tass))
+        let env' = addVariable valueVarName t env
+        when (not $ Map.member u qmap) $ addQuals u (tq env' (allScalars env tass))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       cq <- asks _condQualsGen
-      addQuals u (cq (env, allScalars env tass))
+      addQuals u (cq env (allScalars env tass))
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       mq <- asks _matchQualsGen
-      addQuals u (mq (env, allPotentialScrutinees env tass))
+      addQuals u (mq env (allPotentialScrutinees env tass))
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
@@ -383,6 +376,7 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
       ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False      
       ScalarT b _ -> Just $ Var (toSort b) x
+      _ -> Nothing
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
@@ -430,7 +424,7 @@ embedding env vars measures = do
 potentialVars :: QMap -> Formula -> Set Id
 potentialVars qmap fml = Set.map varName $ Set.unions (varsOf fml : map (uVars qmap) (Set.toList $ unknownsOf fml))
   where
-    uVars qmap u@(Unknown subst name) = Set.unions (map (varsOf . substitute subst) (lookupQuals qmap qualifiers u))  
+    uVars qmap u@(Unknown subst name) = Set.unions (map (varsOf . substitute subst) (lookupQuals qmap qualifiers u))
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> TCSolver s String
@@ -446,24 +440,26 @@ freshVar env prefix = do
     then freshVar env prefix
     else return x
 
--- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables and fresh unknowns as refinements
+-- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables, fresh predicate variables, and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType
 fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
-  a' <- freshId "a"
+  -- Free type variable: replace with fresh free type variable
+  a' <- freshId "A"
   return $ ScalarT (TypeVarT a') ftrue
-fresh env (ScalarT (DatatypeT name tArgs _) _) = do
-  k <- freshId "u"
-  tArgs' <- mapM (fresh env) tArgs
-  
-  let (DatatypeDef tVars pVars _ _) = (env ^. datatypes) Map.! name
-  let substToUnique = Map.fromList $ zip tVars (map VarS deBrujns)
-  let substFromUnique = asSortSubst $ Map.fromList $ zip deBrujns tArgs'
-  
-  pArgs' <- mapM (\(PredSig _ sorts _) -> freshPred env . map (sortSubstitute substFromUnique) . map (sortSubstitute substToUnique) $ sorts) pVars  
-  return $ ScalarT (DatatypeT name tArgs' pArgs') (Unknown Map.empty k)
 fresh env (ScalarT baseT _) = do
+  baseT' <- freshBase baseT
+  -- Replace refinement with fresh predicate unknown:
   k <- freshId "u"
-  return $ ScalarT baseT (Unknown Map.empty k)
+  return $ ScalarT baseT' (Unknown Map.empty k)
+  where
+    freshBase (DatatypeT name tArgs _) = do
+      -- Replace type arguments with fresh types:
+      tArgs' <- mapM (fresh env) tArgs
+      -- Replace predicate arguments with fresh predicate variables:
+      let (DatatypeDef tParams pParams _ _) = (env ^. datatypes) Map.! name
+      pArgs' <- mapM (\sig -> freshPred env . map (noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')) . predSigArgSorts $ sig) pParams  
+      return $ DatatypeT name tArgs' pArgs'
+    freshBase baseT = return baseT
 fresh env (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
   
@@ -519,19 +515,17 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
     Unary op e -> inst e
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
-    -- SetLit s elems -> ?
+    SetLit _ elems -> Set.unions (map inst elems)
     Pred _ p args -> Set.unions $ map inst args
-    -- All x e -> ?
     _ -> Set.empty  
   where
     measureAxiom resS ctor args (MeasureDef inSort _ defs _) = 
       let MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs in
-      let sArgs = sortArgsOf inSort in
-      let uniqueSubst = Map.fromList $ zip (map varSortName sArgs) (map VarS deBrujns) in
-      let inSort' = sortSubstitute uniqueSubst inSort in
-      let (Right sortSubst) = unifySorts [inSort'] [resS] in
-      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in      
-      substitute subst (sortSubstituteFml sortSubst . sortSubstituteFml uniqueSubst $ body)
+      let sParams = map varSortName (sortArgsOf inSort) in -- sort parameters in the datatype declaration
+      let sArgs = sortArgsOf resS in -- actual sort argument in the constructor application
+      let body' = noncaptureSortSubstFml sParams sArgs body in -- measure definition with actual sorts for all subexpressions
+      let subst = Map.fromList $ (valueVarName, Cons resS ctor args) : zip vars args in -- substitute formals for actuals and constructor application for _v    
+      substitute subst body'
     
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 
@@ -563,10 +557,6 @@ finalizeProgram p = do
   pass <- use predAssignment
   sol <- uses candidates (solution . head)
   return $ fmap (typeApplySolution sol . typeSubstitutePred pass . typeSubstitute tass) p
-  
--- | Current valuation of a predicate unknown  
-currentValuations :: Monad s => Formula -> TCSolver s [Set Formula]
-currentValuations u = uses candidates (map $ flip valuation u . solution)  
 
 -- | Clear temporary typing state    
 clearTempState ::  MonadHorn s => TCSolver s ()    

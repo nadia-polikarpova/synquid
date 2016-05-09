@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, ResolverState (..)) where
+module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, addAllVariables, ResolverState (..)) where
 
 import Synquid.Program
 import Synquid.Logic
@@ -28,12 +28,14 @@ import Debug.Trace
 type ErrMsg = String
 
 data ResolverState = ResolverState {
-  _environment :: Environment,
+  _environment :: Environment,  
   _goals :: [(Id, UProgram)],
   _condQualifiers :: [Formula],
   _typeQualifiers :: [Formula],
   _mutuals :: Map Id [Id],
-  _inlines :: Map Id ([Id], Formula)
+  _inlines :: Map Id ([Id], Formula),
+  _sortConstraints :: [SortConstraint],
+  _idCount :: Int
 }
 
 makeLenses ''ResolverState
@@ -44,16 +46,18 @@ initResolverState = ResolverState {
   _condQualifiers = [],
   _typeQualifiers = [],
   _mutuals = Map.empty,
-  _inlines = Map.empty
+  _inlines = Map.empty,
+  _sortConstraints = [],
+  _idCount = 0
 }
 
--- | Convert a parsed program AST into a synthesizable @Goal@ object.
+-- | Convert a parsed program AST into a list of synthesis goals and qualifier maps
 resolveDecls :: [Declaration] -> Either ErrMsg ([Goal], [Formula], [Formula])
 resolveDecls declarations = 
   case runExcept (execStateT go initResolverState) of
     Left msg -> Left msg
-    Right (ResolverState env goals cquals tquals mutes _) -> 
-      Right (map (makeGoal env (map fst goals) mutes) goals, cquals, tquals)
+    Right st -> 
+      Right (map (makeGoal (st ^. environment) (map fst (st ^. goals)) (st ^. mutuals)) (st ^. goals), st ^. condQualifiers, st ^. typeQualifiers)
   where
     go = do
       -- Pass 1: collect all declarations and resolve sorts, but do not resolve refinement types yet
@@ -68,11 +72,14 @@ resolveDecls declarations =
         env' = foldr removeVariable env toRemove
       in Goal name env' spec impl 0
       
-resolveRefinement :: Environment -> Sort -> Formula -> Either ErrMsg Formula
-resolveRefinement env valueSort fml = runExcept (evalStateT (resolveTypeRefinement valueSort fml) (initResolverState {_environment = env}))
+resolveRefinement :: Environment -> Formula -> Either ErrMsg Formula
+resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env})) --, _fmlSubstitution = subst}))
 
 resolveRefinedType :: Environment -> RType -> Either ErrMsg RType
 resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
+
+addAllVariables :: [Formula] -> Environment -> Environment
+addAllVariables = flip (foldr (\(Var s x) -> addVariable x (fromSort s)))
     
 {- Implementation -}    
 
@@ -86,38 +93,44 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
     then environment %= addTypeSynonym typeName typeVars typeBody'
     else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the definition of type synonym", typeName, "are undefined"]
 resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
-resolveDeclaration (DataDecl dataName typeParams predParams constructors) = do
+resolveDeclaration (DataDecl dtName tParams pParams ctors) = do
   let
     datatype = DatatypeDef {
-      _typeArgs = typeParams,
-      _predArgs = predParams,
-      _constructors = map constructorName constructors,
+      _typeParams = tParams,
+      _predArgs = pParams,
+      _constructors = map constructorName ctors,
       _wfMetric = Nothing
     }
-  environment %= addDatatype dataName datatype  
-  let addPreds typ = foldl (\s (PredSig p argSorts _) -> ForallP p argSorts s) (Monotype typ) predParams
-  mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) constructors
+  environment %= addDatatype dtName datatype  
+  let addPreds typ = foldl (flip ForallP) (Monotype typ) pParams
+  mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) ctors
 resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
   -- Resolve measure signature:
-  inSort'' <- resolveSort inSort
-  case inSort'' of 
-    DataS dtName tArgs -> do
+  resolveSort inSort
+  resolveSort outSort  
+  case inSort of 
+    DataS dtName sArgs -> do
+      -- Check that the input sort of the measure is D a_i, where a_i are the type parameters in the declaration of D:
       datatype <- uses (environment . datatypes) (Map.! dtName)
-      let inSort' = DataS dtName (map VarS (datatype ^. typeArgs))
-      let Right sortSubst = unifySorts [inSort''] [inSort']
-      outSort' <- sortSubstitute sortSubst <$> resolveSort outSort      
-      environment %= addGlobalPredicate measureName [outSort', inSort']
-      -- Possibly add as termination metric:      
-      if isTermination
-        then if (isJust $ datatype ^. wfMetric) 
-              then throwError $ unwords ["Multiple termination metrics defined for datatype", dtName]
-              else if outSort' == IntS
-                    then environment %= addDatatype dtName datatype { _wfMetric = Just measureName }
-                    else throwError $ unwords ["Output sort of termination measure", measureName, "must be Int"]  
-        else return ()
-    _ -> throwError $ unwords ["Input sort of measure", measureName, "must be a datatype"]  
-                  
-resolveDeclaration (PredDecl sig) = void $ resolvePredSignature sig True
+      let tParams = datatype ^. typeParams
+      let declDtSort = DataS dtName (map VarS tParams)
+      if inSort /= declDtSort
+        then throwError $ unwords ["Type parameters of measure", measureName, "must be the same as in the datatype declaration"]
+        else do                
+          environment %= addGlobalPredicate measureName outSort [inSort]
+          -- Possibly add as termination metric:      
+          if isTermination
+            then if (isJust $ datatype ^. wfMetric) 
+                  then throwError $ unwords ["Multiple termination metrics defined for datatype", dtName]
+                  else if outSort == IntS
+                        then environment %= addDatatype dtName datatype { _wfMetric = Just measureName }
+                        else throwError $ unwords ["Output sort of termination measure", measureName, "must be Int"]  
+            else return ()
+    _ -> throwError $ unwords ["Input sort of measure", measureName, "must be a datatype"]
+resolveDeclaration (PredDecl (PredSig name argSorts resSort)) = do
+  ifM (Map.member name <$> use (environment . globalPredicates)) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
+  mapM_ resolveSort (resSort : argSorts)
+  environment %= addGlobalPredicate name resSort argSorts
 resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols
   if Map.member name syms
@@ -145,24 +158,25 @@ resolveDeclaration (InlineDecl name args body) =
         else inlines %= Map.insert name (args, body))
       
 resolveSignatures :: Declaration -> Resolver ()      
-resolveSignatures (FuncDecl funcName _)  = resolveSignature funcName
-resolveSignatures (DataDecl dtName tArgs pArgs ctors) = mapM_ resolveConstructorSignature ctors
+resolveSignatures (FuncDecl name _)  = do
+  sch <- uses environment ((Map.! name) . allSymbols)
+  sch' <- resolveSchema sch
+  environment %= addPolyConstant name sch'
+resolveSignatures (DataDecl dtName tParams pParams ctors) = mapM_ resolveConstructorSignature ctors
   where
-    resolveConstructorSignature (ConstructorSig name typ) = do
+    resolveConstructorSignature (ConstructorSig name _) = do
       sch <- uses environment ((Map.! name) . allSymbols)
       sch' <- resolveSchema sch
-      let lastSort = toSort $ baseTypeOf $ lastType typ
-      let dtSort = DataS dtName (map VarS tArgs) -- ToDo: compare base types instead
-      if dtSort == lastSort
+      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map nominalPredApp pParams)) ftrue
+      let returnType = lastType (toMonotype sch')
+      if nominalType == returnType
         then do
-          let sch'' = addRefinementToLastSch sch' (Var dtSort valueVarName |=| Cons dtSort name (allArgs typ))    
+          let nominalSort = toSort $ baseTypeOf nominalType
+          let sch'' = addRefinementToLastSch sch' (Var nominalSort valueVarName |=| Cons nominalSort name (allArgs (toMonotype sch')))    
           environment %= addPolyConstant name sch''
-        else throwError $ unwords ["Constructor", name, "must return type", show dtSort, ", got", show lastSort]
-    
-    predApp (PredSig p sorts BoolS) = Pred BoolS p [] -- (zipWith Var sorts deBrujns)
-  
+        else throwError $ unwords ["Constructor", name, "must return type", show nominalType, ", got", show returnType]      
 resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
-  (outSort : (inSort@(DataS dtName tArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)
+  (outSort : (inSort@(DataS dtName sArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)
   datatype <- uses (environment . datatypes) (Map.! dtName)
   post' <- resolveTypeRefinement outSort post
   let ctors = datatype ^. constructors  
@@ -172,40 +186,50 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
       defs' <- mapM (resolveMeasureDef ctors) defCases
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')    
   where
-    resolveMeasureDef allCtors (MeasureCase ctorName ctorArgs body) = 
+    resolveMeasureDef allCtors (MeasureCase ctorName binders body) = 
       if not (ctorName `elem` allCtors)
         then throwError $ unwords ["Not in scope: data constructor", ctorName, "used in definition of measure", measureName]
         else do
-          sch <- uses environment ((Map.! ctorName) . allSymbols)
-          let n = arity $ toMonotype sch
-          if n /= length ctorArgs 
-            then throwError $ unwords ["Data constructor", ctorName, "expected", show n, "binders and got", show (length ctorArgs), "in definition of measure", measureName]
+          consSch <- uses environment ((Map.! ctorName) . allSymbols)
+          let consT = toMonotype consSch
+          let n = arity consT 
+          if n /= length binders 
+            then throwError $ unwords ["Data constructor", ctorName, "expected", show n, "binders and got", show (length binders), "in definition of measure", measureName]
             else do
-              let ctorArgsInType = allArgs $ toMonotype sch
-              let subst = Map.fromList (zip ctorArgs (map (\(Var _ name) -> Var AnyS name) $ ctorArgsInType))
+              let ctorParams = allArgs consT
+              let subst = Map.fromList $ zip binders ctorParams
               let fml = Pred AnyS measureName [Var AnyS valueVarName] |=| substitute subst body
-              sch' <- resolveSchema $ addMeasureRefinement fml sch
-              let (ScalarT _ fml') = lastType $ toMonotype sch'
-              return $ MeasureCase ctorName (map varName ctorArgsInType) fml'
-    addMeasureRefinement fml (ForallT a sch) = addMeasureRefinement fml sch
-    addMeasureRefinement fml (ForallP p argSorts sch) = ForallP p argSorts $ addMeasureRefinement fml sch
-    addMeasureRefinement fml (Monotype t) = Monotype $ addRefinementToLast (refineTop $ shape t) fml
-
+              fml' <- withLocalEnv $ do
+                environment  . boundTypeVars .= boundVarsOf consSch
+                environment %= addAllVariables ctorParams
+                resolveTypeRefinement (toSort $ baseTypeOf $ lastType consT) fml
+              return $ MeasureCase ctorName (map varName ctorParams) fml'
 resolveSignatures _                      = return ()   
 
 {- Types and sorts -}
 
 resolveSchema :: RSchema -> Resolver RSchema
 resolveSchema sch = do
-  sch' <- resolveSchema' sch
-  return $ Foldable.foldl (flip ForallT) sch' $ typeVarsOf (toMonotype sch')
+  let tvs = Set.toList $ typeVarsOf (toMonotype sch)
+  sch' <- withLocalEnv $ do
+    environment . boundTypeVars %= (tvs ++)
+    resolveSchema' sch  
+  return $ Foldable.foldl (flip ForallT) sch' tvs
   where
-    resolveSchema' (ForallP predName sorts sch) = do
-      oldEnv <- use environment
-      (_ : sorts') <- resolvePredSignature (PredSig predName sorts BoolS) False
-      sch' <- resolveSchema' sch
-      environment .= oldEnv
-      return $ ForallP predName sorts' sch'
+    resolveSchema' (ForallP sig@(PredSig predName argSorts resSort) sch) = do
+      ifM (elem predName <$> uses (environment . boundPredicates) (map predSigName)) 
+        (throwError $ unwords ["Duplicate predicate variables", predName]) 
+        (return ())
+      mapM_ resolveSort argSorts
+      when (resSort /= BoolS) $
+        (throwError $ unwords ["Bound predicate variable", predName, "must return Bool"])
+      sch' <- withLocalEnv $ do
+        environment %= addBoundPredicate sig
+        resolveSchema' sch
+      let extraTypeVars = (Set.unions (map typeVarsOfSort argSorts)) Set.\\ typeVarsOf (toMonotype sch')
+      when (not $ Set.null extraTypeVars) $
+        (throwError $ unwords ["Unbound variables", show (commaSep $ map pretty $ Set.toList extraTypeVars), "in sort of bound predicate", predName])
+      return $ ForallP sig sch'
     resolveSchema' (Monotype t) = Monotype <$> resolveType t
 
 resolveType :: RType -> Resolver RType
@@ -216,243 +240,221 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       t' <- substituteTypeSynonym name tArgs >>= resolveType      
       fml' <- resolveTypeRefinement (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
-    Just (DatatypeDef tVars pVars _ _) -> do
-      let n = length tVars
-      when (length tArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length tArgs)]
-      when (length pArgs /= length pVars) $ throwError $ unwords ["Datatype", name, "expected", show (length pVars), "predicate arguments and got", show (length pArgs)]   
+    Just (DatatypeDef tParams pParams _ _) -> do
+      when (length tArgs /= length tParams) $ throwError $ unwords ["Datatype", name, "expected", show (length tParams), "type arguments and got", show (length tArgs)]
+      when (length pArgs /= length pParams) $ throwError $ unwords ["Datatype", name, "expected", show (length pParams), "predicate arguments and got", show (length pArgs)]   
+      -- Resolve type arguments:
       tArgs' <- mapM resolveType tArgs
-      pArgs' <- zipWithM resolvePredArg pVars pArgs
-      let baseT' = DatatypeT name tArgs' pArgs'      
+      -- Resolve predicate arguments:
+      let subst = noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')
+      pArgs' <- zipWithM (resolvePredArg subst) pParams pArgs
+      let baseT' = DatatypeT name tArgs' pArgs'
+      -- Resolve refinementL
       fml' <- resolveTypeRefinement (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
-    resolvePredArg :: PredSig -> Formula -> Resolver Formula
-    resolvePredArg (PredSig _ sorts BoolS) fml = do
-      oldEnv <- use environment
-      let vars = zipWith Var sorts deBrujns
-      environment %= \env -> foldr (\(Var s x) -> addVariable x (fromSort s)) env vars
-      res <- case fml of
-                Pred _ p [] -> resolveTypeRefinement AnyS (Pred BoolS p vars)
-                _ -> resolveTypeRefinement AnyS fml
-      environment .= oldEnv      
-      return res      
+    resolvePredArg :: (Sort -> Sort) -> PredSig -> Formula -> Resolver Formula
+    resolvePredArg subst (PredSig _ argSorts BoolS) fml = withLocalEnv $ do
+      let argSorts' = map subst argSorts
+      let vars = zipWith Var argSorts' deBrujns
+      environment %= addAllVariables vars
+      case fml of
+        Pred _ p [] -> resolveTypeRefinement AnyS (Pred BoolS p vars)
+        _ -> resolveTypeRefinement AnyS fml
+
 resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveTypeRefinement (toSort baseT) fml
       
-resolveType (FunctionT x tArg tRes) = do
-  when (x == valueVarName) $ throwError $
-    valueVarName ++ " is a reserved variable name, so you can't bind function arguments to it"
-  tArg' <- resolveType tArg
-  oldEnv <- use environment
-  when (not $ isFunctionType tArg') (environment %= addVariable x tArg')
-  tRes' <- resolveType tRes
-  environment .= oldEnv
-  return $ FunctionT x tArg' tRes'
+resolveType (FunctionT x tArg tRes) = 
+  if x == valueVarName
+    then throwError $ unwords [valueVarName, "is a reserved variable name"]
+    else if x == dontCare
+      then error $ unwords ["resolveType: blank in function type", show (FunctionT x tArg tRes)] -- Should never happen
+      else do
+        tArg' <- resolveType tArg
+        tRes' <- withLocalEnv $ do
+          when (not $ isFunctionType tArg') (environment %= addVariable x tArg')
+          resolveType tRes
+        return $ FunctionT x tArg' tRes'
   
 resolveType AnyT = return AnyT  
 
-resolveSort :: Sort -> Resolver Sort
-resolveSort (SetS elSort) = SetS <$> resolveSort elSort
-resolveSort (DataS name sArgs) = do
+-- | Check that sort has no unknown datatypes
+resolveSort :: Sort -> Resolver ()
+resolveSort (SetS elSort) = resolveSort elSort
+resolveSort s@(DataS name sArgs) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
-    Nothing -> do
-      t' <- substituteTypeSynonym name (map fromSort sArgs)
-      resolveSort $ toSort $ baseTypeOf t'
-    Just (DatatypeDef tVars _ _ _) -> do
-      let n = length tVars
+    Nothing -> throwError $ unwords ["Datatype", name, "is undefined in sort", show s]
+    Just (DatatypeDef tParams _ _ _) -> do
+      let n = length tParams
       when (length sArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length sArgs)]
-      sArgs' <- mapM resolveSort sArgs
-      return $ DataS name sArgs'
-resolveSort s = return s
+      mapM_ resolveSort sArgs
+resolveSort s = return ()
   
 {- Formulas -}
 
+-- | 'resolveTypeRefinement' @valueSort fml@ : resolve @fml@ as a refinement with _v of sort @valueSort@;
+-- when @valueSort@ is @AnyS@, _v must not occur
 resolveTypeRefinement :: Sort -> Formula -> Resolver Formula
+resolveTypeRefinement _ (BoolLit True) = return $ BoolLit True -- Special case to allow undefined value sort for function types
 resolveTypeRefinement valueSort fml = do
-  fml' <- resolveFormula BoolS valueSort fml
-  env <- use environment
-  let invalidPreds = negPreds fml' `Set.intersection` (Map.keysSet $ env ^. boundPredicates)
-  when (not $ Set.null invalidPreds) $ 
-    throwError $ unwords ["Bound predicate(s)", show (commaSep (map text $ Set.toList invalidPreds)), "occur negatively in a refinement", show fml']
-  return fml'
-
-resolveFormula :: Sort -> Sort -> Formula -> Resolver Formula
-resolveFormula targetSort valueSort (SetLit AnyS memberFmls) = do
-  _ <- targetSort `unifiedWith` (SetS AnyS)
-  case memberFmls of
-    [] -> return $ SetLit (elemSort targetSort) []
-    (fml:fmls) -> do
-      fml' <- resolveFormula (elemSort targetSort) valueSort fml
-      let newElemSort = sortOf fml'
-      fmls' <- mapM (resolveFormula newElemSort valueSort) fmls
-      return $ SetLit newElemSort (fml':fmls')
-  where
-    elemSort (SetS s) = s
-    elemSort AnyS = AnyS  
-      
-resolveFormula targetSort valueSort (Var AnyS varName) =
-  if varName == valueVarName
-    then flip Var varName <$> (valueSort `unifiedWith` targetSort)
-    else do
-      env <- use environment
-      case Map.lookup varName (symbolsOfArity 0 env) of
-        Just varType ->
-          case toMonotype varType of
-            ScalarT baseType _ -> flip Var varName <$> (toSort baseType `unifiedWith` targetSort)
-            FunctionT _ _ _ -> error "The impossible happened: function in a formula"
-        Nothing -> resolveFormula targetSort valueSort (Pred AnyS varName []) `catchError` -- Maybe it's a zero-argument predicate?
-                      const (throwError $ printf "Var `%s` is not in scope." varName)      -- but if not, throw this error to avoid confusion
-      
-resolveFormula targetSort valueSort (Unary op fml) = fmap (Unary op) $ 
-    do
-      _ <- unifiedWith resSort targetSort
-      resolveFormula operandSort valueSort fml
-  where
-    resSort = case op of
-      Not -> BoolS
-      _ -> IntS
-    operandSort = case op of
-      Not -> BoolS
-      _ -> IntS
-
-resolveFormula targetSort valueSort (Binary op l r) = 
-  if wrongTargetSort op
-    then throwError $ unwords ["Encountered binary operation", show op, "where", show targetSort, "was expected"]
-    else do
-      l' <- resolveFormula (leftSort op) valueSort l
-      let lS = sortOf l'
-      op' <- newOp op lS
-      let rS = right op' lS
-      r' <- resolveFormula rS valueSort r
-      return $ Binary op' l' r'
-  where
-    wrongTargetSort op
-      | op == Times || op == Plus || op == Minus            = isLeft (unifySorts [targetSort] [IntS]) && isLeft (unifySorts [targetSort] [SetS AnyS])
-      | op == Union || op == Intersect || op == Diff        = isLeft (unifySorts [targetSort] [SetS AnyS]) 
-      | otherwise                                           = isLeft (unifySorts [targetSort] [BoolS])
+  fml' <- withLocalEnv $ do -- Resolve fml with _v : valueSort 
+    case valueSort of
+      AnyS -> return ()
+      _ -> environment %= addVariable valueVarName (fromSort valueSort)
+    resolveFormula fml
+  enforceSame (sortOf fml') BoolS -- Refinements must have Boolean sort
+  sortAssignmnet <- solveSortConstraints -- Solve sort constraints and substitute
+  let fml'' = sortSubstituteFml sortAssignmnet fml'
   
-    leftSort op
-      | op == Times || op == Plus || op == Minus            = targetSort
-      | op == Eq  || op == Neq                              = AnyS
-      | op == Lt || op == Le || op == Gt || op == Ge        = AnyS
-      | op == And || op == Or || op == Implies || op == Iff = BoolS
-      | op == Member                                        = AnyS
-      | op == Union || op == Intersect || op == Diff        = targetSort
-      | op == Subset                                        = targetSort
-      
-    newOp op lSort
-      | op == Times || op == Plus || op == Minus  = case lSort of
-                                                            IntS -> return op
-                                                            SetS a -> return $ toSetOp op
-                                                            _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
-      | op == Le                                  = case lSort of
-                                                            IntS -> return op
-                                                            VarS _ -> return op
-                                                            SetS a -> return $ toSetOp op
-                                                            _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
-      | op == Lt || op == Gt || op == Ge          = case lSort of
-                                                            IntS -> return op
-                                                            VarS _  -> return op
-                                                            _ -> throwError $ unwords ["No overloading of", show op, "for", show lSort]
-      | op == Eq  || op == Neq                    = case lSort of
-                                                            _ -> return op
-      | otherwise                                 = return op
-      
+  boundTvs <- use $ environment . boundTypeVars
+  let freeTvs = typeVarsOfSort (sortOf fml'') Set.\\ (Set.fromList boundTvs) -- Remaining free type variables
+  let resolvedFml = if Set.null freeTvs then fml'' else sortSubstituteFml (constMap freeTvs IntS) fml''   
+  
+  boundPreds <- uses (environment . boundPredicates) (Set.fromList . map predSigName)
+  let invalidPreds = negPreds resolvedFml `Set.intersection` boundPreds
+  when (not $ Set.null invalidPreds) $ 
+    throwError $ unwords ["Bound predicate(s)", show (commaSep (map text $ Set.toList invalidPreds)), "occur negatively in a refinement", show resolvedFml]
+  return resolvedFml
+
+resolveFormula :: Formula -> Resolver Formula
+resolveFormula (Var s x) = do
+  env <- use environment
+  case Map.lookup x (symbolsOfArity 0 env) of
+    Just sch ->
+      case sch of
+        Monotype (ScalarT baseType _) -> do
+          let s' = (toSort baseType)
+          return $ Var s' x
+        _ -> error $ unwords ["resolveFormula: encountered non-scalar variable", x, "in a formula"]
+    Nothing -> resolveFormula (Pred AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
+                  const (throwError $ printf "Var `%s` is not in scope." x)      -- but if not, throw this error to avoid confusion
+                      
+resolveFormula (SetLit _ elems) = do
+  elemSort <- freshSort
+  elems' <- mapM resolveFormula elems
+  zipWithM_ enforceSame (map sortOf elems') (repeat elemSort)
+  return $ SetLit elemSort elems'
+  
+resolveFormula (Unary op fml) = fmap (Unary op) $ do
+  fml' <- resolveFormula fml
+  enforceSame (sortOf fml') (operandSort op)
+  return fml'
+  where
+    operandSort Not = BoolS
+    operandSort Neg = IntS  
+            
+resolveFormula (Binary op l r) = do
+  l' <- resolveFormula l
+  r' <- resolveFormula r
+  op' <- addConstraints op (sortOf l') (sortOf r')
+  return $ Binary op' l' r'
+  where
+    addConstraints op sl sr
+      | op == Eq  || op == Neq                                        
+        = enforceSame sl sr >> return op
+      | op == And || op == Or || op == Implies || op == Iff           
+        = enforceSame sl BoolS >> enforceSame sr BoolS >> return op
+      | op == Member                                                  
+        = enforceSame (SetS sl) sr >> return op
+      | op == Union || op == Intersect || op == Diff || op == Subset  
+        = do
+            elemSort <- freshSort
+            enforceSame sl (SetS elemSort)
+            enforceSame sr (SetS elemSort)
+            return op
+      | op == Times || op == Plus || op == Minus  
+        = if isSetS sl 
+            then do
+              elemSort <- freshSort
+              enforceSame sl (SetS elemSort)
+              enforceSame sr (SetS elemSort)
+              return $ toSetOp op
+            else enforceSame sl IntS >> enforceSame sr IntS >> return op      
+      | op == Le 
+        = if isSetS sl 
+            then do
+              elemSort <- freshSort
+              enforceSame sl (SetS elemSort)
+              enforceSame sr (SetS elemSort)
+              return $ toSetOp op
+            else enforceSame sl sr >> sortConstraints %= (++ [IsOrd sl]) >> return op            
+      | op == Lt || op == Gt || op == Ge
+        = enforceSame sl sr >> sortConstraints %= (++ [IsOrd sl]) >> return op
+              
     toSetOp Times = Intersect
     toSetOp Plus = Union
     toSetOp Minus = Diff
     toSetOp Le = Subset
-      
-    right op lSort
-      | op == Times || op == Plus || op == Minus            = IntS
-      | op == Eq  || op == Neq                              = lSort
-      | op == Lt || op == Le || op == Gt || op == Ge        = lSort
-      | op == And || op == Or || op == Implies || op == Iff = BoolS
-      | op == Union || op == Intersect || op == Diff        = lSort
-      | op == Member                                        = SetS lSort
-      | op == Subset                                        = lSort
     
-resolveFormula targetSort valueSort (Ite cond l r) = do
-  cond' <- resolveFormula BoolS valueSort cond
-  l' <- resolveFormula targetSort valueSort l
-  r' <- resolveFormula (sortOf l') valueSort r
+resolveFormula (Ite cond l r) = do
+  cond' <- resolveFormula cond
+  l' <- resolveFormula l
+  r' <- resolveFormula r
+  enforceSame (sortOf cond') BoolS
+  enforceSame (sortOf l') (sortOf r')
   return $ Ite cond' l' r'
    
-resolveFormula targetSort valueSort (Pred AnyS name argFmls) = do
+resolveFormula (Pred _ name argFmls) = do
   inlineMb <- uses inlines (Map.lookup name)
   case inlineMb of
-    Just (args, body) -> resolveFormula targetSort valueSort (substitute (Map.fromList $ zip args argFmls) body)
+    Just (args, body) -> resolveFormula (substitute (Map.fromList $ zip args argFmls) body)
     Nothing -> do
       ps <- uses environment allPredicates
       (resSort : argSorts) <- case Map.lookup name ps of
                                 Nothing -> throwError $ unwords ["Predicate or measure", name, "is undefined"]
-                                Just sorts -> return sorts
+                                Just sorts -> instantiate sorts
       if length argFmls /= length argSorts
           then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate or measure", name, "and got", show (length argFmls)]
           else do
-            (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls targetSort
-            return $ Pred resSort' name argFmls'
+            argFmls' <- mapM resolveFormula argFmls
+            zipWithM_ enforceSame (map sortOf argFmls') argSorts
+            return $ Pred resSort name argFmls'
           
-resolveFormula targetSort valueSort (Cons AnyS name argFmls) = do
+resolveFormula (Cons _ name argFmls) = do
   syms <- uses environment allSymbols
   case Map.lookup name syms of
     Nothing -> throwError $ unwords ["Data constructor", name, "is undefined"]
     Just consSch -> do
       let consT = toMonotype consSch
-      let argSorts = map (toSort . baseTypeOf) $ allArgTypes consT
-      let resSort = toSort $ baseTypeOf $ lastType consT
+      (resSort : argSorts) <- instantiate $ map (toSort . baseTypeOf) $ lastType consT : allArgTypes consT
       if length argSorts /= length argFmls
         then throwError $ unwords ["Constructor", name, "expected", show (length argSorts), "arguments and got", show (length argFmls)]
         else do
-              (resSort', argFmls') <- unifyArguments valueSort argSorts resSort argFmls targetSort
-              return $ Cons resSort' name argFmls'
-            
-resolveFormula targetSort _ fml = let s = sortOf fml -- Formula of a known type: check
-  in if complies targetSort s
-    then return fml
-    else throwError $ unwords ["Encountered", show s, "where", show targetSort, "was expected"]            
--- resolveFormula targetSort _ fml = -- Formula of a known type: check
-  -- case unifySorts [targetSort] [sortOf fml] of
-    -- Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y, "when resolving", show fml]
-    -- Right subst -> return $ sortSubstituteFml subst fml
+            argFmls' <- mapM resolveFormula argFmls
+            zipWithM_ enforceSame (map sortOf argFmls') argSorts
+            return $ Cons resSort name argFmls'
+         
+resolveFormula fml = return fml         
 
 {- Misc -}
 
--- | @s@ unified with @s'@; @s@ should not contain more unknowns than @s'@
-unifiedWith :: Sort -> Sort -> Resolver Sort
-unifiedWith s s' = case unifySorts [s] [s'] of
-  Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
-  Right subst -> return $ sortSubstitute subst s
-      
-unifyArguments :: Sort -> [Sort] -> Sort -> [Formula] -> Sort -> Resolver (Sort, [Formula])
-unifyArguments valueSort argSorts resSort argFmls targetSort = do
-  let typeVars = Set.unions (map typeVarsOfSort (resSort : argSorts)) -- Type variables of the argument sorts
-  let substAny = constMap typeVars AnyS
-  let argSortsAny = map (sortSubstitute substAny) argSorts -- Argument sorts with unknown type parameters
-  argFmls' <- zipWithM (flip resolveFormula valueSort) argSortsAny argFmls -- Resolve arguments against argument sorts with unknown type parameters
-  
-  let substUnique = Map.fromList $ zip (Set.toList typeVars) (map VarS deBrujns)
-  let (resSortUnique : argSortsUnique) = map (sortSubstitute substUnique) (resSort : argSorts)
-  
-  case unifySorts (resSortUnique : argSortsUnique) (targetSort : map sortOf argFmls') of -- Unify required and inferred argument sorts (this can fail if the same type variable has to match two different sorts)
+solveSortConstraints :: Resolver SortSubstitution
+solveSortConstraints = do
+  (unificationCs, typeClassCs) <- uses sortConstraints (partition isSameSortConstraint)
+  tvs <- uses (environment . boundTypeVars) Set.fromList
+  sortConstraints .= []
+  idCount .= 0
+  let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs  
+  subst <- case unifySorts tvs sls srs of
     Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
-    Right subst -> return $ (sortSubstitute subst resSortUnique, argFmls')      
+    Right subst -> return subst
+  mapM_ (checkTypeClass subst) typeClassCs
+  return subst
+  where
+    isSameSortConstraint (SameSort _ _) = True
+    isSameSortConstraint _ = False
+    
+    checkTypeClass subst (IsOrd s) = let s' = sortSubstitute subst s in
+      case s' of
+        IntS -> return ()
+        VarS _ -> return ()
+        _ -> throwError $ unwords ["Sort", show s', "is not ordered"]
     
 addNewSignature name sch = do
   ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of function", name]) (return ())
   environment %= addPolyConstant name sch
   environment %= addUnresolvedConstant name sch
-  
-resolveSignature name = do
-  sch <- uses environment ((Map.! name) . allSymbols)
-  sch' <- resolveSchema sch
-  environment %= addPolyConstant name sch'
-  
-resolvePredSignature (PredSig name argSorts resSort) global = do
-  ifM (Map.member name <$> uses environment allPredicates) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
-  sorts' <- mapM resolveSort (resSort : argSorts)
-  environment %= if global then addGlobalPredicate name sorts' else addBoundPredicate name sorts'
-  return sorts'
   
 substituteTypeSynonym name tArgs = do
   tss <- use $ environment . typeSynonyms
@@ -460,6 +462,32 @@ substituteTypeSynonym name tArgs = do
     Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
     Just (tVars, t) -> do
       when (length tArgs /= length tVars) $ throwError $ unwords ["Type synonym", name, "expected", show (length tVars), "type arguments and got", show (length tArgs)]
-      let tempVars = take (length tVars) deBrujns
-      let t' = typeSubstitute (Map.fromList $ zip tVars (map vartAll tempVars)) t -- We need to do this since tVars and tArgs are not necessarily disjoint
-      return $ typeSubstitute (Map.fromList $ zip tempVars tArgs) t'
+      return $ noncaptureTypeSubst tVars tArgs t
+      
+-- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
+freshSort :: Resolver Sort
+freshSort = do
+  i <- use idCount
+  idCount %= ( + 1)
+  return $ VarS ("S" ++ show i)
+  
+-- | 'instantiate' @sorts@: replace all sort variables in @sorts@ with fresh sort variables
+instantiate :: [Sort] -> Resolver [Sort]
+instantiate sorts = do
+  let tvs = Set.toList $ Set.unions (map typeVarsOfSort sorts)
+  freshTvs <- replicateM (length tvs) freshSort
+  return $ map (sortSubstitute $ Map.fromList $ zip tvs freshTvs) sorts
+
+enforceSame :: Sort -> Sort -> Resolver ()  
+enforceSame sl sr
+  | sl == sr    = return ()
+  | otherwise   = sortConstraints %= (++ [SameSort sl sr])
+      
+-- | Perform an action and restore the initial environment      
+withLocalEnv :: Resolver a -> Resolver a
+withLocalEnv c = do
+  oldEnv <- use environment
+  res <- c
+  environment .= oldEnv
+  return res
+  
