@@ -85,12 +85,10 @@ instance Pretty MemoKey where
 type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
 
 data PartialKey = PartialKey {
-    pState :: ExplorerState,
-    pKeyContext :: RProgram,
-    pEnvironment :: Environment
+    pKeyContext :: RProgram
 } deriving (Eq, Ord)
 
-type PartialMemo = Map PartialKey (Map RProgram Int)
+type PartialMemo = Map PartialKey (Map RProgram (Int, Environment))
 -- | Persistent state accross explorations
 data PersistentState = PersistentState {
   _termMemo :: Memo,
@@ -388,26 +386,31 @@ checkE env typ p@(Program pTerm pTyp) = do
         if arity typ > 0
           then do
               solverState <- get
-              let partialKey = PartialKey solverState fixedContext env
+              let partialKey = PartialKey fixedContext
               startPartials <- getPartials
               let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
-              let myCount = Map.findWithDefault 0 p pastPartials
-              let repeatPartials = filter (\(key, count) -> count > myCount) $ Map.toList pastPartials
+              let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
+              let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
 
               writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of" <+> pretty repeatPartials <+> text "myCount is" <+> pretty myCount
 
               -- Check that pTyp is not a subtype of multiple stored partials which match each other.
-              mapM_ (\(Program _ oldTyp) -> ifte (solveLocally $ Subtype env pTyp oldTyp False)
-                                          (\_ -> do
-                                            writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "in" <+> pretty fixedContext <+> text "Is a subtype of" <+> pretty oldTyp
-                                            mzero)
-                                          (return ())) $ map fst repeatPartials
+              mapM_ (\(Program _ oldTyp, oldEnv) ->
+                               ifte (solveLocally $ Subtype (combineEnv env oldEnv) pTyp oldTyp False)
+                               (\_ -> do
+                                    writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "in" <+> pretty fixedContext <+> text "Is a subtype of" <+> pretty oldTyp
+                                    mzero)
+                               (return ())) $ map (\(prog, (count, env)) -> (prog, env)) repeatPartials
 
               let newCount = 1 + myCount
-              let newPartials = Map.insert p newCount pastPartials
+              let newPartials = Map.insert p (newCount, env) pastPartials
               let newPartialMap = Map.insert partialKey newPartials startPartials
               putPartials newPartialMap
           else return ()
+
+      combineEnv :: Environment -> Environment -> Environment
+      combineEnv env oldEnv =
+        env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
@@ -488,7 +491,8 @@ generateError env = do
 toVar (Program (PSymbol name) t) env 
   | not (isConstant name env)  = return (env, Var (toSort $ baseTypeOf t) name)
 toVar p@(Program _ t) env = do
-  g <- freshId "G"
+  let g = show $ plain $ pretty p <> pretty t
+  -- g <- freshId "G"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
 enqueueGoal env typ impl depth = do
