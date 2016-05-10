@@ -380,6 +380,10 @@ checkE env typ p@(Program pTerm pTyp) = do
   solveIncrementally
   typingState . errorContext .= empty
     where      
+      unknownId :: Formula -> Maybe Id
+      unknownId (Unknown _ i) = Just i
+      unknownId _ = Nothing
+
       checkSymmetry = do
         ctx <- asks $ _context . fst
         let fixedContext = ctx (untyped PHole)
@@ -392,6 +396,11 @@ checkE env typ p@(Program pTerm pTyp) = do
               let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
               let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
 
+              -- Turn off all qualifiers, and thus all match abductions.
+              let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
+              let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
+              typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
+
               writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of" <+> pretty repeatPartials <+> text "myCount is" <+> pretty myCount
 
               -- Check that pTyp is not a subtype of multiple stored partials which match each other.
@@ -399,6 +408,7 @@ checkE env typ p@(Program pTerm pTyp) = do
                                ifte (solveLocally $ Subtype (combineEnv env oldEnv) pTyp oldTyp False)
                                (\_ -> do
                                     writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "in" <+> pretty fixedContext <+> text "Is a subtype of" <+> pretty oldTyp
+                                    typingState . qualifierMap .= qmap
                                     mzero)
                                (return ())) $ map (\(prog, (count, env)) -> (prog, env)) repeatPartials
 
@@ -406,6 +416,8 @@ checkE env typ p@(Program pTerm pTyp) = do
               let newPartials = Map.insert p (newCount, env) pastPartials
               let newPartialMap = Map.insert partialKey newPartials startPartials
               putPartials newPartialMap
+
+              typingState . qualifierMap .= qmap
           else return ()
 
       combineEnv :: Environment -> Environment -> Environment

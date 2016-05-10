@@ -8,6 +8,7 @@ module Synquid.TypeConstraintSolver (
   TypingState,
   typingConstraints,
   typeAssignment,
+  qualifierMap,
   candidates,
   errorContext,
   isFinal,
