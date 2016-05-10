@@ -405,7 +405,7 @@ checkE env typ p@(Program pTerm pTyp) = do
 
               -- Check that pTyp is not a subtype of multiple stored partials which match each other.
               mapM_ (\(Program _ oldTyp, oldEnv) ->
-                               ifte (solveLocally $ Subtype (combineEnv env oldEnv) pTyp oldTyp False)
+                               ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
                                (\_ -> do
                                     writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "in" <+> pretty fixedContext <+> text "Is a subtype of" <+> pretty oldTyp
                                     typingState . qualifierMap .= qmap
