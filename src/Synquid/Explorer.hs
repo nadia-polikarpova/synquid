@@ -416,9 +416,9 @@ checkE env typ p@(Program pTerm pTyp) = do
 
               -- Check that pTyp is not a supertype of any prior programs.
               mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
-                               ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
+                               ifte (areTypesEqual env oldTyp pTyp)
                                (\_ -> do
-                                    writeLog 1 $ text "Supertype of failed predecessor:" <+> pretty pTyp <+> text "Is a supertype of" <+> pretty oldTyp
+                                    writeLog 1 $ text "Same type as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
                                     writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
                                     writeLog 1 $ text "Context:" <+> pretty fixedContext
                                     typingState . qualifierMap .= qmap
