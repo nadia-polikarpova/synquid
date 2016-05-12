@@ -182,7 +182,7 @@ solveHornClauses = do
   qmap <- use qualifierMap
   cands <- use candidates
   env <- use initEnv
-  cands' <- lift . lift . lift $ refine clauses qmap (instantiateConsAxioms env) cands
+  cands' <- lift . lift . lift $ refineCandidates clauses qmap (instantiateConsAxioms env) cands
     
   when (null cands') $ do
     ec <- use errorContext
@@ -195,7 +195,7 @@ checkTypeConsistency = do
   clauses <- use consistencyChecks
   cands <- use candidates
   env <- use initEnv  
-  cands' <- lift . lift . lift $ checkConsistency clauses (instantiateConsAxioms env) cands
+  cands' <- lift . lift . lift $ checkCandidates True clauses (instantiateConsAxioms env) cands
   when (null cands') $ do
     ec <- use errorContext
     throwError $ errorText "Found inconsistent refinements" $+$ ec
@@ -491,17 +491,11 @@ addFixedUnknown name valuation = do
 setUnknownRecheck :: MonadHorn s => Id -> Set Formula -> TCSolver s ()
 setUnknownRecheck name valuation = do
   writeLog 2 $ text "Re-checking candidates after updating" <+> text name
-  qmap <- use qualifierMap
-  let qmap' = Map.map (const emptyQSpace) qmap -- empty qualifier map: disable strengthening
   cands@(cand:_) <- use candidates
   let clauses = Set.filter (\fml -> name `Set.member` (Set.map unknownName (unknownsOf fml))) (validConstraints cand) -- First candidate cannot have invalid constraints
-  let cands' = map (\c -> c {
-                              solution = Map.insert name valuation (solution c),
-                              validConstraints = validConstraints c `Set.difference` clauses, 
-                              invalidConstraints = invalidConstraints c `Set.difference` clauses
-                            }) cands
+  let cands' = map (\c -> c { solution = Map.insert name valuation (solution c) }) cands
   env <- use initEnv
-  cands'' <- lift . lift . lift $ refine (Set.toList clauses) qmap' (instantiateConsAxioms env) cands'
+  cands'' <- lift . lift . lift $ checkCandidates False (Set.toList clauses) (instantiateConsAxioms env) cands'
     
   when (null cands'') $ do
     ec <- use errorContext
