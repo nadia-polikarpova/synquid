@@ -50,7 +50,7 @@ data ExplorerParams = ExplorerParams {
   _partialSolution :: Bool,               -- ^ Should implementations that only cover part of the input space be accepted?
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
   _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
-  _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
+  _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging and symmetry reduction)
   _useMemoization :: Bool,                -- ^ Should enumerated terms be memoized?
   _symmetryReduction :: Bool,             -- ^ Should partial applications be memoized to check for redundancy?
   _explorerLogLevel :: Int                -- ^ How verbose logging is
@@ -384,33 +384,46 @@ checkE env typ p@(Program pTerm pTyp) = do
       unknownId (Unknown _ i) = Just i
       unknownId _ = Nothing
 
+      areTypesEqual :: MonadHorn s => Environment -> RType -> RType -> Explorer s ()
+      areTypesEqual env t1 t2 = do
+        writeLog 1 (text "Solving Type Equality" $+$ pretty t1 $+$ pretty t2)
+        oldTC <- use $ typingState . typingConstraints
+        addConstraint $ Subtype env t1 t2 False 
+        addConstraint $ Subtype env t2 t1 False
+        runInSolver solveTypeConstraints
+        typingState . typingConstraints .= oldTC
+
       checkSymmetry = do
         ctx <- asks $ _context . fst
         let fixedContext = ctx (untyped PHole)
         if arity typ > 0
           then do
-              solverState <- get
               let partialKey = PartialKey fixedContext
               startPartials <- getPartials
               let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
               let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
               let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
 
-              -- Turn off all qualifiers, and thus all match abductions.
+              -- Turn off all qualifiers that abduction might be performed on.
+              -- TODO: Find a better way to turn off abduction.
+              solverState <- get
               let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
               let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
               typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
 
-              writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of" <+> pretty repeatPartials <+> text "myCount is" <+> pretty myCount
+              writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
+              writeLog 1 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
 
-              -- Check that pTyp is not a subtype of multiple stored partials which match each other.
-              mapM_ (\(Program _ oldTyp, oldEnv) ->
+              -- Check that pTyp is not a supertype of any prior programs.
+              mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
                                ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
                                (\_ -> do
-                                    writeLog 1 $ text "Subtype of failed predecessor:" <+> pretty pTyp <+> text "in" <+> pretty fixedContext <+> text "Is a subtype of" <+> pretty oldTyp
+                                    writeLog 1 $ text "Supertype of failed predecessor:" <+> pretty pTyp <+> text "Is a supertype of" <+> pretty oldTyp
+                                    writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
+                                    writeLog 1 $ text "Context:" <+> pretty fixedContext
                                     typingState . qualifierMap .= qmap
                                     mzero)
-                               (return ())) $ map (\(prog, (count, env)) -> (prog, env)) repeatPartials
+                               (return ())) repeatPartials
 
               let newCount = 1 + myCount
               let newPartials = Map.insert p (newCount, env) pastPartials
