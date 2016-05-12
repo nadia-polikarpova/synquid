@@ -64,19 +64,20 @@ instance MonadSMT s => MonadHorn (FixPointSolver s) where
     lift initSolver
     return $ Candidate (topSolution Map.empty) Set.empty Set.empty "0"
     
-  refine = refineCandidates
+  checkCandidates = check
+    
+  refineCandidates = refine
   
-  pruneQualifiers quals = ifM (asks pruneQuals) (pruneQSpace quals) (return quals)
+  pruneQualifiers quals = ifM (asks pruneQuals) (pruneQSpace quals) (return quals)  
   
-  checkConsistency = check
  
 {- Implementation -}
 
--- | 'refineCandidates' @constraints quals extractAssumptions cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
+-- | 'refine' @constraints quals extractAssumptions cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
 -- use @extractAssumptions@ to extract axiom instantiations from formulas;
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
-refineCandidates :: MonadSMT s => [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
-refineCandidates constraints quals extractAssumptions cands = do
+refine :: MonadSMT s => [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
+refine constraints quals extractAssumptions cands = do
     writeLog 2 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
     let constraints' = filter isNew constraints
     cands' <- mapM (addConstraints constraints') cands
@@ -91,18 +92,21 @@ refineCandidates constraints quals extractAssumptions cands = do
       (valids', invalids') <- partitionM (isValidFml . hornApplySolution extractAssumptions sol') constraints -- Evaluate new constraints
       return $ Candidate sol' (valids `Set.union` Set.fromList valids') (invalids `Set.union` Set.fromList invalids') label
 
--- | 'check' @fmls extractAssumptions cands@ : return those candidates from @cands@ under which all @fmls@ are satisfiable;
+-- | 'check' @consistency fmls extractAssumptions cands@ : return those candidates from @cands@ under which all @fmls@ are either valid or satisfiable, depending on @consistency@;
 -- use @extractAssumptions@ to extract axiom instantiations from formulas
-check :: MonadSMT s => [Formula] ->  ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
-check fmls extractAssumptions cands = do    
-    writeLog 2 (vsep [nest 2 $ text "Consistency" $+$ vsep (map pretty fmls), nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
+check :: MonadSMT s => Bool -> [Formula] ->  ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
+check consistency fmls extractAssumptions cands = do    
+    writeLog 2 (vsep [
+      nest 2 $ (if consistency then text "Checking consistency" else text "Checking validity") $+$ vsep (map pretty fmls), 
+      nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
     cands' <- filterM checkCand cands
     writeLog 2 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
     return cands'
   where
-    negate sol fml = let fml' = applySolution sol fml in fnot (fml' |&| conjunction (extractAssumptions fml'))
-      
-    checkCand (Candidate sol valids invalids label) = not <$> anyM isValidFml (map (negate sol) fmls)
+    apply sol fml = let fml' = applySolution sol fml in fml' |&| conjunction (extractAssumptions fml')      
+    checkCand (Candidate sol valids invalids label) = if consistency
+      then allM isSatFml (map (apply sol) fmls)
+      else allM isValidFml (map (hornApplySolution extractAssumptions sol) fmls)
 
 -- | 'greatestFixPoint' @quals constraints@: weakest solution for a system of second-order constraints @constraints@ over qualifiers @quals@.
 greatestFixPoint :: MonadSMT s => QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
@@ -318,9 +322,13 @@ prune isSubsumed (x:xs) = prune' [] x xs
     prune' lefts x [] = ifM (isSubsumed x lefts) (return lefts) (return $ x:lefts)
     prune' lefts x rights@(y:ys) = ifM (isSubsumed x (lefts ++ rights)) (prune' lefts y ys) (prune' (lefts ++ [x]) y ys)
     
--- | 'isValid' lifted to FixPointSolver      
+-- | 'isValid' @fml@: is @fml@ valid (free variables are implicitly universally quantified)?
 isValidFml :: MonadSMT s => Formula -> FixPointSolver s Bool
-isValidFml = lift . isValid
+isValidFml fml = not <$> lift (isSat $ fnot fml)
+
+-- | 'isSat' @fml@: is @fml@ satisfiable (free variables are implicitly existentially quantified)?
+isSatFml :: MonadSMT s => Formula -> FixPointSolver s Bool
+isSatFml = lift . isSat
 
 writeLog level msg = do
   maxLevel <- asks solverLogLevel
