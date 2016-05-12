@@ -68,14 +68,14 @@ instance MonadSMT Z3State where
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
 
-  isValid fml = do
-      res <- local $ (toAST >=> assert) (fnot fml) >> check
+  isSat fml = do
+      res <- local $ (toAST >=> assert) fml >> check
 
       case res of
-        Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "VALID") $ return True
-        Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "INVALID") $ return False
+        Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNSAT") $ return False
+        Sat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "SAT") $ return True
         -- _ -> error $ unwords ["isValid: Z3 returned Unknown for", show fml]
-        _ -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNKNOWN treating as INVALID") $ return False
+        _ -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNKNOWN treating as SAT") $ return True
 
   allUnsatCores = getAllMUSs
 
