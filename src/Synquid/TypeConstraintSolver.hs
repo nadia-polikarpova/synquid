@@ -19,6 +19,7 @@ module Synquid.TypeConstraintSolver (
   addFixedUnknown,
   setUnknownRecheck,
   solveTypeConstraints,
+  solveAllCandidates,
   matchConsType,
   hasPotentialScrutinees,
   freshId,
@@ -188,6 +189,21 @@ solveHornClauses = do
     ec <- use errorContext
     throwError $ errorText "Cannot find sufficiently strong refinements" $+$ ec
   candidates .= cands'
+  
+solveAllCandidates :: MonadHorn s => TCSolver s ()  
+solveAllCandidates = do
+  cands <- use candidates
+  cands' <- concat <$> mapM solveCandidate cands
+  candidates .= cands'
+  where
+    solveCandidate c@(Candidate s valids invalids _) = 
+      if null invalids
+        then return [c]
+        else do
+          qmap <- use qualifierMap
+          env <- use initEnv        
+          cands' <- lift . lift . lift $ refineCandidates [] qmap (instantiateConsAxioms env) [c]
+          concat <$> mapM solveCandidate cands'
 
 -- | Filter out liquid assignments that are too strong for current consistency checks  
 checkTypeConsistency :: MonadHorn s => TCSolver s ()  

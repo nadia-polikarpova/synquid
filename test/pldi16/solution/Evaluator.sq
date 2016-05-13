@@ -43,8 +43,8 @@ measure result2 :: PAST -> Int where
 transform :: x: AST -> {PAST | result2 _v == result x}
 transform = \x . 
   match x with
-    Zero -> IntNode zero
     One -> IntNode one
+    Zero -> IntNode zero
     Two -> IntNode two
     PlusNode x6 x7 -> OpNode zero
                         (transform x6) (transform x7)

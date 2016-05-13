@@ -14,9 +14,6 @@ type List a = PList a <{True}>
 type UList a = PList a <{!(_0 in elems _1)}>
 
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
-	
-nub' :: xs: List a -> acc: UList a -> {UList a | elems _v == elems acc + elems xs}
-nub' = ??
 
 nub :: xs: List a -> {UList a | elems _v == elems xs}
 nub = ??

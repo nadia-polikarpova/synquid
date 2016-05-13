@@ -62,8 +62,8 @@ merge :: x:a
           -> r: {AVL {a | _v > x} | isBal l _v 1}
           -> {AVL a | bigHt l r _v && elems _v == elems l + elems r}
 merge = \x . \l . \r . 
-      match extractMin l with
-        Nothing -> r
+      match extractMin r with
+        Nothing -> l
         MinPair x4 x5 -> balance x4 l x5
 
 delete :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight _v) (realHeight t) &&
