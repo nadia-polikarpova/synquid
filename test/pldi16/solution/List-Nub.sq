@@ -15,20 +15,11 @@ type UList a = PList a <{!(_0 in elems _1)}>
 
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 	
-nub' :: xs: List a -> acc: UList a -> {UList a | elems _v == elems acc + elems xs}
-nub' = \xs . \acc . 
-    match xs with
-      Nil -> acc
-      Cons x3 x4 -> 
-        if elem x3 x4
-          then nub' x4 acc
-          else 
-            if elem x3 acc
-              then nub' x4 acc
-              else Cons x3 (nub' x4 acc)
-
 nub :: xs: List a -> {UList a | elems _v == elems xs}
 nub = \xs . 
   match xs with
     Nil -> Nil
-    Cons x3 x4 -> nub' xs Nil
+    Cons x3 x4 -> 
+      if elem x3 x4
+        then nub x4
+        else Cons x3 (nub x4)

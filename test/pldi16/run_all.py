@@ -73,7 +73,7 @@ ALL_BENCHMARKS = [
     BenchmarkGroup("Unique list", [], [
         Benchmark('UniqueList-Insert', 'insert', '$=$, $\\neq$'),
         Benchmark('UniqueList-Delete', 'delete', '$=$, $\\neq$'),
-        Benchmark('List-Nub', 'remove duplicates', 'is member', ['-m=1']),
+        Benchmark('List-Nub', 'remove duplicates', 'is member', []),
         Benchmark('List-Compress', 'remove adjacent dupl.', '$=$, $\\neq$'),
         Benchmark('UniqueList-Range', 'integer range', '0, inc, dec, $\\leq$, $\\neq$'),
         ]),

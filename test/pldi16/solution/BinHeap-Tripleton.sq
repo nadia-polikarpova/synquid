@@ -15,23 +15,23 @@ measure elems :: Heap a -> Set a where
  
 tripleton :: x: a -> y: a -> z: a -> {Heap a | elems _v == [x, y, z]}
 tripleton = \x . \y . \z . 
-      if (((x <= z) && (y <= z)) && (z
-                                       <= x)) && (z <= y)
+      if ((x <= y) && (y <= z)) && (z
+                                      <= x)
         then Node x Empty Empty
         else 
-          if (((z != x) && (y <= z)) && (z
-                                           <= x)) && (z <= y)
-            then Node z Empty (Node x Empty
+          if (((z != y) && (x <= y)) && (y
+                                           <= x)) && (y <= z)
+            then Node y Empty (Node z Empty
                                  Empty)
             else 
-              if ((x <= y) && (y <= x)) && (y
-                                              <= z)
-                then Node y Empty (Node z Empty
+              if (((y != x) && (x <= y)) && (x
+                                               <= z)) && (z <= x)
+                then Node x Empty (Node y Empty
                                      Empty)
                 else 
-                  if (((y != x) && (x <= y)) && (x
-                                                   <= z)) && (z <= x)
-                    then Node x Empty (Node y Empty
+                  if ((y <= z) && (z <= x)) && (z
+                                                  <= y)
+                    then Node z Empty (Node x Empty
                                          Empty)
                     else 
                       if (y <= x) && (y <= z)

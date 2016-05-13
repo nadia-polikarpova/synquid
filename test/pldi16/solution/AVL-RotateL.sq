@@ -58,7 +58,7 @@ rotL0 = \x . \l . \r .
       match l with
         Leaf -> error
         Node x5 x6 x7 x8 -> 
-          match x7 with
+          match x6 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x5
                                       x6 (Node x x7 r x8) (inc x8)

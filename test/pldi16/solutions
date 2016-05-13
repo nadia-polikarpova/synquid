@@ -118,7 +118,7 @@ delete = \x . \xs .
 (Spec size: 8)
 (Solution size: 26)
 List-Map
-map :: f:(x0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+map :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
 map = \f . \xs . 
     match xs with
       Nil -> Nil
@@ -146,7 +146,7 @@ zip = \xs . \ys .
 (Spec size: 10)
 (Solution size: 22)
 List-ZipWith
-zipWith :: f:(x1:a -> x0:b -> c) -> xs:List a -> ys:{List b|len _v == len xs} -> {List c|len _v == len xs}
+zipWith :: f:(arg1:a -> arg0:b -> c) -> xs:List a -> ys:{List b|len _v == len xs} -> {List c|len _v == len xs}
 zipWith = \f . \xs . \ys . 
       match xs with
         Nil -> Nil
@@ -167,15 +167,18 @@ product :: xs:List a -> ys:List b -> {List Pair a b|len _v == len xs * len ys}
 product = \xs . \ys . 
     match xs with
       Nil -> Nil
-      Cons x3 x4 -> let f0 = \x8 .
-                        Pair x3 x8 in
-                    append (map f0 ys) (product x4
-                                          ys)
+      Cons x3 x4 -> 
+        match ys with
+          Nil -> Nil
+          Cons x7 x8 -> let f0 = \x12 .
+                            Pair x3 x12 in
+                        append (map f0 ys) (product x4
+                                              ys)
 
 (Goals: 1)
 (Measures: 3)
 (Spec size: 8)
-(Solution size: 26)
+(Solution size: 29)
 List-Ith
 ith :: <p :: Int -> a -> Bool> . xs:List a <p> -> i:{Int|0 <= _v && _v < len xs} -> {a|p i _v}
 ith = \xs . \i . 
@@ -290,28 +293,19 @@ delete = \x . \xs .
 (Spec size: 8)
 (Solution size: 22)
 List-Nub
-nub' :: xs:List a -> acc:UList a -> {UList a|elems _v == elems acc + elems xs}
-nub' = \xs . \acc . 
-    match xs with
-      Nil -> acc
-      Cons x3 x4 -> 
-        if elem x3 x4
-          then nub' x4 acc
-          else 
-            if elem x3 acc
-              then nub' x4 acc
-              else Cons x3 (nub' x4 acc)
-
 nub :: xs:List a -> {UList a|elems _v == elems xs}
 nub = \xs . 
   match xs with
     Nil -> Nil
-    Cons x3 x4 -> nub' xs Nil
+    Cons x3 x4 -> 
+      if elem x3 x4
+        then nub x4
+        else Cons x3 (nub x4)
 
-(Goals: 2)
+(Goals: 1)
 (Measures: 2)
-(Spec size: 13)
-(Solution size: 47)
+(Spec size: 5)
+(Solution size: 21)
 List-Compress
 compress :: xs:List a -> {CList a|elems _v == elems xs}
 compress = \xs . 
@@ -777,23 +771,23 @@ doubleton = \x . \y .
 BinHeap-Tripleton
 tripleton :: x:a -> y:a -> z:a -> {Heap a|elems _v == [x, y, z]}
 tripleton = \x . \y . \z . 
-      if (((x <= z) && (y <= z)) && (z
-                                       <= x)) && (z <= y)
+      if ((x <= y) && (y <= z)) && (z
+                                      <= x)
         then Node x Empty Empty
         else 
-          if (((z != x) && (y <= z)) && (z
-                                           <= x)) && (z <= y)
-            then Node z Empty (Node x Empty
+          if (((z != y) && (x <= y)) && (y
+                                           <= x)) && (y <= z)
+            then Node y Empty (Node z Empty
                                  Empty)
             else 
-              if ((x <= y) && (y <= x)) && (y
-                                              <= z)
-                then Node y Empty (Node z Empty
+              if (((y != x) && (x <= y)) && (x
+                                               <= z)) && (z <= x)
+                then Node x Empty (Node y Empty
                                      Empty)
                 else 
-                  if (((y != x) && (x <= y)) && (x
-                                                   <= z)) && (z <= x)
-                    then Node x Empty (Node y Empty
+                  if ((y <= z) && (z <= x)) && (z
+                                                  <= y)
+                    then Node z Empty (Node x Empty
                                          Empty)
                     else 
                       if (y <= x) && (y <= z)
@@ -809,7 +803,7 @@ tripleton = \x . \y . \z .
 (Goals: 1)
 (Measures: 2)
 (Spec size: 7)
-(Solution size: 246)
+(Solution size: 238)
 AVL-RotateL
 rotLR :: x:a -> l:{AVL {a|_v < x}|balFac _v < 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == realHeight l && elems _v == ([x] + elems l) + elems r}
 rotLR = \x . \l . \r . 
@@ -837,7 +831,7 @@ rotL0 = \x . \l . \r .
       match l with
         Leaf -> error
         Node x5 x6 x7 x8 -> 
-          match x7 with
+          match x6 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x5
                                       x6 (Node x x7 r x8) (inc x8)
@@ -873,7 +867,7 @@ rotR0 = \x . \l . \r .
       match r with
         Leaf -> error
         Node x5 x6 x7 x8 -> 
-          match x7 with
+          match x6 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x5
                                       (Node x l x6 x8) x7 (inc x8)
@@ -949,8 +943,8 @@ extractMin = \t .
 AVL-Delete
 merge :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|isBal l _v 1} -> {AVL a|bigHt l r _v && elems _v == elems l + elems r}
 merge = \x . \l . \r . 
-      match extractMin l with
-        Nothing -> r
+      match extractMin r with
+        Nothing -> l
         MinPair x4 x5 -> balance x4 l x5
 
 delete :: y:a -> t:AVL a -> {AVL a|eqOrOneLess (realHeight _v) (realHeight t) && elems t - [y] == elems _v}
@@ -1076,8 +1070,8 @@ Evaluator
 transform :: x:AST -> {PAST|result2 _v == result x}
 transform = \x . 
   match x with
-    Zero -> IntNode zero
     One -> IntNode one
+    Zero -> IntNode zero
     Two -> IntNode two
     PlusNode x6 x7 -> OpNode zero
                         (transform x6) (transform x7)
