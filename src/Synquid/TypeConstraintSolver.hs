@@ -300,7 +300,7 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
       modify $ addTypingConstraint c -- Still has type variables: cannot determine shape
     else do                 
-      u <- freshId "u"
+      u <- freshId "U"
       addPredAssignment p (Unknown Map.empty u)
       let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
       let vars = zipWith Var argSorts' deBrujns
@@ -450,7 +450,7 @@ fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
 fresh env (ScalarT baseT _) = do
   baseT' <- freshBase baseT
   -- Replace refinement with fresh predicate unknown:
-  k <- freshId "u"
+  k <- freshId "U"
   return $ ScalarT baseT' (Unknown Map.empty k)
   where
     freshBase (DatatypeT name tArgs _) = do

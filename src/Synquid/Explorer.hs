@@ -130,10 +130,10 @@ generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (genera
   where
     -- | Guess an E-term and abduce a condition for it
     generateThen = do
-      cUnknown <- Unknown Map.empty <$> freshId "u"
+      cUnknown <- Unknown Map.empty <$> freshId "U"
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
-      cond <- conjunction <$> weakestValuation cUnknown
+      cond <- conjunction <$> currentValuation cUnknown
       return (cond, pThen)
 
 -- | Proceed after solution @pThen@ has been found under assumption @cond@
@@ -142,7 +142,7 @@ generateElse env t cond pThen = if cond == ftrue
   else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
     pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
     
-    cUnknown <- Unknown Map.empty <$> freshId "u"
+    cUnknown <- Unknown Map.empty <$> freshId "U"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
     let conditional = Program (PIf pCond pThen pElse) t
@@ -209,10 +209,10 @@ generateFirstCase env scrVar pScrutinee t consName = do
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
 
       ifte  (do -- Try to find a vacuousness condition:
-              deadUnknown <- Unknown Map.empty <$> freshId "u"
+              deadUnknown <- Unknown Map.empty <$> freshId "U"
               addConstraint $ WellFormedCond env deadUnknown
               err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
-              deadValuation <- weakestValuation deadUnknown
+              deadValuation <- currentValuation deadUnknown
               return (err, conjunction deadValuation)) 
             (\(err, deadCond) -> return $ (Case consName binders err, deadCond)) 
             (do
@@ -250,15 +250,15 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
   where
     -- | Guess an E-term and abduce a condition and a match-condition for it
     generateOneBranch = do
-      matchUnknown <- Unknown Map.empty <$> freshId "u"
+      matchUnknown <- Unknown Map.empty <$> freshId "U"
       addConstraint $ WellFormedMatchCond env matchUnknown
-      condUnknown <- Unknown Map.empty <$> freshId "u"
+      condUnknown <- Unknown Map.empty <$> freshId "U"
       addConstraint $ WellFormedCond env condUnknown
       cut $ do
         p0 <- generateEOrError (addAssumption matchUnknown . addAssumption condUnknown $ env) t
-        matchValuation <- Set.toList <$> weakestValuation matchUnknown
+        matchValuation <- Set.toList <$> currentValuation matchUnknown
         let matchVars = Set.toList $ Set.unions (map varsOf matchValuation)
-        condValuation <- weakestValuation condUnknown
+        condValuation <- currentValuation condUnknown
         let badError = isError p0 && length matchVars /= 1 -- null matchValuation && (not $ Set.null condValuation) -- Have we abduced a nontrivial vacuousness condition that is not a match branch?
         writeLog 2 $ text "Match valuation" <+> pretty matchValuation <+> if badError then text ": discarding error" else empty
         guard $ not badError -- Such vacuousness conditions are not productive (do not add to the environment assumptions and can be discovered over and over infinitely)        
@@ -463,7 +463,7 @@ enumerateAt env typ d = do
         generateApp (\e t -> generateEAt e t d) (\e t -> generateEUpTo e t (d - 1))
 
     generateApp genFun genArg = do
-      x <- freshId "A"
+      x <- freshId "X"
       (env', fun) <- inContext (\p -> Program (PApp p uHole) typ)
                             $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
@@ -503,8 +503,8 @@ generateError env = do
 toVar (Program (PSymbol name) t) env 
   | not (isConstant name env)  = return (env, Var (toSort $ baseTypeOf t) name)
 toVar p@(Program _ t) env = do
-  let g = show $ plain $ pretty p <> pretty t
-  -- g <- freshId "G"
+  -- let g = show $ plain $ pretty p <> pretty t
+  g <- freshId "G"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
 
 enqueueGoal env typ impl depth = do
@@ -570,16 +570,19 @@ freshVar env prefix = runInSolver $ TCSolver.freshVar env prefix
 -- | Return the current valuation of @u@;
 -- in case there are multiple solutions,
 -- order them from weakest to strongest in terms of valuation of @u@ and split the computation
-weakestValuation :: MonadHorn s => Formula -> Explorer s Valuation
-weakestValuation u = do
-  cands <- use (typingState . candidates)
-  let candGroups = groupBy (\c1 c2 -> val c1 == val c2) $ sortBy (\c1 c2 -> setCompare (val c1) (val c2)) cands
-  msum $ map pickCandidiate candGroups
+currentValuation :: MonadHorn s => Formula -> Explorer s Valuation
+currentValuation u = do
+  (first : rest) <- use (typingState . candidates)
+  pickFirst first `mplus` pickRest rest
   where
     val c = valuation (solution c) u
-    pickCandidiate cands' = do
-      typingState . candidates .= cands'
-      return $ val (head cands')    
+    pickFirst first = do
+      typingState . candidates .= [first]
+      return $ val first
+    pickRest rest = do
+      typingState . candidates .= rest
+      runInSolver solveTypeConstraints
+      currentValuation u      
 
 inContext ctx f = local (over (_1 . context) (. ctx)) f
     
