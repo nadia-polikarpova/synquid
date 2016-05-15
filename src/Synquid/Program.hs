@@ -79,16 +79,6 @@ unifySorts boundTvs = unifySorts' Map.empty
     unifySorts' subst (x: _) (y: _)                 
       = Left (x, y)
 
--- | 'complies' @s s'@: are @s@ and @s'@ the same modulo unknowns?
-complies :: Sort -> Sort -> Bool  
--- complies s s' = isRight $ unifySorts [s] [s']
-complies AnyS s = True  
-complies s AnyS = True
-complies (SetS s) (SetS s') = complies s s'
-complies (VarS name) (VarS name') = name == name'
-complies (DataS name sArgs) (DataS name' sArgs') = name == name' && and (zipWith complies sArgs sArgs')
-complies s s' = s == s'
-
 arity :: TypeSkeleton r -> Int
 arity (FunctionT _ _ t) = 1 + arity t
 arity _ = 0

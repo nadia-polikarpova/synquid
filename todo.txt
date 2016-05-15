@@ -1,10 +1,5 @@
+- Match case pruning
 - Split subtyping constraints with multiple measures?  
-- More principled type substitution and qualifier discovery, translate type variables and datatypes into uninterpreted types
-  - Better resolver: global type constraint solving? (test case: list split)
-  - Better qualifier extraction for abstract refinements
-  - Re-enable sort checking in substitute (sometimes wrong in applications, test case: List-Fold-Sort)
-  - Use unifySorts for qualifier substitution instead of complies
-  - Qualifier discovery should be local (otherwise doesn't work for abstract refinements?)
 - Multisets
 - Source lines in resolver
 
