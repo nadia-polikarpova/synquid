@@ -497,7 +497,7 @@ addQuals name quals = do
 -- | Add unknown @name@ with valuation @valuation@ to solutions of all candidates  
 addFixedUnknown :: MonadHorn s => Id -> Set Formula -> TCSolver s ()  
 addFixedUnknown name valuation = do
-    addQuals name emptyQSpace
+    addQuals name (toSpace Nothing (Set.toList valuation))
     candidates %= map update
   where
     update cand = cand { solution = Map.insert name valuation (solution cand) }

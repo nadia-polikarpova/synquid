@@ -23,10 +23,7 @@ product :: xs: List a -> ys: List b -> {List (Pair (a) (b)) | len _v == len xs *
 product = \xs . \ys . 
     match xs with
       Nil -> Nil
-      Cons x3 x4 -> 
-        match ys with
-          Nil -> Nil
-          Cons x7 x8 -> let f0 = \x12 .
-                            Pair x3 x12 in
-                        append (map f0 ys) (product x4
-                                              ys)
+      Cons x3 x4 -> let f0 = \x12 .
+                        Pair x3 x12 in
+                     append (map f0 ys) (product x4
+                                           ys)
