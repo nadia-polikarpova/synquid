@@ -145,13 +145,17 @@ generateElse env t cond pThen = if cond == ftrue
     cUnknown <- Unknown Map.empty <$> freshId "U"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
-    let conditional = Program (PIf pCond pThen pElse) t
-    if isHole pElse
-      then return conditional
-      else ifte -- If synthesis of the else branch succeeded, try to remove the conditional
-            (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty) -- Re-check subsumption constraints after retracting @!cond@
-            (const $ return pElse)                                             -- constraints still hold: @pElse@ is a valid solution for both branches
-            (return conditional)                                               -- constraints don't hold: the conditional is essential               
+    ifM (tryEliminateBranching pElse (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty))
+      (return pElse)
+      (return $ Program (PIf pCond pThen pElse) t)
+            
+tryEliminateBranching branch recheck = 
+  if isHole branch
+      then return False
+      else ifte -- If synthesis of the branch succeeded, try to remove the branching construct
+            recheck -- Re-check Horn constraints after retracting the branch guard
+            (const $ return True) -- constraints still hold: @branch@ is a valid solution overall
+            (return False) -- constraints don't hold: the guard is essential
             
 generateCondition env fml = do
   conjuncts <- mapM genConjunct allConjuncts
@@ -191,7 +195,7 @@ generateMatch env t = do
 
           (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
           (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)                  -- First case generated separately in an attempt to abduce a condition for the whole match
-          pCases <- mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
+          pCases <- map fst <$> mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
           let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
           generateElse env t cond pThen                                                               -- Generate the else branch
 
@@ -222,6 +226,7 @@ generateFirstCase env scrVar pScrutinee t consName = do
               return $ (Case consName binders pCaseExpr, ftrue))
 
 -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
+generateCase  :: MonadHorn s => Environment -> Formula -> RProgram -> RType -> Id -> Explorer s (Case RType, Explorer s ())
 generateCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
@@ -230,14 +235,25 @@ generateCase env scrVar pScrutinee t consName = do
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshVar env "x")
-      (syms, ass) <- caseSymbols scrVar binders consT'
+      (syms, ass) <- caseSymbols scrVar binders consT'      
       unfoldSyms <- asks $ _unfoldLocals . fst
-      let caseEnv = (if unfoldSyms then unfoldAllVariables else id) $ foldr (uncurry addVariable) (addAssumption ass env) syms
+      
+      cUnknown <- Unknown Map.empty <$> freshId "U"
+      runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton ass) -- Create a fixed-valuation unknown to assume @ass@      
+      
+      let caseEnv = (if unfoldSyms then unfoldAllVariables else id) $ foldr (uncurry addVariable) (addAssumption cUnknown env) syms
       pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
                                        $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                                        $ generateError caseEnv `mplus` generateI caseEnv t
-      return $ Case consName binders pCaseExpr
+                                       
+      let recheck = if disjoint (symbolsOf pCaseExpr) (Set.fromList binders)
+                      then runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty
+                      else mzero
+                                       
+      return (Case consName binders pCaseExpr, recheck)
 
+-- | 'caseSymbols' @scrutinee binders consT@: a pair that contains (1) a list of bindings of @binders@ to argument types of @consT@
+-- and (2) a formula that is the return type of @consT@ applied to @scrutinee@
 caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
   return ([], subst fml)
 caseSymbols x (name : names) (FunctionT y tArg tRes) = do
@@ -282,10 +298,18 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
       let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
       let env' = addScrutinee pScrutinee env
       pBaseCase' <- cut $ inContext (\p -> Program (PMatch pScrutinee [Case c [] p]) t) $
-                            generateMatchesFor (addAssumption matchCond env') rest pBaseCase t      
-      pOtherCases <- mapM (cut . generateCase env' matchVar pScrutinee t) (delete c ctors)
-      return $ Program (PMatch pScrutinee (Case c [] pBaseCase : pOtherCases)) t  
-
+                            generateMatchesFor (addAssumption matchCond env') rest pBaseCase t
+                            
+      let genOtherCases previousCases ctors = 
+            case ctors of
+              [] -> return $ Program (PMatch pScrutinee previousCases) t
+              (ctor:rest) -> do
+                (c, recheck) <- cut $ generateCase env' matchVar pScrutinee t ctor
+                ifM (tryEliminateBranching (expr c) recheck)
+                  (return $ expr c)
+                  (genOtherCases (previousCases ++ [c]) rest)
+                            
+      genOtherCases [Case c [] pBaseCase] (delete c ctors)
 
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)

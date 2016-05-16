@@ -80,15 +80,12 @@ take = \n . \xs .
           Nil -> error
           Cons x3 x4 -> Cons x3 (take (dec
                                          n) x4)
-      else 
-        match xs with
-          Nil -> xs
-          Cons x12 x13 -> Nil
+      else Nil
 
 (Goals: 1)
 (Measures: 1)
 (Spec size: 8)
-(Solution size: 27)
+(Solution size: 24)
 List-Drop
 drop :: n:Nat -> xs:{List a|len _v >= n} -> {List a|len _v == len xs - n}
 drop = \n . \xs . 
@@ -167,18 +164,15 @@ product :: xs:List a -> ys:List b -> {List Pair a b|len _v == len xs * len ys}
 product = \xs . \ys . 
     match xs with
       Nil -> Nil
-      Cons x3 x4 -> 
-        match ys with
-          Nil -> Nil
-          Cons x7 x8 -> let f0 = \x12 .
-                            Pair x3 x12 in
-                        append (map f0 ys) (product x4
-                                              ys)
+      Cons x3 x4 -> let f0 = \x12 .
+                        Pair x3 x12 in
+                    append (map f0 ys) (product x4
+                                          ys)
 
 (Goals: 1)
 (Measures: 3)
 (Spec size: 8)
-(Solution size: 29)
+(Solution size: 26)
 List-Ith
 ith :: <p :: Int -> a -> Bool> . xs:List a <p> -> i:{Int|0 <= _v && _v < len xs} -> {a|p i _v}
 ith = \xs . \i . 
@@ -699,15 +693,12 @@ flatten = \t .
                        (flatten x5) (flatten x6)
 
 sort :: xs:List a -> {IList a|ielems _v == elems xs}
-sort = \xs . 
-  match xs with
-    Nil -> INil
-    Cons x3 x4 -> flatten (toBST xs)
+sort = \xs . flatten (toBST xs)
 
 (Goals: 5)
 (Measures: 6)
 (Spec size: 51)
-(Solution size: 115)
+(Solution size: 112)
 BinHeap-Member
 member :: x:a -> t:Heap a -> {Bool|_v == (x in elems t)}
 member = \x . \t . 
@@ -830,16 +821,13 @@ rotL0 :: x:a -> l:{AVL {a|_v < x}|balFac _v == 0} -> r:{AVL {a|_v > x}|realHeigh
 rotL0 = \x . \l . \r . 
       match l with
         Leaf -> error
-        Node x5 x6 x7 x8 -> 
-          match x6 with
-            Leaf -> error
-            Node x13 x14 x15 x16 -> Node x5
-                                      x6 (Node x x7 r x8) (inc x8)
+        Node x5 x6 x7 x8 -> Node x5 x6
+                              (Node x x7 r x8) (inc x8)
 
 (Goals: 3)
 (Measures: 3)
 (Spec size: 104)
-(Solution size: 91)
+(Solution size: 88)
 AVL-RotateR
 rotRR :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v < 0} -> {AVL a|realHeight _v == realHeight r && elems _v == ([x] + elems l) + elems r}
 rotRR = \x . \l . \r . 
@@ -866,16 +854,13 @@ rotR0 :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight
 rotR0 = \x . \l . \r . 
       match r with
         Leaf -> error
-        Node x5 x6 x7 x8 -> 
-          match x6 with
-            Leaf -> error
-            Node x13 x14 x15 x16 -> Node x5
-                                      (Node x l x6 x8) x7 (inc x8)
+        Node x5 x6 x7 x8 -> Node x5
+                              (Node x l x6 x8) x7 (inc x8)
 
 (Goals: 3)
 (Measures: 3)
 (Spec size: 107)
-(Solution size: 91)
+(Solution size: 88)
 AVL-Balance
 balance :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|isBal l _v 2} -> {AVL a|(balHt l r _v && bigHt l r _v) && elems _v == ([x] + elems l) + elems r}
 balance = \x . \l . \r . 

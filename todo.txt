@@ -1,8 +1,6 @@
-- Match case pruning
 - Split subtyping constraints with multiple measures?  
 - Multisets
 - Source lines in resolver
-
 
 - Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
 - Named arguments for abstract predicates

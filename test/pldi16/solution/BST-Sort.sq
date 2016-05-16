@@ -71,7 +71,4 @@ flatten = \t .
                        (flatten x5) (flatten x6)
 
 sort :: xs: List a -> {IList a | ielems _v == elems xs}
-sort = \xs . 
-  match xs with
-    Nil -> INil
-    Cons x3 x4 -> flatten (toBST xs)
+sort = \xs . flatten (toBST xs)
