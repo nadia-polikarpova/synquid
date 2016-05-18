@@ -76,19 +76,19 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
 -- | 'instantiateTypeQualifier ' @qual@: qualifier generator that treats free variables of @qual@ except _v as parameters
 instantiateTypeQualifier :: Formula -> Environment -> [Formula] -> [Formula]
 instantiateTypeQualifier (BoolLit True) _ _ = []
-instantiateTypeQualifier qual env vars =
-  let formals = Set.toList . Set.filter (\v -> varName v /= valueVarName) . varsOf $ qual in
-  allSubstitutions env qual formals vars
+instantiateTypeQualifier qual env (actualVal : actualVars) =
+  let (formalVals, formalVars) = partition (\v -> varName v == valueVarName) . Set.toList . varsOf $ qual in
+  allSubstitutions env qual formalVars actualVars formalVals [actualVal]
 
 -- | 'instantiateCondQualifier' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 instantiateCondQualifier :: Formula -> Environment -> [Formula] -> [Formula]
 instantiateCondQualifier qual env vars = filter (not . isDataEq) $ -- TODO: disallowing datatype equality in conditionals, this is a bit of a hack
-    allSubstitutions env qual (Set.toList . varsOf $ qual) vars
-  where
-    isDataEq (Binary op e1 _)
-      | op == Eq || op == Neq = isData (sortOf e1)
-      | otherwise = False
-    isDataEq _ = False
+    allSubstitutions env qual (Set.toList . varsOf $ qual) vars [] []
+    
+isDataEq (Binary op e1 _)
+  | op == Eq || op == Neq = isData (sortOf e1)
+  | otherwise = False
+isDataEq _ = False
 
 -- | 'extractMatchQGen' @(dtName, dtDef)@: qualifier generator that generates qualifiers of the form x == ctor, for all scalar constructors ctor of datatype @dtName@
 extractMatchQGen :: (Id, DatatypeDef) -> Environment -> [Formula] -> [Formula]    
@@ -98,7 +98,7 @@ extractMatchQGen (dtName, (DatatypeDef tParams _ ctors _)) env vars = concatMap 
     extractForCtor ctor = case toMonotype $ allSymbols env Map.! ctor of
       ScalarT baseT fml -> 
         let fml' = sortSubstituteFml sortInst fml in
-        allSubstitutions env fml' [Var AnyS valueVarName] vars
+        allSubstitutions env fml' [Var (sortSubstitute sortInst $ toSort baseT) valueVarName] vars [] []
       _ -> []
     sortInst = Map.fromList $ zip tParams (map VarS distinctTypeVars)
 
@@ -142,7 +142,7 @@ extractCondFromType t@(FunctionT _ _ _) env vars = case lastType t of
     let 
       sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
       fml' = sortSubstituteFml sortInst fml 
-    in allSubstitutions env fml' (Set.toList . varsOf $ fml) vars
+    in filter (not . isDataEq) $ allSubstitutions env fml' (Set.toList . varsOf $ fml') vars [] []
   _ -> []
 extractCondFromType _ _ _ = []
 
@@ -167,7 +167,7 @@ extractPredQGenFromType t env vars = extractPredQGenFromType' t
           fmls = Set.toList $ conjunctsOf $ fml'
           extractFromConjunct c = 
             filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
-            allSubstitutions env c formals (init actualParams ++ actualVars)
+            allSubstitutions env c formals (init actualParams ++ actualVars) [] []
         in concatMap extractFromConjunct fmls
     
     extractPredQGenFromType' :: RType -> [Formula]
@@ -176,20 +176,31 @@ extractPredQGenFromType t env vars = extractPredQGenFromType' t
             let
               pArg' = sortSubstituteFml sortInst pArg
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
-            in allSubstitutions env pArg' formalVars actualVars -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
+            in allSubstitutions env pArg' formalVars actualVars [] [] -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
     extractPredQGenFromType' (FunctionT _ tArg tRes) = extractPredQGenFromType' tArg ++ extractPredQGenFromType' tRes
 
 -- | 'allSubstitutions' @env qual nonsubstActuals formals actuals@: 
 -- all well-typed substitutions of @actuals@ for @formals@ in a qualifier @qual@
-allSubstitutions :: Environment -> Formula -> [Formula] -> [Formula] -> [Formula]
-allSubstitutions _ (BoolLit True) _ _ = []
-allSubstitutions env qual formals actuals = do
-  let tvs = Set.fromList (env ^. boundTypeVars)
-  let pickSubstForVar var = [Map.singleton (varName var) v | v <- actuals, isRight (unifySorts tvs [sortOf v] [sortOf var])]
-  subst <- Map.unions <$> mapM pickSubstForVar formals
-  guard $ Set.size (Set.fromList $ Map.elems subst) == Map.size subst -- Only use substitutions with unique values
-  case resolveRefinement env (substitute subst qual) of
-    Left _ -> [] -- Variable sort mismatch
-    Right resolved -> return resolved
+allSubstitutions :: Environment -> Formula -> [Formula] -> [Formula] -> [Formula] -> [Formula] -> [Formula]
+allSubstitutions _ (BoolLit True) _ _ _ _ = []
+allSubstitutions env qual formals actuals fixedFormals fixedActuals = do
+  let tvs = Set.fromList (env ^. boundTypeVars)  
+  case unifySorts tvs (map sortOf fixedFormals) (map sortOf fixedActuals) of
+    Left _ -> []
+    Right fixedSortSubst -> do
+      let fixedSubst = Map.fromList $ zip (map varName fixedFormals) fixedActuals
+      let qual' = substitute fixedSubst qual
+      (_, subst, _) <- foldM (go tvs) (fixedSortSubst, Map.empty, actuals) formals
+      case resolveRefinement env (substitute subst qual') of
+        Left _ -> [] -- Variable sort mismatch
+        Right resolved -> return resolved
+    
+  where
+    go tvs (sortSubst, subst, actuals) formal = do
+      let formal' = sortSubstituteFml sortSubst formal
+      actual <- actuals
+      case unifySorts tvs [sortOf formal'] [sortOf actual] of
+        Left _ -> mzero
+        Right sortSubst' -> return (sortSubst `Map.union` sortSubst', Map.insert (varName formal) actual subst, delete actual actuals)

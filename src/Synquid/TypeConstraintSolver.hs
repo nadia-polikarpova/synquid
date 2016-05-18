@@ -369,7 +369,7 @@ processConstraint (WellFormed env t@(ScalarT baseT fml))
         tq <- asks _typeQualsGen
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
         let env' = addVariable valueVarName t env
-        when (not $ Map.member u qmap) $ addQuals u (tq env' (allScalars env tass))
+        when (not $ Map.member u qmap) $ addQuals u (tq env' (Var (toSort baseT) valueVarName : allScalars env tass))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
