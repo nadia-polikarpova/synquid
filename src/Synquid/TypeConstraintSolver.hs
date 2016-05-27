@@ -3,7 +3,6 @@
 -- | Incremental solving of subtyping and well-formedness constraints
 module Synquid.TypeConstraintSolver (
   TypeError,
-  QualsGen,
   TypingParams (..),
   TypingState,
   typingConstraints,
@@ -56,14 +55,12 @@ import Debug.Trace
 -- | Type error description
 type TypeError = Doc
 
-type QualsGen = Environment -> [Formula] -> QSpace
-
 -- | Parameters of type constraint solving
 data TypingParams = TypingParams {
-  _condQualsGen :: QualsGen,  -- ^ Qualifier generator for conditionals
-  _matchQualsGen :: QualsGen, -- ^ Qualifier generator for match scrutinees
-  _typeQualsGen :: QualsGen,  -- ^ Qualifier generator for types
-  _predQualsGen :: QualsGen,  -- ^ Qualifier generator for bound predicates
+  _condQualsGen :: Environment -> [Formula] -> QSpace,              -- ^ Qualifier generator for conditionals
+  _matchQualsGen :: Environment -> [Formula] -> QSpace,             -- ^ Qualifier generator for match scrutinees
+  _typeQualsGen :: Environment -> Formula -> [Formula] -> QSpace,   -- ^ Qualifier generator for types
+  _predQualsGen :: Environment -> [Formula] -> [Formula] -> QSpace, -- ^ Qualifier generator for bound predicates
   _tcSolverLogLevel :: Int    -- ^ How verbose logging is  
 }
 
@@ -321,7 +318,7 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
       let vars = zipWith Var argSorts' deBrujns
       pq <- asks _predQualsGen
-      addQuals u (pq (addAllVariables vars env) (vars ++ allScalars env tass))
+      addQuals u (pq (addAllVariables vars env) vars (allScalars env tass))
   where
     isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
@@ -369,7 +366,7 @@ processConstraint (WellFormed env t@(ScalarT baseT fml))
         tq <- asks _typeQualsGen
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
         let env' = addVariable valueVarName t env
-        when (not $ Map.member u qmap) $ addQuals u (tq env' (Var (toSort baseT) valueVarName : allScalars env tass))
+        when (not $ Map.member u qmap) $ addQuals u (tq env' (Var (toSort baseT) valueVarName) (allScalars env tass))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
