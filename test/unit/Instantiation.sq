@@ -1,0 +1,23 @@
+data List a where
+    Nil :: List a
+    Cons :: x: a -> xs: List a -> List a
+
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+data Z
+data S n
+
+data Natural n where
+  Zero :: Natural Z
+  Succ :: Natural n -> Natural (S n)
+
+measure toNat :: Natural n -> {Int | _v >= 0} where
+          Zero -> 0
+          Succ n -> 1 + toNat n
+
+ix :: xs: List a -> {Natural m | (toNat _v) <= (len xs)} -> a
+ix = ??
+
+

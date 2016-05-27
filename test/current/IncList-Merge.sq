@@ -1,0 +1,16 @@
+qualifier {x <= y, x != y}
+
+data IList a where
+	INil :: IList a
+	ICons :: x: a -> xs: IList {a | x <= _v} -> IList a
+  
+termination measure ilen :: IList a -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + ilen xs  
+
+measure ielems :: IList a -> Set a where
+  INil -> []
+  ICons x xs -> [x] + ielems xs
+	
+merge :: xs: IList a -> ys: IList a -> {IList a | ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
+merge = ??

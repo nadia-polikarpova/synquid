@@ -1,0 +1,26 @@
+type Nat = {Int | _v >= 0}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+  
+zero :: {Int | _v == 0}
+inc :: x:Int -> {Int | _v == x + 1}
+dec :: x:Int -> {Int | _v == x - 1}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}  
+	
+drop :: n: Nat -> xs: {List a | len _v >= n} -> {List a | len _v == len xs - n}
+drop = \n . \xs . 
+    if 0 != n
+      then 
+        match xs with
+          Nil -> error
+          Cons x3 x4 -> drop (dec n) x4
+      else xs
+
+	

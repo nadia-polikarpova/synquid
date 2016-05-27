@@ -1,0 +1,13 @@
+data Pair a b where
+	Pair :: x: a -> y: b -> Pair a b
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+zip :: xs: List a -> ys: {List b | len _v == len xs} -> {List (Pair (a) (b)) | len _v == len xs}
+zip = ??

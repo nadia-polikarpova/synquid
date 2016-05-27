@@ -1,15 +1,30 @@
-- Type classes (to help instantiate qualifiers)	
+- Split subtyping constraints with multiple measures?  
+- Multisets
+- Source lines in resolver
 
-- Do something with datatype equality: does it make everything slower? Eq?
+- Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
+- Named arguments for abstract predicates
+- Collapse lambda-expansions in aux goals
+- Mutual recursion
+- Type classes (for type variables and abstract datatypes)
+- Default components
+- Intersection types (carry multiple environments and type constraint checkers), good example: allPos :: (List Int -> Bool) &&& (List Pos -> {Bool | _v}) &&& ({List Nonpos | len _v > 0} -> {Bool | !_v})
 
-- Memoization: remove subsumed components?
+- Irrefutable type errors (like symbol not in scope)
 - Prove measure postconditions
 - BUG: polymorphic qualifier extraction
 - Check that the first constructor is the base case
-- When a measure is not mentioned in the goal spec, remove it from the componenets?
-- If we are looking for a datatype with a constraint on a measure that, for a certain constructor, only depends on some arguments, we can test that subtyping before finding all the other arguments
+- When a measure is not mentioned in the goal spec, remove it from the components?
 
-Front-end
-	- Make resolver multi-pass so that order of declarations doesn't matter
-	- Check if wf-metric is defined
-	- Attach positions to AST nodes?
+Security:
+- Make use of abstract predicates:
+  - Simple way: when the goal type contains an abstract predicate, either function return type or the argument types should contain that predicate
+  - More complex way: in addition to above, also propagate the information about the arguments of the predicate:
+    if it's in the function return type, unify the arguments and propagate that spec to the argument,
+    otherwise, function must be univalent (~ contain _v = f x), then substitute f _v for _v in the original predicate and propagate that to the argument
+
+When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this prdicate is around
+- Try encoding of atomic flow with HO functions
+
+Front-end:
+	- Attach positions to AST nodes

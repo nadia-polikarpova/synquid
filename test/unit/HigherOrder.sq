@@ -1,0 +1,32 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+type Nat = {Int | _v >= 0}    
+type Pos = {Int | _v > 0}  
+  
+and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
+
+all :: <p :: a -> Bool> . (x: a -> {Bool | _v == p x}) -> List {a | p _v} -> {Bool | _v}
+all = \f . \xs .
+        match xs with
+          Nil -> True
+          Cons y ys -> and (f y) (all (\x . f x) ys)
+          
+qualifier {_v > 0, _v >= 0}          
+
+-- Here strengthening is happening inside the auxiliary goal
+allPos :: {Bool | _v}
+allPos = all (\x . x > 0) (Cons 1 (Cons 2 (Cons 3 Nil)))
+
+-- Here strengthening is happening inside the auxiliary goal
+notAllPos :: {Bool | _v}
+notAllPos = all (\x . x > 0) (Cons 1 (Cons 2 (Cons 0 Nil)))

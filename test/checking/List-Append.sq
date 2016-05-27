@@ -1,0 +1,12 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons y ys -> 1 + len ys  
+      
+append :: xs: List a -> ys: List a -> {List a | len _v == len xs + len ys}
+append = \xs . \ys . match xs with
+                      Nil -> ys
+                      Cons z zs -> Cons z (append (?? :: {List a | len _v > len xs}) ys) -- Discovers inconsistent types

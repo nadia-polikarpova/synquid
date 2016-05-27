@@ -7,6 +7,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Char
 
 import Control.Applicative
 import Control.Monad
@@ -32,6 +33,11 @@ bothM f (x1, x2) = do
   y1 <- f x1
   y2 <- f x2
   return (y1, y2)
+  
+setCompare :: Ord a => Set a -> Set a -> Ordering  
+setCompare x y = case compare (Set.size x) (Set.size y) of
+                  EQ -> compare x y
+                  res -> res
 
 -- | 'disjoint' @s1 s2@ : are @s1@ and @s2@ disjoint?
 disjoint :: Ord a => Set a -> Set a -> Bool
@@ -107,6 +113,9 @@ setPartitionM f s = both Set.fromList `liftM` partitionM f (Set.toList s)
 
 -- | 'pairGetter' @g1 g2@ : combine two getters into one that gets a pair
 pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
+
+asInteger :: String -> Maybe Integer
+asInteger s = if all isDigit s then Just $ read s else Nothing
 
 {- Debug output -}
 

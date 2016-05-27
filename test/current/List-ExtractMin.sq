@@ -1,0 +1,25 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+data MinPair a where
+	MinPair :: x: a -> l: List {a | x <= _v}  -> MinPair a
+  
+measure min :: MinPair a -> a where
+  MinPair x l -> x
+  
+measure rest :: MinPair a -> List a where
+  MinPair x l -> l
+  
+qualifier {x <= y, x != y}
+
+extractMin :: xs: {List a | len _v > 0} -> {MinPair a | elems xs == [min _v] + elems (rest _v) && len xs == 1 + len (rest _v)}
+extractMin = ??

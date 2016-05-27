@@ -1,0 +1,78 @@
+data Unit where
+  Unit :: Unit
+
+{- module Authentication -}
+
+-- | User IDs
+type UId = Int
+
+-- | Passwords
+data Password
+
+-- | Principals
+data Principal where
+  Admin :: (Principal)
+  User :: UId -> (Principal)
+  
+-- | Is principal authenticated?  
+predicate isAuth :: Principal -> Bool
+
+-- | Constructor for @isAuth@: checks @pw@ validity and authenticates @p@
+login :: p: Principal -> pw: Password -> { Bool | _v == isAuth p }
+
+{- module FileRM -}
+
+-- | File handles
+data File
+
+predicate canRead :: File -> Set Principal
+predicate canWrite :: File -> Set Principal
+
+-- | Access permission "axioms" (constructors for @CanRead@ and @CanWrite@)
+wImpliesR :: p: Principal -> f: {File | p in canWrite _v} -> {File | _v == f && p in canRead _v}
+adminW :: f: File -> {File | _v == f && Admin in canWrite _v}
+
+-- | File content
+data Content
+
+data Label where
+  F :: File -> (Label)
+  J :: Label -> Label -> Label
+  
+predicate tracked :: Content -> Label -> Bool
+
+strcatFlow :: c1: Content -> l1: {Label | tracked c1 _v} -> c2: Content ->  l2: {Label | tracked c2 _v} -> {Content | tracked _v (J l1 l2)}
+
+predicate canFlow :: Label -> Label -> Bool
+
+flowJoinUpper :: l: Label -> m1: {Label | canFlow l _v} -> m2: {Label | canFlow l _v} -> { Label | _v == J m1 m2 && canFlow l _v }
+flowJoinLeast :: l: Label -> m1: {Label | canFlow _v l} -> m2: {Label | canFlow _v l} -> { Label | _v == J m1 m2 && canFlow _v l }
+
+atomicFlowL :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v == F lo && canFlow _v (F hi)}
+atomicFlowR :: hi: File -> lo: {File | canRead hi <= canRead _v} -> {Label | _v == F hi && canFlow (F lo) _v}
+
+fread :: p: {Principal | isAuth _v} -> f: {File | p in canRead _v} -> {Content | tracked _v (F f)}
+
+fwrite :: p: {Principal | isAuth _v} -> f: {File | p in canWrite _v} -> c: Content -> l: {Label | canFlow _v (F f) && tracked c _v} -> Unit
+
+{- client -}
+
+sudoAppend :: pw: Password -> 
+              fin: {File | canRead _v == [Admin, User 0]} ->         
+              fout: {File | canRead _v == [Admin]} -> 
+              Unit
+sudoAppend = \pw . \fin . \fout . 
+                let c1 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fin}) in
+                let c2 = fread (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) in
+                let c = strcatFlow c1 ?? c2 ?? in
+                fwrite (?? :: {Principal | _v == Admin}) (?? :: {File | _v == fout}) (?? :: {Content | _v == c}) ??
+          
+-- ===Solution===
+-- sudoAppend = \pw . \fin . \fout . 
+              -- if login Admin pw
+                -- then
+                  -- let c1 = fread Admin fin in
+                  -- let c2 = fread Admin fout in
+                  -- let c = strcatFlow c1 (F fin) c2 (F fout) in
+                  -- fwrite Admin (adminW fout) c (flowJoinLeast (F fout) (atomicFlowL fout fin) (atomicFlowL fout fout))
+                -- else ??

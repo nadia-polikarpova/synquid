@@ -1,0 +1,12 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+	
+zipWith :: f: (a -> b -> c) -> xs: List a -> ys: {List b | len _v == len xs} -> {List c | len _v == len xs}
+zipWith = ??
+
+	

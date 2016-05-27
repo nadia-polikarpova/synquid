@@ -2,17 +2,18 @@
 module Synquid.Tokens where
 
 import Synquid.Logic
+import Synquid.Util
+import Data.Maybe
 import Data.Map (Map, fromList)
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "decreases", "False", "in", "Int", "match", "measure", "predicate", "qualifier", "Set", "True", "type", "where"]
+keywords = ["Bool", "data", "else", "error", "False", "if", "in", "inline", "Int", "let", "match", "measure", "predicate", "qualifier", "Set", "termination", "then", "True", "type", "with", "where"]
 
 -- | Names of unary operators    
 unOpTokens :: Map UnOp String
 unOpTokens = fromList [ (Neg, "-")
                       , (Not, "!")
-                      , (Abs, "~")
                       ]
                            
 -- | Names of binary operators             
@@ -39,7 +40,7 @@ binOpTokens = fromList [ (Times,     "*")
                         
 -- | Other operators         
 otherOps :: [String]
-otherOps = ["::", ":", "->", "|", "=", "??", ",", "."] 
+otherOps = ["::", ":", "->", "|", "=", "??", ",", ".", "\\"] 
 
 -- | Characters allowed in identifiers (in addition to letters and digits)
 identifierChars = "_'"
@@ -49,3 +50,6 @@ commentStart = "{-"
 commentEnd = "-}"
 -- | Start of a single-line comment
 commentLine = "--"
+
+-- | 'isLiteral' @str@ : Is string @str@ a literal of a primitive type?
+isLiteral str = isJust (asInteger str) || str == "True" || str == "False"

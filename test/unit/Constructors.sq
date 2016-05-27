@@ -1,0 +1,12 @@
+type Nat = {Int | _v >= 0}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  	
+-- Sort substitution for constructors used to fail:    
+replicate :: n: {Nat | _v <= 4} -> x: Int -> {List Int | (n == 0 ==> _v == Nil) && 
+                                                         (n == 1 ==> _v == Cons x Nil) &&
+                                                         (n == 2 ==> _v == Cons x (Cons x Nil)) &&
+                                                         (n == 3 ==> _v == Cons x (Cons x (Cons x Nil))) &&
+                                                         (n == 4 ==> _v == Cons x (Cons x (Cons x (Cons x Nil))))}

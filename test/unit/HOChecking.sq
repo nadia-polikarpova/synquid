@@ -1,0 +1,48 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+	
+-- Use abstraction in HO argument:  
+map1 :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
+map1 = \f . \xs . 
+          match xs with
+            Nil -> Nil
+            Cons x3 x4 -> Cons (f x3) (map1 (\x9 . f x9) x4)
+
+-- Use environment variable in HO argument:              
+map2 :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
+map2 = \f . \xs . 
+          match xs with
+            Nil -> Nil
+            Cons x3 x4 -> Cons (f x3) (map2 f x4)
+                            
+-- Use locally-bound variable in HO argument:                            
+map3 :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
+map3 = \f . \xs . 
+          match xs with
+            Nil -> Nil
+            Cons x3 x4 -> let f0 = \x9 . f x9 in
+                            Cons (f x3) (map3 f0 x4)
+                            
+map4 :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
+map4 = \f . \xs . 
+        let f0 = \x9 . f x9 in
+          match xs with
+            Nil -> Nil
+            Cons x3 x4 -> Cons (f x3) (map4 f0 x4)
+    
+-- This one's wrong!    
+map5 :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
+map5 = let f0 = \x9 . f x9 in
+       \f . \xs . 
+          match xs with
+            Nil -> Nil
+            Cons x3 x4 -> Cons (f x3) (map5 f0 x4)
+            
+                            
+                            
+                            

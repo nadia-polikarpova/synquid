@@ -1,0 +1,31 @@
+qualifier {x == y}
+
+{- module Authentication -}
+
+-- | Principals
+data Principal
+  
+predicate isAuth :: Principal -> Bool  
+
+{- module Location -}
+  
+type Location = Int
+
+predicate loc :: Principal -> Location
+predicate canSeeLocation :: Principal -> Principal -> Bool
+
+-- | Policy axioms
+canSeeOwn :: p: Principal -> {Principal | _v == p && canSeeLocation _v _v}
+canSeeNear :: me: Principal -> dude: {Principal | ~(loc _v - loc me) < 5} -> {Principal | _v == me && canSeeLocation _v dude}
+
+-- | Interface
+getLocation :: me: {Principal | isAuth _v} -> dude: {Principal | canSeeLocation me _v} -> {Location | loc dude == _v}
+isNear :: me: {Principal | isAuth _v} -> dude: Principal -> {Bool | _v == (~(loc dude - loc me) < 5)} -- Not really a circular dependency, but I don't see how to express otherwise
+
+{- client -}
+
+whereIsDude :: me: {Principal | isAuth _v} -> dude: Principal -> {Location | loc dude == _v}
+whereIsDude = ??
+
+
+  

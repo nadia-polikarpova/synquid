@@ -1,0 +1,20 @@
+qualifier {x == y, x != y}
+
+false :: {Bool | !_v}
+not :: x: Bool -> {Bool | _v == !x}
+or :: x: Bool -> y: Bool -> {Bool | _v == (x || y)}
+
+data Tree a where
+	Empty :: Tree a
+	Node :: x: a -> l: Tree a -> r: Tree a -> Tree a
+  
+termination measure size :: Tree a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+  
+measure telems :: Tree a -> Set a where
+  Empty -> []
+  Node x l r -> telems l + telems r + [x]  
+	
+elem :: x: a -> t: Tree a -> {Bool | _v == (x in telems t)}
+elem = ??

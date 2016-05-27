@@ -1,0 +1,30 @@
+inc :: x: Int -> {Int | _v == x + 1}
+
+inline max x y = if x >= y then x else y
+inline abs x = if x >= 0 then x else -x
+
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1} 
+            -> h: {Int | _v == 1 + max (realHeight l) (realHeight r) } 
+            -> AVL a
+            
+termination measure realHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> 1 + max (realHeight l) (realHeight r)
+  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> realHeight l - realHeight r
+  
+measure elems :: AVL a -> Set a where
+  Leaf -> []
+  Node x l r h -> [x] + elems l + elems r  
+    
+balR0 :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v == 0} 
+          -> {AVL a | realHeight _v == 1 + realHeight r && elems _v == [x] + elems l + elems r}
+balR0 = ??

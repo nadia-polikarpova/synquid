@@ -1,0 +1,16 @@
+data SList a where
+	Nil :: SList a
+	Cons :: x: a -> xs: SList {a | x < _v} -> SList a
+  
+termination measure len :: SList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: SList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+lt :: x: a -> y: a -> {Bool | _v == (x < y)}
+  
+intersect :: xs: SList a -> ys: SList a -> {SList a | elems _v == elems xs * elems ys}
+intersect = ??

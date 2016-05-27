@@ -1,0 +1,28 @@
+data PList a <p :: a -> PList a -> Bool> where
+	Nil :: PList a <p>
+	Cons :: x: a -> xs: {PList a <p> | p x _v} -> PList a <p>
+  
+termination measure len :: PList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: PList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+type List a = PList a <{True}>
+type UList a = PList a <{!(_0 in elems _1)}>
+
+qualifier {x == y, x != y}
+
+true :: {Bool | _v}
+false :: {Bool | !_v}
+	
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
+elem = ??
+	
+nub' :: xs: List a -> acc: UList a -> {UList a | elems _v == elems acc + elems xs}
+nub' = ??
+
+nub :: xs: List a -> {UList a | elems _v == elems xs}
+nub = ??
