@@ -338,7 +338,8 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
             let relevantVars = potentialVars qmap (l' |&| r')
-            emb <- embedding env relevantVars (predsOf r')
+            emb <- embedding env relevantVars (predsOf $ bottomValuation qmap r')
+            writeLog 2 (text "bottomValuation of" <+> pretty r' <+> text "is" <+> pretty (bottomValuation qmap r'))
             let lhss = uDNF $ conjunction (Set.insert l' emb)
             let clauses = map (|=>| r') lhss
             hornClauses %= (clauses ++)
@@ -433,12 +434,16 @@ embedding env vars measures = do
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
+    
+bottomValuation :: QMap -> Formula -> Formula
+bottomValuation qmap fml = applySolution bottomSolution fml
+  where
+    unknowns = Set.toList $ unknownsOf fml
+    bottomSolution = Map.fromList $ zip (map unknownName unknowns) (map (Set.fromList . lookupQualsSubst qmap) unknowns)
 
 -- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
 potentialVars :: QMap -> Formula -> Set Id
-potentialVars qmap fml = Set.map varName $ Set.unions (varsOf fml : map (uVars qmap) (Set.toList $ unknownsOf fml))
-  where
-    uVars qmap u@(Unknown subst name) = Set.unions (map (varsOf . substitute subst) (lookupQuals qmap qualifiers u))
+potentialVars qmap fml = Set.map varName $ varsOf $ bottomValuation qmap fml
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> TCSolver s String
