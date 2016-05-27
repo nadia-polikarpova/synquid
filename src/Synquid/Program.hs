@@ -60,11 +60,9 @@ unifySorts boundTvs = unifySorts' Map.empty
       = unifySorts' subst (x:xs) (y:ys)
     unifySorts' subst (DataS name args : xs) (DataS name' args' :ys) 
       = if name == name' 
-          then if length args == length args'
-                then unifySorts' subst (args ++ xs) (args' ++ ys) 
-                else error $ unwords ["unifySorts: different number of arguments for datatype", name, show (length args), "and", show (length args')]
+          then unifySorts' subst (args ++ xs) (args' ++ ys) 
           else Left (DataS name [], DataS name' [])
-    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys -- TODO: do we still need these?
+    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys
     unifySorts' subst (_ : xs) (AnyS : ys) = unifySorts' subst xs ys
     unifySorts' subst (VarS x : xs) (y : ys)                 
       | not (Set.member x boundTvs)
@@ -294,10 +292,11 @@ nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Va
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeParams :: [Id],    -- ^ Type parameters
-  _predArgs :: [PredSig], -- ^ Signatures of predicate parameters
-  _constructors :: [Id],  -- ^ Constructor names
-  _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
+  _typeParams :: [Id],              -- ^ Type parameters
+  _predParams :: [PredSig],         -- ^ Signatures of predicate parameters
+  _predVariances :: [Bool],         -- ^ For each predicate parameter, whether it is contravariant
+  _constructors :: [Id],            -- ^ Constructor names
+  _wfMetric :: Maybe Id             -- ^ Name of the measure that serves as well founded termination metric
 } deriving (Eq, Ord)
 
 makeLenses ''DatatypeDef
@@ -593,7 +592,7 @@ allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dt
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env = 
     let allMeasures = Map.toList $ allMeasuresOf dtName env 
-    in catMaybes $ map extractPost allMeasures ++ map elemProperties allMeasures
+    in catMaybes $ map extractPost allMeasures ++ if includeQuanitifed then map elemProperties allMeasures else []
   where
     extractPost (mName, MeasureDef _ outSort _ fml) = 
       if fml == ftrue
@@ -603,7 +602,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
-                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml) || not (mName `Set.member` includeQuanitifed)
+                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
                     then Nothing
                     else  let
                             elemSort = toSort elemT
@@ -626,7 +625,7 @@ data ConstructorSig = ConstructorSig Id RType
 data Declaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature
-  DataDecl Id [Id] [PredSig] [ConstructorSig] |             -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
+  DataDecl Id [Id] [(PredSig, Bool)] [ConstructorSig] |     -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
   MeasureDecl Id Sort Sort Formula [MeasureCase] Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
   PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers

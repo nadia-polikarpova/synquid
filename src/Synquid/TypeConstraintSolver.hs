@@ -262,8 +262,11 @@ simplifyConstraint' _ _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs) pArgs
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name tArgs pArgs) fml) (ScalarT (DatatypeT name' tArgs' pArgs') fml') consistent)
 simplifyConstraint' _ _ (Subtype env (ScalarT (DatatypeT name [] (pArg:pArgs)) fml) (ScalarT (DatatypeT name' [] (pArg':pArgs')) fml') consistent)
   = do
-      -- simplifyConstraint (Subtype emptyEnv (int $ pArg) (int $ pArg') consistent) -- Is this a cheat?
-      simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent) -- Is this a cheat?
+      let variances = _predVariances ((env ^. datatypes) Map.! name)
+      let isContra = variances !! (length variances - length pArgs - 1) -- Is pArg contravariant?
+      if isContra
+        then simplifyConstraint (Subtype env (int $ pArg') (int $ pArg) consistent)
+        else simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent)
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name [] pArgs) fml) (ScalarT (DatatypeT name' [] pArgs') fml') consistent)      
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False)
   = do -- TODO: rename type vars
@@ -338,8 +341,7 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False) | 
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
           then do
             let relevantVars = potentialVars qmap (l' |&| r')
-            emb <- embedding env relevantVars (predsOf $ bottomValuation qmap r')
-            writeLog 2 (text "bottomValuation of" <+> pretty r' <+> text "is" <+> pretty (bottomValuation qmap r'))
+            emb <- embedding env relevantVars True
             let lhss = uDNF $ conjunction (Set.insert l' emb)
             let clauses = map (|=>| r') lhss
             hornClauses %= (clauses ++)
@@ -356,7 +358,7 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True) | bas
         then return ()
         else do
           let relevantVars = potentialVars qmap (l' |&| r')
-          emb <- embedding env relevantVars Set.empty
+          emb <- embedding env relevantVars False
           let clause = conjunction (Set.insert l' $ Set.insert r' emb)
           consistencyChecks %= (clause :)
 processConstraint (WellFormed env t@(ScalarT baseT fml)) 
@@ -411,8 +413,8 @@ hasPotentialScrutinees env = do
   return $ not $ null $ allPotentialScrutinees env tass
   
 -- | Assumptions encoded in an environment    
-embedding :: Monad s => Environment -> Set Id -> Set Id -> TCSolver s (Set Formula)
-embedding env vars measures = do
+embedding :: Monad s => Environment -> Set Id -> Bool -> TCSolver s (Set Formula)
+embedding env vars includeQuantified = do
     tass <- use typeAssignment
     pass <- use predAssignment
     qmap <- use qualifierMap
@@ -429,7 +431,7 @@ embedding env vars measures = do
                 Just (Monotype t) -> case typeSubstitute tass t of
                   ScalarT baseT fml -> 
                     let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                                          ((substitutePredicate pass fml) : allMeasurePostconditions measures baseT env) in
+                                          ((substitutePredicate pass fml) : allMeasurePostconditions includeQuantified baseT env) in
                     addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` potentialVars qmap fml)
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
@@ -475,7 +477,7 @@ fresh env (ScalarT baseT _) = do
       -- Replace type arguments with fresh types:
       tArgs' <- mapM (fresh env) tArgs
       -- Replace predicate arguments with fresh predicate variables:
-      let (DatatypeDef tParams pParams _ _) = (env ^. datatypes) Map.! name
+      let (DatatypeDef tParams pParams _ _ _) = (env ^. datatypes) Map.! name
       pArgs' <- mapM (\sig -> freshPred env . map (noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')) . predSigArgSorts $ sig) pParams  
       return $ DatatypeT name tArgs' pArgs'
     freshBase baseT = return baseT

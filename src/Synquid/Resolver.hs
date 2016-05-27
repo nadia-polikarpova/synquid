@@ -93,11 +93,13 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
     then environment %= addTypeSynonym typeName typeVars typeBody'
     else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the definition of type synonym", typeName, "are undefined"]
 resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
-resolveDeclaration (DataDecl dtName tParams pParams ctors) = do
+resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
   let
+    (pParams, pVariances) = unzip pVarParams
     datatype = DatatypeDef {
       _typeParams = tParams,
-      _predArgs = pParams,
+      _predParams = pParams,
+      _predVariances = pVariances,
       _constructors = map constructorName ctors,
       _wfMetric = Nothing
     }
@@ -167,7 +169,7 @@ resolveSignatures (DataDecl dtName tParams pParams ctors) = mapM_ resolveConstru
     resolveConstructorSignature (ConstructorSig name _) = do
       sch <- uses environment ((Map.! name) . allSymbols)
       sch' <- resolveSchema sch
-      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map nominalPredApp pParams)) ftrue
+      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map nominalPredApp (map fst pParams))) ftrue
       let returnType = lastType (toMonotype sch')
       if nominalType == returnType
         then do
@@ -240,7 +242,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       t' <- substituteTypeSynonym name tArgs >>= resolveType      
       fml' <- resolveTypeRefinement (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
-    Just (DatatypeDef tParams pParams _ _) -> do
+    Just (DatatypeDef tParams pParams _ _ _) -> do
       when (length tArgs /= length tParams) $ throwError $ unwords ["Datatype", name, "expected", show (length tParams), "type arguments and got", show (length tArgs)]
       when (length pArgs /= length pParams) $ throwError $ unwords ["Datatype", name, "expected", show (length pParams), "predicate arguments and got", show (length pArgs)]   
       -- Resolve type arguments:
@@ -285,7 +287,7 @@ resolveSort s@(DataS name sArgs) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
     Nothing -> throwError $ unwords ["Datatype", name, "is undefined in sort", show s]
-    Just (DatatypeDef tParams _ _ _) -> do
+    Just (DatatypeDef tParams _ _ _ _) -> do
       let n = length tParams
       when (length sArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length sArgs)]
       mapM_ resolveSort sArgs
@@ -435,7 +437,7 @@ solveSortConstraints = do
   tvs <- uses (environment . boundTypeVars) Set.fromList
   sortConstraints .= []
   idCount .= 0
-  let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs  
+  let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs
   subst <- case unifySorts tvs sls srs of
     Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
     Right subst -> return subst
