@@ -400,13 +400,15 @@ instance Pretty ConstructorSig where
 
 instance Pretty PredSig where
   pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
+  
+prettyVarianceParam (predSig, contra) = pretty predSig <> (if contra then pretty Not else empty)
 
 instance Pretty Declaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
   pretty (QualifierDecl fmls) = keyword "qualifier" <+> hlBraces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> operator "::" <+> pretty t
-  pretty (DataDecl name typeVars predParams ctors) = hang tab $ 
-    keyword "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> keyword "where" 
+  pretty (DataDecl name tParams pParams ctors) = hang tab $ 
+    keyword "data" <+> text name <+> hsep (map text tParams) <+> hsep (map prettyVarianceParam pParams) <+> keyword "where" 
     $+$ vsep (map pretty ctors)
   pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $ 
     if isTermination then keyword "termination" else empty

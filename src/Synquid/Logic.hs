@@ -313,7 +313,7 @@ negationNF fml = case fml of
 uDNF :: Formula -> [Formula]
 uDNF = dnf' . negationNF
   where
-    dnf' e@(Binary Or e1 e2) = if (Set.null $ unknownsOf e1) || (Set.null $ unknownsOf e2) 
+    dnf' e@(Binary Or e1 e2) = if (Set.null $ unknownsOf e1) && (Set.null $ unknownsOf e2) 
                                 then return e
                                 else dnf' e1 ++ dnf' e2
     dnf' (Binary And e1 e2) = do
