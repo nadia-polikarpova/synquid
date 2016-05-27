@@ -1,0 +1,17 @@
+type Nat = {Int | _v >= 0}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons y ys -> 1 + len ys  
+
+map :: (a -> b) -> xs: List a -> {List b | len _v == len xs}	
+	
+toNat :: xs: List Int -> {List Nat | len _v == len xs}
+toNat = let f = \x . if x < 0 then -x else x in
+        \xs . map f xs
+
+	

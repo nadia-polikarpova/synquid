@@ -1,0 +1,19 @@
+qualifier {x <= y, x != y}
+
+true :: {Bool | _v}
+false :: {Bool | !_v}
+
+data BST a where
+	Empty :: BST a
+	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
+                          
+termination measure size :: BST a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+  
+measure telems :: BST a -> Set a where
+  Empty -> []
+  Node x l r -> telems l + telems r + [x]
+
+member :: x: a -> t: BST a -> {Bool | _v == (x in telems t)}
+member = ??

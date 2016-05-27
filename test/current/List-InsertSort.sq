@@ -1,0 +1,35 @@
+qualifier {x <= y, x != y}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+data IList a where
+	INil :: IList a
+	ICons :: x: a -> xs: IList {a | x <= _v} -> IList a
+  
+termination measure ilen :: IList a -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + ilen xs  
+
+measure ielems :: IList a -> Set a where
+  INil -> []
+  ICons x xs -> [x] + ielems xs
+	
+insert :: x: a -> xs: IList a -> {IList a | ielems _v == ielems xs + [x]}
+insert = ??
+
+insertSort :: xs: List a -> {IList a | ielems _v == elems xs}
+insertSort = ??
+
+
+
+	

@@ -1,0 +1,52 @@
+qualifier {x <= y, x != y}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+data IList a where
+	INil :: IList a
+	ICons :: x: a -> xs: IList {a | x < _v} -> IList a
+  
+termination measure ilen :: IList a -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + ilen xs  
+
+measure ielems :: IList a -> Set a where
+  INil -> []
+  ICons x xs -> [x] + ielems xs  
+
+data BST a where
+	Empty :: BST a
+	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
+                          
+termination measure size :: BST a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+  
+measure telems :: BST a -> Set a where
+  Empty -> []
+  Node x l r -> telems l + telems r + [x]
+
+insert :: x: a -> t: BST a -> {BST a | telems _v == telems t + [x]}
+insert = ??
+
+toBST :: xs: List a -> {BST a | telems _v == elems xs}
+toBST = ??
+
+pivotAppend :: p: a -> xs: IList {a | _v < p} -> ys: IList {a | _v > p} -> {IList a | ilen _v == ilen xs + ilen ys + 1 && ielems _v == ielems xs + ielems ys + [p] }
+pivotAppend = ??
+
+flatten :: t: BST a -> {IList a | ielems _v == telems t}
+flatten = ??
+
+sort :: xs: List a -> {IList a | ielems _v == elems xs}
+sort = ??

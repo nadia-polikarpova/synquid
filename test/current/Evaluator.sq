@@ -1,0 +1,46 @@
+qualifier {x <= y, x != y}
+
+zero :: {Int | _v == 0}
+one :: {Int | _v == 1}
+two :: {Int | _v == 2}
+
+data AST where
+  Zero :: AST
+  One :: AST
+  Two :: AST
+  PlusNode :: l: AST -> r: AST -> AST
+  MinusNode :: l: AST -> r: AST -> AST
+  ProductNode :: l: AST -> r: AST -> AST
+  
+termination measure size :: AST -> {Int | _v >= 0} where
+  Zero -> 1
+  One -> 1
+  Two -> 1
+  PlusNode l r -> 1 + size l + size r + 1
+  MinusNode l r -> 1 + size l + size r + 1
+  ProductNode l r -> 1 + size l + size r + 1
+
+measure result :: AST -> Int where
+  Zero -> 0
+  One -> 1
+  Two -> 2
+  PlusNode l r -> result l + result r
+  MinusNode l r -> result l - result r
+  ProductNode l r -> result l * result r
+
+type OpCode = {Int | _v >= 0 && _v <= 2}
+
+data PAST where
+  IntNode :: x: Int -> PAST
+  OpNode :: op: OpCode -> l: PAST -> r: PAST -> PAST
+  
+termination measure size2 :: PAST -> {Int | _v >= 0} where
+  IntNode x -> 1
+  OpNode op l r -> 1 + size2 l + size2 r
+
+measure result2 :: PAST -> Int where
+  IntNode x -> x
+  OpNode op l r -> if op == 0 then result2 l + result2 r else (if op == 1 then result2 l - result2 r else result2 l * result2 r)
+
+transform :: x: AST -> {PAST | result2 _v == result x}
+transform = ??

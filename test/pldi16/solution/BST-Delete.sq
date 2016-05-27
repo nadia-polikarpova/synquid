@@ -1,0 +1,30 @@
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}  
+
+data BST a where
+	Empty :: BST a
+	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
+                          
+termination measure size :: BST a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+  
+measure telems :: BST a -> Set a where
+  Empty -> []
+  Node x l r -> telems l + telems r + [x]
+
+delete :: t: BST a -> x: a -> {BST a | telems _v == telems t - [x]}
+delete = \t . \x . 
+    match t with
+      Empty -> t
+      Node x4 x5 x6 -> 
+        if (x4 != x) && (x4 <= x)
+          then Node x4 x5 (delete x6 x)
+          else 
+            if x4 != x
+              then Node x4 (delete x5 x) x6
+              else 
+                match x5 with
+                  Empty -> x6
+                  Node x20 x21 x22 -> Node x20 x21
+                                        (delete (Node x x22 x6) x4)

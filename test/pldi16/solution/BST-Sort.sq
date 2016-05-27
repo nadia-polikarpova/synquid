@@ -1,0 +1,74 @@
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}  
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+data IList a where
+	INil :: IList a
+	ICons :: x: a -> xs: IList {a | x < _v} -> IList a
+  
+termination measure ilen :: IList a -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + ilen xs  
+
+measure ielems :: IList a -> Set a where
+  INil -> []
+  ICons x xs -> [x] + ielems xs  
+
+data BST a where
+	Empty :: BST a
+	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
+                          
+termination measure size :: BST a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+  
+measure telems :: BST a -> Set a where
+  Empty -> []
+  Node x l r -> telems l + telems r + [x]
+
+insert :: x: a -> t: BST a -> {BST a | telems _v == telems t + [x]}
+insert = \x . \t . 
+    match t with
+      Empty -> Node x Empty Empty
+      Node x7 x8 x9 -> 
+        if (x <= x7) && (x7 <= x)
+          then t
+          else 
+            if x7 <= x
+              then Node x7 x8 (insert x x9)
+              else Node x7 (insert x x8) x9
+
+toBST :: xs: List a -> {BST a | telems _v == elems xs}
+toBST = \xs . 
+  match xs with
+    Nil -> Empty
+    Cons x3 x4 -> insert x3 (toBST
+                               x4)
+
+pivotAppend :: p: a -> xs: IList {a | _v < p} -> ys: IList {a | _v > p} -> {IList a | ilen _v == ilen xs + ilen ys + 1 && ielems _v == ielems xs + ielems ys + [p] }
+pivotAppend = \p . \xs . \ys . 
+      match xs with
+        INil -> ICons p ys
+        ICons x5 x6 -> ICons x5
+                         (pivotAppend p x6 ys)
+
+flatten :: t: BST a -> {IList a | ielems _v == telems t}
+flatten = \t . 
+  match t with
+    Empty -> INil
+    Node x4 x5 x6 -> pivotAppend x4
+                       (flatten x5) (flatten x6)
+
+sort :: xs: List a -> {IList a | ielems _v == elems xs}
+sort = \xs . flatten (toBST xs)

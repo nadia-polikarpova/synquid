@@ -1,0 +1,45 @@
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}
+
+data Heap a where
+	Empty :: Heap a
+	Node :: x: a -> l: Heap {a | _v > x} -> r: Heap {a | _v > x} -> Heap a
+                                                                              
+termination measure size :: Heap a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> 1 + size l + size r  
+  
+measure elems :: Heap a -> Set a where
+  Empty -> []
+  Node x l r -> elems l + elems r + [x]
+ 
+tripleton :: x: a -> y: a -> z: a -> {Heap a | elems _v == [x, y, z]}
+tripleton = \x . \y . \z . 
+      if ((x <= y) && (y <= z)) && (z
+                                      <= x)
+        then Node x Empty Empty
+        else 
+          if (((z != y) && (x <= y)) && (y
+                                           <= x)) && (y <= z)
+            then Node y Empty (Node z Empty
+                                 Empty)
+            else 
+              if (((y != x) && (x <= y)) && (x
+                                               <= z)) && (z <= x)
+                then Node x Empty (Node y Empty
+                                     Empty)
+                else 
+                  if ((y <= z) && (z <= x)) && (z
+                                                  <= y)
+                    then Node z Empty (Node x Empty
+                                         Empty)
+                    else 
+                      if (y <= x) && (y <= z)
+                        then Node y (Node z Empty Empty)
+                               (Node x Empty Empty)
+                        else 
+                          if (z <= x) && (z <= y)
+                            then Node z (Node y Empty Empty)
+                                   (Node x Empty Empty)
+                            else Node x (Node y Empty Empty)
+                                   (Node z Empty Empty)

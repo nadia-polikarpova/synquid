@@ -1,0 +1,21 @@
+data Array a where
+  Array3 :: x0: a -> 
+            x1: {a | _v > x0} -> 
+            x2: {a | _v > x1} -> Array a
+
+qualifier {x < y, x > y}
+
+n0 :: {Int | _v == 0}
+n1 :: {Int | _v == 1}
+n2 :: {Int | _v == 2}
+n3 :: {Int | _v == 3}
+
+measure at0 :: Array a -> a where Array3 x0 x1 x2 -> x0
+measure at1 :: Array a -> a where Array3 x0 x1 x2 -> x1
+measure at2 :: Array a -> a where Array3 x0 x1 x2 -> x2
+
+findIdx :: arr: Array a -> k: a -> {Int | (k < at0 arr ==> _v == 0) && 
+                                          (k > at2 arr ==> _v == 3) && 
+                                          ((k > at0 arr && k < at1 arr) ==> _v == 1) && 
+                                          ((k > at1 arr && k < at2 arr) ==> _v == 2)}
+findIdx = ??

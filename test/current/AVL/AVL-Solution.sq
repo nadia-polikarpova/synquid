@@ -1,0 +1,154 @@
+qualifier {x < y}
+
+zero :: {Int | _v == 0}
+inc :: x: Int -> {Int | _v == x + 1}
+maximum :: x: Int -> y: Int -> {Int | _v == max x y}
+
+inline max x y = if x >= y then x else y
+inline abs x = if x >= 0 then x else -x
+inline eqOrOneLess x y = x <= y && y <= x + 1 
+
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1} 
+            -> h: {Int | _v == 1 + max (realHeight l) (realHeight r) } 
+            -> AVL a
+            
+termination measure realHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> 1 + max (realHeight l) (realHeight r)
+  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> realHeight l - realHeight r
+  
+measure elems :: AVL a -> Set a where
+  Leaf -> []
+  Node x l r h -> [x] + elems l + elems r  
+
+getHeight :: t: AVL a -> {Int | _v == realHeight t}
+getHeight = \t . 
+  match t with
+    Leaf -> 0
+    Node x l r h -> h
+    
+nodeHeight :: l: AVL a -> r: AVL r -> {Int | _v == 1 + max (realHeight l) (realHeight r)}  
+nodeHeight = \l . \r . 1 + maximum (getHeight l) (getHeight r)
+
+isSkewed :: t: AVL a -> t': AVL a -> {Bool | _v == (realHeight t - realHeight t' == 2)}
+isSkewed = \t . \t' . getHeight t - getHeight t' == 2
+    
+isLeftHeavy :: t: AVL a -> {Bool | _v == (balFac t > 0)}
+isLeftHeavy = \t .
+  match t with
+    Leaf -> False
+    Node x l r h -> getHeight l - getHeight r > 0
+    
+isRightHeavy :: t: AVL a -> {Bool | _v == (balFac t < 0)}
+isRightHeavy = \t .
+  match t with
+    Leaf -> False
+    Node x l r h -> getHeight l - getHeight r < 0      
+        
+balL0 :: x: a 
+          -> l: {AVL {a | _v < x} | balFac _v == 0} 
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == 1 + realHeight l && elems _v == [x] + elems l + elems r}
+balL0 = \x . \l . \r . 
+  match l with 
+    Leaf -> ??
+    Node lx ll lr lh -> Node lx ll (Node x lr r lh) (inc lh)
+    
+balLL :: x: a
+          -> l: {AVL {a | _v < x} | balFac _v > 0} 
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == realHeight l && elems _v == [x] + elems l + elems r}
+balLL = \x . \l . \r . 
+  match l with 
+    Leaf -> ??
+    Node lx ll lr lh -> match ll with
+                          Leaf -> ??
+                          Node llx lll llr llh -> Node lx ll (Node x lr r llh) lh
+    
+balLR :: x:a
+          -> l: {AVL {a | _v < x} | balFac _v < 0}
+          -> r: {AVL {a | _v > x} | realHeight l - realHeight _v == 2} 
+          -> {AVL a | realHeight _v == realHeight l && elems _v == [x] + elems l + elems r}
+balLR = \x . \l . \r .
+  match l with
+    Leaf -> ??
+    Node lx ll lr lh -> match lr with
+                          Leaf -> ??
+                          Node lrx lrl lrr lrh -> Node lrx (Node lx ll lrl lrh) (Node x lrr r lrh) lh
+                          
+balR0 :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v == 0} 
+          -> {AVL a | realHeight _v == 1 + realHeight r && elems _v == [x] + elems l + elems r}
+balR0 = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> Node rx (Node x l rl rh) rr (inc rh) 
+    
+balRL :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v > 0} 
+          -> {AVL a | realHeight _v == realHeight r && elems _v == [x] + elems l + elems r}
+balRL = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> match rl with
+                          Leaf -> ??
+                          Node rlx rll rlr rlh -> Node rlx (Node x l rll rlh) (Node rx rlr rr rlh) rh
+    
+balRR :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | realHeight _v - realHeight l == 2 && balFac _v < 0} 
+          -> {AVL a | realHeight _v == realHeight r && elems _v == [x] + elems l + elems r}
+balRR = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> match rr with
+                          Leaf -> ??
+                          Node rrx rrl rrr rrh -> Node rx (Node x l rl rrh) rr rh 
+    
+balanceL :: x: a
+          -> l: AVL {a | _v < x}
+          -> l': {AVL {a | _v < x} | eqOrOneLess (realHeight l) (realHeight _v)}          
+          -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1 }
+          -> {AVL a | eqOrOneLess (1 + max (realHeight l) (realHeight r)) (realHeight _v) && elems _v == [x] + elems l' + elems r}
+balanceL = \x . \l . \l' . \r . 
+  if isSkewed l' r && isLeftHeavy l'
+    then balLL x l' r
+    else if isSkewed l' r && isRightHeavy l'
+          then balLR x l' r
+          else if isSkewed l' r
+                then balL0 x l' r
+                else Node x l' r (nodeHeight l' r)
+                        
+balanceR :: x: a
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1 }
+          -> r': {AVL {a | _v > x} | eqOrOneLess (realHeight r) (realHeight _v) }
+          -> {AVL a | eqOrOneLess (1 + max (realHeight l) (realHeight r)) (realHeight _v) && elems _v == [x] + elems l + elems r'}          
+balanceR = \x . \l. \r . \r' . 
+  if isSkewed r' l && isLeftHeavy r'
+    then balRL x l r'
+    else if isSkewed r' l && isRightHeavy r'
+          then balRR x l r'
+          else if isSkewed r' l
+                then balR0 x l r'
+                else Node x l r' (nodeHeight l r')
+                
+                
+insert :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight t) (realHeight _v) && elems _v == [y] + elems t}
+insert = \y . \t .
+  match t with
+    Leaf -> Node y Leaf Leaf 1
+    Node x l r h -> if y < x
+                      then balanceL x l (insert y l) r
+                      else if y > x
+                        then balanceR x l r (insert y r)
+                        else t

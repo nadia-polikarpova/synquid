@@ -1,0 +1,77 @@
+inline max x y = if x >= y then x else y
+inline abs x = if x >= 0 then x else -x
+inline eqOrOneLess x y = x <= y && y <= x + 1 
+
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | abs (realHeight l - realHeight _v) <= 1} 
+            -> h: {Int | _v == 1 + max (realHeight l) (realHeight r) } 
+            -> AVL a
+            
+termination measure realHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> 1 + max (realHeight l) (realHeight r)
+  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> realHeight l - realHeight r
+  
+measure elems :: AVL a -> Set a where
+  Leaf -> []
+  Node x l r h -> [x] + elems l + elems r  
+
+{- MinPair: represents a pair (x, t) :: (a, AVL a)
+ -   s.t. x is less than all the elements of t -}
+data MinPair a where
+  Nothing :: MinPair a
+  MinPair :: x: a -> t: AVL {a | x < _v} -> MinPair a
+  
+{- TODO: bug in Program.hs if you replace "Set a" with "a" -}
+measure melems :: MinPair a -> Set a where
+  Nothing -> []
+  MinPair x t -> [x] + elems t
+
+measure mheight :: MinPair a -> {Int | _v >= -1} where
+  Nothing -> -1
+  MinPair x t -> realHeight t
+  
+inline nodeHeightM l r = 1 + max (realHeight l) (realHeight r)
+inline isReal v l r = (v == nodeHeightM l r)
+inline isBal l r n = 0 - n <= realHeight l - realHeight r && realHeight l - realHeight r <= n
+
+{- balHt: If l and r were already balanced (i.e. within 1) then the height of t 
+ -   is exactly equal to that of a tree built by directly linking l and r. -}
+inline balHt l r t = (!(isBal l r 1) || isReal (realHeight t) l r)
+
+{- bigHt: The height of t is the same or one bigger than the larger of l and r -}
+inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight t)
+
+qualifier {x < y}
+
+balance :: x: a
+         -> l: AVL {a | _v < x}
+         -> r: AVL {a | _v > x} {- | abs (realHeight l - realHeight _v) <= 2-}
+         -> {AVL a | balHt l r _v && bigHt l r _v && elems _v == [x] + elems l + elems r}
+
+extractMin :: t: AVL a -> {MinPair a | elems t == melems _v && eqOrOneLess (mheight _v) (realHeight t)}         
+
+merge :: x:a
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | isBal l _v 1}
+          -> {AVL a | bigHt l r _v && elems _v == elems l + elems r}
+merge = ??          
+
+delete :: y: a -> t: AVL a -> {AVL a | eqOrOneLess (realHeight _v) (realHeight t) &&
+                                        elems t - [y] == elems _v}
+delete = ?? 
+
+{- \y. \t.
+  match t with
+    Leaf -> Leaf
+    Node x l r h ->
+      if (y < x) then balance x (delete y l) r
+      else if (x < y) then balance x l (delete y r)
+      else merge x l r 
+ -}

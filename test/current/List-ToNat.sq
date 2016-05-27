@@ -1,0 +1,19 @@
+qualifier {x <= 0, x != 0}
+
+type Nat = {Int | _v >= 0}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+neg :: x: Int -> {Int | _v == -x}	
+map :: (a -> b) -> xs: List a -> {List b | len _v == len xs}	
+	
+toNat :: xs: List Int -> {List Nat | len _v == len xs}
+toNat = ??
+
+	

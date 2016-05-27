@@ -1,0 +1,85 @@
+inline max x y = if x >= y then x else y
+inline abs x = if x >= 0 then x else -x
+inline eqOrOneLess x y = x <= y && y <= x + 1
+
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | isBal l _v 1} 
+            -> h: {Int | _v == nodeHeightM l r } 
+            -> AVL a
+            
+termination measure realHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> nodeHeightM l r
+  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> realHeight l - realHeight r
+  
+measure elems :: AVL a -> Set a where
+  Leaf -> []
+  Node x l r h -> [x] + elems l + elems r  
+
+measure getHeight :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> h
+  
+inline nodeHeightM l r = 1 + max (realHeight l) (realHeight r)
+inline isReal v l r = (v == nodeHeightM l r)
+inline isBal l r n = (abs (realHeight l - realHeight r) <= n)
+inline diff s t = realHeight s - realHeight t
+-- inline eqOrUp s t = 0 <= diff t s && diff t s <= 1
+
+{- balHt: If l and r were already balanced (i.e. within 1) then the height of t 
+ -   is exactly equal to that of a tree built by directly linking l and r. -}
+inline balHt l r t = (!(isBal l r 1) || isReal (realHeight t) l r)
+
+{- bigHt: The height of t is the same or one bigger than the larger of l and r -}
+inline bigHt l r t = eqOrOneLess (max (realHeight l) (realHeight r)) (realHeight t)  
+
+nodeHeight :: l: AVL a -> r: AVL a -> {Int | _v == nodeHeightM l r}
+
+isSkewed :: t: AVL a -> t': AVL a -> {Bool | _v == (diff t t' == 2)}
+    
+isLeftHeavy :: t: AVL a -> {Bool | _v == (balFac t > 0)}
+    
+isRightHeavy :: t: AVL a -> {Bool | _v == (balFac t < 0)}
+
+rotL0 :: x: a 
+          -> l: {AVL {a | _v < x} | balFac _v == 0} 
+          -> r: {AVL {a | _v > x} | diff l _v == 2} 
+          -> {AVL a | realHeight _v == 1 + realHeight l && elems _v == [x] + elems l + elems r}
+    
+rotLL :: x: a
+          -> l: {AVL {a | _v < x} | balFac _v > 0} 
+          -> r: {AVL {a | _v > x} | diff l _v == 2} 
+          -> {AVL a | realHeight _v == realHeight l && elems _v == [x] + elems l + elems r}
+    
+rotLR :: x:a
+          -> l: {AVL {a | _v < x} | balFac _v < 0}
+          -> r: {AVL {a | _v > x} | diff l _v == 2} 
+          -> {AVL a | realHeight _v == realHeight l && elems _v == [x] + elems l + elems r}
+
+rotR0 :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | diff _v l == 2 && balFac _v == 0} 
+          -> {AVL a | realHeight _v == 1 + realHeight r && elems _v == [x] + elems l + elems r}
+
+rotRL :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | diff _v l == 2 && balFac _v > 0} 
+          -> {AVL a | realHeight _v == realHeight r && elems _v == [x] + elems l + elems r}
+
+rotRR :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | diff _v l == 2 && balFac _v < 0} 
+          -> {AVL a | realHeight _v == realHeight r && elems _v == [x] + elems l + elems r}
+
+balance :: x: a
+         -> l: AVL {a | _v < x}
+         -> r: {AVL {a | _v > x} | isBal l _v 2}
+         -> {AVL a | balHt l r _v && bigHt l r _v && elems _v == [x] + elems l + elems r}
+balance = ??
+

@@ -1,0 +1,10 @@
+qualifier {x <= y, x != y}
+
+type Nat = {Int | _v >= 0}
+
+zero :: {Int | _v == 0}
+inc :: x:Nat -> {Int | _v == x + 1}
+dec :: x:Nat -> {Int | _v == x - 1}
+
+add :: x:Nat -> y:Nat -> {Int | _v == x + y}
+add = ??

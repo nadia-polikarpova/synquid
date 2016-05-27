@@ -1,12 +1,13 @@
 name:                 synquid
-version:              0.1.0.0
--- synopsis:
--- description:
+version:              0.3
+synopsis:             Program Synthesis from Refinement Types
+description:          Synquid is a simple functional programming language with refinement types.
+                      In Synquid the programmer must provide the type signature for each top-level function,
+                      but can leave parts (or all) of the implementation out for the system to fill in. 
 -- license:
 -- license-file:         LICENSE
 author:               Nadia Polikarpova
 maintainer:           nadia.polikarpova@gmail.com
--- copyright:
 category:             Language
 build-type:           Simple
 extra-source-files:   README.md
@@ -15,10 +16,6 @@ cabal-version:        >=1.10
 flag synquid
   Description: Build the synquid executable
   Default:     True
-
-flag tests
-  Description: Build synquid-tests executable
-  Default:     False
 
 executable synquid
   main-is:            Synquid.hs
@@ -31,50 +28,24 @@ executable synquid
 
   build-depends:      base >=4.6 && <4.9
                     , containers >=0.5 && <0.6
-                    , mtl >=2.1 && <2.3
+                    , mtl >=2.2 && <2.3
                     , transformers >=0.3 && <0.5
+                    , transformers-compat ==0.4.*
                     , lens >=3.7
                     , ansi-wl-pprint >=0.6 && <0.7
+                    , ansi-terminal >=0.6 
+                    , html ==1.*
                     , bimap >= 0.2
-                    , z3 >= 4.0
+                    , z3 > 4.0
                     , logict >= 0.5
                     , parsec == 3.1.*
+                    , indents == 0.3.*
                     , cmdargs ==0.10.*
                     , time
+
+  ghc-options: -O2
 
   hs-source-dirs:     src
   default-language:   Haskell2010
   If !flag(synquid)
     buildable: False
-
-Test-Suite synquid-tests
-  type:                exitcode-stdio-1.0
-  main-is:             Tests.hs
-  other-extensions:   TemplateHaskell
-                    , Rank2Types
-                    , FlexibleInstances
-                    , TypeSynonymInstances
-                    , FlexibleContexts
-
-  build-depends:      base >=4.6 && <4.9
-                    , containers >=0.5 && <0.6
-                    , mtl >=2.1 && <2.3
-                    , transformers >=0.3 && <0.5
-                    , lens >=3.7
-                    , ansi-wl-pprint >=0.6 && <0.7
-                    , bimap >= 0.2
-                    , z3 >= 4.0
-                    , logict >= 0.5
-                    , HUnit >= 1.2
-                    , parsec == 3.1.*
-                    , test-framework
-                    , test-framework-hunit
-                    , smallcheck
-                    , hspec-smallcheck
-                    , QuickCheck
-                    , test-framework-quickcheck2
-
-  hs-source-dirs:     src, test
-  default-language:   Haskell2010
-  -- If !flag(tests)
-    -- buildable: False

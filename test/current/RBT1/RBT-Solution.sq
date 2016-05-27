@@ -1,0 +1,139 @@
+qualifier {x <= y, x != y}
+
+red   :: {Int | _v == 0}
+black :: {Int | _v == 1}
+
+data RBT a where
+    Empty :: RBT a
+    Node  :: x: a ->
+             col: {Int | 0 <= _v && _v <= 1} ->
+             left:  { RBT {a | _v < x} | isOk _v && (col == 0 ==> color _v == 1) } ->   -- left keys are less than this key; a red node must have black children
+             right: { RBT {a | x < _v} | isOk _v && (col == 0 ==> color _v == 1) &&     -- right keys are greater than this key; a red node must have black children
+                                        (blackHeight _v == blackHeight left)} ->        -- blackHeight the same as of left
+             RBT a
+    Bad :: x: a ->
+              lc:    {Int | 0 <= _v  && _v <= 1 } ->
+              left:  { RBT {a | _v < x} | isOk _v && color _v == lc} ->
+              right: { RBT {a | x < _v } | isOk _v && color _v != lc && blackHeight _v == blackHeight left} ->
+              RBT a             
+                      
+termination measure size :: RBT a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x c l r -> 1 + size l + size r
+  Bad x lc l r -> 1 + size l + size r
+  
+measure color :: RBT a -> {Int | 0 <= _v && _v <= 1} where
+  Empty -> 1
+  Node x c l r -> c
+  Bad x lc left right -> 0
+  
+measure elems :: RBT a -> Set a where
+  Empty -> []
+  Node x c l r -> [x] + elems l + elems r
+  Bad x lc l r -> [x] + elems l + elems r
+
+measure blackHeight :: RBT a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x c l r -> c + blackHeight l
+  Bad x lc l r -> blackHeight l
+  
+measure isOk :: RBT a -> Bool where
+  Empty -> True
+  Node x c left right -> True
+  Bad x lc left right -> False
+  
+error :: {Int | False} -> a  
+  
+rotateL :: x: a ->                
+            lx: {a | _v < x} ->
+            llc: {Int | 0 <= _v && _v <= 1} ->
+            ll: {RBT {a | _v < lx} | isOk _v && color _v == llc} ->
+            lr: {RBT {a | lx < _v && _v < x} | isOk _v && color _v != llc && blackHeight _v == blackHeight ll} -> 
+            r: {RBT {a | x < _v} | isOk _v && blackHeight _v == blackHeight ll} ->
+            {RBT a | isOk _v && color _v == 0 && elems _v == [x, lx] + elems ll + elems lr + elems r && blackHeight _v == blackHeight r + 1 && size _v == 2 + size ll + size lr + size r}
+rotateL = \x . \lx . \llc . \ll. \lr. \r .
+            if llc == 0
+              then match ll with
+                    Empty -> error 0
+                    Node llx llc lll llr -> Node lx red (Node llx black lll llr) (Node x black lr r)
+                    Bad llx lllc lll llr -> error 0
+              else match lr with
+                    Empty -> error 0
+                    Node lrx lrc lrl lrr -> Node lrx red (Node lx black ll lrl) (Node x black lrr r)       
+                    Bad llx lllc lll llr -> error 0
+          
+rotateR :: x: a ->
+            l: {RBT {a | _v < x} | isOk _v} ->
+            rx: {a | x < _v} ->
+            rlc: {Int | _v == 0 || _v == 1} ->
+            rl: {RBT {a | x < _v && _v < rx} | isOk _v && color _v == rlc && blackHeight _v == blackHeight l} ->
+            rr: {RBT {a | rx < _v} | isOk _v && color _v != rlc && blackHeight _v == blackHeight l} ->             
+            {RBT a | isOk _v && color _v == 0 && elems _v == [x, rx] + elems l + elems rl + elems rr && blackHeight _v == blackHeight l + 1 && size _v == 2 + size l + size rl + size rr}        
+rotateR = \x . \l . \rx . \rlc. \rl. \rr .
+            if rlc == 0
+              then match rl with
+                    Empty -> error 0
+                    Node rlx rlc rll rlr -> Node rlx red (Node x black l rll) (Node rx black rlr rr)  
+                    Bad rlx rllc rll rlr -> error 0
+              else match rr with
+                    Empty -> error 0
+                    Node rrx rrc rrl rrr -> Node rx red (Node x black l rl) (Node rrx black rrl rrr)
+                    Bad rlx rllc rll rlr -> error 0
+  
+balanceL :: y: a ->
+            c: {Int | 0 <= _v  && _v <= 1} ->
+            l: {RBT {a | _v < y} | size _v > 0 && (c == 0 ==> isOk _v)} ->
+            r: {RBT {a | _v > y} | isOk _v && (c == 0 ==> color _v == 1) && blackHeight _v == blackHeight l} ->
+            {RBT a | elems _v == [y] + elems l + elems r && 
+                          blackHeight _v == blackHeight r + c && 
+                          size _v == 1 + size l + size r &&
+                          (isOk _v || c == 0)}
+balanceL = \y . \c . \l . \r .
+  match l with
+    Empty -> error 0
+    Node x1 c1 l1 r1 -> if c == 0 && c1 == 0
+                        then Bad y c (Node x1 c1 l1 r1) r
+                        else Node y c (Node x1 c1 l1 r1) r
+    Bad lx lc ll lr -> rotateL y lx lc ll lr r        
+
+balanceR :: x: a ->
+            c: {Int | 0 <= _v  && _v <= 1} ->
+            l: {RBT {a | _v < x} | isOk _v && (c == 0 ==> color _v == 1)} ->
+            r: {RBT {a | _v > x} | size _v > 0 && (c == 0 ==> isOk _v) && blackHeight _v == blackHeight l} ->
+            {RBT a | elems _v == [x] + elems l + elems r && 
+                          blackHeight _v == blackHeight l + c && 
+                          size _v == 1 + size l + size r &&
+                          (isOk _v || c == 0)}
+balanceR = \y . \c . \l . \r .
+  match r with
+    Empty -> error 0
+    Node x1 c1 l1 r1 -> if c == 0 && c1 == 0
+                          then Bad y black l (Node x1 c1 l1 r1)
+                          else Node y c l (Node x1 c1 l1 r1)
+    Bad rx rc rl rr -> rotateR y l rx rc rl rr
+  
+ins :: x: a -> t: {RBT a | isOk _v} -> {RBT a | 
+                                          elems _v == [x] + elems t &&
+                                          blackHeight _v == blackHeight t &&
+                                          size _v > 0 &&
+                                          size t <= size _v && size _v <= size t + 1 &&
+                                          (isOk _v || color t == 0)}
+ins = \x . \t . 
+        match t with
+          Empty -> Node x red Empty Empty
+          Node y c l r -> if x == y
+                            then Node y c l r
+                            else if x < y
+                                  then balanceL y c (ins x l) r
+                                  else balanceR y c l (ins x r)
+          Bad y lc l r -> error 0
+
+mkBlack :: t: RBT a -> {RBT a | isOk _v && elems _v == elems t}
+mkBlack = \t. 
+  match t with
+    Empty -> Empty
+    Node y c l r -> Node y c l r
+    Bad y lc l r -> Node y black l r
+
+insert :: x: a -> t: {RBT a | isOk _v} -> {RBT a | elems _v == elems t + [x]}
+insert = \x . \t . mkBlack (ins x t)

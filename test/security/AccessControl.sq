@@ -1,0 +1,45 @@
+{- module Authentication -}
+
+-- | User IDs
+type UId = Int
+
+-- | Passwords
+data Password
+
+-- | Principals
+data Principal where
+  Admin :: Principal
+  User :: UId -> Principal
+  
+-- | Is principal authenticated?  
+predicate isAuth :: Principal -> Bool
+
+-- | Constructor for @isAuth@: checks @pw@ validity and authenticates @p@
+login :: p: Principal -> pw: Password -> { Bool | _v == isAuth p }
+
+{- module FileRM -}
+
+-- | File handles
+data File
+
+-- | File content
+data Content
+
+-- | Connect file handles to their content
+predicate content :: File -> Content
+  
+-- | Abstract predicates to express access permissions
+predicate canRead :: Principal -> File -> Bool
+predicate canWrite :: Principal -> File -> Bool
+
+-- | Access permission "axioms" (constructors for @canRead@ and @canWrite@)
+wImpliesR :: p: Principal -> f: {File | canWrite p _v} -> {File | _v == f && canRead p _v}
+adminW :: f: File -> {File | _v == f && canWrite Admin _v}
+
+-- | Read file
+freadSimple :: p: {Principal | isAuth _v} -> f: {File | canRead p _v} -> {Content | _v == content f}
+
+{- client -}
+
+readFile :: p: Principal -> pw: Password -> f: {File | canRead p _v} -> {Content | _v == content f}
+readFile = ??
