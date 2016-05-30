@@ -133,8 +133,7 @@ parseMeasureDecl = do
   inSort <- parseSort
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
-  reserved "where"
-  cases <- indented >> block parseDefCase
+  cases <- option [] (reserved "where" >> indented >> block parseDefCase) 
   return $ MeasureDecl measureName inSort outSort post cases isTermination
   where
     parseDefCase = do

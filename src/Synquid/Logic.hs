@@ -321,6 +321,12 @@ uDNF = dnf' . negationNF
                                 rClause <- dnf' e2
                                 return $ lClause |&| rClause
     dnf' fml = [fml]
+    
+atomsOf fml = atomsOf' (negationNF fml)
+  where
+    atomsOf' (Binary And l r) = atomsOf' l `Set.union` atomsOf' r
+    atomsOf' fml@(Binary Or l r) = Set.insert fml (atomsOf' l `Set.union` atomsOf' r)
+    atomsOf' fml = Set.singleton fml    
 
 {- Qualifiers -}
 
