@@ -1,10 +1,10 @@
+- Fix ansi characters in HTML output
+- Source lines in resolver and type checker
 - Split subtyping constraints with multiple measures?  
 - Multisets
-- Source lines in resolver
 
 - Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
 - Named arguments for abstract predicates
-- Collapse lambda-expansions in aux goals
 - Mutual recursion
 - Type classes (for type variables and abstract datatypes)
 - Default components
@@ -25,6 +25,3 @@ Security:
 
 When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this prdicate is around
 - Try encoding of atomic flow with HO functions
-
-Front-end:
-	- Attach positions to AST nodes
