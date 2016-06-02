@@ -79,7 +79,9 @@ instantiateTypeQualifier :: Formula -> Environment -> Formula -> [Formula] -> [F
 instantiateTypeQualifier (BoolLit True) _ _ _ = []
 instantiateTypeQualifier qual env actualVal actualVars =
   let (formalVals, formalVars) = partition (\v -> varName v == valueVarName) . Set.toList . varsOf $ qual in
-  allSubstitutions env qual formalVars actualVars formalVals [actualVal]
+  if length formalVals == 1
+    then allSubstitutions env qual formalVars actualVars formalVals [actualVal]
+    else []
 
 -- | 'instantiateCondQualifier' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 instantiateCondQualifier :: Formula -> Environment -> [Formula] -> [Formula]
@@ -93,7 +95,7 @@ isDataEq _ = False
 
 -- | 'extractMatchQGen' @(dtName, dtDef)@: qualifier generator that generates qualifiers of the form x == ctor, for all scalar constructors ctor of datatype @dtName@
 extractMatchQGen :: (Id, DatatypeDef) -> Environment -> [Formula] -> [Formula]    
-extractMatchQGen (dtName, (DatatypeDef tParams _ ctors _)) env vars = concatMap extractForCtor ctors
+extractMatchQGen (dtName, (DatatypeDef tParams _ _ ctors _)) env vars = concatMap extractForCtor ctors
   where
     -- Extract formulas x == @ctor@ for each x in @vars@
     extractForCtor ctor = case toMonotype $ allSymbols env Map.! ctor of
@@ -116,7 +118,7 @@ extractQGenFromType positive t env val vars = extractQGenFromType' positive t
       let
         -- Datatype: extract from tArgs and pArgs
         extractFromBase (DatatypeT dtName tArgs pArgs) =
-          let (DatatypeDef _ pParams _ _) = (env ^. datatypes) Map.! dtName
+          let (DatatypeDef _ pParams _ _ _) = (env ^. datatypes) Map.! dtName
           in concatMap (extractQGenFromType' True) tArgs ++ concat (zipWith extractQGenFromPred pParams pArgs)
         -- Otherwise: no formulas
         extractFromBase _ = []
@@ -175,7 +177,7 @@ extractPredQGenFromType t env actualParams actualVars = extractPredQGenFromType'
             let
               pArg' = sortSubstituteFml sortInst pArg
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
-              fmls = Set.toList $ conjunctsOf pArg'
+              fmls = Set.toList $ atomsOf pArg'
             in concatMap (\fml -> allSubstitutions env fml formalVars actualVars [] []) fmls -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml

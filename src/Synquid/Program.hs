@@ -136,10 +136,11 @@ renameAsImpl p t = renameAsImpl' Map.empty p t
 
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeParams :: [Id],    -- ^ Type parameters
-  _predArgs :: [PredSig], -- ^ Signatures of predicate parameters
-  _constructors :: [Id],  -- ^ Constructor names
-  _wfMetric :: Maybe Id   -- ^ Name of the measure that serves as well founded termination metric
+  _typeParams :: [Id],              -- ^ Type parameters
+  _predParams :: [PredSig],         -- ^ Signatures of predicate parameters
+  _predVariances :: [Bool],         -- ^ For each predicate parameter, whether it is contravariant
+  _constructors :: [Id],            -- ^ Constructor names
+  _wfMetric :: Maybe Id             -- ^ Name of the measure that serves as well founded termination metric
 } deriving (Eq, Ord)
 
 makeLenses ''DatatypeDef
@@ -322,7 +323,7 @@ allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dt
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env = 
     let allMeasures = Map.toList $ allMeasuresOf dtName env 
-    in catMaybes $ map extractPost allMeasures ++ map elemProperties allMeasures
+    in catMaybes $ map extractPost allMeasures ++ if includeQuanitifed then map elemProperties allMeasures else []
   where
     extractPost (mName, MeasureDef _ outSort _ fml) = 
       if fml == ftrue
@@ -332,7 +333,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
-                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml) || not (mName `Set.member` includeQuanitifed)
+                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
                     then Nothing
                     else  let
                             elemSort = toSort elemT
@@ -357,7 +358,7 @@ constructorName (ConstructorSig name _) = name
 data BareDeclaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature
-  DataDecl Id [Id] [PredSig] [ConstructorSig] |             -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
+  DataDecl Id [Id] [(PredSig, Bool)] [ConstructorSig] |     -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
   MeasureDecl Id Sort Sort Formula [MeasureCase] Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
   PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
