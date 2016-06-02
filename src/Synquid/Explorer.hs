@@ -4,7 +4,9 @@
 module Synquid.Explorer where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import qualified Synquid.TypeConstraintSolver as TCSolver (freshId, freshVar)
@@ -53,6 +55,7 @@ data ExplorerParams = ExplorerParams {
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging and symmetry reduction)
   _useMemoization :: Bool,                -- ^ Should enumerated terms be memoized?
   _symmetryReduction :: Bool,             -- ^ Should partial applications be memoized to check for redundancy?
+  _sourcePos :: SourcePos,                -- ^ Source position of the current goal
   _explorerLogLevel :: Int                -- ^ How verbose logging is
 } 
 
@@ -93,7 +96,7 @@ type PartialMemo = Map PartialKey (Map RProgram (Int, Environment))
 data PersistentState = PersistentState {
   _termMemo :: Memo,
   _partialFailures :: PartialMemo,
-  _typeErrors :: [TypeError]
+  _typeErrors :: [ErrorMessage]
 }
 
 makeLenses ''PersistentState
@@ -102,11 +105,11 @@ makeLenses ''PersistentState
 type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT PersistentState s)))
 
 -- | 'runExplorer' @eParams tParams initTS go@ : execute exploration @go@ with explorer parameters @eParams@, typing parameters @tParams@ in typing state @initTS@
-runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either TypeError a)
+runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either ErrorMessage a)
 runExplorer eParams tParams initTS go = do
   (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go initExplorerState) (eParams, tParams)) (PersistentState Map.empty Map.empty [])
   case ress of
-    [] -> return $ Left $ if null errs then text "No solution" else head errs
+    [] -> return $ Left $ head errs
     (res : _) -> return $ Right res
   where
     initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty
@@ -400,9 +403,10 @@ checkE env typ p@(Program pTerm pTyp) = do
   when (arity typ > 0) $
     ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
   fTyp <- runInSolver $ finalizeType typ
-  typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
+  pos <- asks $ _sourcePos . fst
+  typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
   solveIncrementally
-  typingState . errorContext .= empty
+  typingState . errorContext .= (noPos, empty)
     where      
       unknownId :: Formula -> Maybe Id
       unknownId (Unknown _ i) = Just i
@@ -529,9 +533,10 @@ generateError env = do
   writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
   tass <- use (typingState . typeAssignment)
   addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env tass)) (int ffalse) False
-  typingState . errorContext .= errorText "when checking" </> pretty errorProgram </> errorText "in" $+$ pretty (ctx errorProgram)
+  pos <- asks $ _sourcePos . fst  
+  typingState . errorContext .= (pos, text "when checking" </> pretty errorProgram </> text "in" $+$ pretty (ctx errorProgram))
   runInSolver solveTypeConstraints
-  typingState . errorContext .= empty
+  typingState . errorContext .= (noPos, empty)
   return errorProgram
   where
     trivial var = var |=| var
@@ -546,7 +551,7 @@ toVar p@(Program _ t) env = do
 
 enqueueGoal env typ impl depth = do
   g <- freshVar env "f"
-  auxGoals %= ((Goal g env (Monotype typ) impl depth) :)
+  auxGoals %= ((Goal g env (Monotype typ) impl depth noPos) :)
   return $ Program (PSymbol g) typ
 
 {- Utility -}
@@ -565,10 +570,15 @@ getPartials = lift . lift . lift $ use partialFailures
 putPartials :: MonadHorn s => PartialMemo -> Explorer s ()
 putPartials partials = lift . lift . lift $ partialFailures .= partials
 
+throwErrorWithDescription :: MonadHorn s => Doc -> Explorer s a   
+throwErrorWithDescription msg = do
+  pos <- asks $ _sourcePos . fst
+  throwError $ ErrorMessage TypeError pos msg
+
 -- | Record type error and backtrack
-throwError :: MonadHorn s => TypeError -> Explorer s a  
+throwError :: MonadHorn s => ErrorMessage -> Explorer s a  
 throwError e = do
-  writeLog 1 $ text "TYPE ERROR:" <+> plain e
+  writeLog 1 $ text "TYPE ERROR:" <+> plain (emDescription e)
   lift . lift . lift $ typeErrors %= (e :)
   mzero
   

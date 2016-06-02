@@ -1,5 +1,4 @@
 - Fix ansi characters in HTML output
-- Source lines in resolver and type checker
 - Split subtyping constraints with multiple measures?  
 - Multisets
 

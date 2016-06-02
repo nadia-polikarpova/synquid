@@ -3,10 +3,11 @@ module Synquid.Synthesizer (synthesize) where
 
 import Synquid.Util
 import Synquid.Logic
+import Synquid.Type
+import Synquid.Program
 import Synquid.SolverMonad
 import Synquid.HornSolver
 import Synquid.Z3
-import Synquid.Program
 import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.TypeConstraintSolver
@@ -33,11 +34,11 @@ type HornSolver = FixPointSolver Z3State
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either TypeError RProgram)
+synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram)
 synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFixPointSolver reconstruction solverParams
   where
     -- | Stream of programs that satisfy the specification or type error
-    reconstruction :: HornSolver (Either TypeError RProgram)
+    reconstruction :: HornSolver (Either ErrorMessage RProgram)
     reconstruction = let
         typingParams = TypingParams { 
                         _condQualsGen = condQuals,
