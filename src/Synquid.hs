@@ -46,6 +46,7 @@ main = do
                    symmetry
                    bfs
                    outFormat
+                   resolve
                    print_spec
                    print_stats) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
@@ -70,6 +71,7 @@ main = do
     }
   let synquidParams = defaultSynquidParams {
     outputFormat = outFormat,
+    resolveOnly = resolve,
     showSpec = print_spec,
     showStats = print_stats
   }
@@ -105,6 +107,7 @@ data CommandLineArgs
         bfs_solver :: Bool,
         -- | Output
         output :: OutputFormat,
+        resolve :: Bool,
         print_spec :: Bool,
         print_stats :: Bool
       }
@@ -128,6 +131,7 @@ cla = CommandLineArgs {
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
+  resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
   print_stats         = False           &= help ("Show specification and solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
@@ -181,12 +185,14 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
+  resolveOnly :: Bool,                         -- ^ Stop after resolution step
   showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
   showStats :: Bool                            -- ^ Print specification and solution size
 }
 
 defaultSynquidParams = SynquidParams {
   outputFormat = Plain,
+  resolveOnly = False,
   showSpec = True,
   showStats = False
 }
@@ -200,7 +206,7 @@ runOnFile synquidParams explorerParams solverParams file = do
     -- Right ast -> print $ vsep $ map pretty ast
     Right decls -> case resolveDecls decls of
       Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
-      Right (goals, cquals, tquals) -> do
+      Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
         results <- mapM (synthesizeGoal cquals tquals) goals
         when (not (null results) && showStats synquidParams) $ printStats results
   where
