@@ -1,4 +1,4 @@
--- | Helper functions
+-- | Common types and helper functions
 module Synquid.Util where
 
 import Data.Maybe
@@ -14,6 +14,9 @@ import Control.Monad
 import Control.Lens hiding (both)
 
 import Debug.Trace
+
+-- | Identifiers
+type Id = String
 
 -- | `mappedCompare` @f x y@ : compare @f x@ and @f y@
 mappedCompare :: Ord b => (a -> b) -> a -> a -> Ordering

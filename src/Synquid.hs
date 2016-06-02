@@ -3,9 +3,11 @@
 module Main where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.Pretty
-import Synquid.Parser (parseFromFile, parseProgram)
+import Synquid.Parser (parseFromFile, parseProgram, toErrorMessage)
 import Synquid.Resolver (resolveDecls)
 import Synquid.SolverMonad
 import Synquid.HornSolver
@@ -149,6 +151,7 @@ defaultExplorerParams = ExplorerParams {
   _useMemoization = False,
   _symmetryReduction = False,
   _context = id,
+  _sourcePos = noPos,
   _explorerLogLevel = 0
 }
 
@@ -193,10 +196,10 @@ runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> String -> IO
 runOnFile synquidParams explorerParams solverParams file = do
   parseResult <- parseFromFile parseProgram file
   case parseResult of
-    Left parseErr -> (pdoc $ errorDoc $ text (show parseErr)) >> pdoc empty >> exitFailure
+    Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
     -- Right ast -> print $ vsep $ map pretty ast
     Right decls -> case resolveDecls decls of
-      Left resolutionError -> (pdoc $ errorDoc $ text resolutionError) >> pdoc empty >> exitFailure
+      Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
       Right (goals, cquals, tquals) -> do
         results <- mapM (synthesizeGoal cquals tquals) goals
         when (not (null results) && showStats synquidParams) $ printStats results
@@ -210,11 +213,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> pdoc (errorDoc $ text "No solution. Last candidate failed with error:\n")
-                    >> pdoc empty
-                    >> pdoc err
-                    >> pdoc empty 
-                    >> exitFailure
+        Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
           pdoc empty

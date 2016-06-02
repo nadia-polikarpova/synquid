@@ -3,14 +3,15 @@
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
 module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, addAllVariables, ResolverState (..)) where
 
-import Synquid.Program
 import Synquid.Logic
+import Synquid.Type
+import Synquid.Program
+import Synquid.Error
 import Synquid.Pretty
 import Synquid.Util
 import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.State
-import Text.Printf
 import Control.Lens
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -25,16 +26,15 @@ import Debug.Trace
 
 {- Interface -}
 
-type ErrMsg = String
-
 data ResolverState = ResolverState {
   _environment :: Environment,  
-  _goals :: [(Id, UProgram)],
+  _goals :: [(Id, (UProgram, SourcePos))],
   _condQualifiers :: [Formula],
   _typeQualifiers :: [Formula],
   _mutuals :: Map Id [Id],
   _inlines :: Map Id ([Id], Formula),
   _sortConstraints :: [SortConstraint],
+  _currentPosition :: SourcePos,
   _idCount :: Int
 }
 
@@ -48,11 +48,12 @@ initResolverState = ResolverState {
   _mutuals = Map.empty,
   _inlines = Map.empty,
   _sortConstraints = [],
+  _currentPosition = noPos,
   _idCount = 0
 }
 
 -- | Convert a parsed program AST into a list of synthesis goals and qualifier maps
-resolveDecls :: [Declaration] -> Either ErrMsg ([Goal], [Formula], [Formula])
+resolveDecls :: [Declaration] -> Either ErrorMessage ([Goal], [Formula], [Formula])
 resolveDecls declarations = 
   case runExcept (execStateT go initResolverState) of
     Left msg -> Left msg
@@ -61,21 +62,24 @@ resolveDecls declarations =
   where
     go = do
       -- Pass 1: collect all declarations and resolve sorts, but do not resolve refinement types yet
-      mapM_ resolveDeclaration declarations
+      mapM_ (extractPos resolveDeclaration) declarations
       -- Pass 2: resolve refinement types in signatures
-      mapM_ resolveSignatures declarations
-    makeGoal env allNames allMutuals (name, impl) = 
+      mapM_ (extractPos resolveSignatures) declarations
+    makeGoal env allNames allMutuals (name, (impl, pos)) = 
       let
         spec = allSymbols env Map.! name
         myMutuals = Map.findWithDefault [] name allMutuals
         toRemove = drop (fromJust $ elemIndex name allNames) allNames \\ myMutuals -- All goals after and including @name@, except mutuals
         env' = foldr removeVariable env toRemove
-      in Goal name env' spec impl 0
+      in Goal name env' spec impl 0 pos
+    extractPos pass (Pos pos decl) = do
+      currentPosition .= pos
+      pass decl
       
-resolveRefinement :: Environment -> Formula -> Either ErrMsg Formula
+resolveRefinement :: Environment -> Formula -> Either ErrorMessage Formula
 resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env})) --, _fmlSubstitution = subst}))
 
-resolveRefinedType :: Environment -> RType -> Either ErrMsg RType
+resolveRefinedType :: Environment -> RType -> Either ErrorMessage RType
 resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
 
 addAllVariables :: [Formula] -> Environment -> Environment
@@ -83,15 +87,20 @@ addAllVariables = flip (foldr (\(Var s x) -> addVariable x (fromSort s)))
     
 {- Implementation -}    
 
-type Resolver a = StateT ResolverState (Except ErrMsg) a    
+type Resolver a = StateT ResolverState (Except ErrorMessage) a
 
-resolveDeclaration :: Declaration -> Resolver ()
+throwResError descr = do
+  pos <- use currentPosition
+  throwError $ ErrorMessage ResolutionError pos descr
+
+resolveDeclaration :: BareDeclaration -> Resolver ()
 resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
   typeBody' <- resolveType typeBody
   let extraTypeVars = typeVarsOf typeBody' Set.\\ Set.fromList typeVars
   if Set.null extraTypeVars
     then environment %= addTypeSynonym typeName typeVars typeBody'
-    else throwError $ unwords $ ["Type variable(s)"] ++ Set.toList extraTypeVars ++ ["in the definition of type synonym", typeName, "are undefined"]
+    else throwResError (text "Type variable(s)" <+> hsep (map text $ Set.toList extraTypeVars) <+> 
+              text "in the definition of type synonym" <+> text typeName <+> text "are undefined")
 resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
 resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
   let
@@ -117,27 +126,28 @@ resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermi
       let tParams = datatype ^. typeParams
       let declDtSort = DataS dtName (map VarS tParams)
       if inSort /= declDtSort
-        then throwError $ unwords ["Type parameters of measure", measureName, "must be the same as in the datatype declaration"]
+        then throwResError (text "Type parameters of measure" <+> text measureName <+> text "must be the same as in the datatype declaration")
         else do                
           environment %= addGlobalPredicate measureName outSort [inSort]
           -- Possibly add as termination metric:      
           if isTermination
             then if (isJust $ datatype ^. wfMetric) 
-                  then throwError $ unwords ["Multiple termination metrics defined for datatype", dtName]
+                  then throwResError (text "Multiple termination metrics defined for datatype" <+> text dtName)
                   else if outSort == IntS
                         then environment %= addDatatype dtName datatype { _wfMetric = Just measureName }
-                        else throwError $ unwords ["Output sort of termination measure", measureName, "must be Int"]  
+                        else throwResError (text "Output sort of termination measure" <+> text measureName <+> text "must be Int")
             else return ()
-    _ -> throwError $ unwords ["Input sort of measure", measureName, "must be a datatype"]
+    _ -> throwResError (text "Input sort of measure" <+> text measureName <+> text "must be a datatype")
 resolveDeclaration (PredDecl (PredSig name argSorts resSort)) = do
-  ifM (Map.member name <$> use (environment . globalPredicates)) (throwError $ unwords ["Duplicate declaration of predicate", name]) (return ())
+  ifM (Map.member name <$> use (environment . globalPredicates)) (throwResError (text "Duplicate declaration of predicate" <+> text name)) (return ())
   mapM_ resolveSort (resSort : argSorts)
   environment %= addGlobalPredicate name resSort argSorts
 resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols
+  pos <- use currentPosition
   if Map.member name syms
-    then goals %= (++ [(name, impl)])
-    else throwError $ unwords ["No specification found for synthesis goal", name]
+    then goals %= (++ [(name, (impl, pos))])
+    else throwResError (text "No specification found for synthesis goal" <+> text name)
 resolveDeclaration (QualifierDecl quals) = mapM_ resolveQualifier quals
   where
     resolveQualifier q = if Set.member valueVarName (Set.map varName $ varsOf q)
@@ -149,17 +159,17 @@ resolveDeclaration (MutualDecl names) = mapM_ addMutuals names
       goalMb <- uses goals (lookup name)
       case goalMb of
         Just _ -> mutuals %= Map.insert name (delete name names)
-        Nothing -> throwError $ unwords ["Synthesis goal", name, "in a mutual clause is undefined"]
+        Nothing -> throwResError (text "Synthesis goal" <+> text name <+> text "in a mutual clause is undefined")
 resolveDeclaration (InlineDecl name args body) = 
   ifM (uses inlines (Map.member name))
-    (throwError $ unwords ["Duplicate definition of inline", name])
+    (throwResError (text "Duplicate definition of inline" <+> text name))
     (do
       let extraVars = Set.map varName (varsOf body) `Set.difference` Set.fromList args
       if not $ Set.null extraVars
-        then throwError $ unwords (["Variables"] ++ Set.toList extraVars ++ ["undefined in the body of inline", name])
+        then throwResError (text "Variables" <+> hsep (map text $ Set.toList extraVars) <+> text "undefined in the body of inline" <+> text name)
         else inlines %= Map.insert name (args, body))
       
-resolveSignatures :: Declaration -> Resolver ()      
+resolveSignatures :: BareDeclaration -> Resolver ()      
 resolveSignatures (FuncDecl name _)  = do
   sch <- uses environment ((Map.! name) . allSymbols)
   sch' <- resolveSchema sch
@@ -176,27 +186,27 @@ resolveSignatures (DataDecl dtName tParams pParams ctors) = mapM_ resolveConstru
           let nominalSort = toSort $ baseTypeOf nominalType
           let sch'' = addRefinementToLastSch sch' (Var nominalSort valueVarName |=| Cons nominalSort name (allArgs (toMonotype sch')))    
           environment %= addPolyConstant name sch''
-        else throwError $ unwords ["Constructor", name, "must return type", show nominalType, ", got", show returnType]      
+        else throwResError (commaSep [text "Constructor" <+> text name <+> text "must return type" <+> pretty nominalType, text "got" <+> pretty returnType])      
 resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
   (outSort : (inSort@(DataS dtName sArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)
   datatype <- uses (environment . datatypes) (Map.! dtName)
   post' <- resolveTypeRefinement outSort post
   let ctors = datatype ^. constructors  
   if length defCases /= length ctors
-    then throwError $ unwords $ ["Definition of measure", measureName, "must include one case per constructor of", dtName]
+    then throwResError $ text "Definition of measure" <+> text measureName <+> text "must include one case per constructor of" <+> text dtName
     else do
       defs' <- mapM (resolveMeasureDef ctors) defCases
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')    
   where
     resolveMeasureDef allCtors (MeasureCase ctorName binders body) = 
       if not (ctorName `elem` allCtors)
-        then throwError $ unwords ["Not in scope: data constructor", ctorName, "used in definition of measure", measureName]
+        then throwResError $ text "Not in scope: data constructor" <+> text ctorName <+> text "used in definition of measure" <+> text measureName
         else do
           consSch <- uses environment ((Map.! ctorName) . allSymbols)
           let consT = toMonotype consSch
           let n = arity consT 
           if n /= length binders 
-            then throwError $ unwords ["Data constructor", ctorName, "expected", show n, "binders and got", show (length binders), "in definition of measure", measureName]
+            then throwResError $ text "Data constructor" <+> text ctorName <+> text "expected" <+> pretty n <+> text "binders and got" <+> pretty (length binders) <+> text "in definition of measure" <+> text measureName
             else do
               let ctorParams = allArgs consT
               let subst = Map.fromList $ zip binders ctorParams
@@ -220,17 +230,17 @@ resolveSchema sch = do
   where
     resolveSchema' (ForallP sig@(PredSig predName argSorts resSort) sch) = do
       ifM (elem predName <$> uses (environment . boundPredicates) (map predSigName)) 
-        (throwError $ unwords ["Duplicate predicate variables", predName]) 
+        (throwResError $ text "Duplicate predicate variables" <+> text predName)
         (return ())
       mapM_ resolveSort argSorts
       when (resSort /= BoolS) $
-        (throwError $ unwords ["Bound predicate variable", predName, "must return Bool"])
+        (throwResError $ text "Bound predicate variable" <+> text predName <+> text "must return Bool")
       sch' <- withLocalEnv $ do
         environment %= addBoundPredicate sig
         resolveSchema' sch
       let extraTypeVars = (Set.unions (map typeVarsOfSort argSorts)) Set.\\ typeVarsOf (toMonotype sch')
       when (not $ Set.null extraTypeVars) $
-        (throwError $ unwords ["Unbound variables", show (commaSep $ map pretty $ Set.toList extraTypeVars), "in sort of bound predicate", predName])
+        (throwResError $ text "Unbound variables" <+> (commaSep $ map pretty $ Set.toList extraTypeVars) <+> text "in sort of bound predicate" <+> text predName)
       return $ ForallP sig sch'
     resolveSchema' (Monotype t) = Monotype <$> resolveType t
 
@@ -243,8 +253,10 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       fml' <- resolveTypeRefinement (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
     Just (DatatypeDef tParams pParams _ _ _) -> do
-      when (length tArgs /= length tParams) $ throwError $ unwords ["Datatype", name, "expected", show (length tParams), "type arguments and got", show (length tArgs)]
-      when (length pArgs /= length pParams) $ throwError $ unwords ["Datatype", name, "expected", show (length pParams), "predicate arguments and got", show (length pArgs)]   
+      when (length tArgs /= length tParams) $ 
+        throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length tParams) <+> text "type arguments and got" <+> pretty (length tArgs)
+      when (length pArgs /= length pParams) $ 
+        throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length pParams) <+> text "predicate arguments and got" <+> pretty (length pArgs) 
       -- Resolve type arguments:
       tArgs' <- mapM resolveType tArgs
       -- Resolve predicate arguments:
@@ -268,7 +280,7 @@ resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveTypeRefinement (toSor
       
 resolveType (FunctionT x tArg tRes) = 
   if x == valueVarName
-    then throwError $ unwords [valueVarName, "is a reserved variable name"]
+    then throwResError $ text valueVarName <+> text "is a reserved variable name"
     else if x == dontCare
       then error $ unwords ["resolveType: blank in function type", show (FunctionT x tArg tRes)] -- Should never happen
       else do
@@ -286,10 +298,10 @@ resolveSort (SetS elSort) = resolveSort elSort
 resolveSort s@(DataS name sArgs) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
-    Nothing -> throwError $ unwords ["Datatype", name, "is undefined in sort", show s]
+    Nothing -> throwResError $ text "Datatype" <+> text name <+> text "is undefined in sort" <+> pretty s
     Just (DatatypeDef tParams _ _ _ _) -> do
       let n = length tParams
-      when (length sArgs /= n) $ throwError $ unwords ["Datatype", name, "expected", show n, "type arguments and got", show (length sArgs)]
+      when (length sArgs /= n) $ throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty n <+> text "type arguments and got" <+> pretty (length sArgs)
       mapM_ resolveSort sArgs
 resolveSort s = return ()
   
@@ -316,7 +328,7 @@ resolveTypeRefinement valueSort fml = do
   boundPreds <- uses (environment . boundPredicates) (Set.fromList . map predSigName)
   let invalidPreds = negPreds resolvedFml `Set.intersection` boundPreds
   when (not $ Set.null invalidPreds) $ 
-    throwError $ unwords ["Bound predicate(s)", show (commaSep (map text $ Set.toList invalidPreds)), "occur negatively in a refinement", show resolvedFml]
+    throwResError $ text "Bound predicate(s)" <+> commaSep (map text $ Set.toList invalidPreds)<+> text "occur negatively in a refinement" <+> pretty resolvedFml
   return resolvedFml
 
 resolveFormula :: Formula -> Resolver Formula
@@ -330,7 +342,7 @@ resolveFormula (Var s x) = do
           return $ Var s' x
         _ -> error $ unwords ["resolveFormula: encountered non-scalar variable", x, "in a formula"]
     Nothing -> resolveFormula (Pred AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
-                  const (throwError $ printf "Var `%s` is not in scope." x)      -- but if not, throw this error to avoid confusion
+                  const (throwResError $ text "Variable" <+> text x <+> text "is not in scope")      -- but if not, throw this error to avoid confusion
                       
 resolveFormula (SetLit _ elems) = do
   elemSort <- freshSort
@@ -404,10 +416,10 @@ resolveFormula (Pred _ name argFmls) = do
     Nothing -> do
       ps <- uses environment allPredicates
       (resSort : argSorts) <- case Map.lookup name ps of
-                                Nothing -> throwError $ unwords ["Predicate or measure", name, "is undefined"]
+                                Nothing -> throwResError $ text "Predicate or measure" <+> text name <+> text "is undefined"
                                 Just sorts -> instantiate sorts
       if length argFmls /= length argSorts
-          then throwError $ unwords ["Expected", show (length argSorts), "arguments for predicate or measure", name, "and got", show (length argFmls)]
+          then throwResError $ text "Expected" <+> pretty (length argSorts) <+> text "arguments for predicate or measure" <+> text name <+> text "and got" <+> pretty (length argFmls)
           else do
             argFmls' <- mapM resolveFormula argFmls
             zipWithM_ enforceSame (map sortOf argFmls') argSorts
@@ -416,12 +428,12 @@ resolveFormula (Pred _ name argFmls) = do
 resolveFormula (Cons _ name argFmls) = do
   syms <- uses environment allSymbols
   case Map.lookup name syms of
-    Nothing -> throwError $ unwords ["Data constructor", name, "is undefined"]
+    Nothing -> throwResError $ text "Data constructor" <+> text name <+> text "is undefined"
     Just consSch -> do
       let consT = toMonotype consSch
       (resSort : argSorts) <- instantiate $ map (toSort . baseTypeOf) $ lastType consT : allArgTypes consT
       if length argSorts /= length argFmls
-        then throwError $ unwords ["Constructor", name, "expected", show (length argSorts), "arguments and got", show (length argFmls)]
+        then throwResError $ text "Constructor" <+> text name <+> text "expected" <+> pretty (length argSorts) <+> text "arguments and got" <+> pretty (length argFmls)
         else do
             argFmls' <- mapM resolveFormula argFmls
             zipWithM_ enforceSame (map sortOf argFmls') argSorts
@@ -431,6 +443,8 @@ resolveFormula fml = return fml
 
 {- Misc -}
 
+nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Var argSorts deBrujns)
+
 solveSortConstraints :: Resolver SortSubstitution
 solveSortConstraints = do
   (unificationCs, typeClassCs) <- uses sortConstraints (partition isSameSortConstraint)
@@ -439,7 +453,7 @@ solveSortConstraints = do
   idCount .= 0
   let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs
   subst <- case unifySorts tvs sls srs of
-    Left (x, y) -> throwError $ unwords ["Cannot unify sorts", show x, "and", show y]
+    Left (x, y) -> throwResError $ text "Cannot unify sorts" <+> pretty x <+> text "and" <+> pretty y
     Right subst -> return subst
   mapM_ (checkTypeClass subst) typeClassCs
   return subst
@@ -451,19 +465,19 @@ solveSortConstraints = do
       case s' of
         IntS -> return ()
         VarS _ -> return ()
-        _ -> throwError $ unwords ["Sort", show s', "is not ordered"]
+        _ -> throwResError $ text "Sort" <+> pretty s' <+> text "is not ordered"
     
 addNewSignature name sch = do
-  ifM (Set.member name <$> use (environment . constants)) (throwError $ unwords ["Duplicate declaration of function", name]) (return ())
+  ifM (Set.member name <$> use (environment . constants)) (throwResError $ text "Duplicate declaration of function" <+> text name) (return ())
   environment %= addPolyConstant name sch
   environment %= addUnresolvedConstant name sch
   
 substituteTypeSynonym name tArgs = do
   tss <- use $ environment . typeSynonyms
   case Map.lookup name tss of
-    Nothing -> throwError $ unwords ["Datatype or synonym", name, "is undefined"]
+    Nothing -> throwResError $ text "Datatype or synonym" <+> text name <+> text "is undefined"
     Just (tVars, t) -> do
-      when (length tArgs /= length tVars) $ throwError $ unwords ["Type synonym", name, "expected", show (length tVars), "type arguments and got", show (length tArgs)]
+      when (length tArgs /= length tVars) $ throwResError $ text "Type synonym" <+> text name <+> text "expected" <+> pretty (length tVars) <+> text "type arguments and got" <+> pretty (length tArgs)
       return $ noncaptureTypeSubst tVars tArgs t
       
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
