@@ -15,8 +15,7 @@ import Data.Map (Map)
 import Control.Lens hiding (both)
 import Control.Monad
 
--- | Identifiers
-type Id = String
+{- Sorts -}
 
 -- | Sorts
 data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | AnyS
@@ -53,10 +52,45 @@ noncaptureSortSubst :: [Id] -> [Sort] -> Sort -> Sort
 noncaptureSortSubst sVars sArgs s = 
   let sFresh = sortSubstitute (Map.fromList $ zip sVars (map VarS distinctTypeVars)) s
   in sortSubstitute (Map.fromList $ zip distinctTypeVars sArgs) sFresh
-
+  
+unifySorts :: Set Id -> [Sort] -> [Sort] -> Either (Sort, Sort) SortSubstitution
+unifySorts boundTvs = unifySorts' Map.empty
+  where
+    unifySorts' subst [] []                                 
+      = Right subst
+    unifySorts' subst (x : xs) (y : ys) | x == y 
+      = unifySorts' subst xs ys
+    unifySorts' subst (SetS x : xs) (SetS y : ys)           
+      = unifySorts' subst (x:xs) (y:ys)
+    unifySorts' subst (DataS name args : xs) (DataS name' args' :ys) 
+      = if name == name' 
+          then unifySorts' subst (args ++ xs) (args' ++ ys) 
+          else Left (DataS name [], DataS name' [])
+    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys
+    unifySorts' subst (_ : xs) (AnyS : ys) = unifySorts' subst xs ys
+    unifySorts' subst (VarS x : xs) (y : ys)                 
+      | not (Set.member x boundTvs)
+      = case Map.lookup x subst of
+            Just s -> unifySorts' subst (s : xs) (y : ys)
+            Nothing -> if x `Set.member` typeVarsOfSort y
+              then Left (VarS x, y) 
+              else unifySorts' (Map.insert x y subst) xs ys
+    unifySorts' subst (x : xs) (VarS y : ys)
+      | not (Set.member y boundTvs)
+      = unifySorts' subst (VarS y : ys) (x:xs)
+    unifySorts' subst (x: _) (y: _)                 
+      = Left (x, y)
+      
 -- | Constraints generated during formula resolution
 data SortConstraint = SameSort Sort Sort  -- Two sorts must be the same
   | IsOrd Sort                            -- Sort must have comparisons
+  
+-- | Predicate signature: name and argument sorts  
+data PredSig = PredSig {
+  predSigName :: Id,
+  predSigArgSorts :: [Sort],
+  predSigResSort :: Sort
+} deriving (Eq, Ord)  
 
 {- Formulas of the refinement logic -}
 
