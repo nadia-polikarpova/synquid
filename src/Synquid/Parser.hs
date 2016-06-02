@@ -186,7 +186,13 @@ parseForall = do
   return $ ForallP sig sch
 
 parseType :: Parser RType
-parseType = withPos (choice [try parseFunctionType, parseUnrefTypeWithArgs, parseTypeAtom] <?> "type")
+parseType = withPos (choice [try (standalone parseUnrefTypeWithArgs), try (standalone parseTypeAtom), parseFunctionType] <?> "type")
+
+standalone :: Parser RType -> Parser RType
+standalone p = do
+  t <- p
+  notFollowedBy (reservedOp "->" <|> reservedOp ":")
+  return t
 
 parseTypeAtom :: Parser RType
 parseTypeAtom = choice [
