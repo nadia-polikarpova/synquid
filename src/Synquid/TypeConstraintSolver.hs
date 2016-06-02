@@ -193,7 +193,7 @@ solveAllCandidates = do
   candidates .= cands'
   where
     solveCandidate c@(Candidate s valids invalids _) = 
-      if null invalids
+      if Set.null invalids
         then return [c]
         else do
           qmap <- use qualifierMap
