@@ -2,7 +2,7 @@
 
 -- | Incremental solving of subtyping and well-formedness constraints
 module Synquid.TypeConstraintSolver (
-  TypeError,
+  ErrorMessage,
   TypingParams (..),
   TypingState,
   typingConstraints,
@@ -31,7 +31,9 @@ module Synquid.TypeConstraintSolver (
 ) where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.Pretty
 import Synquid.SolverMonad
 import Synquid.Util
@@ -51,9 +53,6 @@ import Control.Lens hiding (both)
 import Debug.Trace
 
 {- Interface -}
-
--- | Type error description
-type TypeError = Doc
 
 -- | Parameters of type constraint solving
 data TypingParams = TypingParams {
@@ -81,16 +80,16 @@ data TypingState = TypingState {
   _simpleConstraints :: [Constraint],           -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints
   _consistencyChecks :: [Formula],              -- ^ Formulas generated from type consistency constraints
-  _errorContext :: Doc                          -- ^ Information to be added to all type errors
+  _errorContext :: (SourcePos, Doc)             -- ^ Information to be added to all type errors
 }
 
 makeLenses ''TypingState
 
 -- | Computations that solve type constraints, parametrized by the the horn solver @s@
-type TCSolver s = StateT TypingState (ReaderT TypingParams (ExceptT TypeError s))
+type TCSolver s = StateT TypingState (ReaderT TypingParams (ExceptT ErrorMessage s))
 
 -- | 'runTCSolver' @params st go@ : execute a typing computation @go@ with typing parameters @params@ in a typing state @st@
-runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Either TypeError (a, TypingState))
+runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Either ErrorMessage (a, TypingState))
 runTCSolver params st go = runExceptT $ runReaderT (runStateT go st) params  
 
 -- | Initial typing state in the initial environment @env@
@@ -109,7 +108,7 @@ initTypingState env = do
     _simpleConstraints = [],
     _hornClauses = [],
     _consistencyChecks = [],
-    _errorContext = empty
+    _errorContext = (noPos, empty)
   }
 
 -- | Impose typing constraint @c@ on the programs
@@ -170,8 +169,10 @@ processAllConstraints = do
     isSubtyping _ = False
   
 -- | Signal type error  
-throwError :: MonadHorn s => TypeError -> TCSolver s ()  
-throwError e = lift $ lift $ throwE e 
+throwError :: MonadHorn s => Doc -> TCSolver s ()  
+throwError msg = do
+  (pos, ec) <- use errorContext
+  lift $ lift $ throwE $ ErrorMessage TypeError pos (msg $+$ ec)
 
 -- | Refine the current liquid assignments using the horn clauses
 solveHornClauses :: MonadHorn s => TCSolver s ()
@@ -182,9 +183,7 @@ solveHornClauses = do
   env <- use initEnv
   cands' <- lift . lift . lift $ refineCandidates clauses qmap (instantiateConsAxioms env) cands
     
-  when (null cands') $ do
-    ec <- use errorContext
-    throwError $ errorText "Cannot find sufficiently strong refinements" $+$ ec
+  when (null cands') (throwError $ text "Cannot find sufficiently strong refinements")
   candidates .= cands'
   
 solveAllCandidates :: MonadHorn s => TCSolver s ()  
@@ -209,9 +208,7 @@ checkTypeConsistency = do
   cands <- use candidates
   env <- use initEnv  
   cands' <- lift . lift . lift $ checkCandidates True clauses (instantiateConsAxioms env) cands
-  when (null cands') $ do
-    ec <- use errorContext
-    throwError $ errorText "Found inconsistent refinements" $+$ ec
+  when (null cands') (throwError $ text "Found inconsistent refinements")
   candidates .= cands'
 
 -- | Simplify @c@ into a set of simple and shapeless constraints, possibly extended the current type assignment or predicate assignment
@@ -291,10 +288,8 @@ simplifyConstraint' _ _ c@(WellFormed _ (ScalarT baseT _)) = simpleConstraints %
 simplifyConstraint' _ _ c@(WellFormedCond _ _) = simpleConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= (c :)
 -- Otherwise (shape mismatch): fail
-simplifyConstraint' _ _ (Subtype _ t t' _) = do
-  ec <- use errorContext
-  throwError $ errorText "Cannot match shape" <+> squotes (pretty $ shape t) $+$
-               errorText "with shape" <+> squotes (pretty $ shape t') $+$ ec
+simplifyConstraint' _ _ (Subtype _ t t' _) = 
+  throwError $ text  "Cannot match shape" <+> squotes (pretty $ shape t) $+$ text "with shape" <+> squotes (pretty $ shape t')
 
 -- | Unify type variable @a@ with type @t@ or fail if @a@ occurs in @t@
 unify env a t = if a `Set.member` typeVarsOf t
@@ -510,9 +505,7 @@ setUnknownRecheck name valuation = do
   env <- use initEnv
   cands'' <- lift . lift . lift $ checkCandidates False (Set.toList clauses) (instantiateConsAxioms env) cands'
     
-  when (null cands'') $ do
-    ec <- use errorContext
-    throwError $ errorText "Re-checking candidates failed" $+$ ec
+  when (null cands'') (throwError $ text "Re-checking candidates failed")
   candidates .= cands''  
   
 -- | 'instantiateConsAxioms' @env fml@ : If @fml@ contains constructor applications, return the set of instantiations of constructor axioms for those applications in the environment @env@ 

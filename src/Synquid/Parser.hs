@@ -4,8 +4,10 @@
 module Synquid.Parser where
 
 import Synquid.Logic
-import Synquid.Tokens
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
+import Synquid.Tokens
 import Synquid.Util
 
 import Data.Char
@@ -19,6 +21,8 @@ import Text.Parsec hiding (State)
 import qualified Text.Parsec.Token as Token
 import Text.Parsec.Expr
 import Text.Parsec.Indent
+import Text.Parsec.Error
+import Text.PrettyPrint.ANSI.Leijen (text, vsep)
 
 import Debug.Trace
 
@@ -33,11 +37,10 @@ parseFromFile :: Parser a -> String -> IO (Either ParseError a)
 parseFromFile aParser fname = do
   input <- readFile fname
   return $ runIndent fname $ runParserT aParser () fname input
-
--- testParse :: Parser a -> String -> Either String a
--- testParse parser str = case parse parser "" str of
-  -- Left err -> Left $ show err
-  -- Right parsed -> Right parsed
+  
+toErrorMessage :: ParseError -> ErrorMessage  
+toErrorMessage err = ErrorMessage ParseError (errorPos err) 
+  (vsep $ map text $ tail $ lines $ showErrorMessages "or" "unknown parse error" "expecting" "Unexpected" "end of input" (errorMessages err))
 
 {- Lexical analysis -}
 
@@ -84,17 +87,17 @@ dot = Token.dot lexer
 {- Declarations -}      
 
 parseDeclaration :: Parser Declaration
-parseDeclaration = choice [parseTypeDecl
-                         , parseDataDecl
-                         , parseMeasureDecl
-                         , parsePredDecl
-                         , parseQualifierDecl
-                         , parseMutualDecl
-                         , parseInlineDecl
-                         , try parseFuncDecl
-                         , parseSynthesisGoal] <?> "declaration"
+parseDeclaration = attachPosBefore $
+  (choice [ parseTypeDecl
+         , parseDataDecl
+         , parseMeasureDecl
+         , parsePredDecl
+         , parseQualifierDecl
+         , parseMutualDecl
+         , parseInlineDecl
+         , parseFuncDeclOrGoal] <?> "declaration")
 
-parseTypeDecl :: Parser Declaration
+parseTypeDecl :: Parser BareDeclaration
 parseTypeDecl = do
   reserved "type"
   typeName <- parseTypeName
@@ -103,7 +106,7 @@ parseTypeDecl = do
   typeDef <- parseType
   return $ TypeDecl typeName typeVars typeDef
 
-parseDataDecl :: Parser Declaration
+parseDataDecl :: Parser BareDeclaration
 parseDataDecl = do
   reserved "data"
   typeName <- parseTypeName
@@ -119,7 +122,7 @@ parseConstructorSig = do
   ctorType <- parseType  
   return $ ConstructorSig ctorName ctorType
 
-parseMeasureDecl :: Parser Declaration
+parseMeasureDecl :: Parser BareDeclaration
 parseMeasureDecl = do
   isTermination <- option False (reserved "termination" >> return True)
   reserved "measure"
@@ -139,23 +142,23 @@ parseMeasureDecl = do
       body <- parseFormula
       return $ MeasureCase ctor binders body  
   
-parsePredDecl :: Parser Declaration
+parsePredDecl :: Parser BareDeclaration
 parsePredDecl = do
   reserved "predicate"
   sig <- parsePredSig
   return $ PredDecl sig
   
-parseQualifierDecl :: Parser Declaration
+parseQualifierDecl :: Parser BareDeclaration
 parseQualifierDecl = do
   reserved "qualifier"
   QualifierDecl <$> braces (commaSep parseFormula)
   
-parseMutualDecl :: Parser Declaration
+parseMutualDecl :: Parser BareDeclaration
 parseMutualDecl = do
   reserved "mutual"
   MutualDecl <$> braces (commaSep parseIdentifier)  
   
-parseInlineDecl :: Parser Declaration
+parseInlineDecl :: Parser BareDeclaration
 parseInlineDecl = do
   reserved "inline"
   name <- parseIdentifier
@@ -163,19 +166,12 @@ parseInlineDecl = do
   reservedOp "="
   body <- parseFormula
   return $ InlineDecl name args body
-
-parseFuncDecl :: Parser Declaration
-parseFuncDecl = do
+  
+parseFuncDeclOrGoal :: Parser BareDeclaration
+parseFuncDeclOrGoal = do
   funcName <- parseIdentifier
-  reservedOp "::"
-  FuncDecl funcName <$> parseSchema
-
-parseSynthesisGoal :: Parser Declaration
-parseSynthesisGoal = do
-  goalId <- parseIdentifier
-  reservedOp "="
-  goalImpl <- parseImpl
-  return $ SynthesisGoal goalId goalImpl
+  (reservedOp "::" >> FuncDecl funcName <$> parseSchema) <|>
+    (reservedOp "=" >> SynthesisGoal funcName <$> parseImpl)
   
 {- Types -}
 
@@ -416,6 +412,10 @@ parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
   if not (isUpper $ head name) then unexpected ("non-capitalized " ++ show name) else return name
+  
+-- | 'attachPosBefore' @p@ : parser that behaves like @p@, but also attaches the source position before the first token it parsed to the result
+attachPosBefore :: Parser a -> Parser (Pos a)
+attachPosBefore = liftM2 Pos getPosition  
   
 {- Debug -}
 
