@@ -19,6 +19,8 @@ import Control.Monad
 import System.Exit
 import System.Console.CmdArgs
 import System.Console.ANSI
+import System.FilePath
+import Data.Char
 import Data.Time.Calendar
 import qualified Data.Map as Map
 
@@ -26,7 +28,7 @@ programName = "synquid"
 versionName = "0.3"
 releaseDate = fromGregorian 2016 3 8
 
--- | Execute or test a Boogie program, according to command-line arguments
+-- | Type-check and synthesize a program, according to command-line arguments
 main = do
   (CommandLineArgs file
                    appMax
@@ -40,13 +42,15 @@ main = do
                    partial
                    incremental
                    consistency
-                   log_
                    memoize
                    symmetry
                    bfs
+                   out_file
+                   out_module
                    outFormat
                    print_spec
-                   print_stats) <- cmdArgs cla
+                   print_stats
+                   log_) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
     _eGuessDepth = appMax,
     _scrutineeDepth = scrutineeMax,
@@ -72,7 +76,11 @@ main = do
     showSpec = print_spec,
     showStats = print_stats
   }
-  runOnFile synquidParams explorerParams solverParams file
+  let codegenParams = defaultCodegenParams {
+    filename = out_file,
+    module_ = out_module
+  }
+  runOnFile synquidParams explorerParams solverParams codegenParams file
 
 {- Command line arguments -}
 
@@ -97,21 +105,23 @@ data CommandLineArgs
         partial :: Bool,
         incremental :: Bool,
         consistency :: Bool,
-        log_ :: Int,
         memoize :: Bool,
         symmetry :: Bool,
         -- | Solver params
         bfs_solver :: Bool,
         -- | Output
+        out_file :: Maybe String,
+        out_module :: Maybe String,
         output :: OutputFormat,
         print_spec :: Bool,
-        print_stats :: Bool
+        print_stats :: Bool,
+        log_ :: Int
       }
   deriving (Data, Typeable, Show, Eq)
 
 cla = CommandLineArgs {
   file                = ""              &= typFile &= argPos 0,
-  app_max             = 3               &= help ("Maximum depth of an application term (default: 3)"),
+  app_max             = 3               &= help ("Maximum depth of an application term (default: 3)") &= groupname "Explorer parameters",
   scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 1)"),
   match_max           = 2               &= help ("Maximum depth of matches (default: 2)"),
   aux_max             = 1               &= help ("Maximum depth of auxiliary functions (default: 1)") &= name "x",
@@ -122,13 +132,15 @@ cla = CommandLineArgs {
   partial             = False           &= help ("Generate best-effort partial solutions (default: False)") &= name "p",
   incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
-  log_                = 0               &= help ("Logger verboseness level (default: 0)"),
   memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
-  bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
-  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
+  bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)") &= groupname "Solver parameters",
+  out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
+  out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
+  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
-  print_stats         = False           &= help ("Show specification and solution size (default: False)")
+  print_stats         = False           &= help ("Show specification and solution size (default: False)"),
+  log_                = 0               &= help ("Logger verboseness level (default: 0)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
     where
       defaultFormat = outputFormat defaultSynquidParams
@@ -189,9 +201,35 @@ defaultSynquidParams = SynquidParams {
   showStats = False
 }
 
+-- | Parameters for code extraction and Haskell output
+data CodegenParams = CodegenParams {
+  filename :: Maybe String,
+  module_ :: Maybe String
+} deriving (Show)
+
+defaultCodegenParams = CodegenParams {
+  filename = Nothing,
+  module_ = Nothing
+}
+
+{- figures out output filename from module name or vise versa -}
+fillinCodegenParams f p@(CodegenParams (Just "") _) = fillinCodegenParams f $ p { filename = Just (f -<.> ".hs") }
+fillinCodegenParams _ p@(CodegenParams (Just "-") Nothing) =                  p { module_ = Just "Synthed" }
+fillinCodegenParams _ p@(CodegenParams (Just filename) Nothing) =             p { module_ = Just $ idfy filename }
+fillinCodegenParams _ p@(CodegenParams Nothing (Just module_)) =              p { filename = Just (module_ <.> ".hs") }
+fillinCodegenParams _ p = p
+
+idfy = filter isAlphaNum . dropExtension . takeFileName
+
+codegen params results = case params of
+  CodegenParams {filename = Just filePath, module_ = Just moduleName} ->
+      extractModule filePath moduleName results
+  _ -> return ()
+
 -- | Parse and resolve file, then synthesize the specified goals
-runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> String -> IO ()
-runOnFile synquidParams explorerParams solverParams file = do
+runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParams
+                           -> String -> IO ()
+runOnFile synquidParams explorerParams solverParams codegenParams file = do
   parseResult <- parseFromFile parseProgram file
   case parseResult of
     Left parseErr -> (pdoc $ errorDoc $ text (show parseErr)) >> pdoc empty >> exitFailure
@@ -201,7 +239,8 @@ runOnFile synquidParams explorerParams solverParams file = do
       Right (goals, cquals, tquals) -> do
         results <- mapM (synthesizeGoal cquals tquals) goals
         when (not (null results) && showStats synquidParams) $ printStats results
-        extractModule "UserCode" results
+        -- Generate output if requested
+        codegen (fillinCodegenParams file codegenParams) results
   where
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
