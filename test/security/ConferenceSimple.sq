@@ -1,0 +1,80 @@
+-- Regular list
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+-- Length of a list
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+-- Set of elements of a list
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+  
+-- Tagged things
+
+data User 
+  
+data Tagged a <visibleTo :: User -> Bool>!
+measure content :: Tagged a -> a
+tag :: x: a -> Tagged {a | _v == x} <{True}>
+
+if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
+    -> thn: Tagged a <{ic && ip _0}> 
+    -> els: Tagged a <ip> 
+    -> Tagged a <ip>
+
+qualifier {content x == content y}
+eq_ :: <eqp :: User -> Bool> . x: Tagged a <eqp> -> y: Tagged a <eqp> -> Tagged {Bool | _v == (content x == content y)} <eqp>
+  
+-- Conference management  
+
+data World  
+
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged a <pp> -> World
+printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged a <pap> -> World
+     
+data String
+emptyString :: String
+     
+data PaperId
+   
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Done :: Phase
+      
+predicate sessionUser :: World -> User
+predicate isChair :: World -> User -> Bool
+predicate isAuthor :: World -> PaperId -> User -> Bool
+predicate curPhase :: World -> Phase
+      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+getChair :: w: World -> Tagged {User | isChair w _v} <{True}>
+getPhase :: w: World -> {Phase | _v == curPhase w}
+getPaperTitle :: World -> PaperId -> String
+getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List {User | isAuthor w pid _v}) <{isAuthor w pid _0}> 
+getPaperStatus :: w: World -> pid: PaperId -> Tagged String <{(isChair w _0) || ((curPhase w == Done) && (isAuthor w pid _0))}>
+
+test1 :: World -> PaperId -> World
+test1 = \w . \pid .
+  let authors = getPaperAuthors w pid in
+  let st = if_ (tag (getPhase w == Done)) (getPaperStatus w pid) (tag emptyString) in
+  printAll w authors st
+    
+test2 :: World -> PaperId -> World
+test2 = \w . \pid .
+  let ch = getChair w in
+  let st = getPaperStatus w pid in
+  print w ch st
+  
+test3 :: World -> PaperId -> World
+test3 = \w . \pid .
+  let u = getSessionUser w in
+  let ch = getChair w in
+  let st = if_ (eq_ ch u) (getPaperStatus w pid) (tag emptyString) in
+  print w u st  

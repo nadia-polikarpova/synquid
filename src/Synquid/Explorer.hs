@@ -19,6 +19,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Char
 import Control.Monad.Logic
 import Control.Monad.State
 import Control.Monad.Reader
@@ -660,7 +661,7 @@ instantiate env sch top = do
       let argSorts' = map (sortSubstitute (asSortSubst subst)) argSorts
       fml <- if top
               then do
-                p' <- freshId "P"
+                p' <- freshId (map toUpper p)
                 addConstraint $ WellFormedPredicate env argSorts' p'
                 return $ Pred BoolS p' (zipWith Var argSorts' deBrujns)
               else return ffalse

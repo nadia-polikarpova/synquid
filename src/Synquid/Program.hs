@@ -323,12 +323,25 @@ allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dt
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env = 
     let allMeasures = Map.toList $ allMeasuresOf dtName env 
-    in catMaybes $ map extractPost allMeasures ++ if includeQuanitifed then map elemProperties allMeasures else []
+    in catMaybes $ map extractPost allMeasures ++ 
+                   map contentProperties allMeasures ++
+                   if includeQuanitifed then map elemProperties allMeasures else []
   where
     extractPost (mName, MeasureDef _ outSort _ fml) = 
       if fml == ftrue
         then Nothing
         else Just $ substitute (Map.singleton valueVarName (Pred outSort mName [Var (toSort baseT) valueVarName])) fml
+        
+    contentProperties (mName, MeasureDef (DataS _ vars) a _ _) = case elemIndex a vars of
+      Nothing -> Nothing
+      Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ "returns" one of datatype's parameters: transfer the refinement onto the value of the measure 
+                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
+                    then Nothing
+                    else  let
+                            elemSort = toSort elemT
+                            measureApp = Pred elemSort mName [Var (toSort baseT) valueVarName]
+                          in Just $ substitute (Map.singleton valueVarName measureApp) fml
+    contentProperties (mName, MeasureDef _ _ _ _) = Nothing
         
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing

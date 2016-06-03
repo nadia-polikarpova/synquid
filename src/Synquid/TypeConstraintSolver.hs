@@ -311,7 +311,8 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
       modify $ addTypingConstraint c -- Still has type variables: cannot determine shape
     else do                 
-      u <- freshId "U"
+      -- u <- freshId "U"
+      let u = p
       addPredAssignment p (Unknown Map.empty u)
       let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
       let vars = zipWith Var argSorts' deBrujns
