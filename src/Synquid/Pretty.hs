@@ -353,7 +353,8 @@ prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions))
 prettyBindings env = commaSep (map pretty (Map.keys $ removeDomain (env ^. constants) (allSymbols env)))
 -- prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
-prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
+-- prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
+prettyGhosts env = commaSep (map pretty (Map.keys (env ^. ghosts)))
 
 instance Pretty Environment where
   pretty env = prettyBindings env <+> prettyGhosts env <+> prettyAssumptions env
@@ -369,8 +370,8 @@ instance Show SortConstraint where
   show = show . pretty
 
 prettyConstraint :: Constraint -> Doc
-prettyConstraint (Subtype env t1 t2 False) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2
-prettyConstraint (Subtype env t1 t2 True) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2
+prettyConstraint (Subtype env t1 t2 False) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2
+prettyConstraint (Subtype env t1 t2 True) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> operator "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> operator "|-" <+> pretty c
 prettyConstraint (WellFormedMatchCond env c) = prettyBindings env <+> operator "|- (match)" <+> pretty c

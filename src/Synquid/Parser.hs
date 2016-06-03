@@ -10,7 +10,6 @@ import Synquid.Error
 import Synquid.Tokens
 import Synquid.Util
 
-import Data.Char
 import Data.List
 import Data.Map (Map, (!), elems, fromList)
 
@@ -409,19 +408,19 @@ parsePredSig = do
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do
   name <- identifier
-  if isUpper $ head name 
+  if isTypeName name 
     then unexpected ("capitalized " ++ show name) 
     else if name == dontCare then unexpected ("blank") else return name
   
 parseIdentifierOrBlank :: Parser Id
 parseIdentifierOrBlank = try $ do
   name <- identifier
-  if isUpper $ head name then unexpected ("capitalized " ++ show name) else return name  
+  if isTypeName name then unexpected ("capitalized " ++ show name) else return name  
 
 parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
-  if not (isUpper $ head name) then unexpected ("non-capitalized " ++ show name) else return name
+  if not (isTypeName name) then unexpected ("non-capitalized " ++ show name) else return name
   
 -- | 'attachPosBefore' @p@ : parser that behaves like @p@, but also attaches the source position before the first token it parsed to the result
 attachPosBefore :: Parser a -> Parser (Pos a)
