@@ -27,9 +27,15 @@ if_ :: <ip :: User -> Bool> . <ic :: Bool> .
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
+    
+lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+  f: (u: a -> v: b -> {c | l2f u v _v}) ->
+  x: Tagged a <l2p> ->
+  y: Tagged b <l2p> ->
+  Tagged {c | l2f (content x) (content y) _v} <l2p>
 
 qualifier {content x == content y}
-eq_ :: <eqp :: User -> Bool> . x: Tagged a <eqp> -> y: Tagged a <eqp> -> Tagged {Bool | _v == (content x == content y)} <eqp>
+eq :: x: User -> y: User -> {Bool | _v == (x == y)}
   
 -- Conference management  
 
@@ -53,7 +59,7 @@ predicate isChair :: World -> User -> Bool
 predicate isAuthor :: World -> PaperId -> User -> Bool
 predicate curPhase :: World -> Phase
       
-getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
 getChair :: w: World -> Tagged {User | isChair w _v} <{True}>
 getPhase :: w: World -> {Phase | _v == curPhase w}
 getPaperTitle :: World -> PaperId -> String
@@ -76,5 +82,5 @@ test3 :: World -> PaperId -> World
 test3 = \w . \pid .
   let u = getSessionUser w in
   let ch = getChair w in
-  let st = if_ (eq_ ch u) (getPaperStatus w pid) (tag emptyString) in
+  let st = if_ (lift2 eq ch u) (getPaperStatus w pid) (tag emptyString) in
   print w u st  

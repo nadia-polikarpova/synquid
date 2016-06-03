@@ -417,7 +417,9 @@ resolveFormula (Pred _ name argFmls) = do
       ps <- uses environment allPredicates
       (resSort : argSorts) <- case Map.lookup name ps of
                                 Nothing -> throwResError $ text "Predicate or measure" <+> text name <+> text "is undefined"
-                                Just sorts -> instantiate sorts
+                                Just sorts -> ifM (Map.member name <$> use (environment . globalPredicates))
+                                                (instantiate sorts) -- if global, treat type variables as free
+                                                (return sorts) -- otherwise, treat type variables as bound
       if length argFmls /= length argSorts
           then throwResError $ text "Expected" <+> pretty (length argSorts) <+> text "arguments for predicate or measure" <+> text name <+> text "and got" <+> pretty (length argFmls)
           else do
