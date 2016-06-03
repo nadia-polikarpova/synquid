@@ -7,6 +7,8 @@ import Data.Map (assocs,elems,union,empty,(!))
 import Control.Lens ((^.))
 import Control.Monad
 
+import System.IO
+
 import Language.Haskell.Syntax
 import Language.Haskell.Pretty
 
@@ -58,9 +60,8 @@ defaultImports = [HsImportDecl {
     importAs = Nothing,
     importSpecs = Just (False, ids ++ syms)}]
   where
-    ids = map (HsIAbs . HsIdent) ["Eq", "Ord"]
-    syms = map (HsIVar . HsSymbol) ["<=", "==", ">=", "<", ">"]
---    [HsIAbs (HsIdent "Eq"),HsIAbs (HsIdent "Ord"),HsIVar (HsSymbol "<="),HsIVar (HsSymbol "=="),HsIVar (HsSymbol ">=")])}]
+    ids = map (HsIAbs . HsIdent) ["Eq", "Ord", "Int", "Bool"]
+    syms = map (HsIVar . HsSymbol) ["<=", "==", ">=", "<", ">", "/=", "+", "-"]
 
 qualifyByDefault tArg (HsQualType ctx typ) =
   HsQualType (ctx ++ map qual defaultTypeClasses) typ
@@ -208,10 +209,12 @@ codegenSolutions goalProgs = do
 
 {-
  - Module entry point; translate everything and write result to file
- -  name: module name
+ -  filePath: output filename; '-' for standard output
+ -  moduleName: identifier to name the new module
  -  goalProgs: a list of (goal, synthesized program)
- - Output is written to './<name>.hs'.
  -}
-extractModule name goalProgs = do
-  let out = name ++ ".hs"
-  writeFile out $ prettyPrint $ toHsModule name goalProgs
+extractModule filePath moduleName goalProgs =
+    let out = if filePath == "-" then putStr else writeFileLn filePath
+        writeFileLn f s = do h <- openFile f WriteMode ; hPutStrLn h s ; hClose h
+    in
+      out $ prettyPrint $ toHsModule moduleName goalProgs
