@@ -125,7 +125,7 @@ cla = CommandLineArgs {
   unfold_locals       = False           &= help ("Use all variables, as opposed to top-level function arguments only, in match scrutinee abduction (default: False)"),
   partial             = False           &= help ("Generate best-effort partial solutions (default: False)") &= name "p",
   incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
-  consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
+  consistency         = False           &= help ("Check incomplete application types for consistency (default: False)"),
   log_                = 0               &= help ("Logger verboseness level (default: 0)"),
   memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
