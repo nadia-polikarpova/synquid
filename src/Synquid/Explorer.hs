@@ -674,6 +674,7 @@ instantiate env sch top = do
     
 symbolType env x t@(ScalarT b _)
   | isLiteral x = t -- x is a literal of a primitive type, it's type is precise
+  | isTypeName x = t -- x is a constructor, it's type is precise 
   | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
   | otherwise = t
 symbolType _ _ t = t

@@ -416,7 +416,7 @@ embedding env vars includeQuantified = do
     qmap <- use qualifierMap
     let ass = Set.map (substitutePredicate pass) $ (env ^. assumptions)
     let allVars = vars `Set.union` potentialVars qmap (conjunction ass)
-    return $ addBindings tass pass qmap ass allVars
+    return $ addBindings tass pass qmap ass allVars    
   where
     addBindings tass pass qmap fmls vars = 
       if Set.null vars
@@ -428,7 +428,8 @@ embedding env vars includeQuantified = do
                   ScalarT baseT fml -> 
                     let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
                                           ((substitutePredicate pass fml) : allMeasurePostconditions includeQuantified baseT env) in
-                    addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` potentialVars qmap fml)
+                    let newVars = Set.delete x $ setConcatMap (potentialVars qmap) fmls' in
+                    addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` newVars)
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
