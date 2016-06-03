@@ -3,7 +3,7 @@ version:              0.3
 synopsis:             Program Synthesis from Refinement Types
 description:          Synquid is a simple functional programming language with refinement types.
                       In Synquid the programmer must provide the type signature for each top-level function,
-                      but can leave parts (or all) of the implementation out for the system to fill in. 
+                      but can leave parts (or all) of the implementation out for the system to fill in.
 -- license:
 -- license-file:         LICENSE
 author:               Nadia Polikarpova
@@ -33,7 +33,7 @@ executable synquid
                     , transformers-compat ==0.4.*
                     , lens >=3.7
                     , ansi-wl-pprint >=0.6 && <0.7
-                    , ansi-terminal >=0.6 
+                    , ansi-terminal >=0.6
                     , html ==1.*
                     , bimap >= 0.2
                     , z3 > 4.0
@@ -42,6 +42,7 @@ executable synquid
                     , indents == 0.3.*
                     , cmdargs ==0.10.*
                     , time
+                    , haskell-src
 
   ghc-options: -O2
 
