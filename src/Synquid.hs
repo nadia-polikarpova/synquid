@@ -13,6 +13,7 @@ import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.Synthesizer
 import Synquid.HtmlOutput
+import Synquid.Codegen
 
 import Control.Monad
 import System.Exit
@@ -27,10 +28,10 @@ releaseDate = fromGregorian 2016 3 8
 
 -- | Execute or test a Boogie program, according to command-line arguments
 main = do
-  (CommandLineArgs file 
-                   appMax 
-                   scrutineeMax 
-                   matchMax 
+  (CommandLineArgs file
+                   appMax
+                   scrutineeMax
+                   matchMax
                    auxMax
                    fix
                    genPreds
@@ -38,9 +39,9 @@ main = do
                    unfoldLocals
                    partial
                    incremental
-                   consistency 
-                   log_ 
-                   memoize 
+                   consistency
+                   log_
+                   memoize
                    symmetry
                    bfs
                    outFormat
@@ -168,7 +169,7 @@ data OutputFormat = Plain -- ^ Plain text
   | Ansi -- ^ Text with ANSI-terminal special characters
   | Html -- ^ HTML
   deriving (Typeable, Data, Eq, Show)
-    
+
 -- | 'printDoc' @format doc@ : print @doc@ to the console using @format@
 printDoc :: OutputFormat -> Doc -> IO()
 printDoc Plain doc = putDoc (plain doc) >> putStr "\n"
@@ -178,7 +179,7 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
-  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
+  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal
   showStats :: Bool                            -- ^ Print specification and solution size
 }
 
@@ -200,6 +201,7 @@ runOnFile synquidParams explorerParams solverParams file = do
       Right (goals, cquals, tquals) -> do
         results <- mapM (synthesizeGoal cquals tquals) goals
         when (not (null results) && showStats synquidParams) $ printStats results
+        extractModule "UserCode" results
   where
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
@@ -213,7 +215,7 @@ runOnFile synquidParams explorerParams solverParams file = do
         Left err -> pdoc (errorDoc $ text "No solution. Last candidate failed with error:\n")
                     >> pdoc empty
                     >> pdoc err
-                    >> pdoc empty 
+                    >> pdoc empty
                     >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
@@ -230,4 +232,3 @@ runOnFile synquidParams explorerParams solverParams file = do
               parens (text "Solution size:" <+> pretty solutuionSize),
               empty
               ]
-      
