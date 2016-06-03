@@ -77,18 +77,16 @@ isEmpty d = case renderCompact d of
   _ -> False
 
 -- | Separate two documents by space if both are nonempty
-doc1 <+> doc2 = if isEmpty doc1
-  then doc2
-  else if isEmpty doc2
-    then doc1
-    else doc1 L.<+> doc2
+doc1 <+> doc2
+  | isEmpty doc1 = doc2
+  | isEmpty doc2 = doc1
+  | otherwise    = doc1 L.<+> doc2
 
 -- | Separate two documents by linebreak if both are nonempty
-doc1 $+$ doc2 = if isEmpty doc1
-  then doc2
-  else if isEmpty doc2
-    then doc1
-    else doc1 L.<$> doc2
+doc1 $+$ doc2
+  | isEmpty doc1 = doc2
+  | isEmpty doc2 = doc1
+  | otherwise    = doc1 L.<$> doc2
 
 -- | Separate by spaces
 hsep = foldr (<+>) empty
@@ -145,20 +143,11 @@ instance Pretty Sort where
   pretty (DataS name args) = text name <+> hsep (map (hlParens . pretty) args)
   pretty AnyS = operator "?"
 
-instance Show Sort where
-  show = show . pretty
-
 instance Pretty UnOp where
   pretty op = operator $ unOpTokens Map.! op
 
-instance Show UnOp where
-  show = show . pretty
-
 instance Pretty BinOp where
   pretty op = operator $ binOpTokens Map.! op
-
-instance Show BinOp where
-  show = show . pretty
 
 -- | Binding power of a formula
 power :: Formula -> Int
@@ -178,7 +167,7 @@ power _ = 10
 
 -- | Pretty-printed formula
 fmlDoc :: Formula -> Doc
-fmlDoc fml = fmlDocAt 0 fml
+fmlDoc = fmlDocAt 0
 
 -- | 'fmlDocAt' @n fml@ : print @expr@ in a context with binding power @n@
 fmlDocAt :: Int -> Formula -> Doc
@@ -200,10 +189,7 @@ fmlDocAt n fml = condHlParens (n' <= n) (
     n' = power fml
     withSort s doc = doc -- <> text ":" <> pretty s
 
-instance Pretty Formula where pretty e = fmlDoc e
-
-instance Show Formula where
-  show = show . pretty
+instance Pretty Formula where pretty = fmlDoc
 
 instance Pretty Valuation where
   pretty val = braces $ commaSep $ map pretty $ Set.toList val
@@ -219,7 +205,7 @@ instance Show QSpace where
 
 instance Pretty QMap where
   pretty = vMapDoc text pretty
-  
+
 {- Types -}
 
 instance Pretty SBaseType where
@@ -236,7 +222,7 @@ instance Pretty RBaseType where
 
 instance Show RBaseType where
   show = show . pretty
-  
+
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
 prettySType (FunctionT _ t1 t2) = hlParens (pretty t1 <+> operator "->" <+> pretty t2)
@@ -250,7 +236,7 @@ instance Show SType where
 
 -- | Pretty-printed refinement type
 prettyType :: RType -> Doc
-prettyType t = prettyTypeAt 0 t
+prettyType = prettyTypeAt 0
 
 -- | Binding power of a type
 typePower :: RType -> Int
@@ -273,17 +259,11 @@ prettyTypeAt n t = condHlParens (n' <= n) (
 instance Pretty RType where
   pretty = prettyType
 
-instance Show RType where
- show = show . pretty
-
 instance Pretty SSchema where
   pretty sch = case sch of
     Monotype t -> pretty t
     ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
     ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
-
-instance Show SSchema where
- show = show . pretty
 
 instance Pretty RSchema where
   pretty sch = case sch of
@@ -291,17 +271,14 @@ instance Pretty RSchema where
     ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
     ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
 
-instance Show RSchema where
-  show = show . pretty
-
-{- Programs -}  
+{- Programs -}
 
 prettyCase :: (Pretty t) => Case t -> Doc
 prettyCase cas = hang tab $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> operator "->" </> prettyProgram (expr cas)
 
 prettyProgram :: (Pretty t) => Program t -> Doc
 prettyProgram (Program p typ) = case p of
-    PSymbol s -> case asInteger s of 
+    PSymbol s -> case asInteger s of
                   Nothing -> if s == valueVarName then special s else text s
                   Just n -> intLiteral n
     PApp f x -> let
@@ -331,15 +308,16 @@ prettyProgram (Program p typ) = case p of
 instance (Pretty t) => Pretty (Program t) where
   pretty = prettyProgram
 
+{-
 instance (Pretty t) => Show (Program t) where
   show = show . pretty
-
+-}
 instance Pretty TypeSubstitution where
   pretty = hMapDoc text pretty
-  
+
 instance Pretty MeasureCase where
   pretty (MeasureCase cons args def) = text cons <+> hsep (map text args) <+> text "->" <+> pretty def
-  
+
 instance Pretty MeasureDef where
   pretty (MeasureDef inSort outSort defs post) = nest 2 (pretty inSort <+> text "->" <+> pretty outSort <+> braces (pretty post) $+$ vsep (map pretty defs))
 
@@ -353,7 +331,7 @@ prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
 
 instance Pretty Environment where
   pretty env = prettyBindings env <+> prettyGhosts env <+> prettyAssumptions env
-  
+
 prettySortConstraint :: SortConstraint -> Doc
 prettySortConstraint (SameSort sl sr) = pretty sl <+> text "=" <+> pretty sr
 prettySortConstraint (IsOrd s) = text "Ord" <+> pretty s
@@ -383,13 +361,13 @@ instance Pretty Candidate where
 
 instance Show Candidate where
   show = show . pretty
-  
+
 instance Pretty Goal where
   pretty (Goal name env spec impl depth) = pretty env <+> operator "|-" <+> text name <+> operator "::" <+> pretty spec $+$ text name <+> operator "=" <+> pretty impl $+$ parens (text "depth:" <+> pretty depth)
 
 instance Show Goal where
   show = show. pretty
-  
+
 prettySpec g@(Goal name _ _ _ _) = text name <+> operator "::" <+> pretty (unresolvedSpec g)
 prettySolution (Goal name _ _ _ _) prog = text name <+> operator "=" </> pretty prog
 
@@ -405,14 +383,14 @@ instance Pretty Declaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
   pretty (QualifierDecl fmls) = keyword "qualifier" <+> hlBraces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> operator "::" <+> pretty t
-  pretty (DataDecl name typeVars predParams ctors) = hang tab $ 
-    keyword "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> keyword "where" 
+  pretty (DataDecl name typeVars predParams ctors) = hang tab $
+    keyword "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> keyword "where"
     $+$ vsep (map pretty ctors)
-  pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $ 
+  pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $
     if isTermination then keyword "termination" else empty
     <+> keyword "measure" <+> text name <+> operator "::" <+> pretty inSort <+> operator "->"
     <+> if post == ftrue then pretty outSort else hlBraces (pretty outSort <+> operator "|" <+> pretty post) <+> keyword "where"
-    $+$ vsep (map pretty cases)                                                        
+    $+$ vsep (map pretty cases)
   pretty (SynthesisGoal name impl) = text name <+> operator "=" <+> pretty impl
   pretty (MutualDecl names) = keyword "mutual" <+> commaSep (map text names)
   pretty (InlineDecl name args body) = keyword "inline" <+> text name <+> hsep (map text args) <+> operator "=" <+> pretty body
