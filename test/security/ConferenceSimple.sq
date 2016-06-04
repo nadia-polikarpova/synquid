@@ -13,6 +13,8 @@ measure elems :: List a -> Set a where
   Nil -> []
   Cons x xs -> [x] + elems xs
   
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
   
 -- Tagged things
 
@@ -27,15 +29,12 @@ if_ :: <ip :: User -> Bool> . <ic :: Bool> .
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
-    
+
 lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>
-
-qualifier {content x == content y}
-eq :: x: a -> y: a -> {Bool | _v == (x == y)}
   
 -- Conference management  
 
@@ -53,24 +52,33 @@ data Phase where
   Submission :: Phase
   Review :: Phase
   Done :: Phase
-      
-predicate sessionUser :: World -> User
-predicate isChair :: World -> User -> Bool
-predicate isAuthor :: World -> PaperId -> User -> Bool
-predicate curPhase :: World -> Phase
-      
-getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
-getChair :: w: World -> Tagged {User | isChair w _v} <{True}>
-getPhase :: w: World -> Tagged {Phase | _v == curPhase w} <{True}>
-getPaperTitle :: World -> PaperId -> Tagged String <{True}>
-getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List {User | isAuthor w pid _v}) <{isAuthor w pid _0}> 
-getPaperStatus :: w: World -> pid: PaperId -> Tagged String <{(isChair w _0) || ((curPhase w == Done) && (isAuthor w pid _0))}>
 
--- Print paper status to all its authors after the notification
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
+
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+predicate currentPhase :: World -> Phase
+getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
+
+getPaperTitle :: World -> PaperId -> Tagged String <{True}>
+
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}> 
+
+getPaperStatus :: w: World -> pid: PaperId -> Tagged String <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
+
+qualifier {content x == chair w}
+qualifier {content x in paperAuthors w pid}
+
+-- Print paper status to all its authors
 test1 :: World -> PaperId -> World
 test1 = \w . \pid .
   let authors = getPaperAuthors w pid in
-  let st = if_ (lift2 eq (getPhase w) (tag Done)) (getPaperStatus w pid) (tag emptyString) in
+  let st = if_ (lift2 eq (getCurrentPhase w) (tag Done)) 
+              (getPaperStatus w pid) 
+              (tag emptyString) in
   printAll w authors st
     
 -- Print paper status to chair    
@@ -80,10 +88,23 @@ test2 = \w . \pid .
   let st = getPaperStatus w pid in
   print w ch st
   
--- Print paper status to session user  
+-- Print paper authors to session user
 test3 :: World -> PaperId -> World
 test3 = \w . \pid .
   let u = getSessionUser w in
-  let ch = getChair w in
-  let st = if_ (lift2 eq ch u) (getPaperStatus w pid) (tag emptyString) in
+  let authors = getPaperAuthors w pid in
+  let authors' = if_ (lift2 elem u authors) authors (tag Nil) in
+  print w u authors'  
+  
+-- Print paper status to session user
+test4 :: World -> PaperId -> World
+test4 = \w . \pid .
+  let u = getSessionUser w in
+  let st = if_ (lift2 eq (getChair w) u) 
+                (getPaperStatus w pid) 
+                (if_ (lift2 eq (getCurrentPhase w) (tag Done))
+                  (if_ (lift2 elem u (getPaperAuthors w pid)) 
+                    (getPaperStatus w pid) 
+                    (tag emptyString))
+                  (tag emptyString)) in
   print w u st  

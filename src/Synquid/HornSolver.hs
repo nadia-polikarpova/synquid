@@ -35,7 +35,7 @@ import Debug.Trace
 {- Interface -}
 
 -- | Strategies for picking the next candidate solution to strengthen
-data CandidatePickStrategy = FirstCandidate | WeakCandidate | InitializedWeakCandidate
+data CandidatePickStrategy = FirstCandidate | ValidWeakCandidate | InitializedWeakCandidate
       
 -- | Strategies for picking the next constraint to solve      
 data ConstraintPickStrategy = FirstConstraint | SmallSpaceConstraint
@@ -152,11 +152,11 @@ greatestFixPoint quals extractAssumptions candidates = do
           
     pickCandidate :: [Candidate] -> CandidatePickStrategy -> (Candidate, [Candidate])
     pickCandidate (cand:rest) FirstCandidate = (cand, rest)
-    pickCandidate cands WeakCandidate = let 
-        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (- totalQCount s)) cands  -- minimize strength
+    pickCandidate cands ValidWeakCandidate = let 
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (- Set.size invalids, - totalQCount s, nontrivCount s)) cands  -- maximize correctness and minimize strength
       in (res, delete res cands)
     pickCandidate cands InitializedWeakCandidate = let 
-        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (nontrivCount s, - totalQCount s, Set.size valids + Set.size invalids)) cands  -- maximize the number of initialized unknowns and minimize strength
+        res = maximumBy (mappedCompare $ \(Candidate s valids invalids _) -> (nontrivCount s, - totalQCount s)) cands  -- maximize the number of initialized unknowns and minimize strength
       in (res, delete res cands)
       
     pickConstraint (Candidate sol valids invalids _) strategy = case strategy of
