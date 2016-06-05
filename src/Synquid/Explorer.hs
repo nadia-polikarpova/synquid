@@ -322,7 +322,6 @@ generateE env typ = do
   d <- asks $ _eGuessDepth . fst
   (finalEnv, Program pTerm pTyp) <- generateEUpTo env typ d
   pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
-  cleanupTypeVars
   pTerm' <- addLambdaLets pTyp' (Program pTerm pTyp')
   return (finalEnv, pTerm')
   where
@@ -330,19 +329,6 @@ generateE env typ = do
       newGoals <- use newAuxGoals      
       newAuxGoals .= []
       return $ foldr (\f p -> Program (PLet f uHole p) t) body newGoals
-
-
--- | Forget free type variables, which cannot escape an E-term
--- (after substituting outstanding auxiliary goals)
-cleanupTypeVars :: MonadHorn s => Explorer s ()  
-cleanupTypeVars = do
-  goals <- use auxGoals >>= mapM goalSubstituteTypes
-  auxGoals .= goals
-  runInSolver $ typeAssignment .= Map.empty
-  where
-    goalSubstituteTypes g = do
-      spec' <- runInSolver $ currentAssignment (toMonotype $ gSpec g)
-      return g { gSpec = Monotype spec' }      
   
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
 generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
@@ -412,15 +398,6 @@ checkE env typ p@(Program pTerm pTyp) = do
       unknownId :: Formula -> Maybe Id
       unknownId (Unknown _ i) = Just i
       unknownId _ = Nothing
-
-      areTypesEqual :: MonadHorn s => Environment -> RType -> RType -> Explorer s ()
-      areTypesEqual env t1 t2 = do
-        writeLog 1 (text "Solving Type Equality" $+$ pretty t1 $+$ pretty t2)
-        oldTC <- use $ typingState . typingConstraints
-        addConstraint $ Subtype env t1 t2 False 
-        addConstraint $ Subtype env t2 t1 False
-        runInSolver solveTypeConstraints
-        typingState . typingConstraints .= oldTC
 
       checkSymmetry = do
         ctx <- asks $ _context . fst
@@ -599,7 +576,7 @@ runInSolver f = do
       return res
       
 solveIncrementally :: MonadHorn s => Explorer s ()        
-solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver $ isFinal .= False >> solveTypeConstraints >> isFinal .= True) (return ())
+solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver $ solveTypeConstraints) (return ())
 
 solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
 solveLocally c = do

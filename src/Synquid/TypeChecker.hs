@@ -35,7 +35,7 @@ reconstruct eParams tParams goal = do
       pAuxs <- reconstructAuxGoals
       -- let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
       let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
-      runInSolver $ finalizeProgram p      
+      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False >> finalizeProgram p      
 
     reconstructAuxGoals = do
       goals <- use auxGoals
@@ -229,7 +229,6 @@ reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explo
 reconstructETopLevel env t impl = do
   (finalEnv, Program pTerm pTyp) <- reconstructE env t impl
   pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
-  cleanupTypeVars
   return (finalEnv, Program pTerm pTyp')
 
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
@@ -267,6 +266,8 @@ reconstructE' env typ (PApp iFun iArg) = do
       d <- asks $ _auxDepth . fst
       pArg <- generateHOArg env' (d - 1) tArg iArg
       return (env', Program (PApp pFun pArg) tRes)
+      -- pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructI env' tArg iArg
+      -- return (env', Program (PApp pFun pArg) tRes)      
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
