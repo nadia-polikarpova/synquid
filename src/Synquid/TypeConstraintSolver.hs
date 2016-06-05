@@ -426,8 +426,8 @@ embedding env vars includeQuantified = do
                 Nothing -> addBindings tass pass qmap  fmls rest -- Variable not found (useful to ignore value variables)
                 Just (Monotype t) -> case typeSubstitute tass t of
                   ScalarT baseT fml -> 
-                    let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x))) 
-                                          ((substitutePredicate pass fml) : allMeasurePostconditions includeQuantified baseT env) in
+                    let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x)) . substitutePredicate pass)
+                                          (fml : allMeasurePostconditions includeQuantified baseT env) in
                     let newVars = Set.delete x $ setConcatMap (potentialVars qmap) fmls' in
                     addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` newVars)
                   AnyT -> Set.singleton ffalse
