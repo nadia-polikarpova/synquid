@@ -85,7 +85,11 @@ getPaperTitle :: World -> PaperId -> Tagged String <{True}>
 predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}> 
 
-getPaperStatus :: w: World -> pid: PaperId -> Tagged Status <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
+predicate paperStatus :: World -> PaperId -> Status
+getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
+
+-- getPaperSession :: w: World -> pid: {PaperId | paperStatus w _v == Accepted} -> Tagged String <{True}>
+getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 qualifier {content x == chair w}
 qualifier {content x in paperAuthors w pid}
@@ -126,4 +130,17 @@ test4 = \w . \pid .
                 (if_ (lift2 and (lift2 eq (getCurrentPhase w) (tag Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
                   (tag NoDecision)) in
-  print w u (lift1 toString st)  
+  print w u (lift1 toString st)
+
+-- Implicit flow: show status and session to session user
+test5 :: World -> PaperId -> World
+test5 = \w. \pid .
+  let u = getSessionUser w in
+  let title = getPaperTitle w pid in
+  -- let st = getPaperStatus w pid in -- Leaky version
+  let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (tag Done)) (lift2 elem u (getPaperAuthors w pid)))
+                  (getPaperStatus w pid) 
+                  (tag NoDecision) in
+  let ses = if_ (lift2 eq st (tag Accepted)) (getPaperSession w pid) (tag emptyString) in
+  let out = lift2 strcat title (lift2 strcat (lift1 toString st) ses) in
+  print w u out
