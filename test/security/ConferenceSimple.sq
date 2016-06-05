@@ -29,6 +29,11 @@ if_ :: <ip :: User -> Bool> . <ic :: Bool> .
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
+    
+lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+  f: (u: a -> {b | l1f u _v}) ->
+  x: Tagged a <l1p> ->
+  Tagged {b | l1f (content x) _v} <l1p>    
 
 lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
@@ -36,22 +41,31 @@ lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>
   
+-- Strings
+
+data String
+emptyString :: String
+toString :: a -> String
+strcat :: String -> String -> String  
+  
 -- Conference management  
 
 data World  
 
-print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged a <pp> -> World
-printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged a <pap> -> World
-     
-data String
-emptyString :: String
-     
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
+printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
+          
 data PaperId
    
 data Phase where
   Submission :: Phase
   Review :: Phase
   Done :: Phase
+  
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
 
 predicate sessionUser :: World -> User      
 getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
@@ -67,7 +81,7 @@ getPaperTitle :: World -> PaperId -> Tagged String <{True}>
 predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}> 
 
-getPaperStatus :: w: World -> pid: PaperId -> Tagged String <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
+getPaperStatus :: w: World -> pid: PaperId -> Tagged Status <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
 
 qualifier {content x == chair w}
 qualifier {content x in paperAuthors w pid}
@@ -75,18 +89,20 @@ qualifier {content x in paperAuthors w pid}
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World
 test1 = \w . \pid .
+  let title = getPaperTitle w pid in
   let authors = getPaperAuthors w pid in
   let st = if_ (lift2 eq (getCurrentPhase w) (tag Done)) 
               (getPaperStatus w pid) 
-              (tag emptyString) in
-  printAll w authors st
+              (tag NoDecision) in
+  let out = lift2 strcat title (lift1 toString st) in
+  printAll w authors out
     
 -- Print paper status to chair    
 test2 :: World -> PaperId -> World
 test2 = \w . \pid .
   let ch = getChair w in
   let st = getPaperStatus w pid in
-  print w ch st
+  print w ch (lift1 toString st)
   
 -- Print paper authors to session user
 test3 :: World -> PaperId -> World
@@ -94,7 +110,8 @@ test3 = \w . \pid .
   let u = getSessionUser w in
   let authors = getPaperAuthors w pid in
   let authors' = if_ (lift2 elem u authors) authors (tag Nil) in
-  print w u authors'  
+  let out = lift1 toString authors' in
+  print w u out
   
 -- Print paper status to session user
 test4 :: World -> PaperId -> World
@@ -105,6 +122,6 @@ test4 = \w . \pid .
                 (if_ (lift2 eq (getCurrentPhase w) (tag Done))
                   (if_ (lift2 elem u (getPaperAuthors w pid)) 
                     (getPaperStatus w pid) 
-                    (tag emptyString))
-                  (tag emptyString)) in
-  print w u st  
+                    (tag NoDecision))
+                  (tag NoDecision)) in
+  print w u (lift1 toString st)  
