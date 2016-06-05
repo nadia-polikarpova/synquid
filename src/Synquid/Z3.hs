@@ -4,6 +4,8 @@
 module Synquid.Z3 (Z3State, evalZ3State) where
 
 import Synquid.Logic
+import Synquid.Type
+import Synquid.Program
 import Synquid.SolverMonad
 import Synquid.Util
 import Synquid.Pretty
@@ -25,12 +27,15 @@ import Control.Monad.Trans.State
 import Control.Applicative
 import Control.Lens hiding (both)
 
+import Debug.Trace
+
 -- | Z3 state while building constraints
 data Z3Data = Z3Data {
   _mainEnv :: Z3Env,                          -- ^ Z3 environment for the main solver
-  _sorts :: Map Sort Z3.Sort,                 -- ^ Sort for integer sets
+  _sorts :: Map Sort Z3.Sort,                 -- ^ Mapping from Synquid sorts to Z3 sorts
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _functions :: Map Id FuncDecl,              -- ^ Function declarations for measures, predicates, and constructors
+  _storedDatatypes :: Set Id,                 -- ^ Datatypes mapped directly to Z3 datatypes (monomorphic and non-recursive)
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
   _boolSortAux :: Maybe Z3.Sort,              -- ^ Boolean sort in the auxiliary solver
@@ -49,6 +54,7 @@ initZ3Data env env' = Z3Data {
   _sorts = Map.empty,
   _vars = Map.empty,
   _functions = Map.empty,
+  _storedDatatypes = Set.empty,
   _controlLiterals = Bimap.empty,
   _auxEnv = env',
   _boolSortAux = Nothing,
@@ -58,12 +64,14 @@ initZ3Data env env' = Z3Data {
 type Z3State = StateT Z3Data IO
 
 instance MonadSMT Z3State where
-  initSolver = do
+  initSolver env = do
     -- Disable MBQI:
     params <- mkParams
     symb <- mkStringSymbol "mbqi"
     paramsSetBool params symb False
     solverSetParams params
+    
+    mapM_ (convertDatatype (allSymbols env)) (Map.toList $ env ^. datatypes)
   
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
@@ -78,6 +86,35 @@ instance MonadSMT Z3State where
         _ -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNKNOWN treating as SAT") $ return True
 
   allUnsatCores = getAllMUSs
+  
+convertDatatype :: Map Id RSchema -> (Id, DatatypeDef) -> Z3State ()
+convertDatatype symbols (name, DatatypeDef [] _ ctors _) = do
+  z3ctorsMb <- mapM convertCtor ctors
+  if any isNothing z3ctorsMb
+    then return ()
+    else do
+      dtName <- mkStringSymbol name
+      z3dt <- mkDatatype dtName (map fromJust z3ctorsMb)
+      sorts %= Map.insert dataSort z3dt
+      storedDatatypes %= Set.insert name
+  where
+    dataSort = DataS name []
+  
+    convertCtor cName = do
+      z3CName <- mkStringSymbol cName
+      recognizerName <- mkStringSymbol ("is" ++ cName)
+      let args = allArgs $ toMonotype $ symbols Map.! cName
+      z3ArgsMb <- mapM convertField args
+      if any isNothing (map (view _2) z3ArgsMb)
+        then return Nothing -- It's a recursive type: ignore
+        else Just <$> mkConstructor z3CName recognizerName z3ArgsMb
+      
+    convertField (Var fSort fName) = do
+      z3FName <- mkStringSymbol fName
+      z3FSort <- if fSort == dataSort then return Nothing else Just <$> toZ3Sort fSort
+      return (z3FName, z3FSort, 0)
+    
+convertDatatype _ (_, DatatypeDef _ _ _ _) = return ()
 
 -- | Get the literal in the auxiliary solver that corresponds to a given literal in the main solver
 litToAux :: AST -> Z3State AST
@@ -96,7 +133,7 @@ toZ3Sort :: Sort -> Z3State Z3.Sort
 toZ3Sort s = do
   resMb <- uses sorts (Map.lookup s)
   case resMb of
-    Just s -> return s
+    Just z3s -> return z3s
     Nothing -> do
       z3s <- case s of
         BoolS -> mkBoolSort
@@ -163,7 +200,7 @@ toAST expr = case expr of
     mapM toAST args >>= mkApp decl    
   Cons s name args -> do
     let tArgs = map sortOf args
-    decl <- function s name tArgs
+    decl <- constructor s name tArgs
     mapM toAST args >>= mkApp decl
   All v e -> accumAll [v] e
   where
@@ -240,6 +277,22 @@ toAST expr = case expr of
           functions %= Map.insert name' decl
           -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
           return decl
+          
+    constructor resT cName argTypes = do      
+      case resT of
+        DataS dtName [] -> do
+          stored <- uses storedDatatypes (Set.member dtName)
+          if stored
+            then do
+              z3dt <- toZ3Sort resT
+              decls <- getDatatypeSortConstructors z3dt
+              findDecl cName decls
+            else function resT cName argTypes
+        _ -> function resT cName argTypes
+      
+    findDecl cName decls = do
+      declNames <- mapM (\d -> getDeclName d >>= getSymbolString) decls
+      return $ decls !! fromJust (elemIndex cName declNames)
           
     -- | Sort as Z3 sees it
     asZ3Sort s = case s of
