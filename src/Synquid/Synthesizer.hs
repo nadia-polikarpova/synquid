@@ -65,6 +65,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
           extractQGenFromType True env val vars syntGoal] -- extract from spec: both positive and negative
         ++ map (instantiateTypeQualifier env val vars) tquals -- extract from given qualifiers
         ++ map (extractQGenFromType False env val vars) components -- extract from components: only negative
+        -- ++ map (extractQGenFromType True env val vars) components -- extract from components: also positive for now
         
     -- | Qualifier generator for bound predicates
     predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
