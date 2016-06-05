@@ -159,7 +159,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     return $ Program (PLet x pDef pBody) t
   
   PIf (Program PHole AnyT) iThen iElse -> do
-    cUnknown <- Unknown Map.empty <$> freshId "U"
+    cUnknown <- Unknown Map.empty <$> freshId "C"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
     cond <- conjunction <$> currentValuation cUnknown

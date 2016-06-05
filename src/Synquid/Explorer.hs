@@ -134,7 +134,7 @@ generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (genera
   where
     -- | Guess an E-term and abduce a condition for it
     generateThen = do
-      cUnknown <- Unknown Map.empty <$> freshId "U"
+      cUnknown <- Unknown Map.empty <$> freshId "C"
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
       cond <- conjunction <$> currentValuation cUnknown
@@ -146,7 +146,7 @@ generateElse env t cond pThen = if cond == ftrue
   else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
     pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
     
-    cUnknown <- Unknown Map.empty <$> freshId "U"
+    cUnknown <- Unknown Map.empty <$> freshId "C"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
     ifM (tryEliminateBranching pElse (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty))
@@ -217,7 +217,7 @@ generateFirstCase env scrVar pScrutinee t consName = do
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
 
       ifte  (do -- Try to find a vacuousness condition:
-              deadUnknown <- Unknown Map.empty <$> freshId "U"
+              deadUnknown <- Unknown Map.empty <$> freshId "C"
               addConstraint $ WellFormedCond env deadUnknown
               err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
               deadValuation <- currentValuation deadUnknown
@@ -242,7 +242,7 @@ generateCase env scrVar pScrutinee t consName = do
       (syms, ass) <- caseSymbols scrVar binders consT'      
       unfoldSyms <- asks $ _unfoldLocals . fst
       
-      cUnknown <- Unknown Map.empty <$> freshId "U"
+      cUnknown <- Unknown Map.empty <$> freshId "C"
       runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton ass) -- Create a fixed-valuation unknown to assume @ass@      
       
       let caseEnv = (if unfoldSyms then unfoldAllVariables else id) $ foldr (uncurry addVariable) (addAssumption cUnknown env) syms
@@ -270,9 +270,9 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
   where
     -- | Guess an E-term and abduce a condition and a match-condition for it
     generateOneBranch = do
-      matchUnknown <- Unknown Map.empty <$> freshId "U"
+      matchUnknown <- Unknown Map.empty <$> freshId "M"
       addConstraint $ WellFormedMatchCond env matchUnknown
-      condUnknown <- Unknown Map.empty <$> freshId "U"
+      condUnknown <- Unknown Map.empty <$> freshId "C"
       addConstraint $ WellFormedCond env condUnknown
       cut $ do
         p0 <- generateEOrError (addAssumption matchUnknown . addAssumption condUnknown $ env) t

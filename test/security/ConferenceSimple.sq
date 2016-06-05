@@ -23,16 +23,21 @@ data User
   
 data Tagged a <visibleTo :: User -> Bool>!
 measure content :: Tagged a -> a
-tag :: x: a -> Tagged {a | _v == x} <{True}>
+
+return :: x: a -> Tagged {a | _v == x} <{True}>
+
+bind :: <bp :: User -> Bool> . 
+  (Tagged a <bp>) -> (a -> Tagged b <bp>) -> Tagged b <bp>
 
 if_ :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
-    -> Tagged a <ip>
+    -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
+    -- -> Tagged {a | (content cond ==> _v == content thn) && (!(content cond) ==> _v == content els)} <ip>
     
 -- and_ :: <ap :: User -> Bool> .
-  -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>
+  -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>  
     
 lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
@@ -94,14 +99,16 @@ getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 qualifier {content x == chair w}
 qualifier {content x in paperAuthors w pid}
 
+-- qualifier {_v == paperStatus w pid || _v != Accepted}
+
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World
 test1 = \w . \pid .
   let title = getPaperTitle w pid in
   let authors = getPaperAuthors w pid in
-  let st = if_ (lift2 eq (getCurrentPhase w) (tag Done)) 
+  let st = if_ (lift2 eq (getCurrentPhase w) (return Done)) 
               (getPaperStatus w pid) 
-              (tag NoDecision) in
+              (return NoDecision) in
   let out = lift2 strcat title (lift1 toString st) in
   printAll w authors out
     
@@ -117,7 +124,7 @@ test3 :: World -> PaperId -> World
 test3 = \w . \pid .
   let u = getSessionUser w in
   let authors = getPaperAuthors w pid in
-  let authors' = if_ (lift2 elem u authors) authors (tag Nil) in
+  let authors' = if_ (lift2 elem u authors) authors (return Nil) in
   let out = lift1 toString authors' in
   print w u out
   
@@ -127,10 +134,10 @@ test4 = \w . \pid .
   let u = getSessionUser w in
   let st = if_ (lift2 eq (getChair w) u) 
                 (getPaperStatus w pid) 
-                (if_ (lift2 and (lift2 eq (getCurrentPhase w) (tag Done)) (lift2 elem u (getPaperAuthors w pid)))
+                (if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
-                  (tag NoDecision)) in
-  print w u (lift1 toString st)
+                  (return NoDecision)) in
+  print w u (lift1 toString st)  
 
 -- Implicit flow: show status and session to session user
 test5 :: World -> PaperId -> World
@@ -138,9 +145,13 @@ test5 = \w. \pid .
   let u = getSessionUser w in
   let title = getPaperTitle w pid in
   -- let st = getPaperStatus w pid in -- Leaky version
-  let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (tag Done)) (lift2 elem u (getPaperAuthors w pid)))
+  let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
-                  (tag NoDecision) in
-  let ses = if_ (lift2 eq st (tag Accepted)) (getPaperSession w pid) (tag emptyString) in
+                  (return NoDecision) in
+  let ses = if_ (lift2 eq st (return Accepted)) (getPaperSession w pid) (return emptyString) in
+  -- let getSes = \s . if s == Accepted 
+                        -- then getPaperSession w pid
+                        -- else return emptyString in
+  -- let ses = bind st getSes in
   let out = lift2 strcat title (lift2 strcat (lift1 toString st) ses) in
   print w u out
