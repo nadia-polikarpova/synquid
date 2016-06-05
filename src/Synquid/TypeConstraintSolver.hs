@@ -95,7 +95,7 @@ runTCSolver params st go = runExceptT $ runReaderT (runStateT go st) params
 -- | Initial typing state in the initial environment @env@
 initTypingState :: MonadHorn s => Environment -> s TypingState
 initTypingState env = do
-  initCand <- initHornSolver
+  initCand <- initHornSolver env
   return $ TypingState {
     _typingConstraints = [],
     _typeAssignment = Map.empty,

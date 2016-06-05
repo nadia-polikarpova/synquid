@@ -295,7 +295,7 @@ addTypeSynonym name tvs t = over typeSynonyms (Map.insert name (tvs, t))
 addDatatype :: Id -> DatatypeDef -> Environment -> Environment
 addDatatype name dt = over datatypes (Map.insert name dt)
 
--- | 'lookupConstructor' @ctor env@ : the name of the datatype for which @ctor@ is regisered as a constructor in @env@, if any
+-- | 'lookupConstructor' @ctor env@ : the name of the datatype for which @ctor@ is registered as a constructor in @env@, if any
 lookupConstructor :: Id -> Environment -> Maybe Id
 lookupConstructor ctor env = let m = Map.filter (\dt -> ctor `elem` dt ^. constructors) (env ^. datatypes)
   in if Map.null m

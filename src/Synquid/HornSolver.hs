@@ -60,8 +60,8 @@ type FixPointSolver s = ReaderT HornSolverParams s
 evalFixPointSolver = runReaderT
 
 instance MonadSMT s => MonadHorn (FixPointSolver s) where
-  initHornSolver = do
-    lift initSolver
+  initHornSolver env = do
+    lift (initSolver env)
     return $ Candidate (topSolution Map.empty) Set.empty Set.empty "0"
     
   checkCandidates = check
