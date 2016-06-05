@@ -14,6 +14,7 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
   
 -- Tagged things
@@ -29,6 +30,9 @@ if_ :: <ip :: User -> Bool> . <ic :: Bool> .
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
+    
+-- and_ :: <ap :: User -> Bool> .
+  -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>
     
 lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
@@ -119,9 +123,7 @@ test4 = \w . \pid .
   let u = getSessionUser w in
   let st = if_ (lift2 eq (getChair w) u) 
                 (getPaperStatus w pid) 
-                (if_ (lift2 eq (getCurrentPhase w) (tag Done))
-                  (if_ (lift2 elem u (getPaperAuthors w pid)) 
-                    (getPaperStatus w pid) 
-                    (tag NoDecision))
+                (if_ (lift2 and (lift2 eq (getCurrentPhase w) (tag Done)) (lift2 elem u (getPaperAuthors w pid)))
+                  (getPaperStatus w pid) 
                   (tag NoDecision)) in
   print w u (lift1 toString st)  

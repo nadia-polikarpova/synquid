@@ -335,12 +335,10 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
     contentProperties (mName, MeasureDef (DataS _ vars) a _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ "returns" one of datatype's parameters: transfer the refinement onto the value of the measure 
-                in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
-                    then Nothing
-                    else  let
-                            elemSort = toSort elemT
-                            measureApp = Pred elemSort mName [Var (toSort baseT) valueVarName]
-                          in Just $ substitute (Map.singleton valueVarName measureApp) fml
+                in let
+                    elemSort = toSort elemT
+                    measureApp = Pred elemSort mName [Var (toSort baseT) valueVarName]
+                   in Just $ substitute (Map.singleton valueVarName measureApp) fml
     contentProperties (mName, MeasureDef _ _ _ _) = Nothing
         
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
