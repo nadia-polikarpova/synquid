@@ -10,7 +10,6 @@ import Synquid.Error
 import Synquid.Tokens
 import Synquid.Util
 
-import Data.Char
 import Data.List
 import Data.Map (Map, (!), elems, fromList)
 
@@ -110,10 +109,15 @@ parseDataDecl :: Parser BareDeclaration
 parseDataDecl = do
   reserved "data"
   typeName <- parseTypeName
-  typeParams <- many (sameOrIndented >> parseIdentifier)
-  predParams <- many (sameOrIndented >> angles parsePredSig)
+  tParams <- many (sameOrIndented >> parseIdentifier)
+  pParams <- many (sameOrIndented >> parsePredParam)
   constructors <- option [] (reserved "where" >> indented >> block parseConstructorSig) 
-  return $ DataDecl typeName typeParams predParams constructors  
+  return $ DataDecl typeName tParams pParams constructors  
+  where
+    parsePredParam = do
+      p <- angles parsePredSig
+      var <- option False (reservedOp (unOpTokens ! Not) >> return True)
+      return (p, var)
 
 parseConstructorSig :: Parser ConstructorSig
 parseConstructorSig = do
@@ -131,8 +135,7 @@ parseMeasureDecl = do
   inSort <- parseSort
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
-  reserved "where"
-  cases <- indented >> block parseDefCase
+  cases <- option [] (reserved "where" >> indented >> block parseDefCase) 
   return $ MeasureDecl measureName inSort outSort post cases isTermination
   where
     parseDefCase = do
@@ -405,19 +408,19 @@ parsePredSig = do
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do
   name <- identifier
-  if isUpper $ head name 
+  if isTypeName name 
     then unexpected ("capitalized " ++ show name) 
     else if name == dontCare then unexpected ("blank") else return name
   
 parseIdentifierOrBlank :: Parser Id
 parseIdentifierOrBlank = try $ do
   name <- identifier
-  if isUpper $ head name then unexpected ("capitalized " ++ show name) else return name  
+  if isTypeName name then unexpected ("capitalized " ++ show name) else return name  
 
 parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
-  if not (isUpper $ head name) then unexpected ("non-capitalized " ++ show name) else return name
+  if not (isTypeName name) then unexpected ("non-capitalized " ++ show name) else return name
   
 -- | 'attachPosBefore' @p@ : parser that behaves like @p@, but also attaches the source position before the first token it parsed to the result
 attachPosBefore :: Parser a -> Parser (Pos a)

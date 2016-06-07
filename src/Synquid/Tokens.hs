@@ -5,6 +5,7 @@ import Synquid.Logic
 import Synquid.Util
 import Data.Maybe
 import Data.Map (Map, fromList)
+import Data.Char
 
 -- | Keywords
 keywords :: [String]
@@ -53,3 +54,5 @@ commentLine = "--"
 
 -- | 'isLiteral' @str@ : Is string @str@ a literal of a primitive type?
 isLiteral str = isJust (asInteger str) || str == "True" || str == "False"
+
+isTypeName str = isUpper $ head str
