@@ -71,7 +71,7 @@ instance MonadSMT Z3State where
     paramsSetBool params symb False
     solverSetParams params
     
-    mapM_ (convertDatatype (allSymbols env)) (Map.toList $ env ^. datatypes)
+    convertDatatypes (allSymbols env) (Map.toList $ env ^. datatypes)
   
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
@@ -87,18 +87,23 @@ instance MonadSMT Z3State where
 
   allUnsatCores = getAllMUSs
   
-convertDatatype :: Map Id RSchema -> (Id, DatatypeDef) -> Z3State ()
-convertDatatype symbols (name, DatatypeDef [] _ ctors _) = do
-  z3ctorsMb <- mapM convertCtor ctors
-  if any isNothing z3ctorsMb
-    then return ()
-    else do
-      dtName <- mkStringSymbol name
-      z3dt <- mkDatatype dtName (map fromJust z3ctorsMb)
-      sorts %= Map.insert dataSort z3dt
-      storedDatatypes %= Set.insert name
+convertDatatypes :: Map Id RSchema -> [(Id, DatatypeDef)] -> Z3State ()
+convertDatatypes _ [] = return ()
+convertDatatypes symbols ((dtName, DatatypeDef [] _ ctors@(_:_) _):rest) = do
+  ifM (uses storedDatatypes (Set.member dtName))
+    (return ()) -- This datatype has already been processed as a dependency
+    (do
+      z3ctorsMb <- mapM convertCtor ctors
+      if any isNothing z3ctorsMb
+        then return ()
+        else do
+          dtSymb <- mkStringSymbol dtName
+          z3dt <- mkDatatype dtSymb (map fromJust z3ctorsMb)
+          sorts %= Map.insert dataSort z3dt
+          storedDatatypes %= Set.insert dtName)
+  convertDatatypes symbols rest
   where
-    dataSort = DataS name []
+    dataSort = DataS dtName []
   
     convertCtor cName = do
       z3CName <- mkStringSymbol cName
@@ -111,10 +116,19 @@ convertDatatype symbols (name, DatatypeDef [] _ ctors _) = do
       
     convertField (Var fSort fName) = do
       z3FName <- mkStringSymbol fName
-      z3FSort <- if fSort == dataSort then return Nothing else Just <$> toZ3Sort fSort
+      z3FSort <- case fSort of
+                    DataS dtName' [] -> 
+                      if dtName' == dtName
+                        then return Nothing -- Recursive datatype, do not convert
+                        else case lookup dtName' rest of
+                              Nothing -> Just <$> toZ3Sort fSort -- Datatype dtName' should have already been processed
+                              Just dtDef -> do -- It is an eligible datatype yet to process; process it now instead
+                                              convertDatatypes symbols [(dtName', dtDef)]
+                                              Just <$> toZ3Sort fSort                                                
+                    _ -> Just <$> toZ3Sort fSort
       return (z3FName, z3FSort, 0)
     
-convertDatatype _ (_, DatatypeDef _ _ _ _) = return ()
+convertDatatypes symbols (_:rest) = convertDatatypes symbols rest
 
 -- | Get the literal in the auxiliary solver that corresponds to a given literal in the main solver
 litToAux :: AST -> Z3State AST
@@ -280,14 +294,13 @@ toAST expr = case expr of
           
     constructor resT cName argTypes = do      
       case resT of
-        DataS dtName [] -> do
-          stored <- uses storedDatatypes (Set.member dtName)
-          if stored
-            then do
+        DataS dtName [] -> 
+          ifM (uses storedDatatypes (Set.member dtName))
+            (do
               z3dt <- toZ3Sort resT
               decls <- getDatatypeSortConstructors z3dt
-              findDecl cName decls
-            else function resT cName argTypes
+              findDecl cName decls)
+            (function resT cName argTypes)
         _ -> function resT cName argTypes
       
     findDecl cName decls = do
@@ -296,8 +309,8 @@ toAST expr = case expr of
           
     -- | Sort as Z3 sees it
     asZ3Sort s = case s of
-      VarS name -> IntS
-      DataS name args -> IntS
+      VarS _ -> IntS
+      DataS _ (_:_) -> IntS
       SetS el -> SetS (asZ3Sort el)
       _ -> s
           
