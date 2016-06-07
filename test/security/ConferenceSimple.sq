@@ -14,6 +14,7 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+not :: x: Bool -> {Bool | _v == !x}
 and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
   
@@ -84,10 +85,14 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 predicate currentPhase :: World -> Phase
 getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
 
-getPaperTitle :: World -> PaperId -> Tagged String <{True}>
+predicate paperConflicts :: World -> PaperId -> Set User
+getPaperConflicts :: w: World -> pid: PaperId 
+                        -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_0 in paperConflicts w pid)}>
+
+getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{!(_0 in paperConflicts w pid)}>
 
 predicate paperAuthors :: World -> PaperId -> Set User
-getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}> 
+getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
@@ -96,6 +101,7 @@ getPaperSession :: w: World -> pid: {PaperId | paperStatus w _v == Accepted} -> 
 
 qualifier {content x == chair w}
 qualifier {content x in paperAuthors w pid}
+qualifier {!(content x in paperConflicts w pid)}
 
 qualifier {_v == paperStatus w pid || _v != Accepted}
 
@@ -141,7 +147,8 @@ test4 = \w . \pid .
 test5 :: World -> PaperId -> World
 test5 = \w. \pid .
   let u = getSessionUser w in
-  let title = getPaperTitle w pid in
+  let conflicts = getPaperConflicts w pid in
+  let title = if_ (lift1 not (lift2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
   -- let st = getPaperStatus w pid in -- Leaky version
   let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
@@ -151,3 +158,15 @@ test5 = \w. \pid .
                             else return emptyString) in
   let out = lift2 strcat title (lift2 strcat (lift1 toString st) ses) in
   print w u out
+
+-- Print paper title and list of conflicts to the session user  
+test6 :: World -> PaperId -> World
+test6 = \w. \pid .
+  let u = getSessionUser w in
+  let conflicts = getPaperConflicts w pid in
+  let noConflict = lift1 not (lift2 elem u conflicts) in
+  let title = if_ noConflict (getPaperTitle w pid) (return emptyString) in
+  let conflicts' = if_ noConflict conflicts (return Nil) in  
+  let out = lift2 strcat title (lift1 toString conflicts') in
+  print w u out
+
