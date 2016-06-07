@@ -34,7 +34,6 @@ if_ :: <ip :: User -> Bool> . <ic :: Bool> .
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
-    -- -> Tagged {a | (content cond ==> _v == content thn) && (!(content cond) ==> _v == content els)} <ip>
     
 -- and_ :: <ap :: User -> Bool> .
   -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>  
@@ -93,13 +92,12 @@ getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | _v in paperA
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
 
--- getPaperSession :: w: World -> pid: {PaperId | paperStatus w _v == Accepted} -> Tagged String <{True}>
-getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
+getPaperSession :: w: World -> pid: {PaperId | paperStatus w _v == Accepted} -> Tagged String <{True}>
 
 qualifier {content x == chair w}
 qualifier {content x in paperAuthors w pid}
 
--- qualifier {_v == paperStatus w pid || _v != Accepted}
+qualifier {_v == paperStatus w pid || _v != Accepted}
 
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World
@@ -148,10 +146,8 @@ test5 = \w. \pid .
   let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
                   (return NoDecision) in
-  let ses = if_ (lift2 eq st (return Accepted)) (getPaperSession w pid) (return emptyString) in
-  -- let getSes = \s . if s == Accepted 
-                        -- then getPaperSession w pid
-                        -- else return emptyString in
-  -- let ses = bind st getSes in
+  let ses = bind st (\s . if s == Accepted 
+                            then getPaperSession w pid
+                            else return emptyString) in
   let out = lift2 strcat title (lift2 strcat (lift1 toString st) ses) in
   print w u out
