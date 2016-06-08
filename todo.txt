@@ -1,4 +1,3 @@
-- Fix ansi characters in HTML output
 - Split subtyping constraints with multiple measures?  
 - Multisets
 
