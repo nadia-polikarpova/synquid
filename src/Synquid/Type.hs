@@ -178,22 +178,6 @@ shape (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ()
 shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
 shape AnyT = AnyT
 
--- | Insert weakest refinement
-refineTop :: SType -> RType
-refineTop (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map refineTop tArgs) (replicate (length pArgs) ftrue)) ftrue
-refineTop (ScalarT IntT _) = ScalarT IntT ftrue
-refineTop (ScalarT BoolT _) = ScalarT BoolT ftrue
-refineTop (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ftrue
-refineTop (FunctionT x tArg tFun) = FunctionT x (refineBot tArg) (refineTop tFun)
-
--- | Insert strongest refinement
-refineBot :: SType -> RType
-refineBot (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map refineBot tArgs) (replicate (length pArgs) ffalse)) ffalse
-refineBot (ScalarT IntT _) = ScalarT IntT ffalse
-refineBot (ScalarT BoolT _) = ScalarT BoolT ffalse
-refineBot (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ffalse
-refineBot (FunctionT x tArg tFun) = FunctionT x (refineTop tArg) (refineBot tFun)
-
 -- | Conjoin refinement to a type
 addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
   then ScalarT base fml' -- the type of a polymorphic variable does not require any other refinements

@@ -169,4 +169,22 @@ test6 = \w. \pid .
   let conflicts' = if_ noConflict conflicts (return Nil) in  
   let out = lift2 strcat title (lift1 toString conflicts') in
   print w u out
+  
+selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> pids: List PaperId -> Tagged String <{_0 == content u}>  
+selectFrom = \w. \u. \pids .
+  match pids with
+    Nil -> return emptyString
+    Cons pid rest -> 
+      let authors = getPaperAuthors w pid in
+      let authors' = if_ (lift2 elem u authors) authors (return Nil) in
+      let line = lift1 toString authors' in
+      lift2 strcat line (selectFrom w u rest)
+  
+-- Print all session user's papers  
+test7 :: World -> (List PaperId) -> World
+test7 = \w. \allPids .
+  let u = getSessionUser w in
+  print w u (selectFrom w u allPids)
+  
+  
 

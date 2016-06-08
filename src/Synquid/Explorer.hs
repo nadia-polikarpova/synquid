@@ -459,7 +459,7 @@ enumerateAt env typ 0 = do
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False      
+        Just sc -> solveLocally $ Subtype env (refineBot env $ shape t) (refineTop env sc) False      
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
@@ -582,7 +582,8 @@ solveLocally :: MonadHorn s => Constraint -> Explorer s ()
 solveLocally c = do
   writeLog 1 (text "Solving Locally" $+$ pretty c)
   oldTC <- use $ typingState . typingConstraints
-  addConstraint c
+  -- addConstraint c
+  typingState . typingConstraints .= [c]
   runInSolver solveTypeConstraints
   typingState . typingConstraints .= oldTC
 

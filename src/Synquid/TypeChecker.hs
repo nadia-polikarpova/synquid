@@ -176,7 +176,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     
   PMatch iScr iCases -> do
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
-    let scrT = refineTop $ shape $ lastType $ head consTypes
+    let scrT = refineTop env $ shape $ lastType $ head consTypes
     
     (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
     let scrutineeSymbols = symbolList pScrutinee
@@ -249,7 +249,7 @@ reconstructE' env typ (PSymbol name) = do
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False
+        Just sc -> solveLocally $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
       checkE env typ p
       return (env, p)
   where    
