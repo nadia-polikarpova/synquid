@@ -404,7 +404,11 @@ type Solution = Map Id Valuation
   
 -- | 'topSolution' @qmap@ : top of the solution lattice (maps every unknown in the domain of @qmap@ to the empty set of qualifiers)
 topSolution :: QMap -> Solution
-topSolution quals = constMap (Map.keysSet quals) Set.empty
+topSolution qmap = constMap (Map.keysSet qmap) Set.empty
+
+-- | 'botSolution' @qmap@ : bottom of the solution lattice (maps every unknown in the domain of @qmap@ to all its qualifiers)
+botSolution :: QMap -> Solution
+botSolution qmap = Map.map (\(QSpace quals _) -> Set.fromList quals) qmap
 
 -- | 'valuation' @sol u@ : valuation of @u@ in @sol@
 valuation :: Solution -> Formula -> Valuation
