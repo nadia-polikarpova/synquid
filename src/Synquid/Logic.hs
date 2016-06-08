@@ -278,7 +278,7 @@ substitute subst fml = case fml of
   Var s name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
-  Unknown s name -> Unknown (s `compose` (removeId subst)) name 
+  Unknown s name -> Unknown (s `composeSubstitutions` subst) name 
   Unary op e -> Unary op (substitute subst e)
   Binary op e1 e2 -> Binary op (substitute subst e1) (substitute subst e2)
   Ite e0 e1 e2 -> Ite (substitute subst e0) (substitute subst e1) (substitute subst e2)
@@ -288,11 +288,13 @@ substitute subst fml = case fml of
                             then error $ unwords ["Scoped variable clashes with substitution variable", x]
                             else All v (substitute subst e)
   otherwise -> fml
+
+-- | Compose substitutions
+composeSubstitutions old new = 
+  let new' = removeId new
+  in Map.map (substitute new') old `Map.union` new'
   where
-    -- | Compose substitutions
-    compose old new = Map.map (substitute new) old `Map.union` new
     -- | Remove identity substitutions
-    removeId :: Substitution -> Substitution
     removeId = Map.filterWithKey (\x fml -> not $ isVar fml && varName fml == x)
                   
 deBrujns = map (\i -> dontCare ++ show i) [0..] 

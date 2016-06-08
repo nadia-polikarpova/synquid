@@ -104,7 +104,7 @@ initTypingState env = do
     _candidates = [initCand],
     _initEnv = env,
     _idCount = Map.empty,
-    _isFinal = True,
+    _isFinal = False,
     _simpleConstraints = [],
     _hornClauses = [],
     _consistencyChecks = [],
@@ -226,15 +226,15 @@ simplifyConstraint' _ _ c@(WellFormed _ AnyT) = return ()
 simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass = return ()
   
 -- Type variable with known assignment: substitute
-simplifyConstraint' tass _ (Subtype env tv@(ScalarT (TypeVarT a) _) t consistent) | a `Map.member` tass
+simplifyConstraint' tass _ (Subtype env tv@(ScalarT (TypeVarT _ a) _) t consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env (typeSubstitute tass tv) t consistent)
-simplifyConstraint' tass _ (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) | a `Map.member` tass
+simplifyConstraint' tass _ (Subtype env t tv@(ScalarT (TypeVarT _ a) _) consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env t (typeSubstitute tass tv) consistent)
-simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT a) _)) | a `Map.member` tass
+simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT _ a) _)) | a `Map.member` tass
   = simplifyConstraint (WellFormed env (typeSubstitute tass tv))
   
 -- Two unknown free variables: nothing can be done for now
-simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) | not (isBound a env) && not (isBound b env)
+simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) (ScalarT (TypeVarT _ b) _) _) | not (isBound env a) && not (isBound env a)
   = if a == b
       then error $ show $ text "simplifyConstraint: equal type variables on both sides"
       else ifM (use isFinal) 
@@ -242,14 +242,14 @@ simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVa
               addTypeAssignment a intAll
               simplifyConstraint c) 
             (modify $ addTypingConstraint c)
-simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) 
+simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT _ a) _)) | not (isBound env a) 
   = modify $ addTypingConstraint c
 simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstraint c
   
 -- Unknown free variable and a type: extend type assignment
-simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) t _) | not (isBound a env) 
+simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) t _) | not (isBound env a) 
   = unify env a t >> simplifyConstraint c
-simplifyConstraint' _ _ c@(Subtype env t (ScalarT (TypeVarT a) _) _) | not (isBound a env) 
+simplifyConstraint' _ _ c@(Subtype env t (ScalarT (TypeVarT _ a) _) _) | not (isBound env a) 
   = unify env a t >> simplifyConstraint c
 
 -- Compound types: decompose
@@ -266,7 +266,7 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
       if isScalarType tArg1
-        then simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg1 tRes1) tRes2 False)
+        then simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar (isBound env) x y tArg1 tRes1) tRes2 False)
         else simplifyConstraint (Subtype env tRes1 tRes2 False)
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
   = -- TODO: rename type vars
@@ -315,7 +315,7 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       pq <- asks _predQualsGen
       addQuals u (pq (addAllVariables vars env) vars (allScalars env tass))
   where
-    isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
+    isFreeVariable tass a = not (isBound env a) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
 
 -- | Convert simple constraint to horn clauses and consistency checks, and update qualifier maps
@@ -452,10 +452,10 @@ freshVar env prefix = do
 
 -- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables, fresh predicate variables, and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType
-fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
+fresh env (ScalarT (TypeVarT vSubst a) _) | not (isBound env a) = do
   -- Free type variable: replace with fresh free type variable
   a' <- freshId "A"
-  return $ ScalarT (TypeVarT a') ftrue
+  return $ ScalarT (TypeVarT vSubst a') ftrue
 fresh env (ScalarT baseT _) = do
   baseT' <- freshBase baseT
   -- Replace refinement with fresh predicate unknown:
@@ -533,7 +533,7 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 
   = do
       writeLog 2 $ text "Matching constructor type" $+$ pretty formal $+$ text "with scrutinee" $+$ pretty actual
-      zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
+      zipWithM_ (\(ScalarT (TypeVarT _ a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'
     

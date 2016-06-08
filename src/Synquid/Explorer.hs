@@ -208,11 +208,11 @@ generateFirstCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- instantiate env consSch True
+      consT <- instantiate env consSch True []
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshVar env "x")
-      (syms, ass) <- caseSymbols scrVar binders consT'
+      (syms, ass) <- caseSymbols env scrVar binders consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
 
       ifte  (do -- Try to find a vacuousness condition:
@@ -234,11 +234,11 @@ generateCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- instantiate env consSch True
+      consT <- instantiate env consSch True []
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshVar env "x")
-      (syms, ass) <- caseSymbols scrVar binders consT'      
+      (syms, ass) <- caseSymbols env scrVar binders consT'      
       unfoldSyms <- asks $ _unfoldLocals . fst
       
       cUnknown <- Unknown Map.empty <$> freshId "U"
@@ -257,10 +257,10 @@ generateCase env scrVar pScrutinee t consName = do
 
 -- | 'caseSymbols' @scrutinee binders consT@: a pair that contains (1) a list of bindings of @binders@ to argument types of @consT@
 -- and (2) a formula that is the return type of @consT@ applied to @scrutinee@
-caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
+caseSymbols env x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
   return ([], subst fml)
-caseSymbols x (name : names) (FunctionT y tArg tRes) = do
-  (syms, ass) <- caseSymbols x names (renameVar y name tArg tRes)
+caseSymbols env x (name : names) (FunctionT y tArg tRes) = do
+  (syms, ass) <- caseSymbols env x names (renameVar (isBound env) y name tArg tRes)
   return ((name, tArg) : syms, ass)  
 
 -- | Generate a possibly conditional possibly match term, depending on which conditions are abduced
@@ -320,8 +320,7 @@ generateE :: MonadHorn s => Environment -> RType -> Explorer s (Environment, RPr
 generateE env typ = do
   d <- asks $ _eGuessDepth . fst
   (finalEnv, Program pTerm pTyp) <- generateEUpTo env typ d
-  pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
-  cleanupTypeVars
+  pTyp' <- runInSolver $ currentAssignment pTyp
   pTerm' <- addLambdaLets pTyp' (Program pTerm pTyp')
   return (finalEnv, pTerm')
   where
@@ -329,19 +328,6 @@ generateE env typ = do
       newGoals <- use newAuxGoals      
       newAuxGoals .= []
       return $ foldr (\f p -> Program (PLet f uHole p) t) body newGoals
-
-
--- | Forget free type variables, which cannot escape an E-term
--- (after substituting outstanding auxiliary goals)
-cleanupTypeVars :: MonadHorn s => Explorer s ()  
-cleanupTypeVars = do
-  goals <- use auxGoals >>= mapM goalSubstituteTypes
-  auxGoals .= goals
-  runInSolver $ typeAssignment .= Map.empty
-  where
-    goalSubstituteTypes g = do
-      spec' <- runInSolver $ currentAssignment (toMonotype $ gSpec g)
-      return g { gSpec = Monotype spec' }      
   
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
 generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
@@ -485,8 +471,8 @@ enumerateAt env typ 0 = do
       return (env, p)
       
     freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch False -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
-      else instantiate env sch True
+      then instantiate env sch False [] -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
+      else instantiate env sch True []
 
     soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
@@ -523,7 +509,7 @@ enumerateAt env typ d = do
                             $ mbCut (genArg env' tArg)
           writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
-          return (env''', Program (PApp fun arg) (substituteInType (Map.singleton x y) tRes))
+          return (env''', Program (PApp fun arg) (substituteInType (isBound env) (Map.singleton x y) tRes))
       return (envfinal, pApp)
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)      
@@ -598,13 +584,13 @@ runInSolver f = do
       return res
       
 solveIncrementally :: MonadHorn s => Explorer s ()        
-solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver $ isFinal .= False >> solveTypeConstraints >> isFinal .= True) (return ())
+solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
 
 solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
 solveLocally c = do
   writeLog 1 (text "Solving Locally" $+$ pretty c)
   oldTC <- use $ typingState . typingConstraints
-  addConstraint c
+  typingState . typingConstraints .= [c]
   runInSolver solveTypeConstraints
   typingState . typingConstraints .= oldTC
 
@@ -646,8 +632,8 @@ inContext ctx f = local (over (_1 . context) (. ctx)) f
     
 -- | Replace all bound type and predicate variables with fresh free variables
 -- (if @top@ is @False@, instantiate with bottom refinements instead of top refinements)
-instantiate :: MonadHorn s => Environment -> RSchema -> Bool -> Explorer s RType
-instantiate env sch top = do
+instantiate :: MonadHorn s => Environment -> RSchema -> Bool -> [Id] -> Explorer s RType
+instantiate env sch top argNames = do
   t <- instantiate' Map.empty Map.empty sch
   writeLog 2 (text "INSTANTIATE" <+> pretty sch $+$ text "INTO" <+> pretty t)
   return t
@@ -665,11 +651,13 @@ instantiate env sch top = do
                 return $ Pred BoolS p' (zipWith Var argSorts' deBrujns)
               else return ffalse
       instantiate' subst (Map.insert p fml pSubst) sch        
-    instantiate' subst pSubst (Monotype t) = go subst pSubst t
-    go subst pSubst (FunctionT x tArg tRes) = do
-      x' <- freshVar env "x"
-      liftM2 (FunctionT x') (go subst pSubst tArg) (go subst pSubst (renameVar x x' tArg tRes))
-    go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
+    instantiate' subst pSubst (Monotype t) = go subst pSubst argNames t
+    go subst pSubst argNames (FunctionT x tArg tRes) = do
+      x' <- case argNames of
+              [] -> freshVar env "x"
+              (argName : _) -> return argName
+      liftM2 (FunctionT x') (go subst pSubst [] tArg) (go subst pSubst (drop 1 argNames) (renameVar (`Map.member` subst) x x' tArg tRes))
+    go subst pSubst _ t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
     
 symbolType env x t@(ScalarT b _)
   | isLiteral x = t -- x is a literal of a primitive type, it's type is precise

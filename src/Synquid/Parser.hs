@@ -12,7 +12,8 @@ import Synquid.Util
 
 import Data.Char
 import Data.List
-import Data.Map (Map, (!), elems, fromList)
+import qualified Data.Map as Map
+import Data.Map (Map)
 
 import Control.Monad.State
 import Control.Applicative hiding ((<|>), many)
@@ -45,7 +46,7 @@ toErrorMessage err = ErrorMessage ParseError (errorPos err)
 {- Lexical analysis -}
 
 opNames :: [String]
-opNames = elems unOpTokens ++ (elems binOpTokens \\ keywords) ++ otherOps
+opNames = Map.elems unOpTokens ++ (Map.elems binOpTokens \\ keywords) ++ otherOps
 
 opStart :: [Char]
 opStart = nub (map head opNames)
@@ -209,7 +210,7 @@ parseUnrefTypeNoArgs = do
       BoolT <$ reserved "Bool",
       IntT <$ reserved "Int",
       (\name -> DatatypeT name [][]) <$> parseTypeName,
-      TypeVarT <$> parseIdentifier]
+      TypeVarT Map.empty <$> parseIdentifier]
   
 parseUnrefTypeWithArgs = do
   name <- parseTypeName  
@@ -276,9 +277,9 @@ exprTable mkUnary mkBinary withGhost = [
   [binary And AssocLeft, binary Or AssocLeft],
   [binary Implies AssocRight, binary Iff AssocRight]]
   where
-    unary op = Prefix (reservedOp (unOpTokens ! op) >> return (mkUnary op))
-    binary op assoc = Infix (reservedOp (binOpTokens ! op) >> return (mkBinary op)) assoc
-    binaryWord op assoc = Infix (reserved (binOpTokens ! op) >> return (mkBinary op)) assoc    
+    unary op = Prefix (reservedOp (unOpTokens Map.! op) >> return (mkUnary op))
+    binary op assoc = Infix (reservedOp (binOpTokens Map.! op) >> return (mkBinary op)) assoc
+    binaryWord op assoc = Infix (reserved (binOpTokens Map.! op) >> return (mkBinary op)) assoc    
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
@@ -370,8 +371,8 @@ parseIf = do
 
 parseETerm = buildExpressionParser (exprTable mkUnary mkBinary False) parseAppTerm <?> "elimination term"
   where
-    mkUnary op = untyped . PApp (untyped $ PSymbol (unOpTokens ! op))
-    mkBinary op p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens ! op)) p1) p2
+    mkUnary op = untyped . PApp (untyped $ PSymbol (unOpTokens Map.! op))
+    mkBinary op p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens Map.! op)) p1) p2
     parseAppTerm = do
       head <- parseAtomTerm
       args <- many (sameOrIndented >> (try parseAtomTerm <|> parens parseImpl))
