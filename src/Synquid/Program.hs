@@ -357,6 +357,26 @@ allMeasurePostconditions _ _ _ = []
 
 typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
 typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute tass))) env
+
+-- | Insert weakest refinement
+refineTop :: Environment -> SType -> RType
+refineTop env (ScalarT (DatatypeT name tArgs pArgs) _) = 
+  let variances = env ^. (datatypes . to (Map.! name) . predVariances) in
+  ScalarT (DatatypeT name (map (refineTop env) tArgs) (map (BoolLit . not) variances)) ftrue
+refineTop _ (ScalarT IntT _) = ScalarT IntT ftrue
+refineTop _ (ScalarT BoolT _) = ScalarT BoolT ftrue
+refineTop _ (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ftrue
+refineTop env (FunctionT x tArg tFun) = FunctionT x (refineBot env tArg) (refineTop env tFun)
+
+-- | Insert strongest refinement
+refineBot :: Environment -> SType -> RType
+refineBot env (ScalarT (DatatypeT name tArgs pArgs) _) = 
+  let variances = env ^. (datatypes . to (Map.! name) . predVariances) in
+  ScalarT (DatatypeT name (map (refineBot env) tArgs) (map BoolLit variances)) ffalse
+refineBot _ (ScalarT IntT _) = ScalarT IntT ffalse
+refineBot _ (ScalarT BoolT _) = ScalarT BoolT ffalse
+refineBot _ (ScalarT (TypeVarT a) _) = ScalarT (TypeVarT a) ffalse
+refineBot env (FunctionT x tArg tFun) = FunctionT x (refineTop env tArg) (refineBot env tFun)
     
 {- Input language declarations -}
 
