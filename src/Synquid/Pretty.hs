@@ -229,7 +229,7 @@ prettyBase :: Pretty r => (TypeSkeleton r -> Doc) -> BaseType r -> Doc
 prettyBase prettyType base = case base of 
   IntT -> text "Int"
   BoolT -> text "Bool"
-  TypeVarT name -> text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
+  TypeVarT s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
   DatatypeT name tArgs pArgs -> text name <+> hsep (map prettyType tArgs) <+> hsep (map (hlAngles . pretty) pArgs)
 
 instance Pretty (BaseType ()) where
