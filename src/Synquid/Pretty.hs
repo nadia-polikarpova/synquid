@@ -149,7 +149,7 @@ instance Show Sort where
   show = show . pretty
   
 instance Pretty PredSig where
-  pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort  
+  pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
 
 instance Pretty UnOp where
   pretty op = operator $ unOpTokens Map.! op
@@ -353,7 +353,8 @@ prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions))
 prettyBindings env = commaSep (map pretty (Map.keys $ removeDomain (env ^. constants) (allSymbols env)))
 -- prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
-prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
+-- prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
+prettyGhosts env = commaSep (map pretty (Map.keys (env ^. ghosts)))
 
 instance Pretty Environment where
   pretty env = prettyBindings env <+> prettyGhosts env <+> prettyAssumptions env
@@ -369,8 +370,8 @@ instance Show SortConstraint where
   show = show . pretty
 
 prettyConstraint :: Constraint -> Doc
-prettyConstraint (Subtype env t1 t2 False) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2
-prettyConstraint (Subtype env t1 t2 True) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2
+prettyConstraint (Subtype env t1 t2 False) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2
+prettyConstraint (Subtype env t1 t2 True) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2
 prettyConstraint (WellFormed env t) = prettyBindings env <+> operator "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> operator "|-" <+> pretty c
 prettyConstraint (WellFormedMatchCond env c) = prettyBindings env <+> operator "|- (match)" <+> pretty c
@@ -401,13 +402,15 @@ prettySolution (Goal name _ _ _ _ _) prog = text name <+> operator "=" </> prett
 
 instance Pretty ConstructorSig where
   pretty (ConstructorSig name t) = text name <+> text "::" <+> pretty t
+  
+prettyVarianceParam (predSig, contra) = pretty predSig <> (if contra then pretty Not else empty)  
 
 instance Pretty BareDeclaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
   pretty (QualifierDecl fmls) = keyword "qualifier" <+> hlBraces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> operator "::" <+> pretty t
-  pretty (DataDecl name typeVars predParams ctors) = hang tab $ 
-    keyword "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> keyword "where" 
+  pretty (DataDecl name tParams pParams ctors) = hang tab $ 
+    keyword "data" <+> text name <+> hsep (map text tParams) <+> hsep (map prettyVarianceParam pParams) <+> keyword "where" 
     $+$ vsep (map pretty ctors)
   pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $ 
     if isTermination then keyword "termination" else empty
