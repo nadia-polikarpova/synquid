@@ -59,7 +59,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
   where
     reconstructFix = do
       let typ' = renameAsImpl (isBound env) impl typ
-      recCalls <- recursiveCalls typ'
+      recCalls <- runInSolver (currentAssignment typ') >>= recursiveCalls
       polymorphic <- asks $ _polyRecursion . fst
       predPolymorphic <- asks $ _predPolyRecursion . fst
       let tvs = env ^. boundTypeVars
@@ -243,18 +243,14 @@ reconstructE' env typ (PSymbol name) = do
   case lookupSymbol name (arity typ) env of
     Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
     Just sch -> do
-      t <- freshInstance sch
-      let p = Program (PSymbol name) (symbolType env name t)
+      t <- symbolType env name sch
+      let p = Program (PSymbol name) t
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False
+        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False
       checkE env typ p
       return (env, p)
-  where    
-    freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch False [] -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
-      else instantiate env sch True []
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
