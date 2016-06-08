@@ -383,7 +383,7 @@ checkE env typ p@(Program pTerm pTyp) = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
-  ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
+  -- ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
   
   addConstraint $ Subtype env pTyp typ False
   when (arity typ > 0) $
@@ -398,58 +398,49 @@ checkE env typ p@(Program pTerm pTyp) = do
       unknownId (Unknown _ i) = Just i
       unknownId _ = Nothing
 
-      areTypesEqual :: MonadHorn s => Environment -> RType -> RType -> Explorer s ()
-      areTypesEqual env t1 t2 = do
-        writeLog 1 (text "Solving Type Equality" $+$ pretty t1 $+$ pretty t2)
-        oldTC <- use $ typingState . typingConstraints
-        addConstraint $ Subtype env t1 t2 False 
-        addConstraint $ Subtype env t2 t1 False
-        runInSolver solveTypeConstraints
-        typingState . typingConstraints .= oldTC
+      -- checkSymmetry = do
+        -- ctx <- asks $ _context . fst
+        -- let fixedContext = ctx (untyped PHole)
+        -- if arity typ > 0
+          -- then do
+              -- let partialKey = PartialKey fixedContext
+              -- startPartials <- getPartials
+              -- let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
+              -- let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
+              -- let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
 
-      checkSymmetry = do
-        ctx <- asks $ _context . fst
-        let fixedContext = ctx (untyped PHole)
-        if arity typ > 0
-          then do
-              let partialKey = PartialKey fixedContext
-              startPartials <- getPartials
-              let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
-              let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
-              let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
+              -- -- Turn off all qualifiers that abduction might be performed on.
+              -- -- TODO: Find a better way to turn off abduction.
+              -- solverState <- get
+              -- let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
+              -- let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
+              -- typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
 
-              -- Turn off all qualifiers that abduction might be performed on.
-              -- TODO: Find a better way to turn off abduction.
-              solverState <- get
-              let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
-              let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
-              typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
+              -- writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
+              -- writeLog 1 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
 
-              writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
-              writeLog 1 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
+              -- -- Check that pTyp is not a supertype of any prior programs.
+              -- mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
+                               -- ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
+                               -- (\_ -> do
+                                    -- writeLog 1 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
+                                    -- writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
+                                    -- writeLog 1 $ text "Context:" <+> pretty fixedContext
+                                    -- typingState . qualifierMap .= qmap
+                                    -- mzero)
+                               -- (return ())) repeatPartials
 
-              -- Check that pTyp is not a supertype of any prior programs.
-              mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
-                               ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
-                               (\_ -> do
-                                    writeLog 1 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
-                                    writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
-                                    writeLog 1 $ text "Context:" <+> pretty fixedContext
-                                    typingState . qualifierMap .= qmap
-                                    mzero)
-                               (return ())) repeatPartials
+              -- let newCount = 1 + myCount
+              -- let newPartials = Map.insert p (newCount, env) pastPartials
+              -- let newPartialMap = Map.insert partialKey newPartials startPartials
+              -- putPartials newPartialMap
 
-              let newCount = 1 + myCount
-              let newPartials = Map.insert p (newCount, env) pastPartials
-              let newPartialMap = Map.insert partialKey newPartials startPartials
-              putPartials newPartialMap
+              -- typingState . qualifierMap .= qmap
+          -- else return ()
 
-              typingState . qualifierMap .= qmap
-          else return ()
-
-      combineEnv :: Environment -> Environment -> Environment
-      combineEnv env oldEnv =
-        env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
+      -- combineEnv :: Environment -> Environment -> Environment
+      -- combineEnv env oldEnv =
+        -- env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
@@ -461,18 +452,14 @@ enumerateAt env typ 0 = do
     msum $ map pickSymbol symbols'
   where
     pickSymbol (name, sch) = do
-      t <- freshInstance sch
-      let p = Program (PSymbol name) (symbolType env name t)
+      t <- symbolType env name sch
+      let p = Program (PSymbol name) t
       writeLog 1 $ text "Trying" <+> pretty p
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False      
+        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False      
       return (env, p)
-      
-    freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch False [] -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
-      else instantiate env sch True []
 
     soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
@@ -586,14 +573,6 @@ runInSolver f = do
 solveIncrementally :: MonadHorn s => Explorer s ()        
 solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
 
-solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
-solveLocally c = do
-  writeLog 1 (text "Solving Locally" $+$ pretty c)
-  oldTC <- use $ typingState . typingConstraints
-  typingState . typingConstraints .= [c]
-  runInSolver solveTypeConstraints
-  typingState . typingConstraints .= oldTC
-
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
 
@@ -656,14 +635,20 @@ instantiate env sch top argNames = do
       x' <- case argNames of
               [] -> freshVar env "x"
               (argName : _) -> return argName
-      liftM2 (FunctionT x') (go subst pSubst [] tArg) (go subst pSubst (drop 1 argNames) (renameVar (`Map.member` subst) x x' tArg tRes))
-    go subst pSubst _ t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
+      liftM2 (FunctionT x') (go subst pSubst [] tArg) (go subst pSubst (drop 1 argNames) (renameVar (isBoundTV subst) x x' tArg tRes))
+    go subst pSubst _ t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t
+    isBoundTV subst a = (a `Map.member` subst) || (a `elem` (env ^. boundTypeVars))
     
-symbolType env x t@(ScalarT b _)
-  | isLiteral x = t -- x is a literal of a primitive type, it's type is precise
-  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
-  | otherwise = t
-symbolType _ _ t = t
+symbolType :: MonadHorn s => Environment -> Id -> RSchema -> Explorer s RType
+symbolType env x (Monotype t@(ScalarT b _))
+    | isLiteral x = return t -- x is a literal of a primitive type, it's type is precise
+    | isTypeName x = return t -- x is a constructor, it's type is precise 
+    | otherwise = return $ ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
+symbolType env _ sch = freshInstance sch
+  where
+    freshInstance sch = if arity (toMonotype sch) == 0
+      then instantiate env sch False [] -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
+      else instantiate env sch True []
   
 -- | Perform an exploration, and once it succeeds, do not backtrack it  
 cut :: MonadHorn s => Explorer s a -> Explorer s a
