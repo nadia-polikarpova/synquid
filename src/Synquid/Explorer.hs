@@ -19,6 +19,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Char
 import Control.Monad.Logic
 import Control.Monad.State
 import Control.Monad.Reader
@@ -133,7 +134,7 @@ generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (genera
   where
     -- | Guess an E-term and abduce a condition for it
     generateThen = do
-      cUnknown <- Unknown Map.empty <$> freshId "U"
+      cUnknown <- Unknown Map.empty <$> freshId "C"
       addConstraint $ WellFormedCond env cUnknown
       (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
       cond <- conjunction <$> currentValuation cUnknown
@@ -145,7 +146,7 @@ generateElse env t cond pThen = if cond == ftrue
   else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
     pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
     
-    cUnknown <- Unknown Map.empty <$> freshId "U"
+    cUnknown <- Unknown Map.empty <$> freshId "C"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
     ifM (tryEliminateBranching pElse (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty))
@@ -216,7 +217,7 @@ generateFirstCase env scrVar pScrutinee t consName = do
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
 
       ifte  (do -- Try to find a vacuousness condition:
-              deadUnknown <- Unknown Map.empty <$> freshId "U"
+              deadUnknown <- Unknown Map.empty <$> freshId "C"
               addConstraint $ WellFormedCond env deadUnknown
               err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
               deadValuation <- currentValuation deadUnknown
@@ -241,7 +242,7 @@ generateCase env scrVar pScrutinee t consName = do
       (syms, ass) <- caseSymbols env scrVar binders consT'      
       unfoldSyms <- asks $ _unfoldLocals . fst
       
-      cUnknown <- Unknown Map.empty <$> freshId "U"
+      cUnknown <- Unknown Map.empty <$> freshId "C"
       runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton ass) -- Create a fixed-valuation unknown to assume @ass@      
       
       let caseEnv = (if unfoldSyms then unfoldAllVariables else id) $ foldr (uncurry addVariable) (addAssumption cUnknown env) syms
@@ -269,9 +270,9 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
   where
     -- | Guess an E-term and abduce a condition and a match-condition for it
     generateOneBranch = do
-      matchUnknown <- Unknown Map.empty <$> freshId "U"
+      matchUnknown <- Unknown Map.empty <$> freshId "M"
       addConstraint $ WellFormedMatchCond env matchUnknown
-      condUnknown <- Unknown Map.empty <$> freshId "U"
+      condUnknown <- Unknown Map.empty <$> freshId "C"
       addConstraint $ WellFormedCond env condUnknown
       cut $ do
         p0 <- generateEOrError (addAssumption matchUnknown . addAssumption condUnknown $ env) t
@@ -458,7 +459,7 @@ enumerateAt env typ 0 = do
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False      
+        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
       return (env, p)
 
     soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
@@ -573,6 +574,7 @@ runInSolver f = do
 solveIncrementally :: MonadHorn s => Explorer s ()        
 solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
 
+
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
 
@@ -625,7 +627,7 @@ instantiate env sch top argNames = do
       let argSorts' = map (sortSubstitute (asSortSubst subst)) argSorts
       fml <- if top
               then do
-                p' <- freshId "P"
+                p' <- freshId (map toUpper p)
                 addConstraint $ WellFormedPredicate env argSorts' p'
                 return $ Pred BoolS p' (zipWith Var argSorts' deBrujns)
               else return ffalse
