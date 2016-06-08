@@ -44,6 +44,7 @@ main = do
                    log_ 
                    memoize 
                    symmetry
+                   lfp
                    bfs
                    outFormat
                    resolve
@@ -66,6 +67,7 @@ main = do
     _explorerLogLevel = log_
     }
   let solverParams = defaultHornSolverParams {
+    isLeastFixpoint = lfp,
     optimalValuationsStrategy = if bfs then BFSValuations else MarcoValuations,
     solverLogLevel = log_
     }
@@ -104,6 +106,7 @@ data CommandLineArgs
         memoize :: Bool,
         symmetry :: Bool,
         -- | Solver params
+        lfp :: Bool,
         bfs_solver :: Bool,
         -- | Output
         output :: OutputFormat,
@@ -126,9 +129,10 @@ cla = CommandLineArgs {
   partial             = False           &= help ("Generate best-effort partial solutions (default: False)") &= name "p",
   incremental         = True            &= help ("Subtyping checks during bottom-up phase (default: True)"),
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
-  log_                = 0               &= help ("Logger verboseness level (default: 0)"),
+  log_                = 0               &= help ("Logger verboseness level (default: 0)") &= name "l",
   memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
+  lfp                 = False           &= help ("Use least fixpoint solver (only works for type checking, default: False)"),
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
@@ -162,6 +166,7 @@ defaultExplorerParams = ExplorerParams {
 -- | Parameters for constraint solving
 defaultHornSolverParams = HornSolverParams {
   pruneQuals = True,
+  isLeastFixpoint = False,
   optimalValuationsStrategy = MarcoValuations,
   semanticPrune = True,
   agressivePrune = True,
