@@ -312,7 +312,7 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
     case solMb' of
       Nothing -> leastFixPoint extractAssumptions rest -- No way to weaken this candidate, see if there are more
       Just sol' -> do
-                      cand' <- updateCandidate cand sol'
+                      cand' <- updateCandidate fml cand sol'
                       if (Set.null . invalidConstraints) cand'
                         then return $ cand' : rest -- Solution found
                         else leastFixPoint extractAssumptions (cand' : rest)
@@ -326,9 +326,14 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
         else Binary Implies (conjunction $ Set.insert lhs assumptions `Set.union` (Set.map fnot noUnknowns)) (disjunction withUnknowns)
     
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
-    updateCandidate (Candidate _ valids invalids label) sol' = do
-      (newValids, newInvalids) <- setPartitionM (isValidFml . hornApplySolution extractAssumptions sol') $ valids `Set.union` invalids
-      return $ Candidate sol' newValids newInvalids label
+    updateCandidate fml (Candidate sol valids invalids label) sol' = do
+      -- let modifiedUnknowns = Map.keysSet $ Map.differenceWith (\v1 v2 -> if v1 == v2 then Nothing else Just v2) sol sol'
+      let modifiedUnknowns = posUnknowns $ rightHandSide fml
+      let (unaffectedValids, affectedValids) = Set.partition (\fml -> negUnknowns fml `disjoint` modifiedUnknowns) (Set.insert fml valids) -- fml should be re-evaluated if it happens to have the same unknowns also on the right
+      let (unaffectedInvalids, affectedInvalids) = Set.partition (\fml -> posUnknowns fml `disjoint` modifiedUnknowns) (Set.delete fml invalids)
+      (newValids, newInvalids) <- setPartitionM (isValidFml . hornApplySolution extractAssumptions sol') $ affectedValids `Set.union` affectedInvalids
+      return $ Candidate sol' (unaffectedValids `Set.union` newValids) (unaffectedInvalids `Set.union` newInvalids) label
+      
       
     pickConstraint (Candidate sol valids invalids _) strategy = case strategy of
       FirstConstraint -> return $ Set.findMin invalids
