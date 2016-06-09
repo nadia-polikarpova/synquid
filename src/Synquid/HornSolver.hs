@@ -305,7 +305,7 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
     let lhs' = applySolution sol lhs
     let assumptions = extractAssumptions lhs' `Set.union` extractAssumptions (applySolution sol rhs)
     
-    let modifiedConstraint = Binary Implies (conjunction $ Set.insert lhs' assumptions) rhs
+    let modifiedConstraint = modify assumptions lhs' rhs
     
     debugOutput cand fml modifiedConstraint
     solMb' <- weaken modifiedConstraint sol
@@ -316,7 +316,15 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
                       if (Set.null . invalidConstraints) cand'
                         then return $ cand' : rest -- Solution found
                         else leastFixPoint extractAssumptions (cand' : rest)
-  where              
+  where
+    modify assumptions lhs rhs = 
+      let 
+        rDisjuncts = Set.fromList $ uDNF rhs
+        (noUnknowns, withUnknowns) = Set.partition (Set.null . unknownsOf) rDisjuncts
+      in if Set.size withUnknowns > 1
+        then error $ unwords ["Least fixpoint solver got a disjunctive right-hand-side:", show rhs]
+        else Binary Implies (conjunction $ Set.insert lhs assumptions `Set.union` (Set.map fnot noUnknowns)) (disjunction withUnknowns)
+    
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
     updateCandidate (Candidate _ valids invalids label) sol' = do
       (newValids, newInvalids) <- setPartitionM (isValidFml . hornApplySolution extractAssumptions sol') $ valids `Set.union` invalids
@@ -347,13 +355,10 @@ weaken (Binary Implies lhs rhs) sol =
     
     weakenUnknown (Unknown subst u) = do
       let quals = Set.toList (sol Map.! u)
-      -- writeLog 2 (text "isValid" <+> pretty ((Binary Implies lhs (substitute subst q)))) >>
       quals' <- filterM (\q -> isValidFml (Binary Implies lhs (substitute subst q))) quals  
-      -- writeLog 2 (text "survivors" <+> pretty quals')
       return $ (u, Set.fromList quals')
     
-weaken fml _ = error $ unwords ["weaken: encountered ill-formed constraint", show fml]
-        
+weaken fml _ = error $ unwords ["weaken: encountered ill-formed constraint", show fml]        
             
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
 pruneSolutions :: MonadSMT s => [Formula] -> [Solution] -> FixPointSolver s [Solution]
