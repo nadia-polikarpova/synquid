@@ -187,8 +187,11 @@ extractPredQGenFromType env actualParams actualVars t = extractPredQGenFromType'
             let
               pArg' = sortSubstituteFml sortInst pArg
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
-              fmls = Set.toList $ atomsOf pArg'
-            in concatMap (\fml -> allSubstitutions env fml formalVars actualVars [] []) fmls -- Substitute the variables, but leave predicate parameters unchanged (optimization) 
+              atoms = Set.toList $ atomsOf pArg'
+              extractFromAtom atom = 
+                filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
+                allSubstitutions env atom formalVars actualVars [] []              
+            in concatMap extractFromAtom atoms -- Substitute the variables, but leave predicate parameters unchanged (optimization)
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
     extractPredQGenFromType' (FunctionT _ tArg tRes) = extractPredQGenFromType' tArg ++ extractPredQGenFromType' tRes
