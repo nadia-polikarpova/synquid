@@ -35,7 +35,7 @@ reconstruct eParams tParams goal = do
       pAuxs <- reconstructAuxGoals
       runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
       let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
-      runInSolver $ finalizeProgram p      
+      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False >> finalizeProgram p      
 
     reconstructAuxGoals = do
       goals <- use auxGoals
@@ -159,7 +159,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     return $ Program (PLet x pDef pBody) t
   
   PIf (Program PHole AnyT) iThen iElse -> do
-    cUnknown <- Unknown Map.empty <$> freshId "U"
+    cUnknown <- Unknown Map.empty <$> freshId "C"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
     cond <- conjunction <$> currentValuation cUnknown
@@ -176,7 +176,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     
   PMatch iScr iCases -> do
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
-    let scrT = refineTop $ shape $ lastType $ head consTypes
+    let scrT = refineTop env $ shape $ lastType $ head consTypes
     
     (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
     let scrutineeSymbols = symbolList pScrutinee
@@ -248,7 +248,7 @@ reconstructE' env typ (PSymbol name) = do
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False
+        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
       checkE env typ p
       return (env, p)
 reconstructE' env typ (PApp iFun iArg) = do
@@ -261,6 +261,8 @@ reconstructE' env typ (PApp iFun iArg) = do
       d <- asks $ _auxDepth . fst
       pArg <- generateHOArg env' (d - 1) tArg iArg
       return (env', Program (PApp pFun pArg) tRes)
+      -- pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructI env' tArg iArg
+      -- return (env', Program (PApp pFun pArg) tRes)      
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''

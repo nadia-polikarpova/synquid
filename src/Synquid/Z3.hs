@@ -89,7 +89,7 @@ instance MonadSMT Z3State where
   
 convertDatatypes :: Map Id RSchema -> [(Id, DatatypeDef)] -> Z3State ()
 convertDatatypes _ [] = return ()
-convertDatatypes symbols ((dtName, DatatypeDef [] _ ctors@(_:_) _):rest) = do
+convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
   ifM (uses storedDatatypes (Set.member dtName))
     (return ()) -- This datatype has already been processed as a dependency
     (do
