@@ -96,14 +96,13 @@ getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paper
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
+qualifier {_v == paperStatus w pid || _v == NoDecision}
 
 getPaperSession :: w: World -> pid: {PaperId | paperStatus w _v == Accepted} -> Tagged String <{True}>
 
 qualifier {content x == chair w}
 qualifier {content x in paperAuthors w pid}
 qualifier {!(content x in paperConflicts w pid)}
-
-qualifier {_v == paperStatus w pid || _v != Accepted}
 
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World

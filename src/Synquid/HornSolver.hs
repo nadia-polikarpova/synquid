@@ -310,7 +310,9 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
     debugOutput cand fml modifiedConstraint
     solMb' <- weaken modifiedConstraint sol
     case solMb' of
-      Nothing -> leastFixPoint extractAssumptions rest -- No way to weaken this candidate, see if there are more
+      Nothing -> do
+                  writeLog 2 (text "All constraints:" $+$ vsep (map pretty (Set.toList $ validConstraints cand `Set.union` invalidConstraints cand)))
+                  leastFixPoint extractAssumptions rest -- No way to weaken this candidate, see if there are more
       Just sol' -> do
                       cand' <- updateCandidate fml cand sol'
                       if (Set.null . invalidConstraints) cand'

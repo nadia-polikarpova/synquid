@@ -325,10 +325,10 @@ resolveTypeRefinement valueSort fml = do
   let freeTvs = typeVarsOfSort (sortOf fml'') Set.\\ (Set.fromList boundTvs) -- Remaining free type variables
   let resolvedFml = if Set.null freeTvs then fml'' else sortSubstituteFml (constMap freeTvs IntS) fml''   
   
-  boundPreds <- uses (environment . boundPredicates) (Set.fromList . map predSigName)
-  let invalidPreds = negPreds resolvedFml `Set.intersection` boundPreds
-  when (not $ Set.null invalidPreds) $ 
-    throwResError $ text "Bound predicate(s)" <+> commaSep (map text $ Set.toList invalidPreds)<+> text "occur negatively in a refinement" <+> pretty resolvedFml
+  -- boundPreds <- uses (environment . boundPredicates) (Set.fromList . map predSigName)
+  -- let invalidPreds = negPreds resolvedFml `Set.intersection` boundPreds
+  -- when (not $ Set.null invalidPreds) $ 
+    -- throwResError $ text "Bound predicate(s)" <+> commaSep (map text $ Set.toList invalidPreds)<+> text "occur negatively in a refinement" <+> pretty resolvedFml
   return resolvedFml
 
 resolveFormula :: Formula -> Resolver Formula
