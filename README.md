@@ -22,6 +22,12 @@ replicate = \n . \x .
 
 Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.org/citation.cfm?doid=2737924.2738007) and [liquid types](http://dl.acm.org/citation.cfm?doid=1375581.1375602).
 
+## News ##
+
+*June 18, 2016*: [Synquid mode](https://github.com/cpitclaudel/synquid-emacs) for Emacs is now available on MELPA! Thanks to [Clément Pit--Claudel](https://github.com/cpitclaudel)!
+
+*June 16, 2016*: The [Synquid paper](http://people.csail.mit.edu/polikarn/publications/pldi16.pdf) was presented at [PLDI'16](http://conf.researchr.org/home/pldi-2016) in Santa Barbara!
+
 ## Try Synquid ##
 
 * **Try [in your browser](http://comcom.csail.mit.edu/comcom/#Synquid)!**
