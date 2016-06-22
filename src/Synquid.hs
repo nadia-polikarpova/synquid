@@ -143,10 +143,8 @@ cla = CommandLineArgs {
   memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
   lfp                 = False           &= help ("Use least fixpoint solver (only works for type checking, default: False)"),
-  bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
-  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
-  resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)") &= groupname "Solver parameters",
+  resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
   out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
@@ -206,7 +204,7 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
   resolveOnly :: Bool,                         -- ^ Stop after resolution step
-  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
+  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal
   showStats :: Bool                            -- ^ Print specification and solution size
 }
 

@@ -12,6 +12,8 @@ import System.IO
 import Language.Haskell.Syntax
 import Language.Haskell.Pretty
 
+import Synquid.Util
+import Synquid.Type
 import Synquid.Program
 import Synquid.Logic
 import Synquid.Tokens
@@ -104,13 +106,13 @@ instance AsHaskellDecl (Id, DatatypeDef) where
                       |> argTypes |>> HsUnBangedTy
 
 instance AsHaskellDecl (Goal, Program r) where
-  toHsDecl _ (Goal name env _ _ _, p) = HsPatBind unknownLoc
+  toHsDecl _ (Goal name env _ _ _ _, p) = HsPatBind unknownLoc
     (HsPVar $ HsIdent name)            -- lhs (pattern)
     (HsUnGuardedRhs $ toHsExp env p)   -- rhs (expression)
     []                                 -- declarations??
 
 instance AsHaskellDecl Goal where
-  toHsDecl _ (Goal name env spec _ _) = HsTypeSig unknownLoc
+  toHsDecl _ (Goal name env spec _ _ _) = HsTypeSig unknownLoc
     [HsIdent name]
     (toHsQualType env spec)
 
@@ -135,7 +137,7 @@ instance AsHaskellType (BaseType r) where
     foldl HsTyApp typeCtor $ map (toHsType env) tArgs
     where
       typeCtor = HsTyCon $ UnQual $ HsIdent name
-  toHsType env (TypeVarT name) = HsTyVar $ HsIdent name
+  toHsType env (TypeVarT _ name) = HsTyVar $ HsIdent name
 
 instance AsHaskellExp (Program r) where
   toHsExp env (Program term _) = toHsExp env term
