@@ -46,13 +46,14 @@ module Synquid.Pretty (
   -- * Highlighting
   plain,
   errorDoc,
-  errorText,
   -- * Counting
   typeNodeCount,
   programNodeCount
 ) where
 
 import Synquid.Logic
+import Synquid.Type
+import Synquid.Error
 import Synquid.Program
 import Synquid.Tokens
 import Synquid.Util
@@ -119,7 +120,6 @@ vMapDoc keyDoc valDoc m = vsep $ map (entryDoc keyDoc valDoc) (Map.toList m)
 {- Syntax highlighting -}
 
 errorDoc = red
-errorText = errorDoc . text
 keyword = bold . blue . text
 parenDoc = dullwhite
 operator = dullwhite . text
@@ -208,19 +208,20 @@ instance Pretty QMap where
 
 {- Types -}
 
-instance Pretty SBaseType where
-  pretty IntT = text "Int"
-  pretty BoolT = text "Bool"
-  pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
-  pretty (DatatypeT name tArgs pArgs) = text name <+> hsep (map (hlParens . pretty) tArgs) <+> hsep (map (hlAngles . pretty) pArgs)
+prettyBase :: Pretty r => (TypeSkeleton r -> Doc) -> BaseType r -> Doc
+prettyBase prettyType base = case base of 
+  IntT -> text "Int"
+  BoolT -> text "Bool"
+  TypeVarT s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
+  DatatypeT name tArgs pArgs -> text name <+> hsep (map prettyType tArgs) <+> hsep (map (hlAngles . pretty) pArgs)
 
-instance Pretty RBaseType where
-  pretty IntT = text "Int"
-  pretty BoolT = text "Bool"
-  pretty (TypeVarT name) = text name -- if Map.null s then text name else hMapDoc pretty pretty s <> text name
-  pretty (DatatypeT name tArgs pArgs) = text name <+> hsep (map (prettyTypeAt 1) tArgs) <+> hsep (map (hlAngles . pretty) pArgs)
+instance Pretty (BaseType ()) where
+  pretty = prettyBase (hlParens . pretty)
 
-instance Show RBaseType where
+instance Pretty (BaseType Formula) where
+  pretty = prettyBase (prettyTypeAt 1)
+
+instance Show (BaseType Formula) where
   show = show . pretty
 
 prettySType :: SType -> Doc
@@ -259,17 +260,20 @@ prettyTypeAt n t = condHlParens (n' <= n) (
 instance Pretty RType where
   pretty = prettyType
 
+instance Show RType where
+ show = show . pretty
+ 
+prettySchema :: Pretty (TypeSkeleton r) => SchemaSkeleton r -> Doc
+prettySchema sch = case sch of
+  Monotype t -> pretty t
+  ForallT a sch' -> hlAngles (text a) <+> operator "." <+> prettySchema sch'
+  ForallP sig sch' -> pretty sig <+> operator "." <+> prettySchema sch'
+
 instance Pretty SSchema where
-  pretty sch = case sch of
-    Monotype t -> pretty t
-    ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
+  pretty = prettySchema
 
 instance Pretty RSchema where
-  pretty sch = case sch of
-    Monotype t -> pretty t
-    ForallT a sch' -> hlAngles (text a) <+> operator "." <+> pretty sch'
-    ForallP sig sch' -> pretty sig <+> operator "." <+> pretty sch'
+  pretty = prettySchema
 
 {- Programs -}
 
@@ -363,23 +367,20 @@ instance Show Candidate where
   show = show . pretty
 
 instance Pretty Goal where
-  pretty (Goal name env spec impl depth) = pretty env <+> operator "|-" <+> text name <+> operator "::" <+> pretty spec $+$ text name <+> operator "=" <+> pretty impl $+$ parens (text "depth:" <+> pretty depth)
+  pretty (Goal name env spec impl depth _) = pretty env <+> operator "|-" <+> text name <+> operator "::" <+> pretty spec $+$ text name <+> operator "=" <+> pretty impl $+$ parens (text "depth:" <+> pretty depth)
 
 instance Show Goal where
   show = show. pretty
-
-prettySpec g@(Goal name _ _ _ _) = text name <+> operator "::" <+> pretty (unresolvedSpec g)
-prettySolution (Goal name _ _ _ _) prog = text name <+> operator "=" </> pretty prog
+  
+prettySpec g@(Goal name _ _ _ _ _) = text name <+> operator "::" <+> pretty (unresolvedSpec g)
+prettySolution (Goal name _ _ _ _ _) prog = text name <+> operator "=" </> pretty prog
 
 {- Input language -}
 
 instance Pretty ConstructorSig where
   pretty (ConstructorSig name t) = text name <+> text "::" <+> pretty t
 
-instance Pretty PredSig where
-  pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
-
-instance Pretty Declaration where
+instance Pretty BareDeclaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
   pretty (QualifierDecl fmls) = keyword "qualifier" <+> hlBraces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> operator "::" <+> pretty t
@@ -394,6 +395,22 @@ instance Pretty Declaration where
   pretty (SynthesisGoal name impl) = text name <+> operator "=" <+> pretty impl
   pretty (MutualDecl names) = keyword "mutual" <+> commaSep (map text names)
   pretty (InlineDecl name args body) = keyword "inline" <+> text name <+> hsep (map text args) <+> operator "=" <+> pretty body
+  
+instance Pretty a => Pretty (Pos a) where
+  pretty (Pos _ x) = pretty x
+  
+prettyError (ErrorMessage ParseError pos descr) = align $ hang tab $ 
+  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), pretty (sourceColumn pos), text " Parse Error"]) $+$
+  pretty descr    
+prettyError (ErrorMessage ResolutionError pos descr) = hang tab $ 
+  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Resolution Error"]) $+$
+  pretty descr  
+prettyError (ErrorMessage TypeError pos descr) = hang tab $ 
+  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " No Solution. Last candidate failed with error"]) $+$
+  pretty descr
+    
+instance Pretty ErrorMessage where
+  pretty = prettyError        
 
 {- AST node counting -}
 

@@ -2,7 +2,7 @@
 
 -- | Incremental solving of subtyping and well-formedness constraints
 module Synquid.TypeConstraintSolver (
-  TypeError,
+  ErrorMessage,
   TypingParams (..),
   TypingState,
   typingConstraints,
@@ -31,7 +31,9 @@ module Synquid.TypeConstraintSolver (
 ) where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.Pretty
 import Synquid.SolverMonad
 import Synquid.Util
@@ -51,9 +53,6 @@ import Control.Lens hiding (both)
 import Debug.Trace
 
 {- Interface -}
-
--- | Type error description
-type TypeError = Doc
 
 -- | Parameters of type constraint solving
 data TypingParams = TypingParams {
@@ -81,22 +80,22 @@ data TypingState = TypingState {
   _simpleConstraints :: [Constraint],           -- ^ Typing constraints that cannot be simplified anymore and can be converted to horn clauses or qualifier maps
   _hornClauses :: [Formula],                    -- ^ Horn clauses generated from subtyping constraints
   _consistencyChecks :: [Formula],              -- ^ Formulas generated from type consistency constraints
-  _errorContext :: Doc                          -- ^ Information to be added to all type errors
+  _errorContext :: (SourcePos, Doc)             -- ^ Information to be added to all type errors
 }
 
 makeLenses ''TypingState
 
 -- | Computations that solve type constraints, parametrized by the the horn solver @s@
-type TCSolver s = StateT TypingState (ReaderT TypingParams (ExceptT TypeError s))
+type TCSolver s = StateT TypingState (ReaderT TypingParams (ExceptT ErrorMessage s))
 
 -- | 'runTCSolver' @params st go@ : execute a typing computation @go@ with typing parameters @params@ in a typing state @st@
-runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Either TypeError (a, TypingState))
+runTCSolver :: TypingParams -> TypingState -> TCSolver s a -> s (Either ErrorMessage (a, TypingState))
 runTCSolver params st go = runExceptT $ runReaderT (runStateT go st) params  
 
 -- | Initial typing state in the initial environment @env@
 initTypingState :: MonadHorn s => Environment -> s TypingState
 initTypingState env = do
-  initCand <- initHornSolver
+  initCand <- initHornSolver env
   return $ TypingState {
     _typingConstraints = [],
     _typeAssignment = Map.empty,
@@ -105,11 +104,11 @@ initTypingState env = do
     _candidates = [initCand],
     _initEnv = env,
     _idCount = Map.empty,
-    _isFinal = True,
+    _isFinal = False,
     _simpleConstraints = [],
     _hornClauses = [],
     _consistencyChecks = [],
-    _errorContext = empty
+    _errorContext = (noPos, empty)
   }
 
 -- | Impose typing constraint @c@ on the programs
@@ -170,8 +169,10 @@ processAllConstraints = do
     isSubtyping _ = False
   
 -- | Signal type error  
-throwError :: MonadHorn s => TypeError -> TCSolver s ()  
-throwError e = lift $ lift $ throwE e 
+throwError :: MonadHorn s => Doc -> TCSolver s ()  
+throwError msg = do
+  (pos, ec) <- use errorContext
+  lift $ lift $ throwE $ ErrorMessage TypeError pos (msg $+$ ec)
 
 -- | Refine the current liquid assignments using the horn clauses
 solveHornClauses :: MonadHorn s => TCSolver s ()
@@ -182,9 +183,7 @@ solveHornClauses = do
   env <- use initEnv
   cands' <- lift . lift . lift $ refineCandidates clauses qmap (instantiateConsAxioms env) cands
     
-  when (null cands') $ do
-    ec <- use errorContext
-    throwError $ errorText "Cannot find sufficiently strong refinements" $+$ ec
+  when (null cands') (throwError $ text "Cannot find sufficiently strong refinements")
   candidates .= cands'
   
 solveAllCandidates :: MonadHorn s => TCSolver s ()  
@@ -194,7 +193,7 @@ solveAllCandidates = do
   candidates .= cands'
   where
     solveCandidate c@(Candidate s valids invalids _) = 
-      if null invalids
+      if Set.null invalids
         then return [c]
         else do
           qmap <- use qualifierMap
@@ -209,9 +208,7 @@ checkTypeConsistency = do
   cands <- use candidates
   env <- use initEnv  
   cands' <- lift . lift . lift $ checkCandidates True clauses (instantiateConsAxioms env) cands
-  when (null cands') $ do
-    ec <- use errorContext
-    throwError $ errorText "Found inconsistent refinements" $+$ ec
+  when (null cands') (throwError $ text "Found inconsistent refinements")
   candidates .= cands'
 
 -- | Simplify @c@ into a set of simple and shapeless constraints, possibly extended the current type assignment or predicate assignment
@@ -229,15 +226,15 @@ simplifyConstraint' _ _ c@(WellFormed _ AnyT) = return ()
 simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass = return ()
   
 -- Type variable with known assignment: substitute
-simplifyConstraint' tass _ (Subtype env tv@(ScalarT (TypeVarT a) _) t consistent) | a `Map.member` tass
+simplifyConstraint' tass _ (Subtype env tv@(ScalarT (TypeVarT _ a) _) t consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env (typeSubstitute tass tv) t consistent)
-simplifyConstraint' tass _ (Subtype env t tv@(ScalarT (TypeVarT a) _) consistent) | a `Map.member` tass
+simplifyConstraint' tass _ (Subtype env t tv@(ScalarT (TypeVarT _ a) _) consistent) | a `Map.member` tass
   = simplifyConstraint (Subtype env t (typeSubstitute tass tv) consistent)
-simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT a) _)) | a `Map.member` tass
+simplifyConstraint' tass _ (WellFormed env tv@(ScalarT (TypeVarT _ a) _)) | a `Map.member` tass
   = simplifyConstraint (WellFormed env (typeSubstitute tass tv))
   
 -- Two unknown free variables: nothing can be done for now
-simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVarT b) _) _) | not (isBound a env) && not (isBound b env)
+simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) (ScalarT (TypeVarT _ b) _) _) | not (isBound env a) && not (isBound env b)
   = if a == b
       then error $ show $ text "simplifyConstraint: equal type variables on both sides"
       else ifM (use isFinal) 
@@ -245,14 +242,14 @@ simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) (ScalarT (TypeVa
               addTypeAssignment a intAll
               simplifyConstraint c) 
             (modify $ addTypingConstraint c)
-simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT a) _)) | not (isBound a env) 
+simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT _ a) _)) | not (isBound env a) 
   = modify $ addTypingConstraint c
 simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstraint c
   
 -- Unknown free variable and a type: extend type assignment
-simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT a) _) t _) | not (isBound a env) 
+simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) t _) | not (isBound env a) 
   = unify env a t >> simplifyConstraint c
-simplifyConstraint' _ _ c@(Subtype env t (ScalarT (TypeVarT a) _) _) | not (isBound a env) 
+simplifyConstraint' _ _ c@(Subtype env t (ScalarT (TypeVarT _ a) _) _) | not (isBound env a) 
   = unify env a t >> simplifyConstraint c
 
 -- Compound types: decompose
@@ -269,7 +266,7 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
   = do -- TODO: rename type vars
       simplifyConstraint (Subtype env tArg2 tArg1 False)
       if isScalarType tArg1
-        then simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar x y tArg1 tRes1) tRes2 False)
+        then simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar (isBound env) x y tArg1 tRes1) tRes2 False)
         else simplifyConstraint (Subtype env tRes1 tRes2 False)
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True)
   = -- TODO: rename type vars
@@ -291,10 +288,8 @@ simplifyConstraint' _ _ c@(WellFormed _ (ScalarT baseT _)) = simpleConstraints %
 simplifyConstraint' _ _ c@(WellFormedCond _ _) = simpleConstraints %= (c :)
 simplifyConstraint' _ _ c@(WellFormedMatchCond _ _) = simpleConstraints %= (c :)
 -- Otherwise (shape mismatch): fail
-simplifyConstraint' _ _ (Subtype _ t t' _) = do
-  ec <- use errorContext
-  throwError $ errorText "Cannot match shape" <+> squotes (pretty $ shape t) $+$
-               errorText "with shape" <+> squotes (pretty $ shape t') $+$ ec
+simplifyConstraint' _ _ (Subtype _ t t' _) = 
+  throwError $ text  "Cannot match shape" <+> squotes (pretty $ shape t) $+$ text "with shape" <+> squotes (pretty $ shape t')
 
 -- | Unify type variable @a@ with type @t@ or fail if @a@ occurs in @t@
 unify env a t = if a `Set.member` typeVarsOf t
@@ -320,7 +315,7 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       pq <- asks _predQualsGen
       addQuals u (pq (addAllVariables vars env) vars (allScalars env tass))
   where
-    isFreeVariable tass a = not (isBound a env) && not (Map.member a tass)
+    isFreeVariable tass a = not (isBound env a) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
 
 -- | Convert simple constraint to horn clauses and consistency checks, and update qualifier maps
@@ -388,7 +383,8 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
     toFormula (x, Monotype t) = case typeSubstitute tass t of
       ScalarT IntT  (Binary Eq _ (IntLit n)) -> Just $ IntLit n
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
-      ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False      
+      ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False
+      ScalarT (DatatypeT dt [] []) (Binary Eq _ cons@(Cons _ _ [])) -> Just cons
       ScalarT b _ -> Just $ Var (toSort b) x
       _ -> Nothing
     
@@ -456,10 +452,10 @@ freshVar env prefix = do
 
 -- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables, fresh predicate variables, and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType
-fresh env (ScalarT (TypeVarT a) _) | not (isBound a env) = do
+fresh env (ScalarT (TypeVarT vSubst a) _) | not (isBound env a) = do
   -- Free type variable: replace with fresh free type variable
   a' <- freshId "A"
-  return $ ScalarT (TypeVarT a') ftrue
+  return $ ScalarT (TypeVarT vSubst a') ftrue
 fresh env (ScalarT baseT _) = do
   baseT' <- freshBase baseT
   -- Replace refinement with fresh predicate unknown:
@@ -510,9 +506,7 @@ setUnknownRecheck name valuation = do
   env <- use initEnv
   cands'' <- lift . lift . lift $ checkCandidates False (Set.toList clauses) (instantiateConsAxioms env) cands'
     
-  when (null cands'') $ do
-    ec <- use errorContext
-    throwError $ errorText "Re-checking candidates failed" $+$ ec
+  when (null cands'') (throwError $ text "Re-checking candidates failed")
   candidates .= cands''  
   
 -- | 'instantiateConsAxioms' @env fml@ : If @fml@ contains constructor applications, return the set of instantiations of constructor axioms for those applications in the environment @env@ 
@@ -539,7 +533,7 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 
   = do
       writeLog 2 $ text "Matching constructor type" $+$ pretty formal $+$ text "with scrutinee" $+$ pretty actual
-      zipWithM_ (\(ScalarT (TypeVarT a) (BoolLit True)) t -> addTypeAssignment a t) vars args
+      zipWithM_ (\(ScalarT (TypeVarT _ a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'
     
