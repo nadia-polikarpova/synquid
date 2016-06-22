@@ -3,9 +3,11 @@
 module Main where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.Pretty
-import Synquid.Parser (parseFromFile, parseProgram)
+import Synquid.Parser (parseFromFile, parseProgram, toErrorMessage)
 import Synquid.Resolver (resolveDecls)
 import Synquid.SolverMonad
 import Synquid.HornSolver
@@ -44,10 +46,12 @@ main = do
                    consistency
                    memoize
                    symmetry
+                   lfp
                    bfs
                    out_file
                    out_module
                    outFormat
+                   resolve
                    print_spec
                    print_stats
                    log_) <- cmdArgs cla
@@ -68,11 +72,13 @@ main = do
     _explorerLogLevel = log_
     }
   let solverParams = defaultHornSolverParams {
+    isLeastFixpoint = lfp,
     optimalValuationsStrategy = if bfs then BFSValuations else MarcoValuations,
     solverLogLevel = log_
     }
   let synquidParams = defaultSynquidParams {
     outputFormat = outFormat,
+    resolveOnly = resolve,
     showSpec = print_spec,
     showStats = print_stats
   }
@@ -108,11 +114,13 @@ data CommandLineArgs
         memoize :: Bool,
         symmetry :: Bool,
         -- | Solver params
+        lfp :: Bool,
         bfs_solver :: Bool,
         -- | Output
         out_file :: Maybe String,
         out_module :: Maybe String,
         output :: OutputFormat,
+        resolve :: Bool,
         print_spec :: Bool,
         print_stats :: Bool,
         log_ :: Int
@@ -134,6 +142,10 @@ cla = CommandLineArgs {
   consistency         = True            &= help ("Check incomplete application types for consistency (default: True)"),
   memoize             = False           &= help ("Use memoization (default: False)") &= name "z",
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",
+  lfp                 = False           &= help ("Use least fixpoint solver (only works for type checking, default: False)"),
+  bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
+  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
+  resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)") &= groupname "Solver parameters",
   out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
   out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
@@ -162,12 +174,14 @@ defaultExplorerParams = ExplorerParams {
   _useMemoization = False,
   _symmetryReduction = False,
   _context = id,
+  _sourcePos = noPos,
   _explorerLogLevel = 0
 }
 
 -- | Parameters for constraint solving
 defaultHornSolverParams = HornSolverParams {
   pruneQuals = True,
+  isLeastFixpoint = False,
   optimalValuationsStrategy = MarcoValuations,
   semanticPrune = True,
   agressivePrune = True,
@@ -191,12 +205,14 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
-  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal
+  resolveOnly :: Bool,                         -- ^ Stop after resolution step
+  showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
   showStats :: Bool                            -- ^ Print specification and solution size
 }
 
 defaultSynquidParams = SynquidParams {
   outputFormat = Plain,
+  resolveOnly = False,
   showSpec = True,
   showStats = False
 }
@@ -232,11 +248,11 @@ runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParam
 runOnFile synquidParams explorerParams solverParams codegenParams file = do
   parseResult <- parseFromFile parseProgram file
   case parseResult of
-    Left parseErr -> (pdoc $ errorDoc $ text (show parseErr)) >> pdoc empty >> exitFailure
+    Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
     -- Right ast -> print $ vsep $ map pretty ast
     Right decls -> case resolveDecls decls of
-      Left resolutionError -> (pdoc $ errorDoc $ text resolutionError) >> pdoc empty >> exitFailure
-      Right (goals, cquals, tquals) -> do
+      Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
+      Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
         results <- mapM (synthesizeGoal cquals tquals) goals
         when (not (null results) && showStats synquidParams) $ printStats results
         -- Generate output if requested
@@ -251,11 +267,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file = do
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
-        Left err -> pdoc (errorDoc $ text "No solution. Last candidate failed with error:\n")
-                    >> pdoc empty
-                    >> pdoc err
-                    >> pdoc empty
-                    >> exitFailure
+        Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
           pdoc empty

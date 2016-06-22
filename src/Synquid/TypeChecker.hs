@@ -2,7 +2,9 @@
 module Synquid.TypeChecker where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import Synquid.Explorer
@@ -23,15 +25,15 @@ import Control.Lens
 
 -- | 'reconstruct' @eParams tParams goal@ : reconstruct missing types and terms in the body of @goal@ so that it represents a valid type judgment;
 -- return a type error if that is impossible
-reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either TypeError RProgram)
+reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either ErrorMessage RProgram)
 reconstruct eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
-    runExplorer eParams tParams initTS go
+    runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
       pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
       pAuxs <- reconstructAuxGoals
-      -- let p = foldr (\(x, e1) e2 -> Program (PLet x e1 e2) (typeOf e2)) pMain pAuxs
+      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
       let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
       runInSolver $ finalizeProgram p      
 
@@ -51,13 +53,13 @@ reconstruct eParams tParams goal = do
             return $ (gName g, p) : rest    
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
-reconstructTopLevel (Goal funName env (ForallT a sch) impl depth) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth)
-reconstructTopLevel (Goal funName env (ForallP sig sch) impl depth) = reconstructTopLevel (Goal funName (addBoundPredicate sig env) sch impl depth)
-reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth) = local (set (_1 . auxDepth) depth) $ reconstructFix
+reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos)
+reconstructTopLevel (Goal funName env (ForallP sig sch) impl depth pos) = reconstructTopLevel (Goal funName (addBoundPredicate sig env) sch impl depth pos)
+reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _) = local (set (_1 . auxDepth) depth) $ reconstructFix
   where
     reconstructFix = do
-      let typ' = renameAsImpl impl typ
-      recCalls <- recursiveCalls typ'
+      let typ' = renameAsImpl (isBound env) impl typ
+      recCalls <- runInSolver (currentAssignment typ') >>= recursiveCalls
       polymorphic <- asks $ _polyRecursion . fst
       predPolymorphic <- asks $ _predPolyRecursion . fst
       let tvs = env ^. boundTypeVars
@@ -90,7 +92,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
         Just (argLt, argLe) -> do
           y <- freshVar env "x"
           let yForVal = Map.singleton valueVarName (Var (toSort $ baseTypeOf tArg) y)
-          (tRes', seenLast) <- recursiveTypeTuple (renameVar x y tArg tRes) (fml `orClean` substitute yForVal argLt)
+          (tRes', seenLast) <- recursiveTypeTuple (renameVar (isBound env) x y tArg tRes) (fml `orClean` substitute yForVal argLt)
           if seenLast
             then return (FunctionT y (addRefinement tArg argLe) tRes', True) -- already encountered the last recursible argument: add a nonstrict termination refinement to the current one
             -- else return (FunctionT y (addRefinement tArg (fml `orClean` argLt)) tRes', True) -- this is the last recursible argument: add the disjunction of strict termination refinements
@@ -105,7 +107,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
         Nothing -> FunctionT x tArg <$> recursiveTypeFirst tRes
         Just (argLt, _) -> do
           y <- freshVar env "x"
-          return $ FunctionT y (addRefinement tArg argLt) (renameVar x y tArg tRes)
+          return $ FunctionT y (addRefinement tArg argLt) (renameVar (isBound env) x y tArg tRes)
     recursiveTypeFirst t = return t
 
     -- | If argument is recursible, return its strict and non-strict termination refinements, otherwise @Nothing@
@@ -120,7 +122,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
                               metric (Var argSort valueVarName) |>=| IntLit 0  |&| metric (Var argSort valueVarName) |<=| metric (Var argSort argName))
     terminationRefinement _ _ = Nothing
 
-reconstructTopLevel (Goal _ env (Monotype t) impl depth) = local (set (_1 . auxDepth) depth) $ reconstructI env t impl
+reconstructTopLevel (Goal _ env (Monotype t) impl depth _) = local (set (_1 . auxDepth) depth) $ reconstructI env t impl
 
 -- | 'reconstructI' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is a (possibly) introduction term
 -- (top-down phase of bidirectional reconstruction)
@@ -137,19 +139,19 @@ reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-le
   let ctx = \p -> Program (PLet x uHole p) t
   pBody <- inContext ctx $ reconstructI env t iBody
   return $ ctx pBody
-reconstructI' env t@(FunctionT x tArg tRes) impl = case impl of 
+reconstructI' env t@(FunctionT _ tArg tRes) impl = case impl of 
   PFun y impl -> do
     let ctx = \p -> Program (PFun y p) t
-    pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) (renameVar x y tArg tRes) impl
+    pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
     return $ ctx pBody
   PSymbol f -> do
     fun <- etaExpand t f
     reconstructI' env t $ content fun
-  _ -> throwError $ errorText "Cannot assign function type" </> squotes (pretty t) </>
-                    errorText "to non-lambda term" </> squotes (pretty $ untyped impl)
+  _ -> throwErrorWithDescription $ text "Cannot assign function type" </> squotes (pretty t) </>
+                    text "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of
-  PFun _ _ -> throwError $ errorText "Cannot assign non-function type" </> squotes (pretty t) </>
-                           errorText "to lambda term" </> squotes (pretty $ untyped impl)
+  PFun _ _ -> throwErrorWithDescription $ text "Cannot assign non-function type" </> squotes (pretty t) </>
+                           text "to lambda term" </> squotes (pretty $ untyped impl)
                            
   PLet x iDef iBody -> do -- E-term let (since lambda-let was considered before)
     (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
@@ -180,7 +182,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     let scrutineeSymbols = symbolList pScrutinee
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
-    when (not isGoodScrutinee) $ throwError $ errorText "Match scrutinee" </> squotes (pretty pScrutinee) </> errorText "is constant"
+    when (not isGoodScrutinee) $ throwErrorWithDescription $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
             
     (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
     pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
@@ -191,30 +193,29 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
   where
     -- Check that all constructors are known and belong to the same datatype
     checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
-      Nothing -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
+      Nothing -> throwErrorWithDescription $ text "Not in scope: data constructor" </> squotes (text consName)
       Just consSch -> do
-                        consT <- renameAsImpl (foldr (\x p -> untyped $ PFun x p) uHole args) 
-                                    <$> instantiate env consSch True -- Set argument names in constructor type to user-provided binders
+                        consT <- instantiate env consSch True args -- Set argument names in constructor type to user-provided binders
                         case lastType consT of
                           (ScalarT (DatatypeT dtName _ _) _) -> do
                             case mName of
                               Nothing -> return ()                            
                               Just name -> if dtName == name
                                              then return ()
-                                             else throwError $ errorText "Expected constructor of datatype" </> squotes (text name) </> 
-                                                               errorText "and got constructor" </> squotes (text consName) </> 
-                                                               errorText "of datatype" </> squotes (text dtName)
+                                             else throwErrorWithDescription $ text "Expected constructor of datatype" </> squotes (text name) </> 
+                                                               text "and got constructor" </> squotes (text consName) </> 
+                                                               text "of datatype" </> squotes (text dtName)
                             if arity (toMonotype consSch) /= length args 
-                              then throwError $ errorText "Constructor" </> squotes (text consName)
-                                            </> errorText "expected" </> pretty (arity (toMonotype consSch)) </> errorText "binder(s) and got" <+> pretty (length args)
+                              then throwErrorWithDescription $ text "Constructor" </> squotes (text consName)
+                                            </> text "expected" </> pretty (arity (toMonotype consSch)) </> text "binder(s) and got" <+> pretty (length args)
                               else ((consName, consT) :) <$> checkCases (Just dtName) cs
-                          _ -> throwError $ errorText "Not in scope: data constructor" </> squotes (text consName)
+                          _ -> throwErrorWithDescription $ text "Not in scope: data constructor" </> squotes (text consName)
     checkCases _ [] = return []
   
 reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $ do  
   runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
   consT' <- runInSolver $ currentAssignment consT
-  (syms, ass) <- caseSymbols scrVar args consT'
+  (syms, ass) <- caseSymbols env scrVar args consT'
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
   pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) $
                inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
@@ -226,8 +227,7 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
 reconstructETopLevel env t impl = do
   (finalEnv, Program pTerm pTyp) <- reconstructE env t impl
-  pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
-  cleanupTypeVars
+  pTyp' <- runInSolver $ currentAssignment pTyp
   return (finalEnv, Program pTerm pTyp')
 
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
@@ -241,20 +241,16 @@ reconstructE' env typ PHole = do
   generateEUpTo env typ d
 reconstructE' env typ (PSymbol name) = do
   case lookupSymbol name (arity typ) env of
-    Nothing -> throwError $ errorText "Not in scope:" </> text name
+    Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
     Just sch -> do
-      t <- freshInstance sch
-      let p = Program (PSymbol name) (symbolType env name t)
+      t <- symbolType env name sch
+      let p = Program (PSymbol name) t
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False
+        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False
       checkE env typ p
       return (env, p)
-  where    
-    freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch False -- This is a nullary constructor of a polymorphic type: it's safe to instantiate it with bottom refinements
-      else instantiate env sch True
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
@@ -268,7 +264,7 @@ reconstructE' env typ (PApp iFun iArg) = do
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
-      return (env''', Program (PApp pFun pArg) (substituteInType (Map.singleton x y) tRes))
+      return (env''', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x y) tRes))
   checkE envfinal typ pApp
   return (envfinal, pApp)
   where
@@ -280,12 +276,13 @@ reconstructE' env typ (PApp iFun iArg) = do
                       impl <- etaExpand tArg f
                       _ <- enqueueGoal env tArg impl d
                       return ()
-          Just (env', def) -> auxGoals %= ((Goal f env' (Monotype tArg) def d ) :) -- This is a locally defined function: add an aux goal with its body
+          Just (env', def) -> auxGoals %= ((Goal f env' (Monotype tArg) def d noPos) :) -- This is a locally defined function: add an aux goal with its body
         return iArg
       _ -> enqueueGoal env tArg iArg d -- HO argument is an abstraction: enqueue a fresh goal              
       
-reconstructE' env typ impl = throwError $ errorText "Expected application term of type" </> squotes (pretty typ) </>
-                                          errorText "and got" </> squotes (pretty $ untyped impl)
+reconstructE' env typ impl = do
+  throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
+                                          text "and got" </> squotes (pretty $ untyped impl)
     
 -- | 'checkAnnotation' @env t t' p@ : if user annotation @t'@ for program @p@ is a subtype of the goal type @t@,
 -- return resolved @t'@, otherwise fail
@@ -293,20 +290,21 @@ checkAnnotation :: MonadHorn s => Environment -> RType -> RType -> BareProgram R
 checkAnnotation env t t' p = do
   tass <- use (typingState . typeAssignment)
   case resolveRefinedType (typeSubstituteEnv tass env) t' of
-    Left err -> throwError $ errorText err
+    Left err -> throwError err
     Right t'' -> do
       ctx <- asks $ _context . fst
-      writeLog 1 $ errorText "Checking consistency of type annotation" <+> pretty t'' <+> errorText "with" <+> pretty t <+> errorText "in" $+$ pretty (ctx (Program p t''))
+      writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
       addConstraint $ Subtype env t'' t True
       
       fT <- runInSolver $ finalizeType t
       fT'' <- runInSolver $ finalizeType t''
-      typingState . errorContext .= errorText "when checking consistency of type annotation" </> pretty fT'' </> errorText "with" </> pretty fT </> errorText "in" $+$ pretty (ctx (Program p t''))
+      pos <- asks $ _sourcePos . fst  
+      typingState . errorContext .= (pos, text "when checking consistency of type annotation" </> pretty fT'' </> text "with" </> pretty fT </> text "in" $+$ pretty (ctx (Program p t'')))
       solveIncrementally
-      typingState . errorContext .= empty
+      typingState . errorContext .= (noPos, empty)
       
       tass' <- use (typingState . typeAssignment)
-      return $ intersection t'' (typeSubstitute tass' t)
+      return $ intersection (isBound env) t'' (typeSubstitute tass' t)
           
 -- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
 -- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."

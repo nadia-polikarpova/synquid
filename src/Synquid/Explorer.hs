@@ -4,7 +4,9 @@
 module Synquid.Explorer where
 
 import Synquid.Logic
+import Synquid.Type
 import Synquid.Program
+import Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import qualified Synquid.TypeConstraintSolver as TCSolver (freshId, freshVar)
@@ -53,6 +55,7 @@ data ExplorerParams = ExplorerParams {
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging and symmetry reduction)
   _useMemoization :: Bool,                -- ^ Should enumerated terms be memoized?
   _symmetryReduction :: Bool,             -- ^ Should partial applications be memoized to check for redundancy?
+  _sourcePos :: SourcePos,                -- ^ Source position of the current goal
   _explorerLogLevel :: Int                -- ^ How verbose logging is
 } 
 
@@ -93,7 +96,7 @@ type PartialMemo = Map PartialKey (Map RProgram (Int, Environment))
 data PersistentState = PersistentState {
   _termMemo :: Memo,
   _partialFailures :: PartialMemo,
-  _typeErrors :: [TypeError]
+  _typeErrors :: [ErrorMessage]
 }
 
 makeLenses ''PersistentState
@@ -102,11 +105,11 @@ makeLenses ''PersistentState
 type Explorer s = StateT ExplorerState (ReaderT (ExplorerParams, TypingParams) (LogicT (StateT PersistentState s)))
 
 -- | 'runExplorer' @eParams tParams initTS go@ : execute exploration @go@ with explorer parameters @eParams@, typing parameters @tParams@ in typing state @initTS@
-runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either TypeError a)
+runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> TypingState -> Explorer s a -> s (Either ErrorMessage a)
 runExplorer eParams tParams initTS go = do
   (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go initExplorerState) (eParams, tParams)) (PersistentState Map.empty Map.empty [])
   case ress of
-    [] -> return $ Left $ if null errs then text "No solution" else head errs
+    [] -> return $ Left $ head errs
     (res : _) -> return $ Right res
   where
     initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty
@@ -205,11 +208,11 @@ generateFirstCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- instantiate env consSch True
+      consT <- instantiate env consSch True []
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshVar env "x")
-      (syms, ass) <- caseSymbols scrVar binders consT'
+      (syms, ass) <- caseSymbols env scrVar binders consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
 
       ifte  (do -- Try to find a vacuousness condition:
@@ -231,11 +234,11 @@ generateCase env scrVar pScrutinee t consName = do
   case Map.lookup consName (allSymbols env) of
     Nothing -> error $ show $ text "Datatype constructor" <+> text consName <+> text "not found in the environment" <+> pretty env
     Just consSch -> do
-      consT <- instantiate env consSch True
+      consT <- instantiate env consSch True []
       runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
       consT' <- runInSolver $ currentAssignment consT
       binders <- replicateM (arity consT') (freshVar env "x")
-      (syms, ass) <- caseSymbols scrVar binders consT'      
+      (syms, ass) <- caseSymbols env scrVar binders consT'      
       unfoldSyms <- asks $ _unfoldLocals . fst
       
       cUnknown <- Unknown Map.empty <$> freshId "U"
@@ -254,10 +257,10 @@ generateCase env scrVar pScrutinee t consName = do
 
 -- | 'caseSymbols' @scrutinee binders consT@: a pair that contains (1) a list of bindings of @binders@ to argument types of @consT@
 -- and (2) a formula that is the return type of @consT@ applied to @scrutinee@
-caseSymbols x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
+caseSymbols env x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
   return ([], subst fml)
-caseSymbols x (name : names) (FunctionT y tArg tRes) = do
-  (syms, ass) <- caseSymbols x names (renameVar y name tArg tRes)
+caseSymbols env x (name : names) (FunctionT y tArg tRes) = do
+  (syms, ass) <- caseSymbols env x names (renameVar (isBound env) y name tArg tRes)
   return ((name, tArg) : syms, ass)  
 
 -- | Generate a possibly conditional possibly match term, depending on which conditions are abduced
@@ -317,8 +320,7 @@ generateE :: MonadHorn s => Environment -> RType -> Explorer s (Environment, RPr
 generateE env typ = do
   d <- asks $ _eGuessDepth . fst
   (finalEnv, Program pTerm pTyp) <- generateEUpTo env typ d
-  pTyp' <- runInSolver $ solveTypeConstraints >> currentAssignment pTyp
-  cleanupTypeVars
+  pTyp' <- runInSolver $ currentAssignment pTyp
   pTerm' <- addLambdaLets pTyp' (Program pTerm pTyp')
   return (finalEnv, pTerm')
   where
@@ -326,19 +328,6 @@ generateE env typ = do
       newGoals <- use newAuxGoals      
       newAuxGoals .= []
       return $ foldr (\f p -> Program (PLet f uHole p) t) body newGoals
-
-
--- | Forget free type variables, which cannot escape an E-term
--- (after substituting outstanding auxiliary goals)
-cleanupTypeVars :: MonadHorn s => Explorer s ()  
-cleanupTypeVars = do
-  goals <- use auxGoals >>= mapM goalSubstituteTypes
-  auxGoals .= goals
-  runInSolver $ typeAssignment .= Map.empty
-  where
-    goalSubstituteTypes g = do
-      spec' <- runInSolver $ currentAssignment (toMonotype $ gSpec g)
-      return g { gSpec = Monotype spec' }      
   
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
 generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
@@ -394,72 +383,64 @@ checkE env typ p@(Program pTerm pTyp) = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
-  ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
+  -- ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
   
   addConstraint $ Subtype env pTyp typ False
   when (arity typ > 0) $
     ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
   fTyp <- runInSolver $ finalizeType typ
-  typingState . errorContext .= errorText "when checking" </> pretty p </> text "::" </> pretty fTyp </> errorText "in" $+$ pretty (ctx p)  
+  pos <- asks $ _sourcePos . fst
+  typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
   solveIncrementally
-  typingState . errorContext .= empty
+  typingState . errorContext .= (noPos, empty)
     where      
       unknownId :: Formula -> Maybe Id
       unknownId (Unknown _ i) = Just i
       unknownId _ = Nothing
 
-      areTypesEqual :: MonadHorn s => Environment -> RType -> RType -> Explorer s ()
-      areTypesEqual env t1 t2 = do
-        writeLog 1 (text "Solving Type Equality" $+$ pretty t1 $+$ pretty t2)
-        oldTC <- use $ typingState . typingConstraints
-        addConstraint $ Subtype env t1 t2 False 
-        addConstraint $ Subtype env t2 t1 False
-        runInSolver solveTypeConstraints
-        typingState . typingConstraints .= oldTC
+      -- checkSymmetry = do
+        -- ctx <- asks $ _context . fst
+        -- let fixedContext = ctx (untyped PHole)
+        -- if arity typ > 0
+          -- then do
+              -- let partialKey = PartialKey fixedContext
+              -- startPartials <- getPartials
+              -- let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
+              -- let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
+              -- let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
 
-      checkSymmetry = do
-        ctx <- asks $ _context . fst
-        let fixedContext = ctx (untyped PHole)
-        if arity typ > 0
-          then do
-              let partialKey = PartialKey fixedContext
-              startPartials <- getPartials
-              let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
-              let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
-              let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
+              -- -- Turn off all qualifiers that abduction might be performed on.
+              -- -- TODO: Find a better way to turn off abduction.
+              -- solverState <- get
+              -- let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
+              -- let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
+              -- typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
 
-              -- Turn off all qualifiers that abduction might be performed on.
-              -- TODO: Find a better way to turn off abduction.
-              solverState <- get
-              let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
-              let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
-              typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
+              -- writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
+              -- writeLog 1 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
 
-              writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
-              writeLog 1 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
+              -- -- Check that pTyp is not a supertype of any prior programs.
+              -- mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
+                               -- ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
+                               -- (\_ -> do
+                                    -- writeLog 1 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
+                                    -- writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
+                                    -- writeLog 1 $ text "Context:" <+> pretty fixedContext
+                                    -- typingState . qualifierMap .= qmap
+                                    -- mzero)
+                               -- (return ())) repeatPartials
 
-              -- Check that pTyp is not a supertype of any prior programs.
-              mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
-                               ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
-                               (\_ -> do
-                                    writeLog 1 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
-                                    writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
-                                    writeLog 1 $ text "Context:" <+> pretty fixedContext
-                                    typingState . qualifierMap .= qmap
-                                    mzero)
-                               (return ())) repeatPartials
+              -- let newCount = 1 + myCount
+              -- let newPartials = Map.insert p (newCount, env) pastPartials
+              -- let newPartialMap = Map.insert partialKey newPartials startPartials
+              -- putPartials newPartialMap
 
-              let newCount = 1 + myCount
-              let newPartials = Map.insert p (newCount, env) pastPartials
-              let newPartialMap = Map.insert partialKey newPartials startPartials
-              putPartials newPartialMap
+              -- typingState . qualifierMap .= qmap
+          -- else return ()
 
-              typingState . qualifierMap .= qmap
-          else return ()
-
-      combineEnv :: Environment -> Environment -> Environment
-      combineEnv env oldEnv =
-        env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
+      -- combineEnv :: Environment -> Environment -> Environment
+      -- combineEnv env oldEnv =
+        -- env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
 enumerateAt env typ 0 = do
@@ -471,18 +452,14 @@ enumerateAt env typ 0 = do
     msum $ map pickSymbol symbols'
   where
     pickSymbol (name, sch) = do
-      t <- freshInstance sch
-      let p = Program (PSymbol name) (symbolType env name t)
+      t <- symbolType env name sch
+      let p = Program (PSymbol name) t
       writeLog 1 $ text "Trying" <+> pretty p
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> solveLocally $ Subtype env (refineBot $ shape t) (refineTop sc) False      
+        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False      
       return (env, p)
-      
-    freshInstance sch = if arity (toMonotype sch) == 0
-      then instantiate env sch False -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
-      else instantiate env sch True
 
     soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
       in if length ctors == 1
@@ -519,7 +496,7 @@ enumerateAt env typ d = do
                             $ mbCut (genArg env' tArg)
           writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
-          return (env''', Program (PApp fun arg) (substituteInType (Map.singleton x y) tRes))
+          return (env''', Program (PApp fun arg) (substituteInType (isBound env) (Map.singleton x y) tRes))
       return (envfinal, pApp)
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)      
@@ -529,9 +506,10 @@ generateError env = do
   writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
   tass <- use (typingState . typeAssignment)
   addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env tass)) (int ffalse) False
-  typingState . errorContext .= errorText "when checking" </> pretty errorProgram </> errorText "in" $+$ pretty (ctx errorProgram)
+  pos <- asks $ _sourcePos . fst  
+  typingState . errorContext .= (pos, text "when checking" </> pretty errorProgram </> text "in" $+$ pretty (ctx errorProgram))
   runInSolver solveTypeConstraints
-  typingState . errorContext .= empty
+  typingState . errorContext .= (noPos, empty)
   return errorProgram
   where
     trivial var = var |=| var
@@ -546,7 +524,7 @@ toVar p@(Program _ t) env = do
 
 enqueueGoal env typ impl depth = do
   g <- freshVar env "f"
-  auxGoals %= ((Goal g env (Monotype typ) impl depth) :)
+  auxGoals %= ((Goal g env (Monotype typ) impl depth noPos) :)
   return $ Program (PSymbol g) typ
 
 {- Utility -}
@@ -565,10 +543,15 @@ getPartials = lift . lift . lift $ use partialFailures
 putPartials :: MonadHorn s => PartialMemo -> Explorer s ()
 putPartials partials = lift . lift . lift $ partialFailures .= partials
 
+throwErrorWithDescription :: MonadHorn s => Doc -> Explorer s a   
+throwErrorWithDescription msg = do
+  pos <- asks $ _sourcePos . fst
+  throwError $ ErrorMessage TypeError pos msg
+
 -- | Record type error and backtrack
-throwError :: MonadHorn s => TypeError -> Explorer s a  
+throwError :: MonadHorn s => ErrorMessage -> Explorer s a  
 throwError e = do
-  writeLog 1 $ text "TYPE ERROR:" <+> plain e
+  writeLog 1 $ text "TYPE ERROR:" <+> plain (emDescription e)
   lift . lift . lift $ typeErrors %= (e :)
   mzero
   
@@ -588,15 +571,7 @@ runInSolver f = do
       return res
       
 solveIncrementally :: MonadHorn s => Explorer s ()        
-solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver $ isFinal .= False >> solveTypeConstraints >> isFinal .= True) (return ())
-
-solveLocally :: MonadHorn s => Constraint -> Explorer s ()  
-solveLocally c = do
-  writeLog 1 (text "Solving Locally" $+$ pretty c)
-  oldTC <- use $ typingState . typingConstraints
-  addConstraint c
-  runInSolver solveTypeConstraints
-  typingState . typingConstraints .= oldTC
+solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
 
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
@@ -636,8 +611,8 @@ inContext ctx f = local (over (_1 . context) (. ctx)) f
     
 -- | Replace all bound type and predicate variables with fresh free variables
 -- (if @top@ is @False@, instantiate with bottom refinements instead of top refinements)
-instantiate :: MonadHorn s => Environment -> RSchema -> Bool -> Explorer s RType
-instantiate env sch top = do
+instantiate :: MonadHorn s => Environment -> RSchema -> Bool -> [Id] -> Explorer s RType
+instantiate env sch top argNames = do
   t <- instantiate' Map.empty Map.empty sch
   writeLog 2 (text "INSTANTIATE" <+> pretty sch $+$ text "INTO" <+> pretty t)
   return t
@@ -655,17 +630,25 @@ instantiate env sch top = do
                 return $ Pred BoolS p' (zipWith Var argSorts' deBrujns)
               else return ffalse
       instantiate' subst (Map.insert p fml pSubst) sch        
-    instantiate' subst pSubst (Monotype t) = go subst pSubst t
-    go subst pSubst (FunctionT x tArg tRes) = do
-      x' <- freshVar env "x"
-      liftM2 (FunctionT x') (go subst pSubst tArg) (go subst pSubst (renameVar x x' tArg tRes))
-    go subst pSubst t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t  
+    instantiate' subst pSubst (Monotype t) = go subst pSubst argNames t
+    go subst pSubst argNames (FunctionT x tArg tRes) = do
+      x' <- case argNames of
+              [] -> freshVar env "x"
+              (argName : _) -> return argName
+      liftM2 (FunctionT x') (go subst pSubst [] tArg) (go subst pSubst (drop 1 argNames) (renameVar (isBoundTV subst) x x' tArg tRes))
+    go subst pSubst _ t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t
+    isBoundTV subst a = (a `Map.member` subst) || (a `elem` (env ^. boundTypeVars))
     
-symbolType env x t@(ScalarT b _)
-  | isLiteral x = t -- x is a literal of a primitive type, it's type is precise
-  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
-  | otherwise = t
-symbolType _ _ t = t
+symbolType :: MonadHorn s => Environment -> Id -> RSchema -> Explorer s RType
+symbolType env x (Monotype t@(ScalarT b _))
+    | isLiteral x = return t -- x is a literal of a primitive type, it's type is precise
+    | isTypeName x = return t -- x is a constructor, it's type is precise 
+    | otherwise = return $ ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
+symbolType env _ sch = freshInstance sch
+  where
+    freshInstance sch = if arity (toMonotype sch) == 0
+      then instantiate env sch False [] -- Nullary polymorphic function: it is safe to instantiate it with bottom refinements, since nothing can force the refinements to be weaker
+      else instantiate env sch True []
   
 -- | Perform an exploration, and once it succeeds, do not backtrack it  
 cut :: MonadHorn s => Explorer s a -> Explorer s a
