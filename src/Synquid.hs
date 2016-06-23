@@ -48,6 +48,7 @@ main = do
                    bfs
                    outFormat
                    resolve
+                   repair
                    print_spec
                    print_stats) <- cmdArgs cla
   let explorerParams = defaultExplorerParams {
@@ -74,6 +75,7 @@ main = do
   let synquidParams = defaultSynquidParams {
     outputFormat = outFormat,
     resolveOnly = resolve,
+    repairPolicies = repair,
     showSpec = print_spec,
     showStats = print_stats
   }
@@ -111,6 +113,7 @@ data CommandLineArgs
         -- | Output
         output :: OutputFormat,
         resolve :: Bool,
+        repair :: Bool,
         print_spec :: Bool,
         print_stats :: Bool
       }
@@ -136,6 +139,7 @@ cla = CommandLineArgs {
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")"),
   resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
+  repair              = False           &= help ("Policy repair mode (default: False)") &= name "r",
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
   print_stats         = False           &= help ("Show specification and solution size (default: False)")
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
@@ -191,6 +195,7 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
   resolveOnly :: Bool,                         -- ^ Stop after resolution step
+  repairPolicies :: Bool,
   showSpec :: Bool,                            -- ^ Print specification for every synthesis goal 
   showStats :: Bool                            -- ^ Print specification and solution size
 }
@@ -198,6 +203,7 @@ data SynquidParams = SynquidParams {
 defaultSynquidParams = SynquidParams {
   outputFormat = Plain,
   resolveOnly = False,
+  repairPolicies = False,
   showSpec = True,
   showStats = False
 }
@@ -222,7 +228,9 @@ runOnFile synquidParams explorerParams solverParams file = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
-      mProg <- synthesize explorerParams solverParams goal cquals tquals
+      mProg <- if repairPolicies synquidParams  
+                then policyRepair explorerParams solverParams { isLeastFixpoint = True} goal cquals tquals
+                else synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do

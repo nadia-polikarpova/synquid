@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, addAllVariables, ResolverState (..)) where
+module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, addAllVariables, ResolverState (..), instantiateSorts) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -77,10 +77,13 @@ resolveDecls declarations =
       pass decl
       
 resolveRefinement :: Environment -> Formula -> Either ErrorMessage Formula
-resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env})) --, _fmlSubstitution = subst}))
+resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env}))
 
 resolveRefinedType :: Environment -> RType -> Either ErrorMessage RType
 resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
+
+instantiateSorts :: [Sort] -> [Sort]
+instantiateSorts sorts = fromRight $ runExcept (evalStateT (instantiate sorts) (initResolverState))
 
 addAllVariables :: [Formula] -> Environment -> Environment
 addAllVariables = flip (foldr (\(Var s x) -> addVariable x (fromSort s)))
