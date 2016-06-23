@@ -67,7 +67,7 @@ data ExplorerState = ExplorerState {
   _typingState :: TypingState,                     -- ^ Type-checking state
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
   _newAuxGoals :: [Id],                            -- ^ Higher-order arguments that have been synthesized but not yet let-bound
-  _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local function bindings to be checked upon use (in type checking mode)  
+  _letBindings :: Map Id (Environment, UProgram),  -- ^ Local bindings to be checked upon use (in type checking mode)  
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
@@ -394,10 +394,10 @@ checkE env typ p@(Program pTerm pTyp) = do
   typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
   solveIncrementally
   typingState . errorContext .= (noPos, empty)
-    where      
-      unknownId :: Formula -> Maybe Id
-      unknownId (Unknown _ i) = Just i
-      unknownId _ = Nothing
+    -- where      
+      -- unknownId :: Formula -> Maybe Id
+      -- unknownId (Unknown _ i) = Just i
+      -- unknownId _ = Nothing
 
       -- checkSymmetry = do
         -- ctx <- asks $ _context . fst
