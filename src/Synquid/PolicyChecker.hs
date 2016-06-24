@@ -31,12 +31,16 @@ reconstruct eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
-      pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
-      pAuxs <- reconstructAuxGoals
+      p <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
       -- runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
-      let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
+      -- p <- fillInAuxGoals pMain
       runInSolver $ finalizeProgram p      
 
+fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
+fillInAuxGoals pMain = do
+  pAuxs <- reconstructAuxGoals
+  return $ foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
+  where
     reconstructAuxGoals = do
       goals <- use auxGoals
       writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
@@ -44,11 +48,11 @@ reconstruct eParams tParams goal = do
         [] -> return []
         (g : gs) -> do
             auxGoals .= gs
-            let g' = g {
-                          gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
-                       }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
-            p <- reconstructTopLevel g'
+            -- let g' = g {
+                          -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
+                       -- }
+            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g
+            p <- reconstructTopLevel g
             rest <- reconstructAuxGoals
             return $ (gName g, p) : rest    
     
@@ -214,7 +218,11 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 -- (bottom-up phase of bidirectional reconstruction)    
 reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
 reconstructETopLevel env t impl = do
-  (finalEnv, Program pTerm pTyp) <- reconstructE env t impl
+  oldGoals <- use auxGoals
+  auxGoals .= []
+  (finalEnv, p) <- reconstructE env t impl  
+  (Program pTerm pTyp) <- fillInAuxGoals p
+  auxGoals .= oldGoals
   pTyp' <- runInSolver $ currentAssignment pTyp
   return (finalEnv, Program pTerm pTyp')
 
@@ -242,10 +250,8 @@ reconstructE' env typ (PApp iFun iArg) = do
   (envfinal, pApp) <- if isFunctionType tArg
     then do -- Higher-order argument: its value is not required for the function type, enqueue an auxiliary goal
       d <- asks $ _auxDepth . fst
-      pArg <- generateHOArg env' (d - 1) tArg iArg
+      pArg <- generateHOArg env' (d - 1) tArg iArg -- (\p -> Program (PApp pFun p) typ)
       return (env', Program (PApp pFun pArg) tRes)
-      -- pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructI env' tArg iArg
-      -- return (env', Program (PApp pFun pArg) tRes)      
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
