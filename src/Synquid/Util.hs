@@ -2,6 +2,7 @@
 module Synquid.Util where
 
 import Data.Maybe
+import Data.Either
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -17,6 +18,9 @@ import Debug.Trace
 
 -- | Identifiers
 type Id = String
+
+fromRight = head . rights . (:[])
+fromLeft = head . lefts . (:[])
 
 -- | `mappedCompare` @f x y@ : compare @f x@ and @f y@
 mappedCompare :: Ord b => (a -> b) -> a -> a -> Ordering

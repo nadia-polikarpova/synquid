@@ -1,5 +1,5 @@
 -- | Top-level synthesizer interface
-module Synquid.Synthesizer (synthesize) where
+module Synquid.Synthesizer (synthesize, policyRepair) where
 
 import Synquid.Util
 import Synquid.Logic
@@ -12,7 +12,8 @@ import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
-import Synquid.TypeChecker
+import qualified Synquid.TypeChecker as TC
+import qualified Synquid.PolicyChecker as PC
 
 import Data.Maybe
 import Data.Either
@@ -29,6 +30,32 @@ import Control.Applicative ((<$>))
 import Debug.Trace
 
 type HornSolver = FixPointSolver Z3State
+
+policyRepair :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram)
+policyRepair explorerParams solverParams goal cquals tquals = evalZ3State $ evalFixPointSolver reconstruction solverParams
+  where
+    -- | Stream of programs that satisfy the specification or type error
+    reconstruction :: HornSolver (Either ErrorMessage RProgram)
+    reconstruction = let
+        typingParams = TypingParams { 
+                        _condQualsGen = \_ _ -> emptyQSpace,
+                        _matchQualsGen = \_ _ -> emptyQSpace,
+                        _typeQualsGen = \_ _ _ -> emptyQSpace,
+                        _predQualsGen = predQuals,
+                        _tcSolverLogLevel = _explorerLogLevel explorerParams
+                      }
+      in PC.reconstruct explorerParams typingParams goal
+      
+    -- | Qualifier generator for bound predicates
+    predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
+    predQuals env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $ 
+      concatMap (extractPredQGenFromType env params vars') (syntGoal : components) ++
+      if null params  -- Parameter-less predicate: also include conditional qualifiers
+        then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components
+        else []
+        
+    components = map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal
+    syntGoal = toMonotype $ gSpec goal
 
 -- | 'synthesize' @templGenParam consGenParams solverParams env typ templ cq tq@ : synthesize a program that has a type @typ@
 -- in the typing environment @env@ and follows template @templ@,
@@ -47,7 +74,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _predQualsGen = predQuals,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
-      in reconstruct explorerParams typingParams goal
+      in TC.reconstruct explorerParams typingParams goal
       
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
@@ -77,7 +104,6 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
         
     components = map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal
     syntGoal = toMonotype $ gSpec goal
-        
 
 {- Qualifier Generators -}
 
@@ -188,30 +214,40 @@ extractPredQGenFromType env actualParams actualVars t = extractPredQGenFromType'
               pArg' = sortSubstituteFml sortInst pArg
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
               atoms = Set.toList $ atomsOf pArg'
-              extractFromAtom atom = 
+              extractFromAtom atom =                 
                 filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
                 allSubstitutions env atom formalVars actualVars [] []              
             in concatMap extractFromAtom atoms -- Substitute the variables, but leave predicate parameters unchanged (optimization)
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
     extractPredQGenFromType' (FunctionT _ tArg tRes) = extractPredQGenFromType' tArg ++ extractPredQGenFromType' tRes
+    
+allPredApps :: Environment -> [Formula] -> Int -> [Formula]
+allPredApps _ actuals 0 = actuals
+allPredApps env actuals n = 
+  let smallerApps = allPredApps env actuals (n - 1)
+  in smallerApps ++ predAppsOneStep smallerApps
+  where
+    predAppsOneStep actuals = do
+      (pName, sorts) <- Map.toList (env ^. globalPredicates)
+      let (resSort:argSorts) = instantiateSorts sorts
+      let formals = zipWith Var argSorts deBrujns
+      let app = Pred resSort pName formals
+      allRawSubstitutions env app formals actuals [] []
 
 -- | 'allSubstitutions' @env qual nonsubstActuals formals actuals@: 
 -- all well-typed substitutions of @actuals@ for @formals@ in a qualifier @qual@
-allSubstitutions :: Environment -> Formula -> [Formula] -> [Formula] -> [Formula] -> [Formula] -> [Formula]
-allSubstitutions _ (BoolLit True) _ _ _ _ = []
-allSubstitutions env qual formals actuals fixedFormals fixedActuals = do
+allRawSubstitutions :: Environment -> Formula -> [Formula] -> [Formula] -> [Formula] -> [Formula] -> [Formula]
+allRawSubstitutions _ (BoolLit True) _ _ _ _ = []
+allRawSubstitutions env qual formals actuals fixedFormals fixedActuals = do
   let tvs = Set.fromList (env ^. boundTypeVars)  
   case unifySorts tvs (map sortOf fixedFormals) (map sortOf fixedActuals) of
     Left _ -> []
     Right fixedSortSubst -> do
       let fixedSubst = Map.fromList $ zip (map varName fixedFormals) fixedActuals
       let qual' = substitute fixedSubst qual
-      (_, subst, _) <- foldM (go tvs) (fixedSortSubst, Map.empty, actuals) formals
-      case resolveRefinement env (substitute subst qual') of
-        Left _ -> [] -- Variable sort mismatch
-        Right resolved -> return resolved
-    
+      (sortSubst, subst, _) <- foldM (go tvs) (fixedSortSubst, Map.empty, actuals) formals
+      return $ substitute subst $ sortSubstituteFml sortSubst qual'
   where
     go tvs (sortSubst, subst, actuals) formal = do
       let formal' = sortSubstituteFml sortSubst formal
@@ -219,3 +255,11 @@ allSubstitutions env qual formals actuals fixedFormals fixedActuals = do
       case unifySorts tvs [sortOf formal'] [sortOf actual] of
         Left _ -> mzero
         Right sortSubst' -> return (sortSubst `Map.union` sortSubst', Map.insert (varName formal) actual subst, delete actual actuals)
+        
+allSubstitutions :: Environment -> Formula -> [Formula] -> [Formula] -> [Formula] -> [Formula] -> [Formula]        
+allSubstitutions env qual formals actuals fixedFormals fixedActuals = do
+  qual' <- allRawSubstitutions env qual formals actuals fixedFormals fixedActuals
+  case resolveRefinement env qual' of
+    Left _ -> [] -- Variable sort mismatch
+    Right resolved -> return resolved
+  

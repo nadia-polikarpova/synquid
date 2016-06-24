@@ -435,7 +435,10 @@ prettyError (ErrorMessage TypeError pos descr) = hang tab $
   pretty descr
     
 instance Pretty ErrorMessage where
-  pretty = prettyError        
+  pretty = prettyError
+  
+instance Show ErrorMessage where
+  show = show . pretty
 
 {- AST node counting -}
 
