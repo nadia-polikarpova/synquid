@@ -43,7 +43,8 @@ executable synquid
                     , cmdargs ==0.10.*
                     , filepath
                     , time
-                    , haskell-src
+                    , haskell-src-exts
+                    , safe
 
   ghc-options: -O2
 
