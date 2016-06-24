@@ -15,7 +15,7 @@ measure elems :: List a -> Set a where
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 -- not :: x: Bool -> {Bool | _v == !x}
--- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
+and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 elem :: xs: List a -> x: a -> {Bool | _v == (x in elems xs)}  
   
 -- Tagged things
@@ -30,11 +30,11 @@ return :: x: a -> Tagged {a | _v == x} <{True}>
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
 
--- if_ :: <ip :: User -> Bool> . <ic :: Bool> .
-    -- thn: Tagged a <{ic && ip _0}> 
-    -- -> els: Tagged a <ip> 
-    -- -> cond: Tagged {Bool | _v <==> ic} <{ic && ip _0}>
-    -- -> Tagged a <ip>
+if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+    thn: Tagged a <{ic && ip _0}> 
+    -> els: Tagged a <ip> 
+    -> cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}>
+    -> Tagged a <ip>
     -- -- -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
         
 lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
@@ -77,8 +77,8 @@ data Status where
 predicate sessionUser :: World -> User      
 getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
 
-predicate chair :: World -> User
-getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+-- predicate chair :: World -> User
+-- getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 
 predicate currentPhase :: World -> Phase
 getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
@@ -90,22 +90,23 @@ getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paper
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
+
+qualifier {x in y}
   
 -- Print paper status to an author
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
 test1 = \w . \pid .
   let u = getSessionUser w in  
-  print w u
-    (lift1 toString 
-      (getPaperStatus w pid))
-      -- (if_ (getPaperStatus w pid) (return NoDecision) (??)))
-      -- (if_ (getPaperStatus w pid) (return NoDecision) (lift1 (\x . eq x Done) (getCurrentPhase w))))
+  let out = lift1 toString (getPaperStatus w pid) in
+  print w u out      
       
 test2 :: w: World -> pid: PaperId -> World
 test2 = \w . \pid .
   let u = getSessionUser w in  
-  print w u
-    (lift2 strcat
-      (lift1 toString (getPaperAuthors w pid))
-      (lift1 toString (getPaperStatus w pid)))
+  let out1 = lift1 toString (getPaperAuthors w pid) in 
+  let out2 = lift1 toString (getPaperStatus w pid) in  
+  -- let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem (getPaperAuthors w pid) u)) in 
+  -- let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem (getPaperAuthors w pid) u) (lift2 eq (getCurrentPhase w) (return Done)))) in
+  let out = lift2 strcat out1 out2 in
+  print w u out
             

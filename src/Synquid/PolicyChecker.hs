@@ -136,7 +136,7 @@ reconstructI env t (Program p AnyT) = reconstructI' env t p
 reconstructI' env t PErr = generateError env
 reconstructI' env t PHole = error "Holes not supported when checking policies"
 reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
-  letBindings %= Map.insert x (env, iDef)
+  lambdaLets %= Map.insert x (env, iDef)
   let ctx = \p -> Program (PLet x uHole p) t
   pBody <- inContext ctx $ reconstructI env t iBody
   return $ ctx pBody
@@ -155,9 +155,11 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                            text "to lambda term" </> squotes (pretty $ untyped impl)
                            
   PLet x iDef iBody -> do -- E-term let (since lambda-let was considered before)
-    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
-    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
-    return $ Program (PLet x pDef pBody) t
+    pBody <- reconstructI (over letBindings (Map.insert x iDef) env) t iBody
+    defs <- use checkedLets
+    case Map.lookup x defs of
+      Nothing -> return pBody -- x did not appear in iBody, through it away
+      Just pDef -> return $ Program (PLet x pDef pBody) t -- substitute the checked version of x's definition
     
   PIf iCond iThen iElse -> do
     (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
@@ -230,18 +232,24 @@ reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (E
 reconstructE env t (Program p AnyT) = reconstructE' env t p
 
 reconstructE' env typ PHole = error "Holes not supported when checking policies"
-reconstructE' env typ (PSymbol name) = do
-  case lookupSymbol name (arity typ) env of
-    Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
-    Just sch -> do
-      t <- symbolType env name sch
-      let p = Program (PSymbol name) t
-      symbolUseCount %= Map.insertWith (+) name 1
-      case Map.lookup name (env ^. shapeConstraints) of
-        Nothing -> return ()
-        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
-      p' <- coerceE env typ p
-      return (env, p')
+reconstructE' env typ (PSymbol name) = do  
+  case Map.lookup name (env ^. letBindings) of
+    Nothing -> case lookupSymbol name (arity typ) env of
+      Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
+      Just sch -> do
+        t <- symbolType env name sch
+        let p = Program (PSymbol name) t
+        symbolUseCount %= Map.insertWith (+) name 1
+        case Map.lookup name (env ^. shapeConstraints) of
+          Nothing -> return ()
+          Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
+        p' <- coerceE env typ p
+        return (env, p')
+    Just iDef -> do
+        -- writeLog 2 (text "Found let binding for" <+> text name <+> text "check against" <+> pretty typ $+$ pretty iDef)
+        (env', p) <- reconstructE env typ iDef
+        checkedLets %= Map.insert name p
+        return (addGhost name (typeOf p) env', Program (PSymbol name) (typeOf p))
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
@@ -261,7 +269,7 @@ reconstructE' env typ (PApp iFun iArg) = do
   where
     generateHOArg env d tArg iArg = case content iArg of
       PSymbol f -> do
-        lets <- use letBindings
+        lets <- use lambdaLets
         case Map.lookup f lets of
           Nothing -> do -- This is a function from the environment, with a known type: add its eta-expansion as an aux goal
                       impl <- etaExpand tArg f

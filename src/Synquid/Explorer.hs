@@ -67,7 +67,8 @@ data ExplorerState = ExplorerState {
   _typingState :: TypingState,                     -- ^ Type-checking state
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
   _newAuxGoals :: [Id],                            -- ^ Higher-order arguments that have been synthesized but not yet let-bound
-  _letBindings :: Map Id (Environment, UProgram),  -- ^ Local bindings to be checked upon use (in type checking mode)  
+  _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local bindings to be checked upon use (in type checking mode)
+  _checkedLets :: Map Id RProgram,
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
@@ -113,7 +114,7 @@ runExplorer eParams tParams initTS go = do
     [] -> return $ Left $ head errs
     (res : _) -> return $ Right res
   where
-    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty
+    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty Map.empty
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
@@ -350,7 +351,7 @@ generateEAt env typ d = do
       let memoKey = MemoKey env (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
       startMemo <- getMemo
       case Map.lookup memoKey startMemo of
-        Just results -> do -- Found memoizaed results: fetch
+        Just results -> do -- Found memoized results: fetch
           writeLog 3 (text "Fetching for:" <+> pretty memoKey $+$
                       text "Result:" $+$ vsep (map (\(env', p, _) -> pretty p) results))
           msum $ map applyMemoized results
