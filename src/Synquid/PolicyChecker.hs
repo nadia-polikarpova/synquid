@@ -1,5 +1,5 @@
--- | Refinement type reconstruction for programs with holes
-module Synquid.TypeChecker (reconstruct) where
+-- | Type-checker for programs without holes that collects errors
+module Synquid.PolicyChecker (reconstruct) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -31,12 +31,16 @@ reconstruct eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
-      pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
-      pAuxs <- reconstructAuxGoals
-      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
-      let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
-      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False >> finalizeProgram p      
+      p <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
+      -- runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
+      -- p <- fillInAuxGoals pMain
+      runInSolver $ finalizeProgram p      
 
+fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
+fillInAuxGoals pMain = do
+  pAuxs <- reconstructAuxGoals
+  return $ foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
+  where
     reconstructAuxGoals = do
       goals <- use auxGoals
       writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
@@ -44,11 +48,11 @@ reconstruct eParams tParams goal = do
         [] -> return []
         (g : gs) -> do
             auxGoals .= gs
-            let g' = g {
-                          gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
-                       }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
-            p <- reconstructTopLevel g'
+            -- let g' = g {
+                          -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
+                       -- }
+            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g
+            p <- reconstructTopLevel g
             rest <- reconstructAuxGoals
             return $ (gName g, p) : rest    
     
@@ -128,12 +132,9 @@ reconstructTopLevel (Goal _ env (Monotype t) impl depth _) = local (set (_1 . au
 -- (top-down phase of bidirectional reconstruction)
 reconstructI :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructI env t (Program p AnyT) = reconstructI' env t p
-reconstructI env t (Program p t') = do
-  t'' <- checkAnnotation env t t' p
-  reconstructI' env t'' p
 
 reconstructI' env t PErr = generateError env
-reconstructI' env t PHole = generateError env `mplus` generateI env t
+reconstructI' env t PHole = error "Holes not supported when checking policies"
 reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
   letBindings %= Map.insert x (env, iDef)
   let ctx = \p -> Program (PLet x uHole p) t
@@ -157,16 +158,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
     pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
     return $ Program (PLet x pDef pBody) t
-  
-  PIf (Program PHole AnyT) iThen iElse -> do
-    cUnknown <- Unknown Map.empty <$> freshId "C"
-    addConstraint $ WellFormedCond env cUnknown
-    pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
-    cond <- conjunction <$> currentValuation cUnknown
-    pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
-    pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (fnot cond) env) t iElse 
-    return $ Program (PIf pCond pThen pElse) t
-  
+    
   PIf iCond iThen iElse -> do
     (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
@@ -226,19 +218,18 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 -- (bottom-up phase of bidirectional reconstruction)    
 reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
 reconstructETopLevel env t impl = do
-  (finalEnv, Program pTerm pTyp) <- reconstructE env t impl
+  oldGoals <- use auxGoals
+  auxGoals .= []
+  (finalEnv, p) <- reconstructE env t impl  
+  (Program pTerm pTyp) <- fillInAuxGoals p
+  auxGoals .= oldGoals
   pTyp' <- runInSolver $ currentAssignment pTyp
   return (finalEnv, Program pTerm pTyp')
 
 reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
 reconstructE env t (Program p AnyT) = reconstructE' env t p
-reconstructE env t (Program p t') = do
-  t'' <- checkAnnotation env t t' p
-  reconstructE' env t'' p  
 
-reconstructE' env typ PHole = do
-  d <- asks $ _eGuessDepth . fst
-  generateEUpTo env typ d
+reconstructE' env typ PHole = error "Holes not supported when checking policies"
 reconstructE' env typ (PSymbol name) = do
   case lookupSymbol name (arity typ) env of
     Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
@@ -249,8 +240,8 @@ reconstructE' env typ (PSymbol name) = do
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
-      checkE env typ p
-      return (env, p)
+      p' <- coerceE env typ p
+      return (env, p')
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
@@ -259,16 +250,14 @@ reconstructE' env typ (PApp iFun iArg) = do
   (envfinal, pApp) <- if isFunctionType tArg
     then do -- Higher-order argument: its value is not required for the function type, enqueue an auxiliary goal
       d <- asks $ _auxDepth . fst
-      pArg <- generateHOArg env' (d - 1) tArg iArg
+      pArg <- generateHOArg env' (d - 1) tArg iArg -- (\p -> Program (PApp pFun p) typ)
       return (env', Program (PApp pFun pArg) tRes)
-      -- pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructI env' tArg iArg
-      -- return (env', Program (PApp pFun pArg) tRes)      
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
       return (env''', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x y) tRes))
-  checkE envfinal typ pApp
-  return (envfinal, pApp)
+  pApp' <- coerceE envfinal typ pApp
+  return (envfinal, pApp')
   where
     generateHOArg env d tArg iArg = case content iArg of
       PSymbol f -> do
@@ -285,29 +274,30 @@ reconstructE' env typ (PApp iFun iArg) = do
 reconstructE' env typ impl = do
   throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
                                           text "and got" </> squotes (pretty $ untyped impl)
-    
--- | 'checkAnnotation' @env t t' p@ : if user annotation @t'@ for program @p@ is a subtype of the goal type @t@,
--- return resolved @t'@, otherwise fail
-checkAnnotation :: MonadHorn s => Environment -> RType -> RType -> BareProgram RType -> Explorer s RType  
-checkAnnotation env t t' p = do
-  tass <- use (typingState . typeAssignment)
-  case resolveRefinedType (typeSubstituteEnv tass env) t' of
-    Left err -> throwError err
-    Right t'' -> do
-      ctx <- asks $ _context . fst
-      writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
-      addConstraint $ Subtype env t'' t True
-      
-      fT <- runInSolver $ finalizeType t
-      fT'' <- runInSolver $ finalizeType t''
-      pos <- asks $ _sourcePos . fst  
-      typingState . errorContext .= (pos, text "when checking consistency of type annotation" </> pretty fT'' </> text "with" </> pretty fT </> text "in" $+$ pretty (ctx (Program p t'')))
-      solveIncrementally
-      typingState . errorContext .= (noPos, empty)
-      
-      tass' <- use (typingState . typeAssignment)
-      return $ intersection (isBound env) t'' (typeSubstitute tass' t)
-          
+                                          
+coerceE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s RProgram
+coerceE env typ p@(Program pTerm pTyp) = do
+  ctx <- asks $ _context . fst
+  writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
+  
+  oldTState <- use typingState
+  addConstraint $ Subtype env pTyp typ False
+  -- when (arity typ > 0) $
+    -- ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+  fTyp <- runInSolver $ finalizeType typ
+  pos <- asks $ _sourcePos . fst
+  typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
+  -- solveIncrementally
+  -- let res = p
+  res <- ifte solveIncrementally 
+                (const $ return p) 
+                (do -- Subtyping check fails: restore typing state and replace with a hole
+                  typingState .= oldTState
+                  return $ Program PHole typ
+                )
+  typingState . errorContext .= (noPos, empty)
+  return res                              
+                                          
 -- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
 -- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
 insertAuxSolution :: Id -> RProgram -> RProgram -> RProgram

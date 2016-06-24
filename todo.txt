@@ -21,5 +21,5 @@ Security:
     if it's in the function return type, unify the arguments and propagate that spec to the argument,
     otherwise, function must be univalent (~ contain _v = f x), then substitute f _v for _v in the original predicate and propagate that to the argument
 
-When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this prdicate is around
+When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this predicate is around
 - Try encoding of atomic flow with HO functions
