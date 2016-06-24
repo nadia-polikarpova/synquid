@@ -14,13 +14,14 @@ import Safe
 
 import System.IO
 
-import Language.Haskell.Syntax
-import Language.Haskell.Pretty
+import Language.Haskell.Exts.Syntax hiding (Case, PApp)
+import qualified Language.Haskell.Exts.Syntax as Hs
+import Language.Haskell.Exts.Pretty
 
 import Synquid.Util
 import Synquid.Type
-import Synquid.Program
-import Synquid.Logic
+import Synquid.Program hiding (DataDecl)
+import Synquid.Logic hiding (Var)
 import Synquid.Tokens
 import qualified Synquid.Pretty
 
@@ -30,6 +31,10 @@ infixl 0 |>
 (|>>) x y = map y x
 infixl 0 |>>
 
+type HsDecl = Decl
+type HsType = Type
+type HsQualType = Type
+type HsExp = Exp
 
 {- Some container classes -}
 
@@ -44,7 +49,7 @@ class AsHaskellDecl a where
 class AsHaskellType a where
   toHsType :: Environment -> a -> HsType
   toHsQualType :: Environment -> a -> HsQualType
-  toHsQualType env t = HsQualType [] $ toHsType env t
+  toHsQualType env t = {- HsQualType [] $ -} toHsType env t
 
 class AsHaskellExp a where
   toHsExp :: Environment -> a -> HsExp
@@ -56,26 +61,30 @@ data AsHaskellDeclElement =  {- to create heterogenous lists of AsHaskellDecl -}
 
 unknownLoc = SrcLoc { srcFilename="", srcLine=0, srcColumn=0 }
 
-argTypes (HsTyFun argType resultType) = argType : argTypes resultType
+argTypes (TyFun argType resultType) = argType : argTypes resultType
 argTypes typ = []
 
 {- for now, all type parameters get these type classes by default -}
 defaultTypeClasses = map tc ["Eq", "Ord"]
-  where tc = UnQual . HsIdent
+  where tc = UnQual . Ident
 
-defaultImports = [HsImportDecl {
+defaultImports = [ImportDecl {
     importLoc = unknownLoc,
-    importModule = Module "Prelude",
+    importModule = ModuleName "Prelude",
     importQualified = False,
+    importSrc = False,
+    importSafe = False,
+    importPkg = Nothing,
     importAs = Nothing,
     importSpecs = Just (False, ids ++ syms)}]
   where
-    ids = map (HsIAbs . HsIdent) ["Eq", "Ord", "Int", "Bool", "undefined"]
-    syms = map (HsIVar . HsSymbol) ["<=", "==", ">=", "<", ">", "/=", "+", "-"]
+    ids = map (IAbs NoNamespace . Ident) ["Eq", "Ord", "Int", "Bool"] ++
+          map (IVar . Ident) ["undefined"]
+    syms = map (IVar . Symbol) ["<=", "==", ">=", "<", ">", "/=", "+", "-"]
 
-qualifyByDefault tArg (HsQualType ctx typ) =
+qualifyByDefault tArg typ = typ {- (HsQualType ctx typ) =
   HsQualType (ctx ++ map qual defaultTypeClasses) typ
-  where qual cls = (cls, [HsTyVar $ HsIdent tArg])
+  where qual cls = (cls, [HsTyVar $ HsIdent tArg]) -}
 
 
 
@@ -106,41 +115,42 @@ instance AsHaskell (Goal, Program r) where
 
 instance AsHaskellDecl (Id, DatatypeDef) where
   toHsDecl env (name,def) =
-    HsDataDecl unknownLoc         -- source location
+    DataDecl unknownLoc         -- source location
+             DataType           -- 'data' or 'newtype'
                []                 -- context (type class reqs for parameters)
-               (HsIdent name)     -- datatype name
+               (Ident name)     -- datatype name
                params             -- type parameter names
                ctors              -- constructor declarations
                typeClss           -- deriving
     where
-      params = def ^. typeParams |>> HsIdent
+      params = def ^. typeParams |>> UnkindedVar . Ident
       ctors = def ^. constructors |>>
-              \x -> HsConDecl unknownLoc (HsIdent x) (ctorArgs x)
+              \x -> QualConDecl unknownLoc [] [] (ConDecl (Ident x) (ctorArgs x))
       ctorArgs name = toHsType env (allSymbols env ! name)
-                      |> argTypes |>> HsUnBangedTy
-      typeClss = if null ctors then [] else defaultTypeClasses
+                      |> argTypes
+      typeClss = if null ctors then [] else defaultTypeClasses |>> (\x -> (x, []))
 
 instance AsHaskellDecl (Goal, Program r) where
-  toHsDecl _ (Goal name env _ _ _ _, p) = HsPatBind unknownLoc
-    (HsPVar $ HsIdent name)            -- lhs (pattern)
-    (HsUnGuardedRhs $ toHsExp env p)   -- rhs (expression)
-    []                                 -- declarations??
+  toHsDecl _ (Goal name env _ _ _ _, p) = PatBind unknownLoc
+    (PVar $ Ident name)                -- lhs (pattern)
+    (UnGuardedRhs $ toHsExp env p)     -- rhs (expression)
+    Nothing                            -- bindings??
 
 instance AsHaskellDecl Goal where
-  toHsDecl _ (Goal name env spec _ _ _) = HsTypeSig unknownLoc
-    [HsIdent name]
+  toHsDecl _ (Goal name env spec _ _ _) = TypeSig unknownLoc
+    [Ident name]
     (toHsQualType env spec)
 
 instance AsHaskellDecl (Id, SchemaSkeleton r) where
-  toHsDecl env (name, typ) = HsTypeSig unknownLoc
-    [HsIdent name]
+  toHsDecl env (name, typ) = TypeSig unknownLoc
+    [Ident name]
     (toHsQualType env typ)
 
 instance AsHaskellDecl Id where
-  toHsDecl env name = HsPatBind unknownLoc
-    (HsPVar $ HsIdent name)
-    (HsUnGuardedRhs $ HsVar $ UnQual $ HsIdent "undefined")
-    []
+  toHsDecl env name = PatBind unknownLoc
+    (PVar $ Ident name)
+    (UnGuardedRhs $ Var $ UnQual $ Ident "undefined")
+    Nothing
 
 instance AsHaskellDecl AsHaskellDeclElement where
   toHsDecl env (AHDE e) = toHsDecl env e
@@ -151,68 +161,73 @@ instance AsHaskellType (SchemaSkeleton r) where
   toHsType env (Monotype skel) = toHsType env skel
   toHsQualType env (ForallT tArg typ) =
     qualifyByDefault tArg $ toHsQualType env typ
-  toHsQualType env typ = HsQualType [] $ toHsType env typ
+  toHsQualType env typ = {- HsQualType [] $ -} toHsType env typ
 
 instance AsHaskellType (TypeSkeleton r) where
   toHsType env (ScalarT base _) = toHsType env base
   toHsType env (FunctionT _ argType resultType) =
-    HsTyFun (toHsType env argType) (toHsType env resultType)
-  toHsType env AnyT = HsTyCon $ UnQual $ HsIdent "Any"
+    TyFun (toHsType env argType) (toHsType env resultType)
+  toHsType env AnyT = TyCon $ UnQual $ Ident "Any"
 
 instance AsHaskellType (BaseType r) where
-  toHsType env BoolT = HsTyCon $ UnQual $ HsIdent "Bool"
-  toHsType env IntT = HsTyCon $ UnQual $ HsIdent "Int"
+  toHsType env BoolT = TyCon $ UnQual $ Ident "Bool"
+  toHsType env IntT = TyCon $ UnQual $ Ident "Int"
   toHsType env (DatatypeT name tArgs pArgs) =
-    foldl HsTyApp typeCtor $ map (toHsType env) tArgs
+    foldl TyApp typeCtor $ map (toHsType env) tArgs
     where
-      typeCtor = HsTyCon $ UnQual $ HsIdent name
-  toHsType env (TypeVarT _ name) = HsTyVar $ HsIdent name
+      typeCtor = TyCon $ UnQual $ Ident name
+  toHsType env (TypeVarT _ name) = TyVar $ Ident name
 
 instance AsHaskellExp (Program r) where
   toHsExp env (Program term _) = toHsExp env term
 
 instance AsHaskellExp (BareProgram r) where
-  toHsExp env (PSymbol sym) = HsVar $ UnQual $ HsIdent sym
+  toHsExp env (PSymbol sym) = Var $ UnQual $ Ident sym
   toHsExp env (PApp fun arg) =
     case infixate fun arg of
-      Just (l, op, r) -> HsParen $ HsInfixApp (toHsExp env l) (HsQVarOp (UnQual (HsSymbol op))) (toHsExp env r)
-      Nothing -> HsParen $ HsApp (toHsExp env fun) (toHsExp env arg)
+      Just (l, op, r) -> Paren $ InfixApp (toHsExp env l) (QVarOp (UnQual (Symbol op))) (toHsExp env r)
+      Nothing -> Paren $ App (toHsExp env fun) (toHsExp env arg)
     where
       infixate (Program (PApp (Program (PSymbol op) _) l) _) r
        | isBinOp op = Just (l, op, r)
       infixate _ _  = Nothing
       isBinOp x | x `elem` elems binOpTokens = True
       isBinOp _ = False
-  toHsExp env (PFun arg body) = HsParen $ HsLambda unknownLoc [pvar] (toHsExp env body)
-    where pvar = HsPVar $ HsIdent arg
+  toHsExp env (PFun arg body) = Paren $ Lambda unknownLoc [pvar] (toHsExp env body)
+    where pvar = PVar $ Ident arg
   toHsExp env (PIf cond then_ else_) =
-    HsIf (toHsExp env cond) (toHsExp env then_) (toHsExp env else_)
+    If (toHsExp env cond) (toHsExp env then_) (toHsExp env else_)
   toHsExp env (PMatch switch cases) =
-    HsCase (toHsExp env switch) (map alt cases)
+    Hs.Case (toHsExp env switch) (map alt cases)
     where alt (Case ctor argNames expr) =
-            HsAlt unknownLoc
-              (HsPApp (UnQual $ HsIdent ctor)       -- pattern
-                $ map (HsPVar . HsIdent) argNames)
-              (HsUnGuardedAlt $ toHsExp env expr)   -- body
-              []                                    -- ??
+            Alt unknownLoc
+              (Hs.PApp (UnQual $ Ident ctor)       -- pattern
+                $ map (PVar . Ident) argNames)
+              (UnGuardedRhs $ toHsExp env expr)   -- body
+              Nothing                                    -- ??
   toHsExp env (PFix _ p) = toHsExp env p
   toHsExp env (PLet name value body) =
-    HsLet [HsPatBind unknownLoc
-              (HsPVar $ HsIdent name)                   -- binder name
-              (HsUnGuardedRhs $ toHsExp env value) []]  -- rhs
-              (toHsExp env body)                        -- in
-  toHsExp env other = HsVar $ UnQual $ HsIdent "??"
+    Let (BDecls [PatBind unknownLoc
+                 (PVar $ Ident name)                           -- binder name
+                 (UnGuardedRhs $ toHsExp env value) Nothing])  -- rhs
+                 (toHsExp env body)                            -- in (expr)
+  toHsExp env other = Var $ UnQual $ Ident "??"
 
 {- A module contains data declarations and functions -}
-toHsModule :: String -> [(Goal, RProgram)] -> HsModule
+toHsModule :: String -> [(Goal, RProgram)] -> Module
 toHsModule name goalProgs =
   -- TODO Currently grabs environment from the first goal.
   --   Merge environments from all goals?
   let decls = inspectGP goalProgs
       sigs =  goalProgs |>> AHDE . fst
       funcs = goalProgs |>> AHDE
-   in HsModule unknownLoc (Module name) Nothing (defaultImports ++ userImports)
-        (decls ++ sigs ++ funcs |>> toHsDecl env)
+   in Module unknownLoc
+         (ModuleName name)                            -- module name
+         []                                           -- module pragmas
+         Nothing                                      -- warning text
+         Nothing                                      -- exports
+         (defaultImports ++ userImports)              -- imports
+         (decls ++ sigs ++ funcs |>> toHsDecl env)    -- body (declarations)
   where
     env = goalProgs |>> gEnvironment . fst |> headDef emptyEnv
     inspectGP l = assocs (env ^. datatypes) |> filter (not . isSkipped . fst) |>> AHDE
@@ -223,10 +238,13 @@ toHsModule name goalProgs =
 
 isSkipped ident = ident `elem` ["String", "Tagged", "PaperId", "User", "World"]
 
-userImports = [HsImportDecl {
+userImports = [ImportDecl {
     importLoc = unknownLoc,
-    importModule = Module "ConferenceImpl",
+    importModule = ModuleName "ConferenceImpl",
     importQualified = False,
+    importSrc = True,
+    importSafe = False,
+    importPkg = Nothing,
     importAs = Nothing,
     importSpecs = Nothing}]
 
