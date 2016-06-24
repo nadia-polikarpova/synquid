@@ -154,7 +154,7 @@ cla = CommandLineArgs {
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
   print_stats         = False           &= help ("Show specification and solution size (default: False)"),
-  log_                = 0               &= help ("Logger verboseness level (default: 0)")
+  log_                = 0               &= help ("Logger verboseness level (default: 0)") &= name "l" 
   } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
     where
       defaultFormat = outputFormat defaultSynquidParams
