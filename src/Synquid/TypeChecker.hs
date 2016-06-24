@@ -135,7 +135,7 @@ reconstructI env t (Program p t') = do
 reconstructI' env t PErr = generateError env
 reconstructI' env t PHole = generateError env `mplus` generateI env t
 reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
-  letBindings %= Map.insert x (env, iDef)
+  lambdaLets %= Map.insert x (env, iDef)
   let ctx = \p -> Program (PLet x uHole p) t
   pBody <- inContext ctx $ reconstructI env t iBody
   return $ ctx pBody
@@ -272,7 +272,7 @@ reconstructE' env typ (PApp iFun iArg) = do
   where
     generateHOArg env d tArg iArg = case content iArg of
       PSymbol f -> do
-        lets <- use letBindings
+        lets <- use lambdaLets
         case Map.lookup f lets of
           Nothing -> do -- This is a function from the environment, with a known type: add its eta-expansion as an aux goal
                       impl <- etaExpand tArg f
