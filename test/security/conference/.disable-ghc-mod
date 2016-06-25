@@ -1,0 +1,2 @@
+Because ghc-mod does not support recursive modules
+(https://github.com/DanielG/ghc-mod/issues/727)
