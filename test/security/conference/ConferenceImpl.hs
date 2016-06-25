@@ -47,7 +47,6 @@ data PaperRecord = PaperRecord {
 
 deriving instance Show Phase
 deriving instance Show Status
-deriving instance Show a => Show (List a)
 
 makeLenses ''Database
 makeLenses ''World
@@ -79,11 +78,11 @@ mkPapers prows urows arows crows =
                         })) prows
     where
         authors papid = selectJoin arows urows (\(AuthorRow papid' usid') (UserRow usid name) ->
-          if (papid == papid' && usid == usid') then [T.unpack name] else [])
+          [T.unpack name | papid == papid' && usid == usid'])
         --concatMap (\(AuthorRow papid' usid') ->
         --    concatMap (\(UserRow usid name) -> if (papid == papid' && usid == usid') then [T.unpack name] else []) urows) arows
-        conflicts papid = concatMap (\(ConflictRow papid' usid') ->
-            concatMap (\(UserRow usid name) -> if (papid == papid' && usid == usid') then [T.unpack name] else []) urows) crows
+        conflicts papid = selectJoin crows urows (\(ConflictRow papid' usid') (UserRow usid name) ->
+          [T.unpack name | papid == papid' && usid == usid'])
 
 
 {- Actual impls! -}
@@ -108,7 +107,7 @@ bind ::
 bind (Tagged a) f = f a
 
 return :: (Eq a, Ord a) => a -> Tagged a
-return a = Tagged a
+return = Tagged
 
 if_ ::
     (Eq a, Ord a) => Tagged Bool -> Tagged a -> Tagged a -> Tagged a
@@ -129,22 +128,32 @@ elem :: (Eq a, Ord a) => a -> List a -> Bool
 elem x Nil = False
 elem x (Cons y xs) = (x == y) || elem x xs
 
-toList [] = Nil
-toList (x:xs) = Cons x (toList xs)
+toList Nil = []
+toList (Cons x xs) = x : toList xs
+
+fromList = foldr Cons Nil
 
 lfoldl f w Nil = w
 lfoldl f w (Cons x xs) = lfoldl f (f w x) xs
 
+instance Show a => Show (List a) where
+  show = show . toList
+
 {- String -}
 
-emptyString :: String
 emptyString = ""
+
+{-# ANN module "HLint: Use camelCase" #-}
+s_colon = ": "
+s_comma = ", "
+s_authors = "authors: "
+s_paperNo = "Paper #"
 
 strcat :: String -> String -> String
 strcat s1 s2 = s1 ++ s2
 
 toString :: (Show a) => a -> String
-toString x = show x
+toString = show
 
 {- Database access -}
 
@@ -155,10 +164,10 @@ getCurrentPhase :: World -> Tagged Phase
 getCurrentPhase w = Tagged $ w ^. db ^. phase
 
 getPaperAuthors :: World -> PaperId -> Tagged (List User)
-getPaperAuthors w papid = Tagged $ toList $ (w ^. db ^. papers) ! papid ^. authors
+getPaperAuthors w papid = Tagged $ fromList $ (w ^. db ^. papers) ! papid ^. authors
 
 getPaperConflicts :: World -> PaperId -> Tagged (List User)
-getPaperConflicts = undefined  {- TODO -}
+getPaperConflicts w papid = Tagged $ fromList $ (w ^. db ^. papers) ! papid ^. conflicts
 
 getPaperSession :: World -> PaperId -> Tagged String
 getPaperSession w papid = Tagged $ (w ^. db ^. papers) ! papid ^. session
@@ -176,7 +185,7 @@ getSessionUser w = Tagged $ w ^. sessionUser
 {- Output -}
 
 print :: World -> Tagged User -> Tagged String -> World
-print w (Tagged u) (Tagged s) = over (effects) (M.insertWith (++) u [s]) w
+print w (Tagged u) (Tagged s) = over effects (M.insertWith (++) u [s]) w
 
 printAll :: World -> Tagged (List User) -> Tagged String -> World
 printAll w (Tagged us) s = lfoldl (\w u -> print w (Tagged u) s) w us
