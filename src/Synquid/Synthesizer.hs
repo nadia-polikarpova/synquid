@@ -96,6 +96,11 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
         
     -- | Qualifier generator for bound predicates
     predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
+    -- predQuals env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $ 
+      -- concatMap (extractPredQGenFromType env params vars') (syntGoal : components) ++
+      -- if null params  -- Parameter-less predicate: also include conditional qualifiers
+        -- then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components
+        -- else []    
     predQuals env params vars = toSpace Nothing $ 
       concatMap (extractPredQGenFromType env params vars) (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
@@ -201,8 +206,8 @@ extractPredQGenFromType env actualParams actualVars t = extractPredQGenFromType'
           (formalVals, formalVars) = partition (\v -> varName v == valueVarName) . Set.toList . varsOf $ fml'
           -- fml' = sortSubstituteFml sortInst $ substitute (Map.singleton valueVarName (last actualParams)) fml -- Allow mapping _v only to the last parameter of the predicate
           fmls = Set.toList $ conjunctsOf fml'
-          extractFromConjunct c = 
-            filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
+          extractFromConjunct c =
+            -- filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
             allSubstitutions env c formalVars (init actualParams ++ actualVars) formalVals [last actualParams]
             -- allSubstitutions env c formals (init actualParams ++ actualVars) [] []
         in concatMap extractFromConjunct fmls

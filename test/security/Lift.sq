@@ -1,11 +1,24 @@
--- Here we show that we can verify lifts and fancy if using just bind and return
+-- Here we show that we can verify all policy combinators using just return and bind
 
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+-- Set of elements of a list
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs  
+  
 data User 
   
 data Tagged a <visibleTo :: User -> Bool>!
 measure content :: Tagged a -> a
 
-return :: x: a -> Tagged a <{True}>
+return :: x: a -> Tagged {a | _v == x} <{True}>
 
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
@@ -36,4 +49,25 @@ if_ :: <ip :: User -> Bool> . <ic :: Bool> .
     -> Tagged a <ip>
 if_ = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)
 
-  
+sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
+sequence = \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> lift2 Cons y (sequence ys)
+
+insert :: <inp :: User -> Bool> . leq: (a -> a -> Tagged Bool <inp>) -> x: a -> xs: List a -> 
+            Tagged {List a | elems _v == elems xs + [x]} <inp>
+insert = \leq . \x . \xs .
+  match xs with
+    Nil -> return (Cons x Nil)
+    Cons y ys -> bind (leq x y) (\c . 
+      if c
+        then return (Cons x xs)
+        else bind (insert leq x ys) (\rec . return (Cons y rec))
+    )
+    
+sortBy :: <sop :: User -> Bool> . leq: (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
+sortBy = \leq . \xs .  
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> bind (sortBy leq ys) (\rec . insert leq y rec) 
