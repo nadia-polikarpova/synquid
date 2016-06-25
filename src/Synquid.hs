@@ -136,7 +136,7 @@ cla = CommandLineArgs {
   scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 1)"),
   match_max           = 2               &= help ("Maximum depth of matches (default: 2)"),
   aux_max             = 1               &= help ("Maximum depth of auxiliary functions (default: 1)") &= name "x",
-  fix                 = FirstArgument   &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, "(default:", show FirstArgument, ")"]),
+  fix                 = FirstArgument   &= help (unwords ["What should termination metric for fixpoints be derived from?", show AllArguments, show FirstArgument, show DisableFixpoint, show Nonterminating, "(default:", show FirstArgument, ")"]),
   generalize_preds    = True            &= help ("Make recursion polymorphic in abstract refinements (default: False)"),
   explicit_match      = False           &= help ("Do not abduce match scrutinees (default: False)"),
   unfold_locals       = False           &= help ("Use all variables, as opposed to top-level function arguments only, in match scrutinee abduction (default: False)"),
