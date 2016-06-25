@@ -33,8 +33,8 @@ main = do
   db <- open "conf.db"
   execute_ db "CREATE TABLE IF NOT EXISTS papers (id INTEGER PRIMARY KEY, title TEXT, status TEXT, session TEXT)"
   execute_ db "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"
-  execute_ db "CREATE TABLE IF NOT EXISTS authors (paperId INTEGER, userId INTEGER)"
-  execute_ db "CREATE TABLE IF NOT EXISTS conflicts (paperId INTEGER, userId INTEGER)"
+  execute_ db "CREATE TABLE IF NOT EXISTS authors (paperId INTEGER REFERENCES papers (id), userId INTEGER REFERENCES users (id))"
+  execute_ db "CREATE TABLE IF NOT EXISTS conflicts (paperId INTEGER REFERENCES papers (id), userId INTEGER REFERENCES users (id))"
 
   users <- query_ db "SELECT * FROM users" :: IO [UserRow]
   papers <- query_ db "SELECT * FROM papers" :: IO [PaperRow]
