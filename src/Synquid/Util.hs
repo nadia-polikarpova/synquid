@@ -19,8 +19,8 @@ import Debug.Trace
 -- | Identifiers
 type Id = String
 
-fromRight = head . rights . (:[])
-fromLeft = head . lefts . (:[])
+fromRight (Right x) = x
+fromLeft (Left x) = x
 
 -- | `mappedCompare` @f x y@ : compare @f x@ and @f y@
 mappedCompare :: Ord b => (a -> b) -> a -> a -> Ordering

@@ -68,7 +68,6 @@ data ExplorerState = ExplorerState {
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
   _newAuxGoals :: [Id],                            -- ^ Higher-order arguments that have been synthesized but not yet let-bound
   _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local bindings to be checked upon use (in type checking mode)
-  _checkedLets :: Map Id RProgram,
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
@@ -114,7 +113,7 @@ runExplorer eParams tParams initTS go = do
     [] -> return $ Left $ head errs
     (res : _) -> return $ Right res
   where
-    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty Map.empty
+    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
@@ -387,9 +386,9 @@ checkE env typ p@(Program pTerm pTyp) = do
   
   -- ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
   
-  addConstraint $ Subtype env pTyp typ False
+  addConstraint $ Subtype env pTyp typ False ""
   when (arity typ > 0) $
-    ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+    ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True "") (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
   fTyp <- runInSolver $ finalizeType typ
   pos <- asks $ _sourcePos . fst
   typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
@@ -460,7 +459,7 @@ enumerateAt env typ 0 = do
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
+        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
       return (env, p)
 
     soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
@@ -507,7 +506,7 @@ generateError env = do
   ctx <- asks $ _context . fst  
   writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
   tass <- use (typingState . typeAssignment)
-  addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env tass)) (int ffalse) False
+  addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env tass)) (int ffalse) False ""
   pos <- asks $ _sourcePos . fst  
   typingState . errorContext .= (pos, text "when checking" </> pretty errorProgram </> text "in" $+$ pretty (ctx errorProgram))
   runInSolver solveTypeConstraints
