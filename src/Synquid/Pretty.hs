@@ -370,8 +370,8 @@ instance Show SortConstraint where
   show = show . pretty
 
 prettyConstraint :: Constraint -> Doc
-prettyConstraint (Subtype env t1 t2 False) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2
-prettyConstraint (Subtype env t1 t2 True) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2
+prettyConstraint (Subtype env t1 t2 False label) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2 <+> parens (text label)
+prettyConstraint (Subtype env t1 t2 True label) = pretty env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2 <+> parens (text label)
 prettyConstraint (WellFormed env t) = prettyBindings env <+> operator "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> operator "|-" <+> pretty c
 prettyConstraint (WellFormedMatchCond env c) = prettyBindings env <+> operator "|- (match)" <+> pretty c

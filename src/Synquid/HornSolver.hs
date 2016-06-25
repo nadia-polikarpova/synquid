@@ -65,6 +65,8 @@ instance MonadSMT s => MonadHorn (FixPointSolver s) where
     lift (initSolver env)
     return $ Candidate Map.empty Set.empty Set.empty "0"
     
+  preprocessConstraint = preprocess
+    
   checkCandidates = check
     
   refineCandidates = refine
@@ -76,6 +78,28 @@ instance MonadSMT s => MonadHorn (FixPointSolver s) where
 
 initialSolution :: MonadSMT s => QMap -> FixPointSolver s Solution
 initialSolution qmap = ifM (asks isLeastFixpoint) (return $ botSolution qmap) (return $ topSolution qmap)  
+
+preprocess :: MonadSMT s => Formula -> FixPointSolver s [Formula]
+preprocess (Binary Implies lhs rhs) = ifM (asks isLeastFixpoint) (return preprocessLFP) (return preprocessGFP)
+  where
+    preprocessLFP = 
+      -- ToDo: split conjuncts
+      let 
+        rDisjuncts = Set.fromList $ uDNF rhs
+        (noUnknowns, withUnknowns) = Set.partition (Set.null . unknownsOf) rDisjuncts
+      in if Set.size withUnknowns > 1
+        then error $ unwords ["Least fixpoint solver got a disjunctive right-hand-side:", show rhs]
+        else -- Only one disjuncts with unknowns: split into all conjuncts with unknowns into separate constraints
+          let
+            lhs' = conjunction $ Set.insert lhs (Set.map fnot noUnknowns)
+            rConjuncts = conjunctsOf (disjunction withUnknowns)
+            (conjNoUnknowns, conjWithUnknowns) = Set.partition (Set.null . unknownsOf) rConjuncts
+            rhss = (if Set.null conjNoUnknowns then [] else [conjunction conjNoUnknowns]) ++ Set.toList conjWithUnknowns
+          in map (lhs' |=>|) rhss
+
+    preprocessGFP = map (|=>| rhs) (uDNF lhs) -- Remove disjunctions of unknowns on the left
+    
+preprocess fml = error $ unwords ["preprocess: encountered ill-formed constraint", show fml]
 
 -- | 'refine' @constraints quals extractAssumptions cands@ : solve @constraints@ using @quals@ starting from initial candidates @cands@;
 -- use @extractAssumptions@ to extract axiom instantiations from formulas;
@@ -138,11 +162,7 @@ greatestFixPoint quals extractAssumptions candidates = do
       Nothing -> greatestFixPoint quals extractAssumptions (newCandidates ++ rest')
 
   where
-    instantiateRhs sol fml = case fml of
-      Binary Implies lhs rhs -> let
-         rhs' = applySolution sol rhs
-        in Binary Implies lhs rhs'
-      _ -> error $ unwords ["greatestFixPoint: encountered ill-formed constraint", show fml]              
+    instantiateRhs sol (Binary Implies lhs rhs) = Binary Implies lhs (applySolution sol rhs)
               
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
     updateCandidate fml (Candidate sol valids invalids label) diffs diff = do
@@ -179,13 +199,12 @@ greatestFixPoint quals extractAssumptions candidates = do
         text "Invalid Constraint:" <+> pretty inv,
         text "Strengthening:" <+> pretty modified])        
         
-hornApplySolution extractAssumptions sol fml = case fml of
-  Binary Implies lhs rhs -> let
+hornApplySolution extractAssumptions sol (Binary Implies lhs rhs) = 
+    let
      lhs' = applySolution sol lhs
      rhs' = applySolution sol rhs
      assumptions = extractAssumptions lhs' `Set.union` extractAssumptions rhs'
     in Binary Implies (lhs' `andClean` conjunction assumptions) rhs'
-  _ -> error $ unwords ["hornApplySolution: encountered ill-formed constraint", show fml]        
     
 -- | 'strengthen' @qmap fml sol@: all minimal strengthenings of @sol@ using qualifiers from @qmap@ that make @fml@ valid;
 -- | @fml@ must have the form "/\ u_i ==> const".
@@ -243,8 +262,6 @@ strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     
     unsubstQual :: Formula -> Formula -> [Formula]
     unsubstQual u@(Unknown s name) qual = [q | q <- lookupQuals qmap qualifiers u, substitute s q == qual]
-          
-strengthen _ _ fml _ = error $ unwords ["strengthen: encountered ill-formed constraint", show fml]
 
 -- | 'maxValSize' @qmap sol unknowns@: Upper bound on the size of valuations of a conjunction of @unknowns@ when strengthening @sol@ 
 maxValSize :: QMap -> Solution -> Set Formula -> Int 
@@ -305,7 +322,7 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
     let lhs' = applySolution sol lhs
     let assumptions = extractAssumptions lhs' `Set.union` extractAssumptions (applySolution sol rhs)
     
-    let modifiedConstraint = modify assumptions lhs' rhs
+    let modifiedConstraint = Binary Implies (conjunction $ Set.insert lhs' assumptions) rhs
     
     debugOutput cand fml modifiedConstraint
     solMb' <- weaken modifiedConstraint sol
@@ -319,14 +336,6 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
                         then return $ cand' : rest -- Solution found
                         else leastFixPoint extractAssumptions (cand' : rest)
   where
-    modify assumptions lhs rhs = 
-      let 
-        rDisjuncts = Set.fromList $ uDNF rhs
-        (noUnknowns, withUnknowns) = Set.partition (Set.null . unknownsOf) rDisjuncts
-      in if Set.size withUnknowns > 1
-        then error $ unwords ["Least fixpoint solver got a disjunctive right-hand-side:", show rhs]
-        else Binary Implies (conjunction $ Set.insert lhs assumptions `Set.union` (Set.map fnot noUnknowns)) (disjunction withUnknowns)
-    
     -- | Re-evaluate affected clauses in @valids@ and @otherInvalids@ after solution has been strengthened from @sol@ to @sol'@ in order to fix @fml@
     updateCandidate fml (Candidate sol valids invalids label) sol' = do
       -- let modifiedUnknowns = Map.keysSet $ Map.differenceWith (\v1 v2 -> if v1 == v2 then Nothing else Just v2) sol sol'
@@ -352,20 +361,12 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
 -- | 'weaken' @fml sol@: a minimal weakening of @sol@ that make @fml@ valid;
 -- | @fml@ must have the form "const ==> const && /\ Ui" or "const ==> Ui".
 weaken :: MonadSMT s => Formula -> Solution -> FixPointSolver s (Maybe Solution)
-weaken (Binary Implies lhs rhs) sol = 
-  ifM (isValidFml (Binary Implies lhs known))
-    ((\newVals -> Just $ Map.union (Map.fromList newVals) sol) <$> mapM weakenUnknown (Set.toList unknowns))
-    (return Nothing) -- Known part of the rhs is too strong: no solution  
-  where
-    unknowns = unknownsOf rhs
-    known = conjunction (conjunctsOf rhs Set.\\ unknowns)
-    
-    weakenUnknown (Unknown subst u) = do
-      let quals = Set.toList (sol Map.! u)
-      quals' <- filterM (\q -> isValidFml (Binary Implies lhs (substitute subst q))) quals  
-      return $ (u, Set.fromList quals')
-    
-weaken fml _ = error $ unwords ["weaken: encountered ill-formed constraint", show fml]        
+weaken (Binary Implies lhs (Unknown subst u)) sol = do
+  let quals = Set.toList (sol Map.! u)
+  quals' <- filterM (\q -> isValidFml (Binary Implies lhs (substitute subst q))) quals  
+  writeLog 2 (text "Weakened" <+> text u <+> text "to" <+> pretty quals')
+  return (Just $ Map.insert u (Set.fromList quals') sol)
+weaken (Binary Implies lhs _) sol = return Nothing
             
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
 pruneSolutions :: MonadSMT s => [Formula] -> [Solution] -> FixPointSolver s [Solution]

@@ -248,7 +248,7 @@ reconstructE' env typ (PSymbol name) = do
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
+        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
       checkE env typ p
       return (env, p)
 reconstructE' env typ (PApp iFun iArg) = do
@@ -296,7 +296,7 @@ checkAnnotation env t t' p = do
     Right t'' -> do
       ctx <- asks $ _context . fst
       writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
-      addConstraint $ Subtype env t'' t True
+      addConstraint $ Subtype env t'' t True ""
       
       fT <- runInSolver $ finalizeType t
       fT'' <- runInSolver $ finalizeType t''

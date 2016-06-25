@@ -169,7 +169,6 @@ data Environment = Environment {
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _boundPredicates :: [PredSig],           -- ^ Argument sorts of bound abstract refinements
   _assumptions :: Set Formula,             -- ^ Unknown assumptions
-  _letBindings :: Map Id UProgram,
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
   _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
@@ -197,7 +196,6 @@ emptyEnv = Environment {
   _boundTypeVars = [],
   _boundPredicates = [],
   _assumptions = Set.empty,
-  _letBindings = Map.empty,
   _shapeConstraints = Map.empty,
   _usedScrutinees = [],
   _unfoldedVars = Set.empty,
@@ -405,7 +403,7 @@ type Declaration = Pos BareDeclaration
 {- Misc -}
           
 -- | Typing constraints
-data Constraint = Subtype Environment RType RType Bool
+data Constraint = Subtype Environment RType RType Bool Id
   | WellFormed Environment RType
   | WellFormedCond Environment Formula
   | WellFormedMatchCond Environment Formula

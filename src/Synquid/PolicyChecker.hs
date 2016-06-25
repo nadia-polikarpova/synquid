@@ -32,9 +32,14 @@ reconstruct eParams tParams goal = do
   where
     go = do
       p <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
-      -- runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
-      -- p <- fillInAuxGoals pMain
-      runInSolver $ finalizeProgram p      
+      hcs <- use (typingState . hornClauses)      
+      qmap <- use (typingState . qualifierMap)            
+      writeLog 2 (vsep [nest 2 $ text "Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) hcs), nest 2 $ text "QMap" $+$ pretty qmap])      
+      
+      labels <- runInSolver getViolatingLabels
+      if null labels
+        then runInSolver $ finalizeProgram p
+        else throwErrorWithDescription $ text "Violating accesses:" <+> commaSep (map text labels)
 
 fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
 fillInAuxGoals pMain = do
@@ -155,11 +160,9 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                            text "to lambda term" </> squotes (pretty $ untyped impl)
                            
   PLet x iDef iBody -> do -- E-term let (since lambda-let was considered before)
-    pBody <- reconstructI (over letBindings (Map.insert x iDef) env) t iBody
-    defs <- use checkedLets
-    case Map.lookup x defs of
-      Nothing -> return pBody -- x did not appear in iBody, through it away
-      Just pDef -> return $ Program (PLet x pDef pBody) t -- substitute the checked version of x's definition
+    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
+    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
+    return $ Program (PLet x pDef pBody) t
     
   PIf iCond iThen iElse -> do
     (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
@@ -232,24 +235,16 @@ reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (E
 reconstructE env t (Program p AnyT) = reconstructE' env t p
 
 reconstructE' env typ PHole = error "Holes not supported when checking policies"
-reconstructE' env typ (PSymbol name) = do  
-  case Map.lookup name (env ^. letBindings) of
-    Nothing -> case lookupSymbol name (arity typ) env of
-      Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
-      Just sch -> do
-        t <- symbolType env name sch
-        let p = Program (PSymbol name) t
-        symbolUseCount %= Map.insertWith (+) name 1
-        case Map.lookup name (env ^. shapeConstraints) of
-          Nothing -> return ()
-          Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False
-        p' <- coerceE env typ p
-        return (env, p')
-    Just iDef -> do
-        -- writeLog 2 (text "Found let binding for" <+> text name <+> text "check against" <+> pretty typ $+$ pretty iDef)
-        (env', p) <- reconstructE env typ iDef
-        checkedLets %= Map.insert name p
-        return (addGhost name (typeOf p) env', Program (PSymbol name) (typeOf p))
+reconstructE' env typ (PSymbol name) = case lookupSymbol name (arity typ) env of
+  Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
+  Just sch -> do
+    t <- symbolType env name sch
+    let p = Program (PSymbol name) t
+    case Map.lookup name (env ^. shapeConstraints) of
+      Nothing -> return ()
+      Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
+    when (arity typ == 0) $ checkSymbol env typ p
+    return (env, p)
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
@@ -261,11 +256,9 @@ reconstructE' env typ (PApp iFun iArg) = do
       pArg <- generateHOArg env' (d - 1) tArg iArg -- (\p -> Program (PApp pFun p) typ)
       return (env', Program (PApp pFun pArg) tRes)
     else do -- First-order argument: generate now
-      (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
-      (env''', y) <- toVar pArg env''
-      return (env''', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x y) tRes))
-  pApp' <- coerceE envfinal typ pApp
-  return (envfinal, pApp')
+      (env'', pArg@(Program (PSymbol y) t)) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
+      return (env'', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x (Var (toSort $ baseTypeOf t) y)) tRes))
+  return (envfinal, pApp)
   where
     generateHOArg env d tArg iArg = case content iArg of
       PSymbol f -> do
@@ -283,28 +276,13 @@ reconstructE' env typ impl = do
   throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
                                           text "and got" </> squotes (pretty $ untyped impl)
                                           
-coerceE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s RProgram
-coerceE env typ p@(Program pTerm pTyp) = do
+checkSymbol :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
+checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
-  oldTState <- use typingState
-  addConstraint $ Subtype env pTyp typ False
-  -- when (arity typ > 0) $
-    -- ifM (asks $ _consistencyChecking . fst) (addConstraint $ Subtype env pTyp typ True) (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
-  fTyp <- runInSolver $ finalizeType typ
-  pos <- asks $ _sourcePos . fst
-  typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
-  -- solveIncrementally
-  -- let res = p
-  res <- ifte solveIncrementally 
-                (const $ return p) 
-                (do -- Subtyping check fails: restore typing state and replace with a hole
-                  typingState .= oldTState
-                  return $ Program PHole typ
-                )
-  typingState . errorContext .= (noPos, empty)
-  return res                              
+  addConstraint $ Subtype env pTyp typ False name
+  runInSolver generateHornClauses
                                           
 -- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
 -- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
