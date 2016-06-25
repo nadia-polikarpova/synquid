@@ -97,6 +97,9 @@ deriving instance Data FixpointStrategy
 deriving instance Eq FixpointStrategy
 deriving instance Show FixpointStrategy
 
+{-# ANN module "HLint: ignore Use camelCase" #-}
+{-# ANN module "HLint: ignore Redundant bracket" #-}
+
 data CommandLineArgs
     = CommandLineArgs {
         -- | Input
@@ -269,7 +272,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
-      mProg <- if repairPolicies synquidParams  
+      mProg <- if repairPolicies synquidParams
                 then policyRepair explorerParams solverParams { isLeastFixpoint = True} goal cquals tquals
                 else synthesize explorerParams solverParams goal cquals tquals
       case mProg of

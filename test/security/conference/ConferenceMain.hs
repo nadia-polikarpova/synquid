@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 
 module Main where
 
@@ -7,12 +7,15 @@ import Control.Applicative
 import Control.Lens
 import qualified Data.Map as Map
 import qualified Data.Text as T
+import Text.Printf
 
-import ConferenceImpl hiding (print)
-import ConferenceVerification
+import System.Console.CmdArgs
 
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromRow
+
+import ConferenceImpl hiding (print, String)
+import ConferenceVerification
 
 
 instance FromRow PaperRow where
@@ -24,13 +27,43 @@ instance FromRow AuthorRow where
 instance FromRow ConflictRow where
   fromRow = ConflictRow <$> field <*> field
 
-tests = [("test1 w 12", (`test1` 12)),
-         ("test2 w 12", (`test2` 12)),
-         ("test3 w 12", (`test3` 12))]
+(%) s n = printf s n
+infix 0 %
+
+tests opts =
+  let papids = fromList $ paperIds opts
+      papid = head $ paperIds opts
+  in
+        [("test1 w %d" % papid,          (`test1` papid)),
+         ("test2 w %d" % papid,          (`test2` papid)),
+         ("test3 w %d" % papid,          (`test3` papid)),
+         ("test4 w %d" % papid,          (`test4` papid)),
+         ("test5 w %d" % papid,          (`test5` papid)),
+         ("test6 w %d" % papid,          (`test6` papid)),
+         ("test7 w %s" % show (papids),  (`test7` papids))]
+
+data CommandLineArgs = CommandLineArgs {
+  db_ :: String,
+  user :: String,
+  papers_ :: String
+}
+ deriving (Data)
+cla = CommandLineArgs {
+  db_ = "conf.db" &= typFile,
+  user = "Nadia" &= typ "NAME",
+  papers_ = "12" &= typ "ID,ID,..."
+}
+
+split :: String -> String -> [String]
+split sep s = map T.unpack $ T.splitOn (T.pack sep) $ T.pack s
+
+paperIds opts = map read $ split "," (papers_ opts) :: [Int]
 
 main :: IO ()
 main = do
-  db <- open "conf.db"
+  opts <- cmdArgs cla
+  db <- open (db_ opts)
+  print $ paperIds opts
   execute_ db "CREATE TABLE IF NOT EXISTS papers (id INTEGER PRIMARY KEY, title TEXT, status TEXT, session TEXT)"
   execute_ db "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"
   execute_ db "CREATE TABLE IF NOT EXISTS authors (paperId INTEGER REFERENCES papers (id), userId INTEGER REFERENCES users (id))"
@@ -48,11 +81,12 @@ main = do
               _phase = Review,
               _papers = mkPapers papers users authors conflicts
             },
-            _sessionUser = "Nadia",
+            _sessionUser = (user opts),
             _effects = Map.empty
           }
-      w's = map (\(title,test) -> (title, test w)) tests
-    in
+      w's = map (\(title,test) -> (title, test w)) $ tests opts
+    in do
+     putStrLn $ "Session for user \"" ++ (w ^. sessionUser) ++ "\""
      forM_ w's $ \(title, w') -> do
        putStrLn ""
        putStrLn $ "==  " ++ title ++ "  =="
