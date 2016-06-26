@@ -68,6 +68,7 @@ data ExplorerState = ExplorerState {
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
   _newAuxGoals :: [Id],                            -- ^ Higher-order arguments that have been synthesized but not yet let-bound
   _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local bindings to be checked upon use (in type checking mode)
+  _requiredTypes :: Map Id [RType],                -- ^ All types that a variable is required to comply to (in repair mode)
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
@@ -113,7 +114,7 @@ runExplorer eParams tParams initTS go = do
     [] -> return $ Left $ head errs
     (res : _) -> return $ Right res
   where
-    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty
+    initExplorerState = ExplorerState initTS [] [] Map.empty Map.empty Map.empty
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)

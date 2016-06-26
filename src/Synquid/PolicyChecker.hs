@@ -12,6 +12,7 @@ import Synquid.Util
 import Synquid.Pretty
 import Synquid.Resolver
 
+import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -36,10 +37,13 @@ reconstruct eParams tParams goal = do
       
       p <- reconstructTopLevel goal { gImpl = aImpl, gDepth = _auxDepth eParams }      
       labels <- runInSolver getViolatingLabels
-      if null labels
+      if Set.null labels
         then runInSolver $ finalizeProgram p
         else do
-          throwErrorWithDescription $ text "Violating accesses:" <+> commaSep (map text labels) $+$ text "when checking" $+$ pretty p
+          reqs <- uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType)))
+          throwErrorWithDescription $ 
+            (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty reqs)) 
+            $+$ text "when checking" $+$ pretty p
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos)
@@ -123,7 +127,8 @@ reconstructI' env t PHole = error "Holes not supported when checking policies"
 reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
   lambdaLets %= Map.insert x (env, iDef)
   pBody <- inContext (\p -> Program (PLet x uHole p) t) $ reconstructI env t iBody
-  return $ Program (PLet x iDef pBody) t -- ToDo: remember the type-checked version in lambdaLets and substitute
+  (_, pDef) <- uses lambdaLets (Map.! x)
+  return $ Program (PLet x pDef pBody) t
 reconstructI' env t@(FunctionT _ tArg tRes) impl = case impl of 
   PFun y impl -> do
     let ctx = \p -> Program (PFun y p) t
@@ -240,8 +245,8 @@ reconstructE' env typ (PApp iFun iArg) = do
           Just (env', def) -> do -- This is a locally defined function: check it against tArg as a fixpoint
             lambdaLets %= Map.delete f -- Remove from lambda-lets in case of recursive call
             writeLog 1 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
-            void $ inContext ctx $ reconstructTopLevel (Goal f env' (Monotype tArg) def 0 noPos)
-            lambdaLets %= Map.insert f (env', def)
+            def' <- inContext ctx $ reconstructTopLevel (Goal f env' (Monotype tArg) def 0 noPos)
+            lambdaLets %= Map.insert f (env', def')
             return iArg
       _ -> do -- Lambda-abstraction: check against tArg
             let tArg' = renameAsImpl (isBound env) iArg tArg
@@ -257,6 +262,7 @@ checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   ctx <- asks $ _context . fst
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
+  requiredTypes %= Map.insertWith (++) name [typ]
   addConstraint $ Subtype env pTyp typ False name
   runInSolver simplifyAllConstraints
                                             

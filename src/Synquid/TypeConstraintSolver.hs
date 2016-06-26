@@ -136,7 +136,7 @@ solveTypeConstraints = do
   
 {- Repair-specific interface -}
 
-getViolatingLabels :: MonadHorn s => TCSolver s [Id]
+getViolatingLabels :: MonadHorn s => TCSolver s (Set Id)
 getViolatingLabels = do
   scs <- use simpleConstraints
   writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
@@ -157,9 +157,9 @@ getViolatingLabels = do
     nest 2 $ text "QMap" $+$ pretty qmap])        
   
   (newCand:[]) <- lift . lift . lift $ refineCandidates (map fst nontermClauses) qmap (instantiateConsAxioms env) cands    
-  -- candidates .= [newCand]  
+  candidates .= [newCand]  
   invalidTerminals <- filterM (isInvalid newCand (instantiateConsAxioms env)) termClauses
-  return $ map snd invalidTerminals
+  return $ Set.fromList $ map snd invalidTerminals
   where
     isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
     isNonTerminal _ = False
