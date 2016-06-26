@@ -337,7 +337,7 @@ aNormalForm (Program (PLet x def body) t) = do
   aBody <- aNormalForm body
   return $ foldDefs defsX (Program (PLet x aX aBody) t) t
 aNormalForm (Program PErr t) = return $ Program PErr t
-aNormalForm (Program PHole t) = error $ unwords ["aNormalForm: got a hole"]
+aNormalForm (Program PHole t) = error "aNormalForm: got a hole"
 aNormalForm eTerm@(Program _ t) = do
   (defs, a) <- anfE eTerm True
   return $ foldDefs defs a t
@@ -349,14 +349,13 @@ anfE :: MonadHorn s => RProgram -> Bool -> Explorer s ([(Id, RProgram)], RProgra
 anfE p@(Program (PSymbol x) t) _ = return ([], p)
 anfE (Program (PApp pFun pArg) t) varRequired = do
   (defsFun, xFun) <- anfE pFun False
-  (defsArg, xArg) <- convertArg pArg
+  (defsArg, xArg) <- anfE pArg True
   if varRequired
     then do
       tmp <- freshId "T"
       return (defsFun ++ defsArg ++ [(tmp, Program (PApp xFun xArg) t)], (Program (PSymbol tmp) t))
     else return (defsFun ++ defsArg, (Program (PApp xFun xArg) t))
-  where
-    convertArg arg@(Program (PFun _ _) t) = do 
-      arg' <- aNormalForm arg
-      return ([], arg')
-    convertArg arg@(Program _ _) = anfE arg True
+anfE p@(Program (PFun _ _) t) _ = do -- A case for abstraction, which can appear in applications and let-bindings
+  p' <- aNormalForm p
+  return ([], p')    
+anfE p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]    
