@@ -506,7 +506,8 @@ generateError env = do
   ctx <- asks $ _context . fst  
   writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
   tass <- use (typingState . typeAssignment)
-  addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env tass)) (int ffalse) False ""
+  let env' = typeSubstituteEnv tass env
+  addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env')) (int ffalse) False ""
   pos <- asks $ _sourcePos . fst  
   typingState . errorContext .= (pos, text "when checking" </> pretty errorProgram </> text "in" $+$ pretty (ctx errorProgram))
   runInSolver solveTypeConstraints

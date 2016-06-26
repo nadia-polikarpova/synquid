@@ -152,19 +152,24 @@ getViolatingLabels :: MonadHorn s => TCSolver s [Id]
 getViolatingLabels = do
   clauses <- use hornClauses
   -- TODO: this should probably be moved to Horn solver
-  let (termClauses, nontermClauses) = partition isTerminal clauses
+  let (nontermClauses, termClauses) = partition isNonTerminal clauses
   qmap <- use qualifierMap
   cands <- use candidates
   env <- use initEnv
+  
+  writeLog 2 (vsep [
+    nest 2 $ text "Terminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) termClauses), 
+    nest 2 $ text "Nonterminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) nontermClauses), 
+    nest 2 $ text "QMap" $+$ pretty qmap])        
+  
   (newCand:[]) <- lift . lift . lift $ refineCandidates (map fst nontermClauses) qmap (instantiateConsAxioms env) cands    
-  -- candidates .= [newCand]
-  
+  -- candidates .= [newCand]  
   invalidTerminals <- filterM (isInvalid newCand (instantiateConsAxioms env)) termClauses
-  
   return $ map snd invalidTerminals
   where
-    isTerminal (Binary Implies _ rhs, _) = Set.null $ unknownsOf rhs 
-    
+    isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
+    isNonTerminal _ = False
+
     isInvalid cand extractAssumptions (fml,_) = do
       cands' <- lift . lift . lift $ checkCandidates False [fml] extractAssumptions [cand]
       return $ null cands'
@@ -349,9 +354,12 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       let u = p
       addPredAssignment p (Unknown Map.empty u)
       let argSorts' = map (sortSubstitute $ asSortSubst tass) argSorts
-      let vars = zipWith Var argSorts' deBrujns
+      let args = zipWith Var argSorts' deBrujns
+      let env' = typeSubstituteEnv tass env
+      let vars = allScalars env'
+      -- writeLog 2 $ nest 2 (text "Creating QSpace for" <+> text p <+> text "with variables" $+$ vsep (map (\fml -> pretty fml <> text ":" <+> pretty (sortOf fml)) vars))
       pq <- asks _predQualsGen
-      addQuals u (pq (addAllVariables vars env) vars (allScalars env tass))
+      addQuals u (pq (addAllVariables args env') args vars)
   where
     isFreeVariable tass a = not (isBound env a) && not (Map.member a tass)
 processPredicate c = modify $ addTypingConstraint c
@@ -397,28 +405,31 @@ processConstraint (WellFormed env t@(ScalarT baseT fml))
         tass <- use typeAssignment
         tq <- asks _typeQualsGen
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
-        let env' = addVariable valueVarName t env
-        when (not $ Map.member u qmap) $ addQuals u (tq env' (Var (toSort baseT) valueVarName) (allScalars env tass))
+        let env' = typeSubstituteEnv tass env
+        let env'' = addVariable valueVarName t env'
+        when (not $ Map.member u qmap) $ addQuals u (tq env'' (Var (toSort baseT) valueVarName) (allScalars env'))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       cq <- asks _condQualsGen
-      addQuals u (cq env (allScalars env tass))
+      let env' = typeSubstituteEnv tass env
+      addQuals u (cq env' (allScalars env'))
 processConstraint (WellFormedMatchCond env (Unknown _ u))
   = do
       tass <- use typeAssignment
       mq <- asks _matchQualsGen
-      addQuals u (mq env (allPotentialScrutinees env tass))
+      let env' = typeSubstituteEnv tass env
+      addQuals u (mq env' (allPotentialScrutinees env'))
 processConstraint c = error $ show $ text "processConstraint: not a simple constraint" <+> pretty c
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
-allScalars :: Environment -> TypeSubstitution -> [Formula]
-allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+allScalars :: Environment -> [Formula]
+allScalars env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
     toFormula (_, ForallT _ _) = Nothing
     toFormula (x, _) | isTempVar x = Nothing
-    toFormula (x, Monotype t) = case typeSubstitute tass t of
+    toFormula (x, Monotype t) = case t of
       ScalarT IntT  (Binary Eq _ (IntLit n)) -> Just $ IntLit n
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
       ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False
@@ -429,10 +440,10 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
     
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
-allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
-allPotentialScrutinees env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+allPotentialScrutinees :: Environment -> [Formula]
+allPotentialScrutinees env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
-    toFormula (x, Monotype t) = case typeSubstitute tass t of
+    toFormula (x, Monotype t) = case t of
       ScalarT b@(DatatypeT _ _ _) _ ->
         if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
           then Just $ Var (toSort b) x
@@ -443,7 +454,7 @@ allPotentialScrutinees env tass = catMaybes $ map toFormula $ Map.toList $ symbo
 hasPotentialScrutinees :: Monad s => Environment -> TCSolver s Bool
 hasPotentialScrutinees env = do
   tass <- use typeAssignment
-  return $ not $ null $ allPotentialScrutinees env tass
+  return $ not $ null $ allPotentialScrutinees (typeSubstituteEnv tass env)
   
 -- | Assumptions encoded in an environment    
 embedding :: Monad s => Environment -> Set Id -> Bool -> TCSolver s (Set Formula)

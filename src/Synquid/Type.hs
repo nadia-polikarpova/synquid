@@ -36,6 +36,13 @@ isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
 
+hasAny AnyT = True
+hasAny (ScalarT baseT _) = baseHasAny baseT
+  where
+    baseHasAny (DatatypeT _ tArgs _) = any hasAny tArgs
+    baseHasAny _ = False
+hasAny (FunctionT _ tArg tRes) = hasAny tArg || hasAny tRes    
+
 toSort BoolT = BoolS
 toSort IntT = IntS
 toSort (DatatypeT name tArgs _) = DataS name (map (toSort . baseTypeOf) tArgs)

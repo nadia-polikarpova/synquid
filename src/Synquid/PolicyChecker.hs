@@ -34,38 +34,34 @@ reconstruct eParams tParams goal = do
       aImpl <- aNormalForm (gImpl goal)
       writeLog 2 (pretty aImpl)      
       
-      p <- reconstructTopLevel goal { gImpl = aImpl, gDepth = _auxDepth eParams }
-      hcs <- use (typingState . hornClauses)      
-      qmap <- use (typingState . qualifierMap)            
-      writeLog 2 (vsep [nest 2 $ text "Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) hcs), nest 2 $ text "QMap" $+$ pretty qmap])      
-      
+      p <- reconstructTopLevel goal { gImpl = aImpl, gDepth = _auxDepth eParams }      
       labels <- runInSolver getViolatingLabels
       if null labels
         then runInSolver $ finalizeProgram p
         else do
           throwErrorWithDescription $ text "Violating accesses:" <+> commaSep (map text labels) $+$ text "when checking" $+$ pretty p
 
-fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
-fillInAuxGoals pMain = do
-  pAuxs <- reconstructAuxGoals
-  return $ foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
-  where
-    reconstructAuxGoals = do
-      goals <- use auxGoals
-      writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
-      case goals of
-        [] -> return []
-        (g : gs) -> do
-            auxGoals .= gs
-            aImpl <- aNormalForm (gImpl g)
-            let g' = g {
-                          -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
-                          gImpl = aImpl
-                       }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
-            p <- reconstructTopLevel g'
-            rest <- reconstructAuxGoals
-            return $ (gName g, p) : rest    
+-- fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
+-- fillInAuxGoals pMain = do
+  -- pAuxs <- reconstructAuxGoals
+  -- return $ foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
+  -- where
+    -- reconstructAuxGoals = do
+      -- goals <- use auxGoals
+      -- writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
+      -- case goals of
+        -- [] -> return []
+        -- (g : gs) -> do
+            -- auxGoals .= gs
+            -- aImpl <- aNormalForm (gImpl g)
+            -- let g' = g {
+                          -- -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
+                          -- gImpl = aImpl
+                       -- }
+            -- writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
+            -- p <- reconstructTopLevel g'
+            -- rest <- reconstructAuxGoals
+            -- return $ (gName g, p) : rest    
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos)
@@ -148,17 +144,14 @@ reconstructI' env t PErr = generateError env
 reconstructI' env t PHole = error "Holes not supported when checking policies"
 reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
   lambdaLets %= Map.insert x (env, iDef)
-  let ctx = \p -> Program (PLet x uHole p) t
-  pBody <- inContext ctx $ reconstructI env t iBody
-  return $ ctx pBody
+  pBody <- inContext (\p -> Program (PLet x uHole p) t) $ reconstructI env t iBody
+  return $ Program (PLet x iDef pBody) t -- ToDo: remember the type-checked version in lambdaLets and substitute
 reconstructI' env t@(FunctionT _ tArg tRes) impl = case impl of 
   PFun y impl -> do
     let ctx = \p -> Program (PFun y p) t
     pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
     return $ ctx pBody
-  PSymbol f -> do
-    fun <- etaExpand t f
-    reconstructI' env t $ content fun
+  PSymbol f -> snd <$> reconstructETopLevel env t (untyped impl)
   _ -> throwErrorWithDescription $ text "Cannot assign function type" </> squotes (pretty t) </>
                     text "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of
@@ -229,11 +222,7 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 -- (bottom-up phase of bidirectional reconstruction)    
 reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
 reconstructETopLevel env t impl = do
-  oldGoals <- use auxGoals
-  auxGoals .= []
-  (finalEnv, p) <- reconstructE env t impl  
-  (Program pTerm pTyp) <- fillInAuxGoals p
-  auxGoals .= oldGoals
+  (finalEnv, Program pTerm pTyp) <- reconstructE env t impl  
   pTyp' <- runInSolver $ currentAssignment pTyp
   return (finalEnv, Program pTerm pTyp')
 
@@ -249,34 +238,40 @@ reconstructE' env typ (PSymbol name) = case lookupSymbol name (arity typ) env of
     case Map.lookup name (env ^. shapeConstraints) of
       Nothing -> return ()
       Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
-    when (arity typ == 0) $ checkSymbol env typ p
+    when (not $ hasAny typ) $ checkSymbol env typ p
     return (env, p)
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
   (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
 
-  (envfinal, pApp) <- if isFunctionType tArg
+  (envfinal, pApp) <- do
+    let argCtx = \p -> Program (PApp pFun p) tRes
+    if isFunctionType tArg
     then do -- Higher-order argument: its value is not required for the function type, enqueue an auxiliary goal
-      d <- asks $ _auxDepth . fst
-      pArg <- generateHOArg env' (d - 1) tArg iArg -- (\p -> Program (PApp pFun p) typ)
-      return (env', Program (PApp pFun pArg) tRes)
+      pArg <- generateHOArg env' argCtx tArg iArg
+      return (env', argCtx pArg)
     else do -- First-order argument: generate now
-      (env'', pArg@(Program (PSymbol y) t)) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
+      (env'', pArg@(Program (PSymbol y) t)) <- inContext argCtx $ reconstructE env' tArg iArg
       return (env'', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x (Var (toSort $ baseTypeOf t) y)) tRes))
   return (envfinal, pApp)
   where
-    generateHOArg env d tArg iArg = case content iArg of
+    generateHOArg env ctx tArg iArg = case content iArg of
       PSymbol f -> do
         lets <- use lambdaLets
         case Map.lookup f lets of
-          Nothing -> do -- This is a function from the environment, with a known type: add its eta-expansion as an aux goal
-                      impl <- etaExpand tArg f
-                      _ <- enqueueGoal env tArg impl d
-                      return ()
-          Just (env', def) -> auxGoals %= ((Goal f env' (Monotype tArg) def d noPos) :) -- This is a locally defined function: add an aux goal with its body
-        return iArg
-      _ -> enqueueGoal env tArg iArg d -- HO argument is an abstraction: enqueue a fresh goal              
+          Nothing -> -- This is a function from the environment, with a known type: check symbol against tArg                      
+            snd <$> reconstructETopLevel env tArg iArg 
+          Just (env', def) -> do -- This is a locally defined function: check it against tArg as a fixpoint
+            lambdaLets %= Map.delete f -- Remove from lambda-lets in case of recursive call
+            writeLog 1 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
+            void $ inContext ctx $ reconstructTopLevel (Goal f env' (Monotype tArg) def 0 noPos)
+            lambdaLets %= Map.insert f (env', def)
+            return iArg
+      _ -> do -- Lambda-abstraction: check against tArg
+            let tArg' = renameAsImpl (isBound env) iArg tArg
+            writeLog 1 $ text "Checking lambda argument" <+> pretty iArg <+> text "::" <+> pretty tArg' <+> text "in" $+$ pretty (ctx (untyped PHole))
+            inContext ctx $ reconstructI env tArg' iArg
       
 reconstructE' env typ impl = do
   throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
@@ -290,30 +285,30 @@ checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   addConstraint $ Subtype env pTyp typ False name
   runInSolver generateHornClauses
                                           
--- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
--- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
-insertAuxSolution :: Id -> RProgram -> RProgram -> RProgram
-insertAuxSolution x pAux (Program body t) = flip Program t $ 
-  case body of
-    PLet y def p -> if x == y 
-                    then PLet x pAux p
-                    else PLet y (ins def) (ins p) 
-    PSymbol y -> if x == y
-                    then content $ pAux
-                    else body
-    PApp p1 p2 -> PApp (ins p1) (ins p2)
-    PFun y p -> PFun y (ins p)
-    PIf c p1 p2 -> PIf (ins c) (ins p1) (ins p2)
-    PMatch s cases -> PMatch (ins s) (map (\(Case c args p) -> Case c args (ins p)) cases)
-    PFix ys p -> PFix ys (ins p)
-    _ -> body  
-  where
-    ins = insertAuxSolution x pAux
+-- -- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
+-- -- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
+-- insertAuxSolution :: Id -> RProgram -> RProgram -> RProgram
+-- insertAuxSolution x pAux (Program body t) = flip Program t $ 
+  -- case body of
+    -- PLet y def p -> if x == y 
+                    -- then PLet x pAux p
+                    -- else PLet y (ins def) (ins p) 
+    -- PSymbol y -> if x == y
+                    -- then content $ pAux
+                    -- else body
+    -- PApp p1 p2 -> PApp (ins p1) (ins p2)
+    -- PFun y p -> PFun y (ins p)
+    -- PIf c p1 p2 -> PIf (ins c) (ins p1) (ins p2)
+    -- PMatch s cases -> PMatch (ins s) (map (\(Case c args p) -> Case c args (ins p)) cases)
+    -- PFix ys p -> PFix ys (ins p)
+    -- _ -> body  
+  -- where
+    -- ins = insertAuxSolution x pAux
 
-etaExpand t f = do    
-  args <- replicateM (arity t) (freshId "X")
-  let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped (PSymbol f)) (map (untyped . PSymbol) args)
-  return $ foldr (\x p -> untyped $ PFun x p) body args
+-- etaExpand t f = do    
+  -- args <- replicateM (arity t) (freshId "X")
+  -- let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped (PSymbol f)) (map (untyped . PSymbol) args)
+  -- return $ foldr (\x p -> untyped $ PFun x p) body args
   
 -- | 'aNormalForm' @p@: program equivalent to @p@ where arguments and top-level e-terms do not contain applications
 aNormalForm :: MonadHorn s => RProgram -> Explorer s RProgram
