@@ -18,9 +18,9 @@ module Synquid.TypeConstraintSolver (
   addTypingConstraint,
   addFixedUnknown,
   setUnknownRecheck,
-  generateHornClauses,
-  getViolatingLabels,
   solveTypeConstraints,
+  simplifyAllConstraints,
+  getViolatingLabels,  
   solveAllCandidates,
   matchConsType,
   hasPotentialScrutinees,
@@ -120,36 +120,30 @@ addTypingConstraint c = over typingConstraints (nub . (c :))
 -- | Solve @typingConstraints@: either strengthen the current candidates and return shapeless type constraints or fail
 solveTypeConstraints :: MonadHorn s => TCSolver s ()
 solveTypeConstraints = do
-  generateHornClauses
+  simplifyAllConstraints
+  
+  scs <- use simpleConstraints
+  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))  
+  
+  processAllPredicates
+  processAllConstraints  
   solveHornClauses
   checkTypeConsistency  
-    
+  
+  simpleConstraints .= []
   hornClauses .= []
   consistencyChecks .= []
   
 {- Repair-specific interface -}
 
--- | Generate Horn clauses from current typing constraints but do not solve them
-generateHornClauses :: MonadHorn s => TCSolver s ()
-generateHornClauses = do
-  simplifyAllConstraints
-  
-  scs <- use simpleConstraints
-  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))  
-        
-  tass <- use typeAssignment
-  writeLog 2 (text "Type assignment" $+$ vMapDoc text pretty tass)
-  
-  processAllPredicates
-  
-  pass <- use predAssignment
-  writeLog 2 (text "Pred assignment" $+$ vMapDoc text pretty pass)        
-  
-  processAllConstraints
-  simpleConstraints .= []
-
 getViolatingLabels :: MonadHorn s => TCSolver s [Id]
 getViolatingLabels = do
+  scs <- use simpleConstraints
+  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
+
+  processAllPredicates
+  processAllConstraints
+
   clauses <- use hornClauses
   -- TODO: this should probably be moved to Horn solver
   let (nontermClauses, termClauses) = partition isNonTerminal clauses
@@ -186,8 +180,10 @@ simplifyAllConstraints = do
   tass <- use typeAssignment
   mapM_ simplifyConstraint tcs
     
-  -- If type assignment has changed, we might be able to process more shapeless constraints:
+  -- If type assignment has changed, we might be able to process more shapeless constraints:  
   tass' <- use typeAssignment
+  writeLog 2 (text "Type assignment" $+$ vMapDoc text pretty tass')
+  
   when (Map.size tass' > Map.size tass) simplifyAllConstraints
   
 -- | Assign unknowns to all free predicate variables  
@@ -196,6 +192,9 @@ processAllPredicates = do
   tcs <- use typingConstraints
   typingConstraints .= []
   mapM_ processPredicate tcs
+  
+  pass <- use predAssignment
+  writeLog 2 (text "Pred assignment" $+$ vMapDoc text pretty pass)          
     
 -- | Convert simple typing constraints into horn clauses and qualifier maps
 processAllConstraints :: MonadHorn s => TCSolver s ()
@@ -357,7 +356,6 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
       let args = zipWith Var argSorts' deBrujns
       let env' = typeSubstituteEnv tass env
       let vars = allScalars env'
-      -- writeLog 2 $ nest 2 (text "Creating QSpace for" <+> text p <+> text "with variables" $+$ vsep (map (\fml -> pretty fml <> text ":" <+> pretty (sortOf fml)) vars))
       pq <- asks _predQualsGen
       addQuals u (pq (addAllVariables args env') args vars)
   where

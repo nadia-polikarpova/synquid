@@ -283,7 +283,7 @@ checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
   addConstraint $ Subtype env pTyp typ False name
-  runInSolver generateHornClauses
+  runInSolver simplifyAllConstraints
                                           
 -- -- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
 -- -- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."

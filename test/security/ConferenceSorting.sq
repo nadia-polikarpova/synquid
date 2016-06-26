@@ -53,7 +53,7 @@ lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
   
 sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
   
-sortBy :: <sop :: User -> Bool> . xs: List a -> leq: (a -> a -> Tagged Bool <sop>) -> Tagged {List a | elems _v == elems xs} <sop>
+sortBy :: <sop :: User -> Bool> . leq: (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
     
 -- Strings
 
@@ -107,5 +107,5 @@ test = \w . \pids .
                       bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid2) (return 0)) (\score2 .
                         return (score1 <= score2)
                       )
-                    ) in                    
-  print w u (lift1 toString (sortBy pids scoreLeq))
+                    ) in
+  print w u (lift1 toString (sortBy scoreLeq pids))
