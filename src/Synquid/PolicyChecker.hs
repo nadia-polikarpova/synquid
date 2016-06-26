@@ -40,28 +40,6 @@ reconstruct eParams tParams goal = do
         then runInSolver $ finalizeProgram p
         else do
           throwErrorWithDescription $ text "Violating accesses:" <+> commaSep (map text labels) $+$ text "when checking" $+$ pretty p
-
--- fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
--- fillInAuxGoals pMain = do
-  -- pAuxs <- reconstructAuxGoals
-  -- return $ foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
-  -- where
-    -- reconstructAuxGoals = do
-      -- goals <- use auxGoals
-      -- writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
-      -- case goals of
-        -- [] -> return []
-        -- (g : gs) -> do
-            -- auxGoals .= gs
-            -- aImpl <- aNormalForm (gImpl g)
-            -- let g' = g {
-                          -- -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
-                          -- gImpl = aImpl
-                       -- }
-            -- writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
-            -- p <- reconstructTopLevel g'
-            -- rest <- reconstructAuxGoals
-            -- return $ (gName g, p) : rest    
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos)
@@ -151,7 +129,7 @@ reconstructI' env t@(FunctionT _ tArg tRes) impl = case impl of
     let ctx = \p -> Program (PFun y p) t
     pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
     return $ ctx pBody
-  PSymbol f -> snd <$> reconstructETopLevel env t (untyped impl)
+  PSymbol f -> reconstructETopLevel env t (untyped impl)
   _ -> throwErrorWithDescription $ text "Cannot assign function type" </> squotes (pretty t) </>
                     text "to non-lambda term" </> squotes (pretty $ untyped impl)
 reconstructI' env t@(ScalarT _ _) impl = case impl of
@@ -159,32 +137,32 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                            text "to lambda term" </> squotes (pretty $ untyped impl)
                            
   PLet x iDef iBody -> do -- E-term let (since lambda-let was considered before)
-    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
-    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
+    pDef <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
+    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env) t iBody
     return $ Program (PLet x pDef pBody) t
     
   PIf iCond iThen iElse -> do
-    (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
+    pCond <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
     let ScalarT BoolT cond = typeOf pCond
-    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ftrue) cond) $ env') t iThen
-    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ffalse) cond) $ env') t iElse
+    pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ftrue) cond) env) t iThen
+    pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ffalse) cond) env) t iElse
     return $ Program (PIf pCond pThen pElse) t
     
   PMatch iScr iCases -> do
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
     let scrT = refineTop env $ shape $ lastType $ head consTypes
     
-    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
+    pScrutinee <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
     let scrutineeSymbols = symbolList pScrutinee
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
     when (not isGoodScrutinee) $ throwErrorWithDescription $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
             
-    (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
-    pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
+    (env', x) <- toVar pScrutinee (addScrutinee pScrutinee env)
+    pCases <- zipWithM (reconstructCase env' x pScrutinee t) iCases consTypes    
     return $ Program (PMatch pScrutinee pCases) t
       
-  _ -> snd <$> reconstructETopLevel env t (untyped impl)
+  _ -> reconstructETopLevel env t (untyped impl)
   
   where
     -- Check that all constructors are known and belong to the same datatype
@@ -220,13 +198,13 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 
 -- | 'reconstructE' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
 -- (bottom-up phase of bidirectional reconstruction)    
-reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
+reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructETopLevel env t impl = do
-  (finalEnv, Program pTerm pTyp) <- reconstructE env t impl  
+  (Program pTerm pTyp) <- reconstructE env t impl  
   pTyp' <- runInSolver $ currentAssignment pTyp
-  return (finalEnv, Program pTerm pTyp')
+  return $ Program pTerm pTyp'
 
-reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
+reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructE env t (Program p AnyT) = reconstructE' env t p
 
 reconstructE' env typ PHole = error "Holes not supported when checking policies"
@@ -239,29 +217,26 @@ reconstructE' env typ (PSymbol name) = case lookupSymbol name (arity typ) env of
       Nothing -> return ()
       Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
     when (not $ hasAny typ) $ checkSymbol env typ p
-    return (env, p)
+    return p
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
-  (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
+  pFun <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
-
-  (envfinal, pApp) <- do
-    let argCtx = \p -> Program (PApp pFun p) tRes
-    if isFunctionType tArg
-    then do -- Higher-order argument: its value is not required for the function type, enqueue an auxiliary goal
-      pArg <- generateHOArg env' argCtx tArg iArg
-      return (env', argCtx pArg)
-    else do -- First-order argument: generate now
-      (env'', pArg@(Program (PSymbol y) t)) <- inContext argCtx $ reconstructE env' tArg iArg
-      return (env'', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x (Var (toSort $ baseTypeOf t) y)) tRes))
-  return (envfinal, pApp)
+  let argCtx = \p -> Program (PApp pFun p) tRes
+  if isFunctionType tArg
+  then do -- Higher-order argument: its value is not required for the function type, enqueue an auxiliary goal
+    pArg <- generateHOArg env argCtx tArg iArg
+    return $ argCtx pArg
+  else do -- First-order argument: generate now
+    pArg@(Program (PSymbol y) t) <- inContext argCtx $ reconstructE env tArg iArg
+    return $ Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x (Var (toSort $ baseTypeOf t) y)) tRes)
   where
     generateHOArg env ctx tArg iArg = case content iArg of
       PSymbol f -> do
         lets <- use lambdaLets
         case Map.lookup f lets of
           Nothing -> -- This is a function from the environment, with a known type: check symbol against tArg                      
-            snd <$> reconstructETopLevel env tArg iArg 
+            reconstructETopLevel env tArg iArg 
           Just (env', def) -> do -- This is a locally defined function: check it against tArg as a fixpoint
             lambdaLets %= Map.delete f -- Remove from lambda-lets in case of recursive call
             writeLog 1 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
@@ -284,32 +259,7 @@ checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   
   addConstraint $ Subtype env pTyp typ False name
   runInSolver simplifyAllConstraints
-                                          
--- -- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
--- -- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
--- insertAuxSolution :: Id -> RProgram -> RProgram -> RProgram
--- insertAuxSolution x pAux (Program body t) = flip Program t $ 
-  -- case body of
-    -- PLet y def p -> if x == y 
-                    -- then PLet x pAux p
-                    -- else PLet y (ins def) (ins p) 
-    -- PSymbol y -> if x == y
-                    -- then content $ pAux
-                    -- else body
-    -- PApp p1 p2 -> PApp (ins p1) (ins p2)
-    -- PFun y p -> PFun y (ins p)
-    -- PIf c p1 p2 -> PIf (ins c) (ins p1) (ins p2)
-    -- PMatch s cases -> PMatch (ins s) (map (\(Case c args p) -> Case c args (ins p)) cases)
-    -- PFix ys p -> PFix ys (ins p)
-    -- _ -> body  
-  -- where
-    -- ins = insertAuxSolution x pAux
-
--- etaExpand t f = do    
-  -- args <- replicateM (arity t) (freshId "X")
-  -- let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped (PSymbol f)) (map (untyped . PSymbol) args)
-  -- return $ foldr (\x p -> untyped $ PFun x p) body args
-  
+                                            
 -- | 'aNormalForm' @p@: program equivalent to @p@ where arguments and top-level e-terms do not contain applications
 aNormalForm :: MonadHorn s => RProgram -> Explorer s RProgram
 aNormalForm (Program (PFun x body) t) = do
