@@ -417,6 +417,7 @@ allScalars :: Environment -> TypeSubstitution -> [Formula]
 allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
     toFormula (_, ForallT _ _) = Nothing
+    toFormula (x, _) | isTempVar x = Nothing
     toFormula (x, Monotype t) = case typeSubstitute tass t of
       ScalarT IntT  (Binary Eq _ (IntLit n)) -> Just $ IntLit n
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
@@ -424,6 +425,8 @@ allScalars env tass = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 
       ScalarT (DatatypeT dt [] []) (Binary Eq _ cons@(Cons _ _ [])) -> Just cons
       ScalarT b _ -> Just $ Var (toSort b) x
       _ -> Nothing
+    isTempVar x = take 1 x == "T" -- A variable introduced by ANF transformation  
+    
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> TypeSubstitution -> [Formula]
@@ -457,7 +460,7 @@ embedding env vars includeQuantified = do
         then fmls
         else let (x, rest) = Set.deleteFindMin vars in
               case Map.lookup x allSymbols of
-                Nothing -> addBindings tass pass qmap  fmls rest -- Variable not found (useful to ignore value variables)
+                Nothing -> addBindings tass pass qmap fmls rest -- Variable not found (useful to ignore value variables)
                 Just (Monotype t) -> case typeSubstitute tass t of
                   ScalarT baseT fml -> 
                     let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x)) . substitutePredicate pass)
@@ -466,6 +469,7 @@ embedding env vars includeQuantified = do
                     addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` newVars)
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
+                Just sch -> addBindings tass pass qmap fmls rest -- TODO: why did this work before?
     allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
     
 bottomValuation :: QMap -> Formula -> Formula
