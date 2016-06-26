@@ -96,17 +96,18 @@ qualifier {x in y}
 -- Print paper status to an author
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
 test1 = \w . \pid .
-  let u = getSessionUser w in  
-  let out = lift1 toString (getPaperStatus w pid) in
-  print w u out      
+  let u = getSessionUser w in
+  -- let out = lift1 toString (getPaperStatus w pid) in
+  let out = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 eq (getCurrentPhase w) (return Done))) in
+  print w u out
       
 test2 :: w: World -> pid: PaperId -> World
 test2 = \w . \pid .
-  let u = getSessionUser w in  
-  let out1 = lift1 toString (getPaperAuthors w pid) in 
-  let out2 = lift1 toString (getPaperStatus w pid) in  
-  -- let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem (getPaperAuthors w pid) u)) in 
-  -- let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem (getPaperAuthors w pid) u) (lift2 eq (getCurrentPhase w) (return Done)))) in
+  let u = getSessionUser w in
+  -- let out1 = lift1 toString (getPaperAuthors w pid) in 
+  -- let out2 = lift1 toString (getPaperStatus w pid) in  
+  let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem (getPaperAuthors w pid) u)) in 
+  let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem (getPaperAuthors w pid) u) (lift2 eq (getCurrentPhase w) (return Done)))) in
   let out = lift2 strcat out1 out2 in
   print w u out
             

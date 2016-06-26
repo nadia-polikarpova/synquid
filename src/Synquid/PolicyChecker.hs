@@ -31,7 +31,10 @@ reconstruct eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
-      p <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
+      aImpl <- aNormalForm (gImpl goal)
+      writeLog 2 (pretty aImpl)      
+      
+      p <- reconstructTopLevel goal { gImpl = aImpl, gDepth = _auxDepth eParams }
       hcs <- use (typingState . hornClauses)      
       qmap <- use (typingState . qualifierMap)            
       writeLog 2 (vsep [nest 2 $ text "Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) hcs), nest 2 $ text "QMap" $+$ pretty qmap])      
@@ -39,7 +42,8 @@ reconstruct eParams tParams goal = do
       labels <- runInSolver getViolatingLabels
       if null labels
         then runInSolver $ finalizeProgram p
-        else throwErrorWithDescription $ text "Violating accesses:" <+> commaSep (map text labels)
+        else do
+          throwErrorWithDescription $ text "Violating accesses:" <+> commaSep (map text labels) $+$ text "when checking" $+$ pretty p
 
 fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
 fillInAuxGoals pMain = do
@@ -53,11 +57,13 @@ fillInAuxGoals pMain = do
         [] -> return []
         (g : gs) -> do
             auxGoals .= gs
-            -- let g' = g {
+            aImpl <- aNormalForm (gImpl g)
+            let g' = g {
                           -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
-                       -- }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g
-            p <- reconstructTopLevel g
+                          gImpl = aImpl
+                       }
+            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
+            p <- reconstructTopLevel g'
             rest <- reconstructAuxGoals
             return $ (gName g, p) : rest    
     
@@ -308,5 +314,49 @@ etaExpand t f = do
   args <- replicateM (arity t) (freshId "X")
   let body = foldl (\e1 e2 -> untyped $ PApp e1 e2) (untyped (PSymbol f)) (map (untyped . PSymbol) args)
   return $ foldr (\x p -> untyped $ PFun x p) body args
-    
   
+-- | 'aNormalForm' @p@: program equivalent to @p@ where arguments and top-level e-terms do not contain applications
+aNormalForm :: MonadHorn s => RProgram -> Explorer s RProgram
+aNormalForm (Program (PFun x body) t) = do
+  aBody <- aNormalForm body
+  return $ Program (PFun x aBody) t
+aNormalForm (Program (PIf cond thn els) t) = do
+  (defsCond, aCond) <- anfE cond True
+  aThn <- aNormalForm thn
+  aEls <- aNormalForm els
+  return $ foldDefs defsCond (Program (PIf aCond aThn aEls) t) t
+aNormalForm (Program (PMatch scr cases) t) = do
+  (defsScr, aScr) <- anfE scr True
+  aCases <- mapM (\(Case ctor binders e) -> (Case ctor binders) <$> aNormalForm e) cases
+  return $ foldDefs defsScr (Program (PMatch aScr aCases) t) t
+aNormalForm (Program (PFix xs body) t) = do
+  aBody <- aNormalForm body
+  return $ Program (PFix xs aBody) t
+aNormalForm (Program (PLet x def body) t) = do
+  (defsX, aX) <- anfE def False
+  aBody <- aNormalForm body
+  return $ foldDefs defsX (Program (PLet x aX aBody) t) t
+aNormalForm (Program PErr t) = return $ Program PErr t
+aNormalForm (Program PHole t) = error $ unwords ["aNormalForm: got a hole"]
+aNormalForm eTerm@(Program _ t) = do
+  (defs, a) <- anfE eTerm True
+  return $ foldDefs defs a t
+  
+foldDefs defs body t = foldr (\(name, def) p -> Program (PLet name def p) t) body defs
+  
+-- | 'anfE' @p varRequired@: convert E-term @p@ to a list of bindings and either a variable (if @varRequired@) or a flat application (if not @varRequired@)
+anfE :: MonadHorn s => RProgram -> Bool -> Explorer s ([(Id, RProgram)], RProgram)
+anfE p@(Program (PSymbol x) t) _ = return ([], p)
+anfE (Program (PApp pFun pArg) t) varRequired = do
+  (defsFun, xFun) <- anfE pFun False
+  (defsArg, xArg) <- convertArg pArg
+  if varRequired
+    then do
+      tmp <- freshId "T"
+      return (defsFun ++ defsArg ++ [(tmp, Program (PApp xFun xArg) t)], (Program (PSymbol tmp) t))
+    else return (defsFun ++ defsArg, (Program (PApp xFun xArg) t))
+  where
+    convertArg arg@(Program (PFun _ _) t) = do 
+      arg' <- aNormalForm arg
+      return ([], arg')
+    convertArg arg@(Program _ _) = anfE arg True
