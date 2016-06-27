@@ -35,7 +35,7 @@ localize eParams tParams goal = do
       aImpl <- aNormalForm (gImpl goal)
       writeLog 2 (pretty aImpl)      
       
-      p <- localizeTopLevel goal { gImpl = aImpl, gDepth = _auxDepth eParams }      
+      p <- localizeTopLevel goal { gImpl = aImpl }
       labels <- runInSolver getViolatingLabels
       reqs <- uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType)))
       finalP <- runInSolver $ finalizeProgram p
@@ -57,23 +57,22 @@ repair eParams tParams env p violations = do
 localizeTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 localizeTopLevel (Goal funName env (ForallT a sch) impl depth pos) = localizeTopLevel (Goal funName (addTypeVar a env) sch impl depth pos)
 localizeTopLevel (Goal funName env (ForallP sig sch) impl depth pos) = localizeTopLevel (Goal funName (addBoundPredicate sig env) sch impl depth pos)
-localizeTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _) = local (set (_1 . auxDepth) depth) $ localizeFix
-  where
-    localizeFix = do
-      let typ' = renameAsImpl (isBound env) impl typ
-      recCalls <- runInSolver (currentAssignment typ') >>= recursiveCalls
-      polymorphic <- asks $ _polyRecursion . fst
-      predPolymorphic <- asks $ _predPolyRecursion . fst
-      let tvs = env ^. boundTypeVars
-      let pvs = env ^. boundPredicates      
-      let predGeneralized sch = if predPolymorphic then foldr ForallP sch pvs else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function          
-      let typeGeneralized sch = if polymorphic then foldr ForallT sch tvs else sch -- Version of @t'@ generalized in bound type variables of the enclosing function
-      
-      let env' = foldr (\(f, t) -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t) . (shapeConstraints %~ Map.insert f (shape typ'))) env recCalls
-      let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) typ'
-      p <- inContext ctx  $ localizeI env' typ' impl
-      return $ ctx p
+localizeTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _) = do
+  let typ' = renameAsImpl (isBound env) impl typ
+  recCalls <- runInSolver (currentAssignment typ') >>= recursiveCalls
+  polymorphic <- asks $ _polyRecursion . fst
+  predPolymorphic <- asks $ _predPolyRecursion . fst
+  let tvs = env ^. boundTypeVars
+  let pvs = env ^. boundPredicates      
+  let predGeneralized sch = if predPolymorphic then foldr ForallP sch pvs else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function          
+  let typeGeneralized sch = if polymorphic then foldr ForallT sch tvs else sch -- Version of @t'@ generalized in bound type variables of the enclosing function
+  
+  let env' = foldr (\(f, t) -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t) . (shapeConstraints %~ Map.insert f (shape typ'))) env recCalls
+  let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) typ'
+  p <- inContext ctx  $ localizeI env' typ' impl
+  return $ ctx p
 
+  where
     -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
     recursiveCalls t = do
       fixStrategy <- asks $ _fixStrategy . fst
@@ -124,7 +123,7 @@ localizeTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _
                               metric (Var argSort valueVarName) |>=| IntLit 0  |&| metric (Var argSort valueVarName) |<=| metric (Var argSort argName))
     terminationRefinement _ _ = Nothing
 
-localizeTopLevel (Goal _ env (Monotype t) impl depth _) = local (set (_1 . auxDepth) depth) $ localizeI env t impl
+localizeTopLevel (Goal _ env (Monotype t) impl depth _) = localizeI env t impl
 
 -- | 'localizeI' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is a (possibly) introduction term
 -- (top-down phase of bidirectional reconstruction)
@@ -152,7 +151,7 @@ localizeI' env t@(ScalarT _ _) impl = case impl of
                            
   PLet x iDef iBody -> do -- E-term let (since lambda-let was considered before)
     pDef <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ localizeETopLevel env AnyT iDef
-    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ localizeI (addVariable x (typeOf pDef) env) t iBody
+    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ localizeI (addLetBound x (typeOf pDef) env) t iBody
     return $ Program (PLet x pDef pBody) t
     
   PIf iCond iThen iElse -> do
@@ -166,14 +165,8 @@ localizeI' env t@(ScalarT _ _) impl = case impl of
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
     let scrT = refineTop env $ shape $ lastType $ head consTypes
     
-    pScrutinee <- inContext (\p -> Program (PMatch p []) t) $ localizeETopLevel env scrT iScr
-    let scrutineeSymbols = symbolList pScrutinee
-    let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
-                          (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
-    when (not isGoodScrutinee) $ throwErrorWithDescription $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
-            
-    (env', x) <- toVar pScrutinee (addScrutinee pScrutinee env)
-    pCases <- zipWithM (localizeCase env' x pScrutinee t) iCases consTypes    
+    pScrutinee <- inContext (\p -> Program (PMatch p []) t) $ localizeETopLevel env scrT iScr            
+    pCases <- zipWithM (localizeCase env pScrutinee t) iCases consTypes    
     return $ Program (PMatch pScrutinee pCases) t
       
   _ -> localizeETopLevel env t (untyped impl)
@@ -200,13 +193,12 @@ localizeI' env t@(ScalarT _ _) impl = case impl of
                           _ -> throwErrorWithDescription $ text "Not in scope: data constructor" </> squotes (text consName)
     checkCases _ [] = return []
   
-localizeCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $ do  
+localizeCase env pScrutinee@(Program (PSymbol x) scrT) t (Case consName args iBody) consT = cut $ do  
   runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
   consT' <- runInSolver $ currentAssignment consT
-  (syms, ass) <- caseSymbols env scrVar args consT'
+  (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) x) args consT'
   let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-  pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) $
-               inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
+  pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
                localizeI caseEnv t iBody
   return $ Case consName args pCaseExpr  
 
@@ -286,19 +278,28 @@ replaceViolations env (Program (PIf cond thn els) t) = do
   thn' <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ftrue) fml) env) thn
   els' <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ffalse) fml) env) els
   return $ Program (PIf cond thn' els') t
--- replaceViolations (Program (PMatch scr cases) t) = do
-  -- (defsScr, aScr) <- anfE scr True
-  -- aCases <- mapM (\(Case ctor binders e) -> (Case ctor binders) <$> aNormalForm e) cases
-  -- return $ foldDefs defsScr (Program (PMatch aScr aCases) t) t
--- replaceViolations (Program (PFix xs body) t) = do
-  -- aBody <- aNormalForm body
-  -- return $ Program (PFix xs aBody) t
+replaceViolations env (Program (PMatch scr cases) t) = error "replaceViolations: matches not implemented"
+  -- do
+  -- cases' <- mapM reaplceInCase cases
+  -- return $ Program (PMatch scr cases') t
+  -- where
+    -- reaplceInCase (Case consName args iBody) = do  
+      -- runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
+      -- consT' <- runInSolver $ currentAssignment consT
+      -- (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) x) args consT'
+  -- let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+  -- pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
+               -- localizeI caseEnv t iBody
+  -- return $ Case consName args pCaseExpr  
+replaceViolations env (Program (PFix xs body) t) = do
+  body' <- replaceViolations env body
+  return $ Program (PFix xs body') t
 replaceViolations env (Program (PLet x def body) t) = do
   reqs <- use requiredTypes
   def' <- case Map.lookup x reqs of
             Nothing -> replaceViolations env def
             Just ts -> generateRepair env (head ts) def -- ToDo: other ts
-  body' <- replaceViolations (addVariable x (typeOf def) env) body
+  body' <- replaceViolations (addLetBound x (typeOf def) env) body
   return $ Program (PLet x def' body') t
 replaceViolations env (Program (PApp fun arg) t) = do
   fun' <- replaceViolations env fun

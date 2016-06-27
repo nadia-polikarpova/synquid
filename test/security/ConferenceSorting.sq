@@ -88,6 +88,7 @@ predicate chair :: World -> User
 getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 
 getPaperScore :: w: World -> PaperId -> Tagged Int <{_0 == chair w}>
+defaultPaperScore :: Tagged Int <{True}>
 
 qualifier {x == w, x in y, !(x in y)}
 
@@ -103,8 +104,8 @@ test = \w . \pids .
                       -- )
                     -- ) in
   let scoreLeq = \pid1 . \pid2 . 
-                    bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid1) (return 0)) (\score1 .
-                      bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid2) (return 0)) (\score2 .
+                    bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid1) defaultPaperScore) (\score1 .
+                      bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid2) defaultPaperScore) (\score2 .
                         return (score1 <= score2)
                       )
                     ) in

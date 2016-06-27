@@ -96,7 +96,7 @@ getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paper
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
-qualifier {_v == paperStatus w pid || _v == NoDecision}
+defaultPaperStatus :: Tagged Status <{True}>
 
 getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 

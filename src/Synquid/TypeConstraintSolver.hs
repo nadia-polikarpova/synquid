@@ -426,16 +426,14 @@ allScalars :: Environment -> [Formula]
 allScalars env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
   where
     toFormula (_, ForallT _ _) = Nothing
-    toFormula (x, _) | isTempVar x = Nothing
+    toFormula (x, _) | x `Set.member` (env ^. letBound) = Nothing
     toFormula (x, Monotype t) = case t of
       ScalarT IntT  (Binary Eq _ (IntLit n)) -> Just $ IntLit n
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
       ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False
       ScalarT (DatatypeT dt [] []) (Binary Eq _ cons@(Cons _ _ [])) -> Just cons
       ScalarT b _ -> Just $ Var (toSort b) x
-      _ -> Nothing
-    isTempVar x = take 1 x == "T" -- A variable introduced by ANF transformation  
-    
+      _ -> Nothing    
     
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> [Formula]
