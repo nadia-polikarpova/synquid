@@ -172,6 +172,7 @@ data Environment = Environment {
   _shapeConstraints :: Map Id SType,       -- ^ For polymorphic recursive calls, the shape their types must have
   _usedScrutinees :: [RProgram],           -- ^ Program terms that has already been scrutinized
   _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
+  _letBound :: Set Id,                     -- ^ Subset of symbols that are let-bound
   -- | Constant part:
   _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
@@ -199,6 +200,7 @@ emptyEnv = Environment {
   _shapeConstraints = Map.empty,
   _usedScrutinees = [],
   _unfoldedVars = Set.empty,
+  _letBound = Set.empty,
   _constants = Set.empty,
   _globalPredicates = Map.empty,
   _datatypes = Map.empty,
@@ -266,6 +268,9 @@ addConstant name t = addPolyConstant name (Monotype t)
 -- | 'addPolyConstant' @name sch env@ : add type binding @name@ :: @sch@ to @env@
 addPolyConstant :: Id -> RSchema -> Environment -> Environment
 addPolyConstant name sch = addPolyVariable name sch . (constants %~ Set.insert name)
+
+addLetBound :: Id -> RType -> Environment -> Environment
+addLetBound name t = addVariable name t . (letBound %~ Set.insert name)
 
 addUnresolvedConstant :: Id -> RSchema -> Environment -> Environment
 addUnresolvedConstant name sch = unresolvedConstants %~ Map.insert name sch
