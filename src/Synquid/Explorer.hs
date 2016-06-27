@@ -62,13 +62,15 @@ data ExplorerParams = ExplorerParams {
 
 makeLenses ''ExplorerParams
 
+type Requirements = Map Id [RType]
+
 -- | State of program exploration
 data ExplorerState = ExplorerState {
   _typingState :: TypingState,                     -- ^ Type-checking state
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
   _newAuxGoals :: [Id],                            -- ^ Higher-order arguments that have been synthesized but not yet let-bound
   _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local bindings to be checked upon use (in type checking mode)
-  _requiredTypes :: Map Id [RType],                -- ^ All types that a variable is required to comply to (in repair mode)
+  _requiredTypes :: Requirements,                  -- ^ All types that a variable is required to comply to (in repair mode)
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
 } deriving (Eq, Ord)
 
