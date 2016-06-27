@@ -273,7 +273,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file = do
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       mProg <- if repairPolicies synquidParams
-                then policyRepair explorerParams solverParams { isLeastFixpoint = True} goal cquals tquals
+                then policyRepair explorerParams solverParams goal cquals tquals
                 else synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure

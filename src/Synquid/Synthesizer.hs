@@ -12,8 +12,8 @@ import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
-import qualified Synquid.TypeChecker as TC
-import qualified Synquid.PolicyChecker as PC
+import Synquid.TypeChecker
+import Synquid.PolicyChecker
 
 import Data.Maybe
 import Data.Either
@@ -32,19 +32,35 @@ import Debug.Trace
 type HornSolver = FixPointSolver Z3State
 
 policyRepair :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram)
-policyRepair explorerParams solverParams goal cquals tquals = evalZ3State $ evalFixPointSolver reconstruction solverParams
+policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
   where
-    -- | Stream of programs that satisfy the specification or type error
-    reconstruction :: HornSolver (Either ErrorMessage RProgram)
-    reconstruction = let
-        typingParams = TypingParams { 
-                        _condQualsGen = \_ _ -> emptyQSpace,
-                        _matchQualsGen = \_ _ -> emptyQSpace,
-                        _typeQualsGen = \_ _ _ -> emptyQSpace,
-                        _predQualsGen = predQuals,
-                        _tcSolverLogLevel = _explorerLogLevel explorerParams
-                      }
-      in PC.reconstruct explorerParams typingParams goal
+    go :: Z3State (Either ErrorMessage RProgram)
+    go = do
+      locResult <- evalFixPointSolver localizationPhase (solverParams { isLeastFixpoint = True })
+      case locResult of
+        Left err -> return $ Left err -- Irreparable type error: report
+        Right (p, violations) -> if Map.null violations
+          then return $ Right p -- No errors
+          else evalFixPointSolver (repairPhase p violations) (solverParams { isLeastFixpoint = False })
+  
+    localizationPhase :: HornSolver (Either ErrorMessage (RProgram, Requirements))
+    localizationPhase = localize explorerParams typingParams goal
+      
+    repairPhase :: RProgram -> Requirements -> HornSolver (Either ErrorMessage RProgram)
+    repairPhase p violations = repair explorerParams typingParams {_condQualsGen = condQuals} (gEnvironment goal) p violations 
+      
+    typingParams = TypingParams { 
+                    _condQualsGen = \_ _ -> emptyQSpace,
+                    _matchQualsGen = \_ _ -> emptyQSpace,
+                    _typeQualsGen = \_ _ _ -> emptyQSpace,
+                    _predQualsGen = predQuals,
+                    _tcSolverLogLevel = _explorerLogLevel explorerParams
+                  }
+
+    -- | Qualifier generator for conditionals
+    condQuals :: Environment -> [Formula] -> QSpace
+    condQuals env vars = let vars' = allPredApps env vars 1 in toSpace Nothing $ concat $
+      map (instantiateCondQualifier env vars') cquals ++ map (extractCondFromType env vars') components                  
       
     -- | Qualifier generator for bound predicates
     predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
@@ -74,7 +90,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _predQualsGen = predQuals,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
-      in TC.reconstruct explorerParams typingParams goal
+      in reconstruct explorerParams typingParams goal
       
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace

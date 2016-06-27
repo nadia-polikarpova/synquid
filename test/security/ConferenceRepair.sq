@@ -87,27 +87,29 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
+defaultPaperAuthors :: Tagged (List User) <{True}>
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
+defaultPaperStatus :: Tagged Status <{True}>
 
-qualifier {x in y}
+qualifier {x == y, x in y}
   
 -- Print paper status to an author
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
 test1 = \w . \pid .
   let u = getSessionUser w in
-  -- let out = lift1 toString (getPaperStatus w pid) in
-  let out = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 eq (getCurrentPhase w) (return Done))) in
+  let out = lift1 toString (getPaperStatus w pid) in
+  -- let out = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 eq (getCurrentPhase w) (return Done))) in
   print w u out
       
 test2 :: w: World -> pid: PaperId -> World
 test2 = \w . \pid .
   let u = getSessionUser w in
-  -- let out1 = lift1 toString (getPaperAuthors w pid) in 
-  -- let out2 = lift1 toString (getPaperStatus w pid) in  
-  let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem (getPaperAuthors w pid) u)) in 
-  let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem (getPaperAuthors w pid) u) (lift2 eq (getCurrentPhase w) (return Done)))) in
+  let out1 = lift1 toString (getPaperAuthors w pid) in 
+  let out2 = lift1 toString (getPaperStatus w pid) in  
+  -- let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem (getPaperAuthors w pid) u)) in 
+  -- let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem (getPaperAuthors w pid) u) (lift2 eq (getCurrentPhase w) (return Done)))) in
   let out = lift2 strcat out1 out2 in
   print w u out
             
