@@ -76,6 +76,15 @@ varsOfType (ScalarT baseT fml) = varsOfBase baseT `Set.union` (Set.map varName $
     varsOfBase _ = Set.empty
 varsOfType (FunctionT x tArg tRes) = varsOfType tArg `Set.union` (Set.delete x $ varsOfType tRes)
 varsOfType AnyT = Set.empty    
+
+-- | Free variables of a type
+predsOfType :: RType -> Set Id
+predsOfType (ScalarT baseT fml) = predsOfBase baseT `Set.union` predsOf fml
+  where
+    predsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map predsOfType tArgs) `Set.union` (Set.unions (map predsOf pArgs))
+    predsOfBase _ = Set.empty
+predsOfType (FunctionT x tArg tRes) = predsOfType tArg `Set.union` predsOfType tRes
+predsOfType AnyT = Set.empty    
   
 varRefinement x s = Var s valueVarName |=| Var s x
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName

@@ -15,11 +15,7 @@ measure elems :: List a -> Set a where
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 not :: x: Bool -> {Bool | _v == !x}
-and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
-
-map :: f: (a -> b) -> xs: List a -> {List b | len _v == len xs}
-
   
 -- Tagged things
 
