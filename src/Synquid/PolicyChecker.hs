@@ -26,6 +26,8 @@ import Control.Monad.Reader
 import Control.Applicative hiding (empty)
 import Control.Lens
 
+import Debug.Trace
+
 -- | 'localize' @eParams tParams goal@ : reconstruct intermediate type annotations in @goal@
 -- and return the resulting program in ANF together with a list of type-violating bindings
 localize :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either ErrorMessage (RProgram, Requirements))
@@ -340,7 +342,7 @@ generateRepair env typ p = do
         
     -- | Synthesize a tagged Boolean program with value equivalent to @fml@ and policy (@targetPolicy@ && @fml@)
     generateCondition fml = do
-      let strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
+      let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml) Map.empty)) env
       pureCond <- generatePureCondition strippedEnv fml
       return $ liftCondition env strippedEnv (targetPolicy |&| fml) pureCond
         
@@ -358,13 +360,21 @@ generateRepair env typ p = do
       let targetType = ScalarT BoolT $ valBool |<=>| c
       local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType)
       
-    updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
-    updateSymbol m name _ | -- This is a default value: remove
+    updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
+    updateSymbol _ m name _ | -- This is a default value: remove
       take (length defaultPrefix) name == defaultPrefix   = m
-    updateSymbol m name _ | -- This is a function from base tagged library: remove
+    updateSymbol _ m name _ | -- This is a function from base tagged library: remove
       name `elem` taggedLibraryFunctions                  = m        
-    updateSymbol m name (Monotype t) = Map.insert name (Monotype $ stripTags t) m
-    updateSymbol m name sch = Map.insert name sch m
+    updateSymbol targetRefinement m name (Monotype t) = 
+      let 
+        t' = stripTags t 
+        symbolPreds = predsOfType t'
+        targetPreds = predsOf targetRefinement
+      in if t /= t' && disjoint symbolPreds targetPreds 
+          -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
+          then m -- This is a stripped component whose type has no predicates in common with our target: exclude it form the environment
+          else Map.insert name (Monotype t') m
+    updateSymbol _ m name sch = Map.insert name sch m
       
     defaultPrefix = "default"
 
