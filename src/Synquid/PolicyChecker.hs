@@ -8,7 +8,7 @@ import Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import Synquid.Explorer
-import Synquid.TypeChecker (reconstructTopLevel)
+import Synquid.TypeChecker
 import Synquid.Util
 import Synquid.Pretty
 import Synquid.Resolver
@@ -30,8 +30,8 @@ import Debug.Trace
 
 -- | 'localize' @eParams tParams goal@ : reconstruct intermediate type annotations in @goal@
 -- and return the resulting program in ANF together with a list of type-violating bindings
-localize :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either ErrorMessage (RProgram, Requirements))
-localize eParams tParams goal = do
+localize :: MonadHorn s => Bool -> ExplorerParams -> TypingParams -> Goal -> s (Either ErrorMessage (RProgram, Requirements))
+localize isRecheck eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
@@ -43,10 +43,11 @@ localize eParams tParams goal = do
       labels <- runInSolver getViolatingLabels
       reqs <- uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType)))
       finalP <- runInSolver $ finalizeProgram p
-      return (finalP, reqs)
-      -- if Map.null reqs
-        -- then return (finalP, reqs)
-        -- else throwErrorWithDescription $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty reqs)) $+$ text "when checking" $+$ pretty p
+      if isRecheck
+        then if Map.null reqs
+              then return (finalP, Map.empty)
+              else throwErrorWithDescription $ (nest 2 (text "Repair failed with violations:" $+$ vMapDoc text pretty reqs)) $+$ text "when checking" $+$ pretty p
+        else return (finalP, reqs)
       
 repair :: MonadHorn s => ExplorerParams -> TypingParams -> Environment -> RProgram -> Requirements -> s (Either ErrorMessage RProgram)
 repair eParams tParams env p violations = do
@@ -144,6 +145,7 @@ localizeI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: 
   (_, pDef) <- uses lambdaLets (Map.! x)
   return $ Program (PLet x pDef pBody) t
 localizeI' env t@(FunctionT _ tArg tRes) impl = case impl of 
+  PFix _ impl -> localizeI env t impl
   PFun y impl -> do
     let ctx = \p -> Program (PFun y p) t
     pBody <- inContext ctx $ localizeI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
@@ -302,18 +304,20 @@ replaceViolations env (Program (PFix xs body) t) = do
   return $ Program (PFix xs body') t
 replaceViolations env (Program (PLet x def body) t) = do
   reqs <- use requiredTypes
-  def' <- case Map.lookup x reqs of
-            Nothing -> replaceViolations env def
+  (newDefs, def') <- case Map.lookup x reqs of
+            Nothing -> do
+                          def'<- replaceViolations env def
+                          return ([], def')
             Just ts -> generateRepair env (head ts) def -- ToDo: other ts
   body' <- replaceViolations (addLetBound x (typeOf def') env) body
-  return $ Program (PLet x def' body') t
+  return $ foldDefs (newDefs ++ [(x, def')]) body' t
 replaceViolations env (Program (PApp fun arg) t) = do
   fun' <- replaceViolations env fun
   arg' <- replaceViolations env arg
   return $ Program (PApp fun' arg') t
 replaceViolations _ p = return p
 
-generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s RProgram
+generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram)
 generateRepair env typ p = do
   writeLog 1 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ
   cUnknown <- Unknown Map.empty <$> freshId "C"
@@ -323,10 +327,9 @@ generateRepair env typ p = do
   ifte (runInSolver $ solveTypeConstraints)
     (const $ do -- Condition found
       cond <- conjunction <$> currentValuation cUnknown -- Todo: multiple valuations: disjunction
-      -- let pCond = Program PHole (ScalarT BoolT $ valBool |=| cond)
-      pCond <- generateCondition cond      
-      return $ mkCheck pCond p pElse)
-    (return pElse) -- No condition found, Todo: issue a warning
+      (cDefs, cBody) <- generateCondition cond      
+      mkCheck cDefs cBody p pElse)
+    (return ([], pElse)) -- No condition found, Todo: issue a warning
   where
     targetPolicy = case typ of
       ScalarT (DatatypeT _ _ [fml]) _ -> fml
@@ -344,7 +347,7 @@ generateRepair env typ p = do
     generateCondition fml = do
       let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml) Map.empty)) env
       pureCond <- generatePureCondition strippedEnv fml
-      return $ liftCondition env strippedEnv (targetPolicy |&| fml) pureCond
+      liftCondition env strippedEnv (targetPolicy |&| fml) pureCond      
         
     -- | Synthesize a Boolean program equivalent to @fml@ put of components stripped of their tags
     generatePureCondition strippedEnv fml = do
@@ -352,9 +355,10 @@ generateRepair env typ p = do
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
       let andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
       let conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll
-      let pCond = fmap (flip addRefinement $ valBool |=| fml) (foldl1 conjoin conjuncts)
+      let pCond = foldl1 conjoin conjuncts
       aCond <- aNormalForm "TT" pCond
-      return $ aCond
+      -- reconstructI strippedEnv (ScalarT BoolT $ valBool |<=>| fml) (eraseTypes aCond) -- re-check ANF to get rid of ghosts
+      return aCond
       
     genPureConjunct strippedEnv c = do
       let targetType = ScalarT BoolT $ valBool |<=>| c
@@ -388,36 +392,43 @@ generateRepair env typ p = do
     
     -- | 'liftCondition' @env strippedEnv policy p@: turn a pure E-term @p@ into a tagged one, 
     -- by binding all lets that have different types in @env@ and @strippedEnv@
-    liftCondition env strippedEnv policy (Program (PLet x def body) t) = 
-      let 
-        arity = length (symbolList def) - 1
-        headSymbol = head $ symbolList def
-        realType = case lookupSymbol headSymbol arity env of
+    liftCondition env strippedEnv policy (Program (PLet x def body) typ) = do
+      let arity = length (symbolList def) - 1
+      let headSymbol = head $ symbolList def
+      let realType = case lookupSymbol headSymbol arity env of
                     Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in original environment"]
                     Just t -> t
-        strippedType = case lookupSymbol headSymbol arity strippedEnv of
+      let strippedType = case lookupSymbol headSymbol arity strippedEnv of
                         Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in stripped environment"]
                         Just t -> t
-        addX = addLetBound x (typeOf def)
-        body' = liftCondition (addX env) (addX strippedEnv) policy body
-      in if realType == strippedType
-        then Program (PLet x def body') t -- This definition hasn't been stripped: leave as is 
-        else mkBind def x body' -- This definition has been stripped: turn into a bind      
-    liftCondition env strippedEnv policy pCond = pCond
+      let addX = addLetBound x (typeOf def)
+      (defs', body') <- liftCondition (addX env) (addX strippedEnv) policy body
+      if realType == strippedType
+        then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
+        else do -- This definition has been stripped: turn into a bind
+          tmp <- freshId "TT"
+          return ([(tmp, def)], mkBind tmp x (foldDefs defs' body' (typeOf body')))
+    liftCondition env strippedEnv policy pCond = do
+      tmp <- freshId "TT"
+      return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
 
     mkTagged a policy = DatatypeT "Tagged" [a] [policy]
     
-    mkBind def x body = 
+    mkBind argName x body = 
       let 
-        app = untyped (PApp (untyped (PSymbol "bind")) def)
+        app = untyped (PApp (untyped (PSymbol "bind")) (untyped (PSymbol argName)))
         fun = untyped (PFun x body)
       in untyped (PApp app fun)
+      
+    mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)
     
-    mkCheck pCond pThen pElse = 
-      let 
-        app1 = untyped (PApp (untyped (PSymbol "if_")) pCond)
-        app2 = untyped (PApp app1 pThen)
-      in Program (PApp app2 pElse) typ -- ToDo: real type!
+    mkCheck cDefs cBody pThen pElse = do
+      cTmp <- freshId "TT"
+      pTmp <- freshId "TT"
+      let allDefs = cDefs ++ [(cTmp, cBody), (pTmp, pThen)]
+      let app1 = untyped (PApp (untyped (PSymbol "if_")) (untyped (PSymbol cTmp)))
+      let app2 = untyped (PApp app1 (untyped (PSymbol pTmp)))
+      return (allDefs, untyped (PApp app2 pElse))
 
 {- Misc -}  
                                             
