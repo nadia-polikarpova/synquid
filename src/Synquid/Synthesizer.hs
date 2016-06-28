@@ -36,29 +36,34 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
   where
     go :: Z3State (Either ErrorMessage RProgram)
     go = do
-      locResult <- evalFixPointSolver localizationPhase (solverParams { isLeastFixpoint = True })
+      locResult <- evalFixPointSolver (localizationPhase False goal) (solverParams { isLeastFixpoint = True })
       case locResult of
         Left err -> return $ Left err -- Irreparable type error: report
         Right (p, violations) -> if Map.null violations
           then return $ Right p -- No errors
-          else evalFixPointSolver (repairPhase p violations) (solverParams { isLeastFixpoint = False })
-  
-    localizationPhase :: HornSolver (Either ErrorMessage (RProgram, Requirements))
-    localizationPhase = let typingParams = TypingParams { 
+          else do
+            repairRes <- evalFixPointSolver (repairPhase p violations) (solverParams { isLeastFixpoint = False })
+            case repairRes of
+              Left err -> return $ Left err -- No repair
+              Right p' -> mapRight fst <$> evalFixPointSolver (localizationPhase True goal { gImpl = eraseTypes p' }) (solverParams { isLeastFixpoint = True })
+              
+    localizationPhase :: Bool -> Goal -> HornSolver (Either ErrorMessage (RProgram, Requirements))
+    localizationPhase isRecheck goal = 
+                            let typingParams = TypingParams { 
                               _condQualsGen = \_ _ -> emptyQSpace,
                               _matchQualsGen = \_ _ -> emptyQSpace,
                               _typeQualsGen = \_ _ _ -> emptyQSpace,
                               _predQualsGen = predQuals False,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
                             }
-                        in localize explorerParams typingParams goal
+                        in localize isRecheck explorerParams typingParams goal
       
     repairPhase :: RProgram -> Requirements -> HornSolver (Either ErrorMessage RProgram)
     repairPhase p violations = let  typingParams = TypingParams { 
                                       _condQualsGen = condQuals,
                                       _matchQualsGen = \_ _ -> emptyQSpace,
                                       _typeQualsGen = \_ _ _ -> emptyQSpace,
-                                      _predQualsGen = predQuals True,
+                                      _predQualsGen = \_ _ _ -> emptyQSpace, -- predQuals True,
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
                                in repair explorerParams typingParams (gEnvironment goal) p violations 
@@ -71,7 +76,7 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
     -- | Qualifier generator for bound predicates
     predQuals :: Bool -> Environment -> [Formula] -> [Formula] -> QSpace
     predQuals useAllArgs env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $
-      -- concatMap (extractPredQGenFromQual useAllArgs env params vars') tquals ++ -- extract from given qualifiers
+      concatMap (extractPredQGenFromQual useAllArgs env params vars') tquals ++ -- extract from given qualifiers
       concatMap (extractPredQGenFromType useAllArgs env params vars') (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
         then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components

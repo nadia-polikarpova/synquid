@@ -26,8 +26,8 @@ measure content :: Tagged a -> a
 
 return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 
-bind :: <bp :: User -> Bool> . 
-  (Tagged a <bp>) -> (a -> Tagged b <bp>) -> Tagged b <bp>
+bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
 
 if_ :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
@@ -86,6 +86,7 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 getPaperScore :: w: World -> PaperId -> Tagged Int <{_0 == chair w}>
 defaultPaperScore :: Tagged Int <{True}>
 
+-- qualifier {_v == (x == y), _v == (x in y)}
 qualifier {x == w, x in y, !(x in y)}
 
 -- Sort papers according to score
@@ -93,16 +94,16 @@ test :: w: World -> pids: List PaperId -> World
 test = \w . \pids .
   let u = getSessionUser w in
   -- Leaky version:
-  -- let scoreLeq = \pid1 . \pid2 . 
-                    -- bind (getPaperScore w pid1) (\score1 .
-                      -- bind (getPaperScore w pid2) (\score2 .
-                        -- return (score1 <= score2)
-                      -- )
-                    -- ) in
   let scoreLeq = \pid1 . \pid2 . 
-                    bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid1) defaultPaperScore) (\score1 .
-                      bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid2) defaultPaperScore) (\score2 .
+                    bind (getPaperScore w pid1) (\score1 .
+                      bind (getPaperScore w pid2) (\score2 .
                         return (score1 <= score2)
                       )
                     ) in
+  -- let scoreLeq = \pid1 . \pid2 . 
+                    -- bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid1) defaultPaperScore) (\score1 .
+                      -- bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid2) defaultPaperScore) (\score2 .
+                        -- return (score1 <= score2)
+                      -- )
+                    -- ) in
   print w u (lift1 toString (sortBy scoreLeq pids))

@@ -521,8 +521,9 @@ generateError env = do
     trivial var = var |=| var
 
 -- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
-toVar (Program (PSymbol name) t) env 
-  | not (isConstant name env) = return (env, Var (toSort $ baseTypeOf t) name)
+toVar (Program (PSymbol name) t) env
+  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = return (env, Var (toSort $ baseTypeOf t) name)
+  -- | not (isConstant name env) = return (env, Var (toSort $ baseTypeOf t) name)
 toVar p@(Program _ t) env = do
   g <- freshId "G"
   return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
