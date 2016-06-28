@@ -363,8 +363,6 @@ generateRepair env typ p = do
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol _ m name _ | -- This is a default value: remove
       take (length defaultPrefix) name == defaultPrefix   = m
-    updateSymbol _ m name _ | -- This is a function from base tagged library: remove
-      name `elem` taggedLibraryFunctions                  = m        
     updateSymbol targetRefinement m name (Monotype t) = 
       let 
         t' = stripTags t 
@@ -374,14 +372,17 @@ generateRepair env typ p = do
           -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
           then m -- This is a stripped component whose type has no predicates in common with our target: exclude it form the environment
           else Map.insert name (Monotype t') m
+    updateSymbol _ m name sch | -- This is a function from base tagged library: remove
+      isTagged (lastType $ toMonotype sch)                = m                  
     updateSymbol _ m name sch = Map.insert name sch m
       
     defaultPrefix = "default"
-
-    taggedLibraryFunctions = ["return", "bind", "if_", "lift1", "lift2"]
     
-    stripTags (ScalarT (DatatypeT dtName [dtArg] _) _) 
-      | dtName == "Tagged"   = dtArg    
+    isTagged (ScalarT (DatatypeT dtName _ _) _) | dtName == "Tagged" = True
+    isTagged t = False
+    
+    stripTags t@(ScalarT (DatatypeT dtName [dtArg] _) _) 
+      | isTagged t   = dtArg    
     stripTags (FunctionT x tArg tRes) = FunctionT x tArg (stripTags tRes)
     stripTags t = t
     

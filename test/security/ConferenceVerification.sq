@@ -25,7 +25,7 @@ data User
 data Tagged a <visibleTo :: User -> Bool>!
 measure content :: Tagged a -> a
 
-return :: x: a -> Tagged {a | _v == x} <{True}>
+return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 
 bind :: <bp :: User -> Bool> . 
   (Tagged a <bp>) -> (a -> Tagged b <bp>) -> Tagged b <bp>
