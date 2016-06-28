@@ -8,9 +8,11 @@ import Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import Synquid.Explorer
+import Synquid.TypeChecker (reconstructTopLevel)
 import Synquid.Util
 import Synquid.Pretty
 import Synquid.Resolver
+import Synquid.Tokens
 
 import Data.List
 import qualified Data.Set as Set
@@ -39,8 +41,10 @@ localize eParams tParams goal = do
       labels <- runInSolver getViolatingLabels
       reqs <- uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType)))
       finalP <- runInSolver $ finalizeProgram p
-      
       return (finalP, reqs)
+      -- if Map.null reqs
+        -- then return (finalP, reqs)
+        -- else throwErrorWithDescription $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty reqs)) $+$ text "when checking" $+$ pretty p
       
 repair :: MonadHorn s => ExplorerParams -> TypingParams -> Environment -> RProgram -> Requirements -> s (Either ErrorMessage RProgram)
 repair eParams tParams env p violations = do
@@ -299,7 +303,7 @@ replaceViolations env (Program (PLet x def body) t) = do
   def' <- case Map.lookup x reqs of
             Nothing -> replaceViolations env def
             Just ts -> generateRepair env (head ts) def -- ToDo: other ts
-  body' <- replaceViolations (addLetBound x (typeOf def) env) body
+  body' <- replaceViolations (addLetBound x (typeOf def') env) body
   return $ Program (PLet x def' body') t
 replaceViolations env (Program (PApp fun arg) t) = do
   fun' <- replaceViolations env fun
@@ -313,18 +317,63 @@ generateRepair env typ p = do
   cUnknown <- Unknown Map.empty <$> freshId "C"
   addConstraint $ WellFormedCond env cUnknown
   addConstraint $ Subtype (addAssumption cUnknown env) (typeOf p) typ False ""
-  runInSolver $ solveTypeConstraints
-  cond <- conjunction <$> currentValuation cUnknown -- Todo: multiple valuations: disjunction
-  let pCond = Program PHole (ScalarT BoolT $ valBool |=| cond)
   pElse <- defaultValue
-  return $ Program (PIf pCond p pElse) typ
+  ifte (runInSolver $ solveTypeConstraints)
+    (const $ do -- Condition found
+      cond <- conjunction <$> currentValuation cUnknown -- Todo: multiple valuations: disjunction
+      -- let pCond = Program PHole (ScalarT BoolT $ valBool |=| cond)
+      pCond <- generateCondition cond      
+      return $ mkCheck pCond p pElse)
+    (return pElse) -- No condition found, Todo: issue a warning
   where
+    targetPolicy = case typ of
+      ScalarT (DatatypeT _ _ [fml]) _ -> fml
+      _ -> error $ unwords ["generateRepair: ill-formed target type", show typ]
+  
     defaultValue = do
       let f = head $ symbolList p
-      let f' = "default" ++ drop 3 f -- ToDo: better way of finding default value
+      let f' = defaultPrefix ++ drop 3 f -- ToDo: better way of finding default value
       case lookupSymbol f' 0 env of
         Nothing -> throwErrorWithDescription $ text "No default value found for sensitive component" $+$ text f
         Just (Monotype t) -> return $ Program (PSymbol f') t
+        
+    generateCondition fml = do
+      let allConjuncts = Set.toList $ conjunctsOf fml
+      conjuncts <- mapM (genConjunct (targetPolicy |&| fml)) allConjuncts
+      let andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
+      let conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll      
+      return $ fmap (flip addRefinement $ valBool |=| fml) (foldl1 conjoin conjuncts)
+      
+    genConjunct policy c = do
+      let innerType = ScalarT BoolT $ valBool |<=>| c
+      let targetType = innerType -- ScalarT (mkTagged innerType policy) ftrue
+      let strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
+      local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType)
+      
+    updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
+    updateSymbol m name _ | -- This is a default value: remove
+      take (length defaultPrefix) name == defaultPrefix   = m
+    updateSymbol m name _ | -- This is a function from base tagged library: remove
+      name `elem` taggedLibraryFunctions                  = m        
+    updateSymbol m name (Monotype t) = Map.insert name (Monotype $ stripTags t) m
+    updateSymbol m name sch = Map.insert name sch m
+      
+    defaultPrefix = "default"
+      
+    mkTagged a policy = DatatypeT "Tagged" [a] [policy]
+    
+    stripTags (ScalarT (DatatypeT dtName [dtArg] _) _) 
+      | dtName == "Tagged"   = dtArg    
+    stripTags (FunctionT x tArg tRes) = FunctionT x tArg (stripTags tRes)
+    stripTags t = t    
+    
+    taggedLibraryFunctions = ["return", "bind", "if_", "lift1", "lift2"]
+    
+    mkCheck pCond pThen pElse = 
+      let 
+        app1 = untyped (PApp (untyped (PSymbol "if_")) pCond)
+        app2 = untyped (PApp app1 pThen)
+      in Program (PApp app2 pElse) typ -- ToDo: real type!
 
 {- Misc -}  
                                             
@@ -371,4 +420,55 @@ anfE (Program (PApp pFun pArg) t) varRequired = do
 anfE p@(Program (PFun _ _) t) _ = do -- A case for abstraction, which can appear in applications and let-bindings
   p' <- aNormalForm p
   return ([], p')    
-anfE p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]    
+anfE p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]
+
+-- ToDo: replace this with TypeChecker functionality
+reconstructE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
+reconstructE env t = do
+  oldGoals <- use auxGoals
+  auxGoals .= []
+  (finalEnv, p) <- generateE env t
+  (Program pTerm pTyp) <- fillInAuxGoals p
+  auxGoals .= oldGoals
+  pTyp' <- runInSolver $ currentAssignment pTyp
+  return $ Program pTerm pTyp'
+
+fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
+fillInAuxGoals pMain = do
+  pAuxs <- reconstructAuxGoals
+  return $ foldl (\e2 (x, e1) -> insertAuxSolution x e1 e2) pMain pAuxs
+  where
+    reconstructAuxGoals = do
+      goals <- use auxGoals
+      writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
+      case goals of
+        [] -> return []
+        (g : gs) -> do
+            auxGoals .= gs
+            -- let g' = g {
+                          -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
+                       -- }
+            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g
+            p <- reconstructTopLevel g
+            rest <- reconstructAuxGoals
+            return $ (gName g, p) : rest
+            
+-- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
+-- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
+insertAuxSolution :: Id -> RProgram -> RProgram -> RProgram
+insertAuxSolution x pAux (Program body t) = flip Program t $ 
+  case body of
+    PLet y def p -> if x == y 
+                    then PLet x pAux p
+                    else PLet y (ins def) (ins p) 
+    PSymbol y -> if x == y
+                    then content $ pAux
+                    else body
+    PApp p1 p2 -> PApp (ins p1) (ins p2)
+    PFun y p -> PFun y (ins p)
+    PIf c p1 p2 -> PIf (ins c) (ins p1) (ins p2)
+    PMatch s cases -> PMatch (ins s) (map (\(Case c args p) -> Case c args (ins p)) cases)
+    PFix ys p -> PFix ys (ins p)
+    _ -> body  
+  where
+    ins = insertAuxSolution x pAux

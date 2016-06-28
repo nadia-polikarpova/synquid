@@ -30,7 +30,8 @@ module Synquid.TypeConstraintSolver (
   finalizeType,
   finalizeProgram,
   initEnv,
-  allScalars
+  allScalars,
+  condQualsGen
 ) where
 
 import Synquid.Logic

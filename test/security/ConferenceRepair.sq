@@ -15,8 +15,8 @@ measure elems :: List a -> Set a where
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 -- not :: x: Bool -> {Bool | _v == !x}
-and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
-elem :: xs: List a -> x: a -> {Bool | _v == (x in elems xs)}  
+-- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
   
 -- Tagged things
 
@@ -46,7 +46,7 @@ lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
-  Tagged {c | l2f (content x) (content y) _v} <l2p>  
+  Tagged {c | l2f (content x) (content y) _v} <l2p>
   
 -- Strings
 
@@ -77,8 +77,8 @@ data Status where
 predicate sessionUser :: World -> User      
 getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
 
--- predicate chair :: World -> User
--- getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 
 predicate currentPhase :: World -> Phase
 getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
@@ -93,6 +93,7 @@ predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
 defaultPaperStatus :: Tagged Status <{True}>
 
+-- qualifier {_v == (x == y), _v == (x in y)}
 qualifier {x == y, x in y}
   
 -- Print paper status to an author
@@ -108,8 +109,8 @@ test2 = \w . \pid .
   let u = getSessionUser w in
   let out1 = lift1 toString (getPaperAuthors w pid) in 
   let out2 = lift1 toString (getPaperStatus w pid) in  
-  -- let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem (getPaperAuthors w pid) u)) in 
-  -- let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem (getPaperAuthors w pid) u) (lift2 eq (getCurrentPhase w) (return Done)))) in
+  -- let out1 = lift1 toString (if_ (getPaperAuthors w pid) (return Nil) (lift2 elem u (getPaperAuthors w pid))) in 
+  -- let out2 = lift1 toString (if_ (getPaperStatus w pid) (return NoDecision) (lift2 and (lift2 elem u (getPaperAuthors w pid)) (lift2 eq (getCurrentPhase w) (return Done)))) in
   let out = lift2 strcat out1 out2 in
   print w u out
             
