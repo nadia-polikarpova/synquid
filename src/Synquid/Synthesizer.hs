@@ -44,18 +44,24 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
           else evalFixPointSolver (repairPhase p violations) (solverParams { isLeastFixpoint = False })
   
     localizationPhase :: HornSolver (Either ErrorMessage (RProgram, Requirements))
-    localizationPhase = localize explorerParams typingParams goal
+    localizationPhase = let typingParams = TypingParams { 
+                              _condQualsGen = \_ _ -> emptyQSpace,
+                              _matchQualsGen = \_ _ -> emptyQSpace,
+                              _typeQualsGen = \_ _ _ -> emptyQSpace,
+                              _predQualsGen = predQuals False,
+                              _tcSolverLogLevel = _explorerLogLevel explorerParams
+                            }
+                        in localize explorerParams typingParams goal
       
     repairPhase :: RProgram -> Requirements -> HornSolver (Either ErrorMessage RProgram)
-    repairPhase p violations = repair explorerParams typingParams {_condQualsGen = condQuals} (gEnvironment goal) p violations 
-      
-    typingParams = TypingParams { 
-                    _condQualsGen = \_ _ -> emptyQSpace,
-                    _matchQualsGen = \_ _ -> emptyQSpace,
-                    _typeQualsGen = \_ _ _ -> emptyQSpace,
-                    _predQualsGen = predQuals,
-                    _tcSolverLogLevel = _explorerLogLevel explorerParams
-                  }
+    repairPhase p violations = let  typingParams = TypingParams { 
+                                      _condQualsGen = condQuals,
+                                      _matchQualsGen = \_ _ -> emptyQSpace,
+                                      _typeQualsGen = \_ _ _ -> emptyQSpace,
+                                      _predQualsGen = predQuals True,
+                                      _tcSolverLogLevel = _explorerLogLevel explorerParams
+                                    }
+                               in repair explorerParams typingParams (gEnvironment goal) p violations 
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
@@ -63,9 +69,10 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
       map (instantiateCondQualifier env vars') cquals ++ map (extractCondFromType env vars') components                  
       
     -- | Qualifier generator for bound predicates
-    predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
-    predQuals env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $ 
-      concatMap (extractPredQGenFromType env params vars') (syntGoal : components) ++
+    predQuals :: Bool -> Environment -> [Formula] -> [Formula] -> QSpace
+    predQuals useAllArgs env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $
+      -- concatMap (extractPredQGenFromQual useAllArgs env params vars') tquals ++ -- extract from given qualifiers
+      concatMap (extractPredQGenFromType useAllArgs env params vars') (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
         then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components
         else []
@@ -113,12 +120,12 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
     -- | Qualifier generator for bound predicates
     predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
     -- predQuals env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $ 
-      -- concatMap (extractPredQGenFromType env params vars') (syntGoal : components) ++
+      -- concatMap (extractPredQGenFromType True env params vars') (syntGoal : components) ++
       -- if null params  -- Parameter-less predicate: also include conditional qualifiers
         -- then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components
         -- else []    
     predQuals env params vars = toSpace Nothing $ 
-      concatMap (extractPredQGenFromType env params vars) (syntGoal : components) ++
+      concatMap (extractPredQGenFromType True env params vars) (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
         then concatMap (instantiateCondQualifier env vars) cquals ++ concatMap (extractCondFromType env vars) components
         else []
@@ -203,30 +210,44 @@ extractCondFromType env vars t@(FunctionT _ _ _) = case lastType t of
   _ -> []
 extractCondFromType _ _ _ = []
 
-extractPredQGenFromType :: Environment -> [Formula] -> [Formula] -> RType -> [Formula]
-extractPredQGenFromType env actualParams actualVars t = extractPredQGenFromType' t
+extractPredQGenFromQual :: Bool -> Environment -> [Formula] -> [Formula] -> Formula -> [Formula]
+extractPredQGenFromQual useAllArgs env actualParams actualVars fml =
+  if null actualParams 
+    then []
+    else let
+        (formalVals, formalVars) = partition (\v -> varName v == valueVarName) . Set.toList . varsOf $ fml
+        fmls = Set.toList $ conjunctsOf fml
+        extractFromConjunct c =
+          filterAllArgs $ allSubstitutions env c formalVars (init actualParams ++ actualVars) formalVals [last actualParams]
+      in concatMap extractFromConjunct fmls
+  where
+    filterAllArgs = if useAllArgs
+                      then filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q)  -- Only take the qualifiers that use all predicate parameters
+                      else id
+
+extractPredQGenFromType :: Bool -> Environment -> [Formula] -> [Formula] -> RType -> [Formula]
+extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQGenFromType' t
   where
     sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
     
     isParam (Var _ name) = take 1 name == dontCare
     isParam _ = False
+    
+    filterAllArgs = if useAllArgs
+                      then filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q)  -- Only take the qualifiers that use all predicate parameters
+                      else id
         
     -- Extract predicate qualifiers from a type refinement:
     -- only allow replacing _v with the last parameter of the refinement
     extractFromRefinement fml = if null actualParams 
       then []
-      else
-        let
-          -- formals = Set.toList $ varsOf fml
-          fml' = sortSubstituteFml sortInst fml
-          (formalVals, formalVars) = partition (\v -> varName v == valueVarName) . Set.toList . varsOf $ fml'
-          -- fml' = sortSubstituteFml sortInst $ substitute (Map.singleton valueVarName (last actualParams)) fml -- Allow mapping _v only to the last parameter of the predicate
-          fmls = Set.toList $ conjunctsOf fml'
-          extractFromConjunct c =
-            -- filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
-            allSubstitutions env c formalVars (init actualParams ++ actualVars) formalVals [last actualParams]
-            -- allSubstitutions env c formals (init actualParams ++ actualVars) [] []
-        in concatMap extractFromConjunct fmls
+      else  let
+              fml' = sortSubstituteFml sortInst fml
+              (formalVals, formalVars) = partition (\v -> varName v == valueVarName) . Set.toList . varsOf $ fml'
+              fmls = Set.toList $ conjunctsOf fml'
+              extractFromConjunct c =
+                filterAllArgs $ allSubstitutions env c formalVars (init actualParams ++ actualVars) formalVals [last actualParams]
+            in concatMap extractFromConjunct fmls
     
     extractPredQGenFromType' :: RType -> [Formula]
     extractPredQGenFromType' (ScalarT (DatatypeT dtName tArgs pArgs) fml) =
@@ -236,8 +257,7 @@ extractPredQGenFromType env actualParams actualVars t = extractPredQGenFromType'
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
               atoms = Set.toList $ atomsOf pArg'
               extractFromAtom atom =                 
-                filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q) $ -- Only take the qualifiers that use all predicate parameters (optimization)
-                allSubstitutions env atom formalVars actualVars [] []              
+                filterAllArgs $ allSubstitutions env atom formalVars actualVars [] []              
             in concatMap extractFromAtom atoms -- Substitute the variables, but leave predicate parameters unchanged (optimization)
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
