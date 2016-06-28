@@ -34,7 +34,7 @@ localize eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
-      aImpl <- aNormalForm (gImpl goal)
+      aImpl <- aNormalForm "T" (gImpl goal)
       writeLog 2 (pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }
@@ -330,6 +330,7 @@ generateRepair env typ p = do
       ScalarT (DatatypeT _ _ [fml]) _ -> fml
       _ -> error $ unwords ["generateRepair: ill-formed target type", show typ]
   
+    -- | Public version of @p@
     defaultValue = do
       let f = head $ symbolList p
       let f' = defaultPrefix ++ drop 3 f -- ToDo: better way of finding default value
@@ -337,17 +338,24 @@ generateRepair env typ p = do
         Nothing -> throwErrorWithDescription $ text "No default value found for sensitive component" $+$ text f
         Just (Monotype t) -> return $ Program (PSymbol f') t
         
+    -- | Synthesize a tagged Boolean program with value equivalent to @fml@ and policy (@targetPolicy@ && @fml@)
     generateCondition fml = do
-      let allConjuncts = Set.toList $ conjunctsOf fml
-      conjuncts <- mapM (genConjunct (targetPolicy |&| fml)) allConjuncts
-      let andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
-      let conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll      
-      return $ fmap (flip addRefinement $ valBool |=| fml) (foldl1 conjoin conjuncts)
-      
-    genConjunct policy c = do
-      let innerType = ScalarT BoolT $ valBool |<=>| c
-      let targetType = innerType -- ScalarT (mkTagged innerType policy) ftrue
       let strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
+      pureCond <- generatePureCondition strippedEnv fml
+      return $ liftCondition env strippedEnv (targetPolicy |&| fml) pureCond
+        
+    -- | Synthesize a Boolean program equivalent to @fml@ put of components stripped of their tags
+    generatePureCondition strippedEnv fml = do
+      let allConjuncts = Set.toList $ conjunctsOf fml
+      conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
+      let andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
+      let conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll
+      let pCond = fmap (flip addRefinement $ valBool |=| fml) (foldl1 conjoin conjuncts)
+      aCond <- aNormalForm "TT" pCond
+      return $ aCond
+      
+    genPureConjunct strippedEnv c = do
+      let targetType = ScalarT BoolT $ valBool |<=>| c
       local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType)
       
     updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
@@ -359,15 +367,40 @@ generateRepair env typ p = do
     updateSymbol m name sch = Map.insert name sch m
       
     defaultPrefix = "default"
-      
-    mkTagged a policy = DatatypeT "Tagged" [a] [policy]
+
+    taggedLibraryFunctions = ["return", "bind", "if_", "lift1", "lift2"]
     
     stripTags (ScalarT (DatatypeT dtName [dtArg] _) _) 
       | dtName == "Tagged"   = dtArg    
     stripTags (FunctionT x tArg tRes) = FunctionT x tArg (stripTags tRes)
-    stripTags t = t    
+    stripTags t = t
     
-    taggedLibraryFunctions = ["return", "bind", "if_", "lift1", "lift2"]
+    -- | 'liftCondition' @env strippedEnv policy p@: turn a pure E-term @p@ into a tagged one, 
+    -- by binding all lets that have different types in @env@ and @strippedEnv@
+    liftCondition env strippedEnv policy (Program (PLet x def body) t) = 
+      let 
+        arity = length (symbolList def) - 1
+        headSymbol = head $ symbolList def
+        realType = case lookupSymbol headSymbol arity env of
+                    Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in original environment"]
+                    Just t -> t
+        strippedType = case lookupSymbol headSymbol arity strippedEnv of
+                        Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in stripped environment"]
+                        Just t -> t
+        addX = addLetBound x (typeOf def)
+        body' = liftCondition (addX env) (addX strippedEnv) policy body
+      in if realType == strippedType
+        then Program (PLet x def body') t -- This definition hasn't been stripped: leave as is 
+        else mkBind def x body' -- This definition has been stripped: turn into a bind      
+    liftCondition env strippedEnv policy pCond = pCond
+
+    mkTagged a policy = DatatypeT "Tagged" [a] [policy]
+    
+    mkBind def x body = 
+      let 
+        app = untyped (PApp (untyped (PSymbol "bind")) def)
+        fun = untyped (PFun x body)
+      in untyped (PApp app fun)
     
     mkCheck pCond pThen pElse = 
       let 
@@ -378,49 +411,49 @@ generateRepair env typ p = do
 {- Misc -}  
                                             
 -- | 'aNormalForm' @p@: program equivalent to @p@ where arguments and top-level e-terms do not contain applications
-aNormalForm :: MonadHorn s => RProgram -> Explorer s RProgram
-aNormalForm (Program (PFun x body) t) = do
-  aBody <- aNormalForm body
+aNormalForm :: MonadHorn s => Id -> RProgram -> Explorer s RProgram
+aNormalForm prefix (Program (PFun x body) t) = do
+  aBody <- aNormalForm prefix body
   return $ Program (PFun x aBody) t
-aNormalForm (Program (PIf cond thn els) t) = do
-  (defsCond, aCond) <- anfE cond True
-  aThn <- aNormalForm thn
-  aEls <- aNormalForm els
+aNormalForm prefix (Program (PIf cond thn els) t) = do
+  (defsCond, aCond) <- anfE prefix cond True
+  aThn <- aNormalForm prefix thn
+  aEls <- aNormalForm prefix els
   return $ foldDefs defsCond (Program (PIf aCond aThn aEls) t) t
-aNormalForm (Program (PMatch scr cases) t) = do
-  (defsScr, aScr) <- anfE scr True
-  aCases <- mapM (\(Case ctor binders e) -> (Case ctor binders) <$> aNormalForm e) cases
+aNormalForm prefix (Program (PMatch scr cases) t) = do
+  (defsScr, aScr) <- anfE prefix scr True
+  aCases <- mapM (\(Case ctor binders e) -> (Case ctor binders) <$> aNormalForm prefix e) cases
   return $ foldDefs defsScr (Program (PMatch aScr aCases) t) t
-aNormalForm (Program (PFix xs body) t) = do
-  aBody <- aNormalForm body
+aNormalForm prefix (Program (PFix xs body) t) = do
+  aBody <- aNormalForm prefix body
   return $ Program (PFix xs aBody) t
-aNormalForm (Program (PLet x def body) t) = do
-  (defsX, aX) <- anfE def False
-  aBody <- aNormalForm body
+aNormalForm prefix (Program (PLet x def body) t) = do
+  (defsX, aX) <- anfE prefix def False
+  aBody <- aNormalForm prefix body
   return $ foldDefs defsX (Program (PLet x aX aBody) t) t
-aNormalForm (Program PErr t) = return $ Program PErr t
-aNormalForm (Program PHole t) = error "aNormalForm: got a hole"
-aNormalForm eTerm@(Program _ t) = do
-  (defs, a) <- anfE eTerm True
+aNormalForm _ (Program PErr t) = return $ Program PErr t
+aNormalForm _ (Program PHole t) = error "aNormalForm: got a hole"
+aNormalForm prefix eTerm@(Program _ t) = do
+  (defs, a) <- anfE prefix eTerm True
   return $ foldDefs defs a t
   
 foldDefs defs body t = foldr (\(name, def) p -> Program (PLet name def p) t) body defs
   
 -- | 'anfE' @p varRequired@: convert E-term @p@ to a list of bindings and either a variable (if @varRequired@) or a flat application (if not @varRequired@)
-anfE :: MonadHorn s => RProgram -> Bool -> Explorer s ([(Id, RProgram)], RProgram)
-anfE p@(Program (PSymbol x) t) _ = return ([], p)
-anfE (Program (PApp pFun pArg) t) varRequired = do
-  (defsFun, xFun) <- anfE pFun False
-  (defsArg, xArg) <- anfE pArg True
+anfE :: MonadHorn s => Id -> RProgram -> Bool -> Explorer s ([(Id, RProgram)], RProgram)
+anfE prefix p@(Program (PSymbol x) t) _ = return ([], p)
+anfE prefix (Program (PApp pFun pArg) t) varRequired = do
+  (defsFun, xFun) <- anfE prefix pFun False
+  (defsArg, xArg) <- anfE prefix pArg True
   if varRequired
     then do
-      tmp <- freshId "T"
+      tmp <- freshId prefix
       return (defsFun ++ defsArg ++ [(tmp, Program (PApp xFun xArg) t)], (Program (PSymbol tmp) t))
     else return (defsFun ++ defsArg, (Program (PApp xFun xArg) t))
-anfE p@(Program (PFun _ _) t) _ = do -- A case for abstraction, which can appear in applications and let-bindings
-  p' <- aNormalForm p
+anfE prefix p@(Program (PFun _ _) t) _ = do -- A case for abstraction, which can appear in applications and let-bindings
+  p' <- aNormalForm prefix p
   return ([], p')    
-anfE p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]
+anfE _ p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]
 
 -- ToDo: replace this with TypeChecker functionality
 reconstructE :: MonadHorn s => Environment -> RType -> Explorer s RProgram

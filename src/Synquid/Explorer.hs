@@ -456,6 +456,7 @@ enumerateAt env typ 0 = do
     msum $ map pickSymbol symbols'
   where
     pickSymbol (name, sch) = do
+      when (Set.member name (env ^. letBound)) mzero
       t <- symbolType env name sch
       let p = Program (PSymbol name) t
       writeLog 1 $ text "Trying" <+> pretty p
