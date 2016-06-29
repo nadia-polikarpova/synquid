@@ -47,6 +47,11 @@ lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>  
   
+liftAnd :: <l2p :: User -> Bool> . 
+  x: Tagged Bool <l2p> ->
+  y: Tagged Bool <l2p> ->
+  Tagged {Bool | _v == (content x) && (content y)} <l2p>  
+  
 sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
   
 sortBy :: <sop :: User -> Bool> . leq: (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
