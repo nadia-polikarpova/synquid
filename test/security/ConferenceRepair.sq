@@ -14,7 +14,7 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
--- not :: x: Bool -> {Bool | _v == !x}
+not :: x: Bool -> {Bool | _v == !x}
 -- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
   
@@ -100,8 +100,8 @@ predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
 defaultPaperStatus :: Tagged Status <{True}>
 
-qualifier {_v == (x in y)}-- , _v == !(x in y)}
-qualifier {x == y, x in y} --, !(x in y)}
+qualifier {x == y, x in y, !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y)}
   
 -- Print paper status to an author
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World

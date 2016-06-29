@@ -92,7 +92,7 @@ getPaperScore :: w: World -> PaperId -> Tagged Int <{_0 == chair w}>
 defaultPaperScore :: Tagged Int <{True}>
 
 -- qualifier {_v == (x == y), _v == (x in y)}
-qualifier {x == w, x in y, !(x in y)}
+qualifier {x == y, x in y, !(x in y)}
 
 -- Sort papers according to score
 test :: w: World -> pids: List PaperId -> World

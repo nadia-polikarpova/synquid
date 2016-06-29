@@ -15,7 +15,6 @@ measure elems :: List a -> Set a where
   
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 not :: x: Bool -> {Bool | _v == !x}
-and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
   
 -- Tagged things
@@ -92,6 +91,7 @@ getPaperConflicts :: w: World -> pid: PaperId
                         -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_0 in paperConflicts w pid)}>
 
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{!(_0 in paperConflicts w pid)}>
+defaultPaperTitle :: Tagged String <{True}>
 
 predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
@@ -103,7 +103,7 @@ defaultPaperStatus :: Tagged Status <{True}>
 getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 qualifier {x == w, x in y, !(x in y)}
--- qualifier {_v == (x in y), _v == !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y)}
 
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World
@@ -138,7 +138,7 @@ test4 = \w . \pid .
   let u = getSessionUser w in
   let st = if_ (lift2 eq (getChair w) u) 
                 (getPaperStatus w pid) 
-                (if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
+                (if_ (liftAnd (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
                   (return NoDecision)) in
   print w u (lift1 toString st)  
@@ -148,9 +148,10 @@ test5 :: World -> PaperId -> World
 test5 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
+  -- let title = getPaperTitle w pid in -- Leaky version
   let title = if_ (lift1 not (lift2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
   -- let st = getPaperStatus w pid in -- Leaky version
-  let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
+  let st = if_ (liftAnd (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
                   (return NoDecision) in
   let ses = bind st (\s . if s == Accepted 
