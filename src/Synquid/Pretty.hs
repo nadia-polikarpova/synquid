@@ -433,7 +433,7 @@ prettyError (ErrorMessage ResolutionError pos descr) = hang tab $
   errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Resolution Error"]) $+$
   pretty descr  
 prettyError (ErrorMessage TypeError pos descr) = hang tab $ 
-  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " No Solution. Last candidate failed with error"]) $+$
+  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Error"]) $+$
   pretty descr
     
 instance Pretty ErrorMessage where

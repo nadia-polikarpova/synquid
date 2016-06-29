@@ -66,7 +66,7 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
                                       _predQualsGen = \_ _ _ -> emptyQSpace, -- predQuals True,
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
-                               in repair explorerParams typingParams (gEnvironment goal) p violations
+                               in repair explorerParams typingParams (goal {gImpl = p}) violations
                                
     varsForQuals env vars = 
       let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
