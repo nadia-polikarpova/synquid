@@ -346,23 +346,21 @@ generateRepair env typ p = do
     -- | Synthesize a tagged Boolean program with value equivalent to @fml@ and policy (@targetPolicy@ && @fml@)
     generateCondition fml = do
       let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml) Map.empty)) env
-      pureCond <- generatePureCondition strippedEnv fml
-      liftCondition env strippedEnv (targetPolicy |&| fml) pureCond      
-        
-    -- | Synthesize a Boolean program equivalent to @fml@ put of components stripped of their tags
-    generatePureCondition strippedEnv fml = do
       let allConjuncts = Set.toList $ conjunctsOf fml
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
-      let andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
-      let conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll
-      let pCond = foldl1 conjoin conjuncts
-      aCond <- aNormalForm "TT" pCond
-      -- reconstructI strippedEnv (ScalarT BoolT $ valBool |<=>| fml) (eraseTypes aCond) -- re-check ANF to get rid of ghosts
-      return aCond
-      
+      lifted <- mapM (liftCondition env strippedEnv) conjuncts    
+      let defs = concatMap fst lifted
+      let conjuncts' = map snd lifted
+      let liftAndSymb = untyped (PSymbol "liftAnd")
+      let conjoin p1 p2 = untyped (PApp (untyped (PApp liftAndSymb p1)) p2)
+      let pCond = foldl1 conjoin conjuncts'
+      (defs', xCond) <- anfE "TT" pCond False
+      return (defs ++ defs', xCond)
+              
     genPureConjunct strippedEnv c = do
       let targetType = ScalarT BoolT $ valBool |<=>| c
-      local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType)
+      c' <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType)
+      aNormalForm "TT" c'
       
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol _ m name _ | -- This is a default value: remove
@@ -390,9 +388,9 @@ generateRepair env typ p = do
     stripTags (FunctionT x tArg tRes) = FunctionT x tArg (stripTags tRes)
     stripTags t = t
     
-    -- | 'liftCondition' @env strippedEnv policy p@: turn a pure E-term @p@ into a tagged one, 
+    -- | 'liftCondition' @env strippedEnv p@: turn a pure E-term @p@ into a tagged one, 
     -- by binding all lets that have different types in @env@ and @strippedEnv@
-    liftCondition env strippedEnv policy (Program (PLet x def body) typ) = do
+    liftCondition env strippedEnv (Program (PLet x def body) typ) = do
       let arity = length (symbolList def) - 1
       let headSymbol = head $ symbolList def
       let realType = case lookupSymbol headSymbol arity env of
@@ -402,13 +400,13 @@ generateRepair env typ p = do
                         Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in stripped environment"]
                         Just t -> t
       let addX = addLetBound x (typeOf def)
-      (defs', body') <- liftCondition (addX env) (addX strippedEnv) policy body
+      (defs', body') <- liftCondition (addX env) (addX strippedEnv) body
       if realType == strippedType
         then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
         else do -- This definition has been stripped: turn into a bind
           tmp <- freshId "TT"
           return ([(tmp, def)], mkBind tmp x (foldDefs defs' body' (typeOf body')))
-    liftCondition env strippedEnv policy pCond = do
+    liftCondition env strippedEnv pCond = do
       tmp <- freshId "TT"
       return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
 
