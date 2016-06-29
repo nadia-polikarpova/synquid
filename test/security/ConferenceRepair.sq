@@ -98,7 +98,7 @@ predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
 defaultPaperStatus :: Tagged Status <{True}>
 
-qualifier {_v == (x == y), _v == (x in y)}
+qualifier {_v == (x in y)}
 qualifier {x == y, x in y}
   
 -- Print paper status to an author

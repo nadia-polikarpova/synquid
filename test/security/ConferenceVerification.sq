@@ -27,18 +27,15 @@ measure content :: Tagged a -> a
 
 return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 
-bind :: <bp :: User -> Bool> . 
-  (Tagged a <bp>) -> (a -> Tagged b <bp>) -> Tagged b <bp>
+bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
 
 if_ :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
-    
--- and_ :: <ap :: User -> Bool> .
-  -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>  
-    
+
 lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
   x: Tagged a <l1p> ->
@@ -49,6 +46,11 @@ lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>
+  
+liftAnd :: <l2p :: User -> Bool> . 
+  x: Tagged Bool <l2p> ->
+  y: Tagged Bool <l2p> ->
+  Tagged {Bool | _v == (content x) && (content y)} <l2p>  
   
 -- Strings
 
@@ -100,10 +102,8 @@ defaultPaperStatus :: Tagged Status <{True}>
 
 getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 
-qualifier {x == w, x in y, !(x in y)} -- ToDo: make this work
--- qualifier {content x == chair w}
--- qualifier {content x in paperAuthors w pid}
--- qualifier {!(content x in paperConflicts w pid)}
+qualifier {x == w, x in y, !(x in y)}
+-- qualifier {_v == (x in y), _v == !(x in y)}
 
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World
@@ -185,6 +185,3 @@ test7 :: World -> (List PaperId) -> World
 test7 = \w. \allPids .
   let u = getSessionUser w in
   print w u (selectFrom w u allPids)
-  
-  
-
