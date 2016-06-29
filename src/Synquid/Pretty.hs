@@ -40,6 +40,7 @@ module Synquid.Pretty (
   -- * Structures
   hMapDoc,
   vMapDoc,
+  mkTable,
   -- * Programs
   prettySpec,
   prettySolution,
@@ -78,18 +79,14 @@ isEmpty d = case renderCompact d of
   _ -> False
 
 -- | Separate two documents by space if both are nonempty
-doc1 <+> doc2 = if isEmpty doc1
-  then doc2
-  else if isEmpty doc2
-    then doc1
-    else doc1 L.<+> doc2
+doc1 <+> doc2 | isEmpty doc1 = doc2
+              | isEmpty doc2 = doc1
+              | otherwise    = doc1 L.<+> doc2
 
 -- | Separate two documents by linebreak if both are nonempty
-doc1 $+$ doc2 = if isEmpty doc1
-  then doc2
-  else if isEmpty doc2
-    then doc1
-    else doc1 L.<$> doc2
+doc1 $+$ doc2 | isEmpty doc1 = doc2
+              | isEmpty doc2 = doc1
+              | otherwise    = doc1 L.<$> doc2
 
 -- | Separate by spaces
 hsep = foldr (<+>) empty
@@ -165,9 +162,9 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Pred _ _ _) = 9
-power (Cons _ _ _) = 9
-power (Unary _ _) = 8
+power Pred {} = 9
+power Cons {} = 9
+power Unary {} = 8
 power (Binary op _ _)
   | op `elem` [Times, Intersect] = 7
   | op `elem` [Plus, Minus, Union, Diff] = 6
@@ -175,13 +172,13 @@ power (Binary op _ _)
   | op `elem` [And, Or] = 4
   | op `elem` [Implies] = 3
   | op `elem` [Iff] = 2
-power (All _ _) = 1
-power (Ite _ _ _) = 1
+power All {} = 1
+power Ite {} = 1
 power _ = 10
 
 -- | Pretty-printed formula
 fmlDoc :: Formula -> Doc
-fmlDoc fml = fmlDocAt 0 fml
+fmlDoc = fmlDocAt 0
 
 -- | 'fmlDocAt' @n fml@ : print @expr@ in a context with binding power @n@
 fmlDocAt :: Int -> Formula -> Doc
@@ -258,7 +255,7 @@ prettyType t = prettyTypeAt 0 t
 
 -- | Binding power of a type
 typePower :: RType -> Int
-typePower (FunctionT _ _ _) = 1
+typePower FunctionT {} = 1
 typePower (ScalarT (DatatypeT _ tArgs pArgs) r)
   | ((not (null tArgs) || not (null pArgs)) && (r == ftrue)) = 2
 typePower _ = 3
@@ -475,3 +472,22 @@ programNodeCount (Program p _) = case p of
   PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
   PHole -> 0
   PErr -> 1
+
+-- | Prints data in a table, with fixed column widths.
+-- Positive widths for left justification, negative for right.
+mkTable :: [Int] -> [[Doc]] -> Doc
+mkTable widths docs = vsep $ map (mkTableRow widths) docs
+mkTableRow widths docs = hsep $ map (\(w,doc) -> signedFill w doc) $ zip widths docs
+
+signedFill w doc | w < 0 = lfill (-w) doc
+                 | otherwise = fill w doc
+
+-- | Really? They didn't think I might want to right-align something?
+-- This implementation only works for simple documents with a single string.
+-- Implementing the general case seemed not worth it.
+lfill :: Int -> Doc -> Doc
+lfill w d        = case renderCompact d of
+  SText l s _ -> spaces (w - l) <> d
+ where
+  spaces n | n <= 0    = empty
+           | otherwise = text $ replicate n ' '

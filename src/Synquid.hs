@@ -18,6 +18,7 @@ import Synquid.HtmlOutput
 import Synquid.Codegen
 
 import Control.Monad
+import Control.Lens ((^.))
 import System.Exit
 import System.Console.CmdArgs
 import System.Console.ANSI
@@ -25,6 +26,10 @@ import System.FilePath
 import Data.Char
 import Data.Time.Calendar
 import qualified Data.Map as Map
+import qualified Data.Set as Set
+
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import Text.PrettyPrint.ANSI.Leijen (fill, column)
 
 programName = "synquid"
 versionName = "0.3"
@@ -99,6 +104,7 @@ deriving instance Show FixpointStrategy
 
 {-# ANN module "HLint: ignore Use camelCase" #-}
 {-# ANN module "HLint: ignore Redundant bracket" #-}
+{-# ANN module "HLint: ignore" #-}
 
 data CommandLineArgs
     = CommandLineArgs {
@@ -226,8 +232,8 @@ defaultSynquidParams = SynquidParams {
 
 -- | Parameters for code extraction and Haskell output
 data CodegenParams = CodegenParams {
-  filename :: Maybe String,
-  module_ :: Maybe String
+  filename :: Maybe String,               -- ^ Output filename (of Haskell code)
+  module_ :: Maybe String                 -- ^ Generated module name
 } deriving (Show)
 
 defaultCodegenParams = CodegenParams {
@@ -235,13 +241,14 @@ defaultCodegenParams = CodegenParams {
   module_ = Nothing
 }
 
-{- figures out output filename from module name or vise versa -}
+-- | figures out output filename from module name or vise versa
 fillinCodegenParams f p@(CodegenParams (Just "") _) = fillinCodegenParams f $ p { filename = Just (f -<.> ".hs") }
 fillinCodegenParams _ p@(CodegenParams (Just "-") Nothing) =                  p { module_ = Just "Synthed" }
 fillinCodegenParams _ p@(CodegenParams (Just filename) Nothing) =             p { module_ = Just $ idfy filename }
 fillinCodegenParams _ p@(CodegenParams Nothing (Just module_)) =              p { filename = Just (module_ <.> ".hs") }
 fillinCodegenParams _ p = p
 
+-- | E.g., "out/User-Module.hs" ---> "UserModule"
 idfy = filter isAlphaNum . dropExtension . takeFileName
 
 codegen params results = case params of
@@ -260,7 +267,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file = do
     Right decls -> case resolveDecls decls of
       Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
       Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
-        results <- mapM (synthesizeGoal cquals tquals) goals
+        results <- mapM (synthesizeGoal cquals tquals) (reverse goals)  -- TODO currently starts from the bottom. Useful for debugging
         when (not (null results) && showStats synquidParams) $ printStats results
         -- Generate output if requested
         codegen (fillinCodegenParams file codegenParams) results
@@ -282,13 +289,30 @@ runOnFile synquidParams explorerParams solverParams codegenParams file = do
           pdoc empty
           return (goal, prog)
     printStats results = do
-      let measureCount = Map.size $ _measures $ gEnvironment (fst $ head results)
-      let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst) results
-      let solutuionSize = sum $ map (programNodeCount . snd) results
-      pdoc $ vsep [
+      let env = gEnvironment (fst $ head results)
+      let measureCount = Map.size $ _measures $ env
+      let policySize = sum $ Set.map (typeNodeCount . toMonotype . unresolvedType env) (env ^. constants)
+      let getStatsFor (goal, prog) = (gName goal, 
+                                      typeNodeCount $ toMonotype $ unresolvedSpec goal,
+                                      programNodeCount $ gImpl goal,   -- size of implementation template (before synthesis/repair)
+                                      programNodeCount prog)           -- size of generated solution
+      let perResult = map getStatsFor results
+      --let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst) results
+      --let solutionSize = sum $ map (programNodeCount . snd) results
+      pdoc $ vsep $ [
               parens (text "Goals:" <+> pretty (length results)),
               parens (text "Measures:" <+> pretty measureCount),
-              parens (text "Spec size:" <+> pretty specSize),
-              parens (text "Solution size:" <+> pretty solutuionSize),
+              parens (text "Policy size:" <+> pretty policySize),
+              statsTable perResult,
               empty
               ]
+
+statsTable :: [(String, Int, Int, Int)] -> Doc
+statsTable dataRows =
+  let headerRow = [text "Goal", text "Spec", text "Templ", text "Solution"]
+      totalsRow = ("Totals", sum $ map (\(a,b,c,d) -> b) dataRows, sum $ map (\(a,b,c,d) -> c) dataRows, sum $ map (\(a,b,c,d) -> d) dataRows)
+      toDocs (a,b,c,d) = [text a, pretty b, pretty c, pretty d]
+      colWidths = [12, -8, -8, -8]
+  in
+    mkTable colWidths $ [headerRow] ++ 
+       (map (\(a,b,c,d) -> [text a, pretty b, pretty c, pretty d]) $ dataRows ++ [totalsRow])
