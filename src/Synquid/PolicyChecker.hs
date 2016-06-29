@@ -328,9 +328,11 @@ generateRepair env typ p = do
   pElse <- defaultValue
   ifte (runInSolver $ solveTypeConstraints)
     (const $ do -- Condition found
-      cond <- conjunction <$> currentValuation cUnknown -- Todo: multiple valuations: disjunction
-      (cDefs, cBody) <- generateCondition cond      
-      mkCheck cDefs cBody p pElse)
+      disjuncts <- map conjunction <$> allCurrentValuations cUnknown
+      condANFs <- mapM generateDisjunct disjuncts
+      let allDefs = concatMap fst condANFs
+      let allConds = map snd condANFs            
+      mkCheck allDefs allConds p pElse)
     (return ([], pElse)) -- No condition found, Todo: issue a warning
   where
     targetPolicy = case typ of
@@ -344,9 +346,10 @@ generateRepair env typ p = do
       case lookupSymbol f' 0 env of
         Nothing -> throwErrorWithDescription $ text "No default value found for sensitive component" $+$ text f
         Just (Monotype t) -> return $ Program (PSymbol f') t
-        
+
     -- | Synthesize a tagged Boolean program with value equivalent to @fml@ and policy (@targetPolicy@ && @fml@)
-    generateCondition fml = do
+    generateDisjunct:: MonadHorn s => Formula -> Explorer s ([(Id, RProgram)], RProgram)
+    generateDisjunct fml = do
       let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml) Map.empty)) env
       let allConjuncts = Set.toList $ conjunctsOf fml
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
@@ -356,6 +359,7 @@ generateRepair env typ p = do
       let liftAndSymb = untyped (PSymbol "liftAnd")
       let conjoin p1 p2 = untyped (PApp (untyped (PApp liftAndSymb p1)) p2)
       let pCond = foldl1 conjoin conjuncts'
+      return (defs, pCond)
       (defs', xCond) <- anfE "TT" pCond False
       return (defs ++ defs', xCond)
               
@@ -423,13 +427,13 @@ generateRepair env typ p = do
       
     mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)
     
-    mkCheck cDefs cBody pThen pElse = do
-      cTmp <- freshId "TT"
+    mkCheck defs conds pThen pElse = do
+      cTmps <- replicateM (length conds) (freshId "TT")
       pTmp <- freshId "TT"
-      let allDefs = cDefs ++ [(cTmp, cBody), (pTmp, pThen)]
-      let app1 = untyped (PApp (untyped (PSymbol "if_")) (untyped (PSymbol cTmp)))
-      let app2 = untyped (PApp app1 (untyped (PSymbol pTmp)))
-      return (allDefs, untyped (PApp app2 pElse))
+      let allDefs = defs ++ zip cTmps conds ++ [(pTmp, pThen)]
+      let app1 cTmp = untyped (PApp (untyped (PSymbol "if_")) (untyped (PSymbol cTmp)))
+      let app2 cTmp = untyped (PApp (app1 cTmp) (untyped (PSymbol pTmp)))      
+      return (allDefs, foldr (\cTmp els -> untyped $ PApp (app2 cTmp) els) pElse cTmps)
 
 {- Misc -}  
                                             
@@ -571,3 +575,13 @@ insertAuxSolution x pAux (Program body t) = flip Program t $
     _ -> body  
   where
     ins = insertAuxSolution x pAux
+    
+-- | Return all current valuations of @u@
+allCurrentValuations :: MonadHorn s => Formula -> Explorer s [Valuation]
+allCurrentValuations u = do
+  runInSolver $ solveAllCandidates
+  cands <- use (typingState . candidates)
+  let candGroups = groupBy (\c1 c2 -> val c1 == val c2) $ sortBy (\c1 c2 -> setCompare (val c1) (val c2)) cands
+  return $ map (val. head) candGroups
+  where
+    val c = valuation (solution c) u    
