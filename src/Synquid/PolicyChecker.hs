@@ -46,20 +46,23 @@ localize isRecheck eParams tParams goal = do
       if isRecheck
         then if Map.null reqs
               then return (deANF finalP, Map.empty)
-              else throwErrorWithDescription $ (nest 2 (text "Repair failed with violations:" $+$ vMapDoc text pretty reqs)) $+$ text "when checking" $+$ pretty p
+              else throwErrorWithDescription $ 
+                    hang 2 (text "Re-verification of inserted checks failed with violations:" $+$ vMapDoc text pretty reqs $+$
+                      text "Probable causes: missing type qualifiers or policy incorrectly depends on another sensitive value"
+                    ) $+$ text "when checking" $+$ pretty p
         else if Map.null reqs
               then return (deANF finalP, Map.empty)
               else return (finalP, reqs)        
       
-repair :: MonadHorn s => ExplorerParams -> TypingParams -> Environment -> RProgram -> Requirements -> s (Either ErrorMessage RProgram)
-repair eParams tParams env p violations = do
-    initTS <- initTypingState env
-    runExplorer eParams tParams initTS go
+repair :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> Requirements -> s (Either ErrorMessage RProgram)
+repair eParams tParams goal violations = do
+    initTS <- initTypingState $ gEnvironment goal
+    runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
-      writeLog 1 $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty violations)) $+$ text "when checking" $+$ pretty p
+      writeLog 1 $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty violations)) $+$ text "when checking" $+$ pretty (gImpl goal)
       requiredTypes .= violations
-      replaceViolations env p
+      replaceViolations (gEnvironment goal) (gImpl goal)
       
 {- Standard Tagged library -}
 
@@ -351,7 +354,11 @@ generateRepair env typ p = do
       let allDefs = concatMap fst condANFs
       let allConds = map snd condANFs            
       mkCheck allDefs allConds p pElse)
-    (return ([], pElse)) -- No condition found, Todo: issue a warning
+    (do
+      writeLog 0 $ hang 2 (
+        text "WARNING: cannot abduce a condition for violation" $+$ pretty p </> text "::" </> pretty typ $+$ 
+        text "Probable cause: missing condition qualifiers")
+      return ([], pElse))
   where
     targetPolicy = case typ of
       ScalarT (DatatypeT _ _ [fml]) _ -> fml
@@ -381,10 +388,14 @@ generateRepair env typ p = do
       (defs', xCond) <- anfE "TT" pCond False
       return (defs ++ defs', xCond)
               
-    genPureConjunct strippedEnv c = do
-      let targetType = ScalarT BoolT $ valBool |<=>| c
-      c' <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType)
-      aNormalForm "TT" c'
+    genPureConjunct strippedEnv c = let targetType = ScalarT BoolT $ valBool |<=>| c in 
+      ifte 
+        (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType))
+        (\pCond -> aNormalForm "TT" pCond)
+        (throwErrorWithDescription $ hang 2 $ 
+          text "Cannot synthesize term of type" <+> pretty targetType $+$
+          text "when repairing violation" $+$ pretty p </> text "::" </> pretty typ $+$
+          text "Probable cause: missing components to implement check")
       
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol _ m name _ | -- This is a default value: remove
