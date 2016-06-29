@@ -125,7 +125,7 @@ fmlToProgram fml@(Binary op e1 e2) = let
       
 -- | 'renameAsImpl' @p t@: change argument names in function type @t@ to be the same as in the abstraction @p@
 renameAsImpl :: (Id -> Bool) -> UProgram -> RType -> RType
-renameAsImpl isBound p t = renameAsImpl' Map.empty p t
+renameAsImpl isBound = renameAsImpl' Map.empty
   where
     renameAsImpl' subst (Program (PFun y pRes) _) (FunctionT x tArg tRes) = case tArg of
       ScalarT baseT fml -> FunctionT y (substituteInType isBound subst tArg) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)    
@@ -257,7 +257,7 @@ addVariable :: Id -> RType -> Environment -> Environment
 addVariable name t = addPolyVariable name (Monotype t)
 
 addPolyVariable :: Id -> RSchema -> Environment -> Environment
-addPolyVariable name sch = let n = arity (toMonotype sch) in (symbols %~ Map.insertWith (Map.union) n (Map.singleton name sch))
+addPolyVariable name sch = let n = arity (toMonotype sch) in (symbols %~ Map.insertWith Map.union n (Map.singleton name sch))
 
 -- | 'addConstant' @name t env@ : add type binding @name@ :: Monotype @t@ to @env@
 addConstant :: Id -> RType -> Environment -> Environment
@@ -315,7 +315,7 @@ addAssumption f = assumptions %~ Set.insert f
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
-allPredicates env = (Map.fromList $ map (\(PredSig pName argSorts resSort) -> (pName, resSort:argSorts)) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
+allPredicates env = Map.fromList (map (\(PredSig pName argSorts resSort) -> (pName, resSort:argSorts)) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures
@@ -339,7 +339,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                     elemSort = toSort elemT
                     measureApp = Pred elemSort mName [Var (toSort baseT) valueVarName]
                    in Just $ substitute (Map.singleton valueVarName measureApp) fml
-    contentProperties (mName, MeasureDef _ _ _ _) = Nothing
+    contentProperties (mName, MeasureDef {}) = Nothing
         
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
@@ -351,12 +351,12 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                             scopedVar = Var elemSort "_x"
                             setVal = Pred (SetS elemSort) mName [Var (toSort baseT) valueVarName]
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
-    elemProperties (mName, MeasureDef _ _ _ _) = Nothing
+    elemProperties (mName, MeasureDef {}) = Nothing
     
 allMeasurePostconditions _ _ _ = []
 
 typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
-typeSubstituteEnv tass env = over symbols (Map.map (Map.map (schemaSubstitute tass))) env
+typeSubstituteEnv tass = over symbols (Map.map (Map.map (schemaSubstitute tass)))
 
 -- | Insert weakest refinement
 refineTop :: Environment -> SType -> RType
@@ -420,5 +420,6 @@ data Goal = Goal {
   gSourcePos :: SourcePos       -- ^ Source Position
 } deriving (Eq, Ord)
 
-unresolvedSpec goal = (gEnvironment goal ^. unresolvedConstants) Map.! gName goal
+unresolvedType env ident = (env ^. unresolvedConstants) Map.! ident
+unresolvedSpec goal = unresolvedType (gEnvironment goal) (gName goal)
   
