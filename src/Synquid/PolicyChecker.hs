@@ -45,7 +45,7 @@ localize isRecheck eParams tParams goal = do
       finalP <- runInSolver $ finalizeProgram p
       if isRecheck
         then if Map.null reqs
-              then return (finalP, Map.empty)
+              then return (deANF finalP, Map.empty)
               else throwErrorWithDescription $ (nest 2 (text "Repair failed with violations:" $+$ vMapDoc text pretty reqs)) $+$ text "when checking" $+$ pretty p
         else return (finalP, reqs)
       
@@ -404,8 +404,9 @@ generateRepair env typ p = do
       if realType == strippedType
         then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
         else do -- This definition has been stripped: turn into a bind
-          tmp <- freshId "TT"
-          return ([(tmp, def)], mkBind tmp x (foldDefs defs' body' (typeOf body')))
+          y <- freshVar env "x"
+          let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
+          return ([(x, def)], mkBind x y body'')
     liftCondition env strippedEnv pCond = do
       tmp <- freshId "TT"
       return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
@@ -474,6 +475,49 @@ anfE prefix p@(Program (PFun _ _) t) _ = do -- A case for abstraction, which can
   p' <- aNormalForm prefix p
   return ([], p')    
 anfE _ p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]
+
+deANF :: RProgram -> RProgram
+deANF p = deANF' Map.empty Map.empty p
+
+deANF' :: Map Id RProgram -> Map RProgram Id -> RProgram -> RProgram
+deANF' tmpDefs userDefs (Program (PFun x body) t) = 
+  let body' = deANF' tmpDefs userDefs body
+  in Program (PFun x body') t
+deANF' tmpDefs userDefs (Program (PIf cond thn els) t) = 
+  let
+    cond' = deANF' tmpDefs userDefs cond
+    thn' = deANF' tmpDefs userDefs thn
+    els' = deANF' tmpDefs userDefs els
+  in Program (PIf cond' thn' els') t
+deANF' tmpDefs userDefs (Program (PMatch scr cases) t) = 
+  let
+    scr' = deANF' tmpDefs userDefs scr
+    cases' = map (\(Case ctor binders e) -> Case ctor binders (deANF' tmpDefs userDefs e)) cases
+  in Program (PMatch scr' cases') t
+deANF' tmpDefs userDefs (Program (PFix xs body) t) = 
+  let body' = deANF' tmpDefs userDefs body
+  in Program (PFix xs body') t
+deANF' tmpDefs userDefs (Program (PLet x def body) t) =   
+  let def' = deANF' tmpDefs userDefs def 
+  in if isIdentifier x
+    then let body' = deANF' tmpDefs (Map.insert (eraseTypes def') x userDefs) body
+         in Program (PLet x def' body') t
+    else deANF' (newMap def') userDefs body
+  where
+    newMap def' = case Map.lookup (eraseTypes def') userDefs of
+                    Nothing -> Map.insert x def' tmpDefs
+                    Just y -> Map.insert x (Program (PSymbol y) (typeOf def')) tmpDefs
+deANF' tmpDefs userDefs (Program (PApp pFun pArg) t) =
+  let
+    pFun' = deANF' tmpDefs userDefs pFun
+    pArg' = deANF' tmpDefs userDefs pArg
+  in (Program (PApp pFun' pArg') t)    
+deANF' tmpDefs userDefs p@(Program (PSymbol name) t) =
+  case Map.lookup name tmpDefs of
+    Nothing -> p
+    Just def -> def
+deANF' _ _ (Program PErr t) = Program PErr t
+deANF' _ _ (Program PHole t) = error "deANF': got a hole"
 
 -- ToDo: replace this with TypeChecker functionality
 reconstructE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
