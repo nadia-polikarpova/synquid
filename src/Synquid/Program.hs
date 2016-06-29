@@ -96,6 +96,7 @@ programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteS
     programSubstituteSymbol' (PIf c p1 p2) = PIf (pss c) (pss p1) (pss p2)
     programSubstituteSymbol' (PMatch scr cases) = PMatch (pss scr) (map (\(Case ctr args pBody) -> Case ctr args (pss pBody)) cases)
     programSubstituteSymbol' (PFix args pBody) = PFix args (pss pBody)
+    programSubstituteSymbol' (PLet x pDef pBody) = PLet x (pss pDef) (pss pBody)
 
 -- | Convert an executable formula into a program    
 fmlToProgram :: Formula -> RProgram

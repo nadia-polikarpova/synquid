@@ -56,3 +56,4 @@ commentLine = "--"
 isLiteral str = isJust (asInteger str) || str == "True" || str == "False"
 
 isTypeName str = isUpper $ head str
+isIdentifier str = isLower $ head str
