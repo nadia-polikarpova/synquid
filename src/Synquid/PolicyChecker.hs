@@ -325,13 +325,18 @@ replaceViolations env (Program (PMatch scr cases) t) = do
 replaceViolations env (Program (PFix xs body) t) = do
   body' <- replaceViolations env body
   return body'
-replaceViolations env (Program (PLet x def body) t) = do
+replaceViolations env p@(Program (PLet x def body) t) = do
   reqs <- use requiredTypes
   (newDefs, def') <- case Map.lookup x reqs of
             Nothing -> do
                           def'<- replaceViolations env def
                           return ([], def')
-            Just ts -> generateRepair env (head ts) def -- ToDo: other ts
+            Just ts -> if length ts == 1
+                          then generateRepair env (head ts) def
+                          else throwErrorWithDescription $ hang 2 $ 
+                                text "Binder" <+> squotes (text x) <+> text "violates multiple requirements:" $+$ vsep (map pretty ts) $+$
+                                text "Probable causes: binder flows into multiple sinks or is itself a sink with a self-denying policy" $+$
+                                text "when checking" $+$ pretty p
   body' <- replaceViolations (addLetBound x (typeOf def') env) body
   return $ foldDefs (newDefs ++ [(x, def')]) body' t
 replaceViolations env (Program (PApp fun arg) t) = do
