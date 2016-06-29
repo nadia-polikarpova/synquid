@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving, TemplateHaskell #-}
 module ConferenceImpl where
 
-import Prelude hiding (String, elem, print)
+import Prelude hiding (String, elem, print, foldl, foldl1, map)
 
 import qualified Prelude
 import Data.Map (Map, (!))
@@ -20,6 +20,8 @@ type User = String
 type PaperId = Int
 
 data Tagged a = Tagged a
+deriving instance Eq a => Eq (Tagged a)
+deriving instance Ord a => Ord (Tagged a)
 
 data Database = Database {
   _chair :: User,
@@ -61,7 +63,8 @@ data ConflictRow = ConflictRow Int Int deriving (Show)
 selectJoin table1 table2 cross = concatMap (\x -> concatMap (cross x) table2) table1
 
 mkPapers prows urows arows crows =
-    M.fromList $ map (\(PaperRow id title status session) ->
+    M.fromList $ 
+         Prelude.map (\(PaperRow id title status session) ->
                         (id, PaperRecord {
                             _papid = id,
                             _title = T.unpack title,
@@ -128,6 +131,21 @@ elem :: (Eq a, Ord a) => a -> List a -> Bool
 elem x Nil = False
 elem x (Cons y xs) = (x == y) || elem x xs
 
+map :: (a -> b) -> List a -> List b
+map f = fromList . Prelude.map f . toList
+
+foldl1 :: (a -> a -> a) -> List a -> a
+foldl1 f = Prelude.foldl1 f . toList
+
+foldl :: (a -> b -> a) -> a -> List b -> a
+foldl f a = Prelude.foldl f a . toList
+
+forM_ ::
+        (Eq a, Ord a) =>
+        World -> Tagged (List a) -> (World -> Tagged a -> World) -> World
+forM_ w (Tagged Nil) f = w
+forM_ w (Tagged (Cons x xs)) f = forM_ (f w (Tagged x)) (Tagged xs) f
+
 toList Nil = []
 toList (Cons x xs) = x : toList xs
 
@@ -148,6 +166,7 @@ s_colon = ": "
 s_comma = ", "
 s_authors = "authors: "
 s_paperNo = "Paper #"
+s_qmark = "?"
 
 strcat :: String -> String -> String
 strcat s1 s2 = s1 ++ s2
@@ -181,11 +200,13 @@ getPaperTitle w papid = Tagged $ (w ^. db ^. papers) ! papid ^. title
 getSessionUser :: World -> Tagged User
 getSessionUser w = Tagged $ w ^. sessionUser
 
+getAllPapers :: World -> List PaperId
+getAllPapers w = fromList $ M.keys $ w ^. db ^. papers
 
 {- Output -}
 
 print :: World -> Tagged User -> Tagged String -> World
-print w (Tagged u) (Tagged s) = over effects (M.insertWith (++) u [s]) w
+print w (Tagged u) (Tagged s) = over effects (M.insertWith (\new old -> old ++ new) u [s]) w
 
 printAll :: World -> Tagged (List User) -> Tagged String -> World
 printAll w (Tagged us) s = lfoldl (\w u -> print w (Tagged u) s) w us
