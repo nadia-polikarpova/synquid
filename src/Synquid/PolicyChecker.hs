@@ -288,22 +288,23 @@ replaceViolations env (Program (PIf cond thn els) t) = do
   thn' <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ftrue) fml) env) thn
   els' <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ffalse) fml) env) els
   return $ Program (PIf cond thn' els') t
-replaceViolations env (Program (PMatch scr cases) t) = error "replaceViolations: matches not implemented"
-  -- do
-  -- cases' <- mapM reaplceInCase cases
-  -- return $ Program (PMatch scr cases') t
-  -- where
-    -- reaplceInCase (Case consName args iBody) = do  
-      -- runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
-      -- consT' <- runInSolver $ currentAssignment consT
-      -- (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) x) args consT'
-  -- let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-  -- pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
-               -- localizeI caseEnv t iBody
-  -- return $ Case consName args pCaseExpr  
+replaceViolations env (Program (PMatch scr cases) t) = do
+  cases' <- mapM replaceInCase cases
+  return $ Program (PMatch scr cases') t
+  where
+    replaceInCase (Case consName args body) = do
+      let scrT = typeOf scr
+      let consSch = allSymbols env Map.! consName
+      consT <- instantiate env consSch True []    
+      runInSolver $ matchConsType (lastType consT) scrT
+      consT' <- runInSolver $ currentAssignment consT
+      (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) (symbolName scr)) args consT'
+      let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+      body' <- replaceViolations caseEnv body
+      return $ Case consName args body'
 replaceViolations env (Program (PFix xs body) t) = do
   body' <- replaceViolations env body
-  return $ Program (PFix xs body') t
+  return body'
 replaceViolations env (Program (PLet x def body) t) = do
   reqs <- use requiredTypes
   (newDefs, def') <- case Map.lookup x reqs of
