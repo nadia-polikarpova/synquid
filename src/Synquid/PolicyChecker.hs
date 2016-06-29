@@ -47,7 +47,9 @@ localize isRecheck eParams tParams goal = do
         then if Map.null reqs
               then return (deANF finalP, Map.empty)
               else throwErrorWithDescription $ (nest 2 (text "Repair failed with violations:" $+$ vMapDoc text pretty reqs)) $+$ text "when checking" $+$ pretty p
-        else return (finalP, reqs)
+        else if Map.null reqs
+              then return (deANF finalP, Map.empty)
+              else return (finalP, reqs)        
       
 repair :: MonadHorn s => ExplorerParams -> TypingParams -> Environment -> RProgram -> Requirements -> s (Either ErrorMessage RProgram)
 repair eParams tParams env p violations = do
