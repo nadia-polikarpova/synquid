@@ -2,6 +2,7 @@
 
 module Synquid.Codegen where
 
+import Data.Char
 import qualified Data.Map as Map
 import Data.Map (assocs,elems,union,empty,(!))
 import qualified Data.Set as Set
@@ -49,7 +50,7 @@ class AsHaskellDecl a where
 class AsHaskellType a where
   toHsType :: Environment -> a -> HsType
   toHsQualType :: Environment -> a -> HsQualType
-  toHsQualType env t = {- HsQualType [] $ -} toHsType env t
+  toHsQualType = toHsType   -- ^ overridden when type qualifiers are possible
 
 class AsHaskellExp a where
   toHsExp :: Environment -> a -> HsExp
@@ -82,11 +83,17 @@ defaultImports = [ImportDecl {
           map (IVar . Ident) ["undefined"]
     syms = map (IVar . Symbol) ["<=", "==", ">=", "<", ">", "/=", "+", "-"]
 
-qualifyByDefault tArg typ = typ {- (HsQualType ctx typ) =
-  HsQualType (ctx ++ map qual defaultTypeClasses) typ
-  where qual cls = (cls, [HsTyVar $ HsIdent tArg]) -}
+qualifyByDefault tArg = TyForall Nothing (map qual defaultTypeClasses)
+  where qual cls = ClassA cls [TyVar $ Ident tArg]
 
-
+ensureLower s = case s of
+  c:cs | isLower c -> s
+  _ -> "v" ++ s
+--ensureLower s@(c:cs) | isLower c = s
+--ensureLower s = "v" ++ s
+vIdent env name
+  | name `elem` constructorNames env = Ident name
+  | otherwise = Ident $ ensureLower name
 
 constructorNames env = concatMap (^. constructors) $ env ^. datatypes
 
@@ -132,7 +139,7 @@ instance AsHaskellDecl (Id, DatatypeDef) where
 
 instance AsHaskellDecl (Goal, Program r) where
   toHsDecl _ (Goal name env _ _ _ _, p) = PatBind unknownLoc
-    (PVar $ Ident name)                -- lhs (pattern)
+    (PVar $ vIdent env name)           -- lhs (pattern)
     (UnGuardedRhs $ toHsExp env p)     -- rhs (expression)
     Nothing                            -- bindings??
 
@@ -148,7 +155,7 @@ instance AsHaskellDecl (Id, SchemaSkeleton r) where
 
 instance AsHaskellDecl Id where
   toHsDecl env name = PatBind unknownLoc
-    (PVar $ Ident name)
+    (PVar $ vIdent env name)
     (UnGuardedRhs $ Var $ UnQual $ Ident "undefined")
     Nothing
 
@@ -182,7 +189,7 @@ instance AsHaskellExp (Program r) where
   toHsExp env (Program term _) = toHsExp env term
 
 instance AsHaskellExp (BareProgram r) where
-  toHsExp env (PSymbol sym) = Var $ UnQual $ Ident sym
+  toHsExp env (PSymbol sym) = Var $ UnQual $ vIdent env sym
   toHsExp env (PApp fun arg) =
     case infixate fun arg of
       Just (l, op, r) -> Paren $ InfixApp (toHsExp env l) (QVarOp (UnQual (Symbol op))) (toHsExp env r)
@@ -191,27 +198,26 @@ instance AsHaskellExp (BareProgram r) where
       infixate (Program (PApp (Program (PSymbol op) _) l) _) r
        | isBinOp op = Just (l, op, r)
       infixate _ _  = Nothing
-      isBinOp x | x `elem` elems binOpTokens = True
-      isBinOp _ = False
+      isBinOp = (`elem` elems binOpTokens)
   toHsExp env (PFun arg body) = Paren $ Lambda unknownLoc [pvar] (toHsExp env body)
-    where pvar = PVar $ Ident arg
+    where pvar = PVar $ vIdent env arg
   toHsExp env (PIf cond then_ else_) =
     If (toHsExp env cond) (toHsExp env then_) (toHsExp env else_)
   toHsExp env (PMatch switch cases) =
     Hs.Case (toHsExp env switch) (map alt cases)
     where alt (Case ctor argNames expr) =
             Alt unknownLoc
-              (Hs.PApp (UnQual $ Ident ctor)       -- pattern
-                $ map (PVar . Ident) argNames)
-              (UnGuardedRhs $ toHsExp env expr)   -- body
+              (Hs.PApp (UnQual $ Ident ctor)             -- pattern
+                $ map (PVar . vIdent env) argNames)
+              (UnGuardedRhs $ toHsExp env expr)          -- body
               Nothing                                    -- ??
   toHsExp env (PFix _ p) = toHsExp env p
   toHsExp env (PLet name value body) =
     Let (BDecls [PatBind unknownLoc
-                 (PVar $ Ident name)                           -- binder name
+                 (PVar $ vIdent env name)                      -- binder name
                  (UnGuardedRhs $ toHsExp env value) Nothing])  -- rhs
                  (toHsExp env body)                            -- in (expr)
-  toHsExp env other = Var $ UnQual $ Ident "??"
+  toHsExp env other = Var $ UnQual $ Symbol "??"
 
 {- A module contains data declarations and functions -}
 toHsModule :: String -> [(Goal, RProgram)] -> Module
