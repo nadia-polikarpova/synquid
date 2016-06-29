@@ -599,20 +599,7 @@ currentValuation u = do
     val c = valuation (solution c) u
     pickCandidiate cands' = do
       typingState . candidates .= cands'
-      return $ val (head cands')  
-
--- currentValuation u = do
-  -- (first : rest) <- use (typingState . candidates)
-  -- pickFirst first `mplus` pickRest rest
-  -- where
-    -- val c = valuation (solution c) u
-    -- pickFirst first = do
-      -- typingState . candidates .= [first]
-      -- return $ val first
-    -- pickRest rest = do
-      -- typingState . candidates .= rest
-      -- runInSolver solveTypeConstraints
-      -- currentValuation u      
+      return $ val (head cands')
 
 inContext ctx f = local (over (_1 . context) (. ctx)) f
     

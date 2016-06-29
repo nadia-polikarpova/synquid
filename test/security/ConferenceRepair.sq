@@ -95,6 +95,7 @@ getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paper
 defaultPaperAuthors :: Tagged (List User) <{True}>
 
 predicate paperStatus :: World -> PaperId -> Status
+-- getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
 defaultPaperStatus :: Tagged Status <{True}>
 
@@ -106,7 +107,12 @@ test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> Worl
 test1 = \w . \pid .
   let u = getSessionUser w in
   let out = lift1 toString (getPaperStatus w pid) in
-  -- let out = lift1 toString (if_ (lift2 eq (getCurrentPhase w) (return Done)) (getPaperStatus w pid) (return NoDecision)) in
+  -- let out = lift1 toString (
+              -- if_ 
+                -- (lift2 eq (getCurrentPhase w) (return Done)) 
+                -- (getPaperStatus w pid) 
+                -- (if_ (lift2 eq u (getChair w)) (getPaperStatus w pid) (return NoDecision))) in
+                -- -- (return NoDecision)) in
   print w u out
       
 test2 :: w: World -> pid: PaperId -> World
