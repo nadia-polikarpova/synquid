@@ -88,19 +88,20 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 predicate currentPhase :: World -> Phase
 getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
 
-getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
-
 predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
 defaultPaperAuthors :: Tagged (List User) <{True}>
+
+getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{_0 in paperAuthors w pid}>
+defaultPaperTitle :: Tagged String <{True}>
 
 predicate paperStatus :: World -> PaperId -> Status
 -- getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
 defaultPaperStatus :: Tagged Status <{True}>
 
-qualifier {_v == (x in y)}
-qualifier {x == y, x in y}
+qualifier {_v == (x in y)}-- , _v == !(x in y)}
+qualifier {x == y, x in y} --, !(x in y)}
   
 -- Print paper status to an author
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
@@ -124,4 +125,13 @@ test2 = \w . \pid .
   -- let out2 = lift1 toString (if_ (liftAnd (lift2 elem u (getPaperAuthors w pid)) (lift2 eq (getCurrentPhase w) (return Done))) (getPaperStatus w pid) (return NoDecision)) in
   let out = lift2 strcat out1 out2 in
   print w u out
+  
+sillys :: World -> (List PaperId) -> World
+sillys = \w . \pids .
+  let u = getSessionUser w in
+  match pids with
+    Nil -> w
+    Cons pid rest ->
+      let title = getPaperTitle w pid in
+      sillys (print w u (lift1 toString title)) rest  
             
