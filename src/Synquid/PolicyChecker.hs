@@ -1,5 +1,5 @@
 -- | Type-checker for programs without holes that collects errors
-module Synquid.PolicyChecker (localize, repair) where
+module Synquid.PolicyChecker (localize, repair, isDefaultValue) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -60,6 +60,23 @@ repair eParams tParams env p violations = do
       writeLog 1 $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty violations)) $+$ text "when checking" $+$ pretty p
       requiredTypes .= violations
       replaceViolations env p
+      
+{- Standard Tagged library -}
+
+defaultPrefix = "default"
+isDefaultValue name = take (length defaultPrefix) name == defaultPrefix
+defaultValueOf name = defaultPrefix ++ drop 3 name
+
+mkTagged a policy = DatatypeT "Tagged" [a] [policy]
+
+isTagged (ScalarT (DatatypeT dtName _ _) _) | dtName == "Tagged" = True
+isTagged t = False
+
+stripTags t@(ScalarT (DatatypeT dtName [dtArg] _) _) 
+  | isTagged t   = dtArg    
+stripTags (FunctionT x tArg tRes) = FunctionT x tArg (stripTags tRes)
+stripTags t = t
+
       
 {- Localization -}
     
@@ -343,7 +360,7 @@ generateRepair env typ p = do
     -- | Public version of @p@
     defaultValue = do
       let f = head $ symbolList p
-      let f' = defaultPrefix ++ drop 3 f -- ToDo: better way of finding default value
+      let f' = defaultValueOf f
       case lookupSymbol f' 0 env of
         Nothing -> throwErrorWithDescription $ text "No default value found for sensitive component" $+$ text f
         Just (Monotype t) -> return $ Program (PSymbol f') t
@@ -371,7 +388,7 @@ generateRepair env typ p = do
       
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol _ m name _ | -- This is a default value: remove
-      take (length defaultPrefix) name == defaultPrefix   = m
+      isDefaultValue name   = m
     updateSymbol targetRefinement m name (Monotype t) = 
       let 
         t' = stripTags t 
@@ -384,17 +401,7 @@ generateRepair env typ p = do
     updateSymbol _ m name sch | -- This is a function from base tagged library: remove
       isTagged (lastType $ toMonotype sch)                = m                  
     updateSymbol _ m name sch = Map.insert name sch m
-      
-    defaultPrefix = "default"
-    
-    isTagged (ScalarT (DatatypeT dtName _ _) _) | dtName == "Tagged" = True
-    isTagged t = False
-    
-    stripTags t@(ScalarT (DatatypeT dtName [dtArg] _) _) 
-      | isTagged t   = dtArg    
-    stripTags (FunctionT x tArg tRes) = FunctionT x tArg (stripTags tRes)
-    stripTags t = t
-    
+        
     -- | 'liftCondition' @env strippedEnv p@: turn a pure E-term @p@ into a tagged one, 
     -- by binding all lets that have different types in @env@ and @strippedEnv@
     liftCondition env strippedEnv (Program (PLet x def body) typ) = do
@@ -417,8 +424,6 @@ generateRepair env typ p = do
     liftCondition env strippedEnv pCond = do
       tmp <- freshId "TT"
       return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
-
-    mkTagged a policy = DatatypeT "Tagged" [a] [policy]
     
     mkBind argName x body = 
       let 

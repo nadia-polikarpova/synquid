@@ -66,21 +66,29 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
                                       _predQualsGen = \_ _ _ -> emptyQSpace, -- predQuals True,
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
-                               in repair explorerParams typingParams (gEnvironment goal) p violations 
+                               in repair explorerParams typingParams (gEnvironment goal) p violations
+                               
+    varsForQuals env vars = 
+      let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
+      allPredApps env vars' 1
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
-    condQuals env vars = let vars' = allPredApps env vars 1 in toSpace Nothing $ concat $
+    condQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing $ concat $
       map (instantiateCondQualifier env vars') cquals ++ map (extractCondFromType env vars') components                  
       
     -- | Qualifier generator for bound predicates
     predQuals :: Bool -> Environment -> [Formula] -> [Formula] -> QSpace
-    predQuals useAllArgs env params vars = let vars' = allPredApps env vars 1 in toSpace Nothing $
-      concatMap (extractPredQGenFromQual useAllArgs env params vars') tquals ++ -- extract from given qualifiers
-      concatMap (extractPredQGenFromType useAllArgs env params vars') (syntGoal : components) ++
-      if null params  -- Parameter-less predicate: also include conditional qualifiers
-        then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components
-        else []
+    predQuals useAllArgs env params vars = 
+      let 
+        vars' = varsForQuals env vars 
+        params' = if null params then params else allPredApps env (init params) 1 ++ [last params]
+      in toSpace Nothing $
+        concatMap (extractPredQGenFromQual useAllArgs env params' vars') tquals ++ -- extract from given qualifiers
+        concatMap (extractPredQGenFromType useAllArgs env params' vars') (syntGoal : components) ++
+        if null params  -- Parameter-less predicate: also include conditional qualifiers
+          then concatMap (instantiateCondQualifier env vars') cquals ++ concatMap (extractCondFromType env vars') components
+          else []
         
     components = map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal
     syntGoal = toMonotype $ gSpec goal
