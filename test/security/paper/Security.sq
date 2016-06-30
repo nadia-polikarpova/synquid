@@ -64,23 +64,23 @@ liftAnd :: <l2p :: User -> Bool> .
   
 map :: <mp :: User -> Bool> .
   (a -> Tagged b <mp>) -> xs: List a -> List (Tagged b <mp>)
--- map = \f . \xs .
-  -- match xs with 
-    -- Nil -> Nil
-    -- Cons y ys -> Cons (f y) (map f ys)
+map = \f . \xs .
+  match xs with 
+    Nil -> Nil
+    Cons y ys -> Cons (f y) (map f ys)
     
 sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
--- sequence = \xs .
-  -- match xs with
-    -- Nil -> return Nil
-    -- Cons y ys -> lift2 Cons y (sequence ys)    
+sequence = \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> lift2 Cons y (sequence ys)    
   
 filter :: <fp :: User -> Bool> .
   (a -> Tagged Bool <fp>) -> xs: List a -> Tagged (List a) <fp>
--- filter = \f . \xs .
-  -- match xs with
-    -- Nil -> return Nil
-    -- Cons y ys -> if_ (f y) (lift2 Cons (return y) (filter f ys)) (filter f ys)
+filter = \f . \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> if_ (f y) (lift2 Cons (return y) (filter f ys)) (filter f ys)
     
 fold :: <fp :: User -> Bool> . 
   (a -> b -> Tagged a <fp>) -> seed: a -> xs: List b -> Tagged a <fp>

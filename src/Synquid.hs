@@ -271,7 +271,8 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       case parseResult of
         Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
         -- Right ast -> print $ vsep $ map pretty ast
-        Right decls -> (decls ++) <$> parseFromFiles rest    
+        Right decls -> let decls' = if null rest then decls else filter (not . isSynthesisGoal) decls in -- Remove implementations from libraries
+          (decls' ++) <$> parseFromFiles rest    
     
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do

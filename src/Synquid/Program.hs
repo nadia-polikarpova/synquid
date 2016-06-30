@@ -405,6 +405,9 @@ data BareDeclaration =
   deriving (Eq)
 
 type Declaration = Pos BareDeclaration
+
+isSynthesisGoal (Pos _ (SynthesisGoal _ _)) = True
+isSynthesisGoal _ = False
             
 {- Misc -}
           
