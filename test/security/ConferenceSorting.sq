@@ -60,7 +60,7 @@ sortBy :: <sop :: User -> Bool> . leq: (a -> a -> Tagged Bool <sop>) -> xs: List
 
 data String
 emptyString :: String
-toString :: a -> String
+show :: a -> String
 strcat :: String -> String -> String  
   
 -- Conference management  
@@ -111,4 +111,4 @@ test = \w . \pids .
                         -- return (score1 <= score2)
                       -- )
                     -- ) in
-  print w u (liftM toString (sortBy scoreLeq pids))
+  print w u (liftM show (sortBy scoreLeq pids))

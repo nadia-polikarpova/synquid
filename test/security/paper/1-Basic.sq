@@ -32,6 +32,6 @@ showPaper :: w: World -> pid: PaperId -> World
 showPaper = \w . \pid .
   let u = getSessionUser w in
   let title = getPaperTitle w pid in
-  let authors = liftM toString (getPaperAuthors w pid) in
+  let authors = liftM show (getPaperAuthors w pid) in
   let out = liftM2 strcat title authors in
   print w u out

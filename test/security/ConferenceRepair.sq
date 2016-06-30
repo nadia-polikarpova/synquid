@@ -37,7 +37,7 @@ ifM :: <ip :: User -> Bool> . <ic :: Bool> .
     -> Tagged a <ip>
     -- -- -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
         
-liftM1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
   x: Tagged a <l1p> ->
   Tagged {b | l1f (content x) _v} <l1p>
@@ -57,7 +57,7 @@ andM :: <l2p :: User -> Bool> .
 
 data String
 emptyString :: String
-toString :: a -> String
+show :: a -> String
 strcat :: String -> String -> String  
   
 -- Conference management  
@@ -107,8 +107,8 @@ qualifier {_v == (x in y), _v == !(x in y)}
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
 test1 = \w . \pid .
   let u = getSessionUser w in
-  let out = liftM1 toString (getPaperStatus w pid) in
-  -- let out = liftM1 toString (
+  let out = liftM show (getPaperStatus w pid) in
+  -- let out = liftM show (
               -- ifM 
                 -- (liftM2 eq (getCurrentPhase w) (return Done)) 
                 -- (getPaperStatus w pid) 
@@ -119,10 +119,10 @@ test1 = \w . \pid .
 test2 :: w: World -> pid: PaperId -> World
 test2 = \w . \pid .
   let u = getSessionUser w in
-  let out1 = liftM1 toString (getPaperAuthors w pid) in 
-  let out2 = liftM1 toString (getPaperStatus w pid) in  
-  -- let out1 = liftM1 toString (ifM (liftM2 elem u (getPaperAuthors w pid)) (getPaperAuthors w pid) (return Nil)) in 
-  -- let out2 = liftM1 toString (ifM (andM (liftM2 elem u (getPaperAuthors w pid)) (liftM2 eq (getCurrentPhase w) (return Done))) (getPaperStatus w pid) (return NoDecision)) in
+  let out1 = liftM show (getPaperAuthors w pid) in 
+  let out2 = liftM show (getPaperStatus w pid) in  
+  -- let out1 = liftM show (ifM (liftM2 elem u (getPaperAuthors w pid)) (getPaperAuthors w pid) (return Nil)) in 
+  -- let out2 = liftM show (ifM (andM (liftM2 elem u (getPaperAuthors w pid)) (liftM2 eq (getCurrentPhase w) (return Done))) (getPaperStatus w pid) (return NoDecision)) in
   let out = liftM2 strcat out1 out2 in
   print w u out
   
@@ -133,5 +133,5 @@ sillys = \w . \pids .
     Nil -> w
     Cons pid rest ->
       let title = getPaperTitle w pid in
-      sillys (print w u (liftM1 toString title)) rest  
+      sillys (print w u (liftM show title)) rest  
             
