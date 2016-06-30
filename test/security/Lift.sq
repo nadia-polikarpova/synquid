@@ -23,18 +23,18 @@ return :: x: a -> Tagged {a | _v == x} <{True}>
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
         
-lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
   x: Tagged a <l1p> ->
   Tagged {b | l1f (content x) _v} <l1p>
-lift1 = \f . \x . bind x (\x' . return (f x'))  
+liftM = \f . \x . bind x (\x' . return (f x'))  
 
-lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>
-lift2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))
+liftM2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))
 
 -- Unfortunately this strengthened bind only works for Booleans
 -- The general case would be: in `bind x f`, violation of the additional policy on x compels x to be a particular value,
@@ -42,18 +42,18 @@ lift2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))
 bindBool :: <bp :: User -> Bool> . <bf :: Bool -> b -> Bool> . <bc :: Bool> .
   x: Tagged {Bool | _v ==> bc} <{bp _0 && bc}> -> (u: {Bool | _v ==> bc} -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
   
-if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
-if_ = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)
+ifM = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)
 
 sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
 sequence = \xs .
   match xs with
     Nil -> return Nil
-    Cons y ys -> lift2 Cons y (sequence ys)
+    Cons y ys -> liftM2 Cons y (sequence ys)
 
 insert :: <inp :: User -> Bool> . leq: (a -> a -> Tagged Bool <inp>) -> x: a -> xs: List a -> 
             Tagged {List a | elems _v == elems xs + [x]} <inp>

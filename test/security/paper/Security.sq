@@ -31,7 +31,8 @@ strcat :: String -> String -> String
 {- Tagged -}
 
 data User 
-  
+
+-- | Value tagged with a policy  
 data Tagged a <visibleTo :: User -> Bool>!
 measure content :: Tagged a -> a
 
@@ -39,28 +40,38 @@ return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+  
+-- Unfortunately this strengthened bind only works for Booleans
+-- The general case would be: in `bind x f`, violation of the additional policy on x compels x to be a particular value,
+-- but that is not expressible  
+bindBool :: <bp :: User -> Bool> . <bf :: Bool -> b -> Bool> . <bc :: Bool> .
+  x: Tagged {Bool | _v ==> bc} <{bp _0 && bc}> -> (u: {Bool | _v ==> bc} -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>  
 
-if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
-    -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
+    -> Tagged a <ip>
+ifM = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)    
 
-lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
   x: Tagged a <l1p> ->
-  Tagged {b | l1f (content x) _v} <l1p>    
+  Tagged {b | l1f (content x) _v} <l1p>
+liftM = \f . \x . bind x (\x' . return (f x'))    
 
-lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>
+liftM2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))  
   
-liftAnd :: <l2p :: User -> Bool> . 
+andM :: <l2p :: User -> Bool> . 
   x: Tagged Bool <l2p> ->
   y: Tagged Bool <l2p> ->
-  Tagged {Bool | _v == (content x) && (content y)} <l2p>
+  Tagged {Bool | _v == (content x && content y)} <l2p>
+andM = \x . \y . liftM2 (\u . \v . u && v) x y
   
 map :: <mp :: User -> Bool> .
   (a -> Tagged b <mp>) -> xs: List a -> List (Tagged b <mp>)
@@ -73,16 +84,18 @@ sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List 
 sequence = \xs .
   match xs with
     Nil -> return Nil
-    Cons y ys -> lift2 Cons y (sequence ys)    
+    Cons y ys -> liftM2 Cons y (sequence ys)    
+    
+mapM :: <mp :: User -> Bool> .(a -> Tagged b <mp>) -> xs: List a -> Tagged (List b) <mp>
+mapM = \f . \xs . sequence (map f xs)
   
-filter :: <fp :: User -> Bool> .
-  (a -> Tagged Bool <fp>) -> xs: List a -> Tagged (List a) <fp>
-filter = \f . \xs .
+filterM :: <fp :: User -> Bool> . (a -> Tagged Bool <fp>) -> xs: List a -> Tagged (List a) <fp>
+filterM = \f . \xs .
   match xs with
     Nil -> return Nil
-    Cons y ys -> if_ (f y) (lift2 Cons (return y) (filter f ys)) (filter f ys)
+    Cons y ys -> ifM (f y) (liftM2 Cons (return y) (filterM f ys)) (filterM f ys)
     
-fold :: <fp :: User -> Bool> . 
+foldM :: <fp :: User -> Bool> . 
   (a -> b -> Tagged a <fp>) -> seed: a -> xs: List b -> Tagged a <fp>
   
 data World  
@@ -91,5 +104,5 @@ print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -
 printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
 
 qualifier {x == y, x in y, !(x in y)}
-qualifier {_v == (x in y), _v == !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y), _v == (x && y)}
   
