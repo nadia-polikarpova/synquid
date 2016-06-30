@@ -33,6 +33,7 @@ releaseDate = fromGregorian 2016 3 8
 -- | Type-check and synthesize a program, according to command-line arguments
 main = do
   (CommandLineArgs file
+                   libs
                    appMax
                    scrutineeMax
                    matchMax
@@ -88,7 +89,7 @@ main = do
     filename = out_file,
     module_ = out_module
   }
-  runOnFile synquidParams explorerParams solverParams codegenParams file
+  runOnFile synquidParams explorerParams solverParams codegenParams file libs
 
 {- Command line arguments -}
 
@@ -104,6 +105,7 @@ data CommandLineArgs
     = CommandLineArgs {
         -- | Input
         file :: String,
+        libs :: [String],
         -- | Explorer params
         app_max :: Int,
         scrutinee_max :: Int,
@@ -133,8 +135,9 @@ data CommandLineArgs
       }
   deriving (Data, Typeable, Show, Eq)
 
-cla = CommandLineArgs {
+cla = CommandLineArgs {  
   file                = ""              &= typFile &= argPos 0,
+  libs                = []              &= args &= typ "FILES",
   app_max             = 3               &= help ("Maximum depth of an application term (default: 3)") &= groupname "Explorer parameters",
   scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 1)"),
   match_max           = 2               &= help ("Maximum depth of matches (default: 2)"),
@@ -251,20 +254,25 @@ codegen params results = case params of
 
 -- | Parse and resolve file, then synthesize the specified goals
 runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParams
-                           -> String -> IO ()
-runOnFile synquidParams explorerParams solverParams codegenParams file = do
-  parseResult <- parseFromFile parseProgram file
-  case parseResult of
-    Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
-    -- Right ast -> print $ vsep $ map pretty ast
-    Right decls -> case resolveDecls decls of
-      Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
-      Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
-        results <- mapM (synthesizeGoal cquals tquals) goals
-        when (not (null results) && showStats synquidParams) $ printStats results
-        -- Generate output if requested
-        codegen (fillinCodegenParams file codegenParams) results
+                           -> String -> [String] -> IO ()
+runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
+  decls <- parseFromFiles (libs ++ [file])
+  case resolveDecls decls of
+    Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
+    Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
+      results <- mapM (synthesizeGoal cquals tquals) goals
+      when (not (null results) && showStats synquidParams) $ printStats results
+      -- Generate output if requested
+      codegen (fillinCodegenParams file codegenParams) results
   where
+    parseFromFiles [] = return []
+    parseFromFiles (file:rest) = do
+      parseResult <- parseFromFile parseProgram file
+      case parseResult of
+        Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
+        -- Right ast -> print $ vsep $ map pretty ast
+        Right decls -> (decls ++) <$> parseFromFiles rest    
+    
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
       when (showSpec synquidParams) $ pdoc (prettySpec goal)

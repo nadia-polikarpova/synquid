@@ -1,0 +1,70 @@
+{- Primitives -}
+
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+not :: x: Bool -> {Bool | _v == !x}
+
+{- Lists -}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
+
+{- Strings -}
+
+data String
+emptyString :: String
+toString :: a -> String
+strcat :: String -> String -> String  
+  
+{- Tagged -}
+
+data User 
+  
+data Tagged a <visibleTo :: User -> Bool>!
+measure content :: Tagged a -> a
+
+return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
+
+bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+
+if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
+    -> thn: Tagged a <{ic && ip _0}> 
+    -> els: Tagged a <ip> 
+    -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
+
+lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+  f: (u: a -> {b | l1f u _v}) ->
+  x: Tagged a <l1p> ->
+  Tagged {b | l1f (content x) _v} <l1p>    
+
+lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+  f: (u: a -> v: b -> {c | l2f u v _v}) ->
+  x: Tagged a <l2p> ->
+  y: Tagged b <l2p> ->
+  Tagged {c | l2f (content x) (content y) _v} <l2p>
+  
+liftAnd :: <l2p :: User -> Bool> . 
+  x: Tagged Bool <l2p> ->
+  y: Tagged Bool <l2p> ->
+  Tagged {Bool | _v == (content x) && (content y)} <l2p>
+  
+data World  
+
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
+printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
+
+qualifier {x == y, x in y, !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y)}
+  
