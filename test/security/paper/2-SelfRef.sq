@@ -24,6 +24,8 @@ predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> 
   Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid || _0 == chair w}>
 defaultPaperAuthors :: Tagged (List User) <{True}>  
+
+{- Client code -}
   
 -- | Show paper info to session user
 -- | Repair: check that u is chair or in paper authors
