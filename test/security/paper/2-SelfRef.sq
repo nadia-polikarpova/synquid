@@ -1,6 +1,5 @@
 {-
-  This example assumes that all users are either PC members or chair,
-  and only chair can see paper authors
+  This example adds a self-referential policy: not only chair but also authors themselves can see who the authors are 
 -}
 
 {- Datatypes -}
@@ -20,12 +19,14 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 -- | Paper title (public)
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
--- | Paper authors (visible only to the chair)
-getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w}>
-defaultPaperAuthors :: Tagged (List User) <{True}>
+-- | Paper authors (visible to themselves and the chair)
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId -> 
+  Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid || _0 == chair w}>
+defaultPaperAuthors :: Tagged (List User) <{True}>  
   
 -- | Show paper info to session user
--- | Repair: check that u is chair
+-- | Repair: check that u is chair or in paper authors
 showPaper :: w: World -> pid: PaperId -> World
 showPaper = \w . \pid .
   let u = getSessionUser w in
