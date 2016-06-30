@@ -30,25 +30,25 @@ return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
 
-if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
     cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}>
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
     -- -- -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
         
-lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+liftM1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
   x: Tagged a <l1p> ->
   Tagged {b | l1f (content x) _v} <l1p>
 
-lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>
   
-liftAnd :: <l2p :: User -> Bool> . 
+andM :: <l2p :: User -> Bool> . 
   x: Tagged Bool <l2p> ->
   y: Tagged Bool <l2p> ->
   Tagged {Bool | _v == (content x) && (content y)} <l2p>
@@ -107,23 +107,23 @@ qualifier {_v == (x in y), _v == !(x in y)}
 test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
 test1 = \w . \pid .
   let u = getSessionUser w in
-  let out = lift1 toString (getPaperStatus w pid) in
-  -- let out = lift1 toString (
-              -- if_ 
-                -- (lift2 eq (getCurrentPhase w) (return Done)) 
+  let out = liftM1 toString (getPaperStatus w pid) in
+  -- let out = liftM1 toString (
+              -- ifM 
+                -- (liftM2 eq (getCurrentPhase w) (return Done)) 
                 -- (getPaperStatus w pid) 
-                -- (if_ (lift2 eq u (getChair w)) (getPaperStatus w pid) (return NoDecision))) in
+                -- (ifM (liftM2 eq u (getChair w)) (getPaperStatus w pid) (return NoDecision))) in
                 -- -- (return NoDecision)) in
   print w u out
       
 test2 :: w: World -> pid: PaperId -> World
 test2 = \w . \pid .
   let u = getSessionUser w in
-  let out1 = lift1 toString (getPaperAuthors w pid) in 
-  let out2 = lift1 toString (getPaperStatus w pid) in  
-  -- let out1 = lift1 toString (if_ (lift2 elem u (getPaperAuthors w pid)) (getPaperAuthors w pid) (return Nil)) in 
-  -- let out2 = lift1 toString (if_ (liftAnd (lift2 elem u (getPaperAuthors w pid)) (lift2 eq (getCurrentPhase w) (return Done))) (getPaperStatus w pid) (return NoDecision)) in
-  let out = lift2 strcat out1 out2 in
+  let out1 = liftM1 toString (getPaperAuthors w pid) in 
+  let out2 = liftM1 toString (getPaperStatus w pid) in  
+  -- let out1 = liftM1 toString (ifM (liftM2 elem u (getPaperAuthors w pid)) (getPaperAuthors w pid) (return Nil)) in 
+  -- let out2 = liftM1 toString (ifM (andM (liftM2 elem u (getPaperAuthors w pid)) (liftM2 eq (getCurrentPhase w) (return Done))) (getPaperStatus w pid) (return NoDecision)) in
+  let out = liftM2 strcat out1 out2 in
   print w u out
   
 sillys :: World -> (List PaperId) -> World
@@ -133,5 +133,5 @@ sillys = \w . \pids .
     Nil -> w
     Cons pid rest ->
       let title = getPaperTitle w pid in
-      sillys (print w u (lift1 toString title)) rest  
+      sillys (print w u (liftM1 toString title)) rest  
             

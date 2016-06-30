@@ -386,7 +386,7 @@ generateRepair env typ p = do
       lifted <- mapM (liftCondition env strippedEnv) conjuncts    
       let defs = concatMap fst lifted
       let conjuncts' = map snd lifted
-      let liftAndSymb = untyped (PSymbol "liftAnd")
+      let liftAndSymb = untyped (PSymbol "andM")
       let conjoin p1 p2 = untyped (PApp (untyped (PApp liftAndSymb p1)) p2)
       let pCond = foldl1 conjoin conjuncts'
       return (defs, pCond)
@@ -453,7 +453,7 @@ generateRepair env typ p = do
       cTmps <- replicateM (length conds) (freshId "TT")
       pTmp <- freshId "TT"
       let allDefs = defs ++ zip cTmps conds ++ [(pTmp, pThen)]
-      let app1 cTmp = untyped (PApp (untyped (PSymbol "if_")) (untyped (PSymbol cTmp)))
+      let app1 cTmp = untyped (PApp (untyped (PSymbol "ifM")) (untyped (PSymbol cTmp)))
       let app2 cTmp = untyped (PApp (app1 cTmp) (untyped (PSymbol pTmp)))      
       return (allDefs, foldr (\cTmp els -> untyped $ PApp (app2 cTmp) els) pElse cTmps)
 

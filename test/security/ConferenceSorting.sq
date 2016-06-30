@@ -29,25 +29,25 @@ return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
 
-if_ :: <ip :: User -> Bool> . <ic :: Bool> .
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -- -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
     -> Tagged a <ip>
         
-lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->
   x: Tagged a <l1p> ->
   Tagged {b | l1f (content x) _v} <l1p>    
 
-lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
   f: (u: a -> v: b -> {c | l2f u v _v}) ->
   x: Tagged a <l2p> ->
   y: Tagged b <l2p> ->
   Tagged {c | l2f (content x) (content y) _v} <l2p>  
   
-liftAnd :: <l2p :: User -> Bool> . 
+andM :: <l2p :: User -> Bool> . 
   x: Tagged Bool <l2p> ->
   y: Tagged Bool <l2p> ->
   Tagged {Bool | _v == (content x) && (content y)} <l2p>  
@@ -106,9 +106,9 @@ test = \w . \pids .
                       )
                     ) in
   -- let scoreLeq = \pid1 . \pid2 . 
-                    -- bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid1) defaultPaperScore) (\score1 .
-                      -- bind (if_ (lift2 eq u (getChair w)) (getPaperScore w pid2) defaultPaperScore) (\score2 .
+                    -- bind (ifM (liftM2 eq u (getChair w)) (getPaperScore w pid1) defaultPaperScore) (\score1 .
+                      -- bind (ifM (liftM2 eq u (getChair w)) (getPaperScore w pid2) defaultPaperScore) (\score2 .
                         -- return (score1 <= score2)
                       -- )
                     -- ) in
-  print w u (lift1 toString (sortBy scoreLeq pids))
+  print w u (liftM toString (sortBy scoreLeq pids))

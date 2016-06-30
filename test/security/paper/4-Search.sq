@@ -44,7 +44,7 @@ searchByAuthor :: w: World -> a: User -> World
 searchByAuthor = \w . \a .
   let u = getSessionUser w in
   let isAuthor = \pid . bind (getPaperAuthors w pid) (\auths . return (elem a auths)) in -- Is a one of the authors of paper pid?
-  let aPids = bind (getAllPaperIds w) (\pids . filter isAuthor pids) in -- a's paper IDs
-  let titles = bind aPids (\pids . sequence (map (\pid . getPaperTitle w pid) pids)) in -- a's paper titles
-  let out = bind titles (\xs . fold (\x . \y . return (strcat x y)) emptyString xs) in -- concatenate them together
+  let aPids = bind (getAllPaperIds w) (\pids . filterM isAuthor pids) in -- a's paper IDs
+  let titles = bind aPids (\pids . mapM (\pid . getPaperTitle w pid) pids) in -- a's paper titles
+  let out = bind titles (\xs . foldM (\x . \y . return (strcat x y)) emptyString xs) in -- concatenate them together
   print w u out
