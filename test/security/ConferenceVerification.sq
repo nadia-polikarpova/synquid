@@ -55,7 +55,7 @@ andM :: <l2p :: User -> Bool> .
 
 data String
 emptyString :: String
-toString :: a -> String
+show :: a -> String
 strcat :: String -> String -> String  
   
 -- Conference management  
@@ -113,7 +113,7 @@ test1 = \w . \pid .
   let st = ifM (liftM2 eq (getCurrentPhase w) (return Done)) 
               (getPaperStatus w pid) 
               (return NoDecision) in
-  let out = liftM2 strcat title (liftM toString st) in
+  let out = liftM2 strcat title (liftM show st) in
   printAll w authors out
     
 -- Print paper status to chair    
@@ -121,7 +121,7 @@ test2 :: World -> PaperId -> World
 test2 = \w . \pid .
   let ch = getChair w in
   let st = getPaperStatus w pid in
-  print w ch (liftM toString st)
+  print w ch (liftM show st)
   
 -- Print paper authors to session user
 test3 :: World -> PaperId -> World
@@ -129,7 +129,7 @@ test3 = \w . \pid .
   let u = getSessionUser w in
   let authors = getPaperAuthors w pid in
   let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
-  let out = liftM toString authors' in
+  let out = liftM show authors' in
   print w u out
   
 -- Print paper status to session user
@@ -141,7 +141,7 @@ test4 = \w . \pid .
                 (ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid) 
                   (return NoDecision)) in
-  print w u (liftM toString st)  
+  print w u (liftM show st)  
 
 -- Implicit flow: show status and session to session user
 test5 :: World -> PaperId -> World
@@ -157,7 +157,7 @@ test5 = \w. \pid .
   let ses = bind st (\s . if s == Accepted 
                             then getPaperSession w pid
                             else return emptyString) in
-  let out = liftM2 strcat title (liftM2 strcat (liftM toString st) ses) in
+  let out = liftM2 strcat title (liftM2 strcat (liftM show st) ses) in
   print w u out
 
 -- Print paper title and list of conflicts to the session user  
@@ -168,7 +168,7 @@ test6 = \w. \pid .
   let noConflict = liftM not (liftM2 elem u conflicts) in
   let title = ifM noConflict (getPaperTitle w pid) (return emptyString) in
   let conflicts' = ifM noConflict conflicts (return Nil) in  
-  let out = liftM2 strcat title (liftM toString conflicts') in
+  let out = liftM2 strcat title (liftM show conflicts') in
   print w u out
   
 selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> pids: List PaperId -> Tagged String <{_0 == content u}>  
@@ -178,7 +178,7 @@ selectFrom = \w. \u. \pids .
     Cons pid rest -> 
       let authors = getPaperAuthors w pid in
       let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
-      let line = liftM toString authors' in
+      let line = liftM show authors' in
       liftM2 strcat line (selectFrom w u rest)
   
 -- Print all session user's papers  

@@ -25,7 +25,7 @@ elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 
 data String
 emptyString :: String
-toString :: a -> String
+show :: a -> String
 strcat :: String -> String -> String  
   
 {- Tagged -}
@@ -96,12 +96,20 @@ filterM = \f . \xs .
     Cons y ys -> ifM (f y) (liftM2 Cons (return y) (filterM f ys)) (filterM f ys)
     
 foldM :: <fp :: User -> Bool> . 
-  (a -> b -> Tagged a <fp>) -> seed: a -> xs: List b -> Tagged a <fp>
-  
+  (a -> b -> Tagged a <fp>) -> a: a -> xs: List b -> Tagged a <fp>
+foldM = \f . \a . \xs .
+    match xs with 
+      Nil -> return a
+      Cons y ys -> bind (f a y) (\fay . foldM f fay ys)
+      
+{- Output -}      
+      
 data World  
 
-print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
-printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged a <pp> -> World
+printAll :: <pp :: User -> Bool> . w: World -> viewers: Tagged (List {User | pp _v}) <pp> -> x: Tagged a <pp> -> World
+
+{- Qualifiers -}
 
 qualifier {x == y, x in y, !(x in y)}
 qualifier {_v == (x in y), _v == !(x in y), _v == (x && y)}
