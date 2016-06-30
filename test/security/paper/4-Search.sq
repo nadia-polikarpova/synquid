@@ -35,6 +35,8 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 -- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>
 defaultPaperAuthors :: Tagged (List User) <{True}>
+
+{- Client code -}
   
 -- | Search papers by author
 -- | Repair: inside isAuthor, check that u is chair or current phase is >= rebuttal

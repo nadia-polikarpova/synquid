@@ -23,6 +23,8 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 -- | Paper authors (visible only to the chair)
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w}>
 defaultPaperAuthors :: Tagged (List User) <{True}>
+
+{- Client code -}
   
 -- | Show paper info to session user
 -- | Repair: check that u is chair
