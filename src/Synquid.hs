@@ -31,6 +31,8 @@ import qualified Data.Set as Set
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen (fill, column)
 
+import Data.List.Split
+
 programName = "synquid"
 versionName = "0.3"
 releaseDate = fromGregorian 2016 3 8
@@ -39,6 +41,7 @@ releaseDate = fromGregorian 2016 3 8
 main = do
   (CommandLineArgs file
                    libs
+                   onlyGoals
                    appMax
                    scrutineeMax
                    matchMax
@@ -84,6 +87,7 @@ main = do
     solverLogLevel = log_
     }
   let synquidParams = defaultSynquidParams {
+    goalFilter = liftM (splitOn ",") onlyGoals,
     outputFormat = outFormat,
     resolveOnly = resolve,
     repairPolicies = repair,
@@ -112,6 +116,7 @@ data CommandLineArgs
         -- | Input
         file :: String,
         libs :: [String],
+        only :: Maybe String,
         -- | Explorer params
         app_max :: Int,
         scrutinee_max :: Int,
@@ -144,6 +149,7 @@ data CommandLineArgs
 cla = CommandLineArgs {  
   file                = ""              &= typFile &= argPos 0,
   libs                = []              &= args &= typ "FILES",
+  only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
   app_max             = 3               &= help ("Maximum depth of an application term (default: 3)") &= groupname "Explorer parameters",
   scrutinee_max       = 1               &= help ("Maximum depth of a match scrutinee (default: 1)"),
   match_max           = 2               &= help ("Maximum depth of matches (default: 2)"),
@@ -218,6 +224,7 @@ printDoc Html doc = putStr (showDocHtml (renderPretty 0.4 100 doc))
 
 -- | Parameters of the synthesis
 data SynquidParams = SynquidParams {
+  goalFilter :: Maybe [String],
   outputFormat :: OutputFormat,                -- ^ Output format
   resolveOnly :: Bool,                         -- ^ Stop after resolution step
   repairPolicies :: Bool,
@@ -226,6 +233,7 @@ data SynquidParams = SynquidParams {
 }
 
 defaultSynquidParams = SynquidParams {
+  goalFilter = Nothing,
   outputFormat = Plain,
   resolveOnly = False,
   repairPolicies = False,
@@ -267,7 +275,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
   case resolveDecls decls of
     Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
-      results <- mapM (synthesizeGoal cquals tquals) goals
+      results <- mapM (synthesizeGoal cquals tquals) (requested goals)
       when (not (null results) && showStats synquidParams) $ printStats results
       -- Generate output if requested
       codegen (fillinCodegenParams file codegenParams) results
@@ -280,6 +288,9 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
         -- Right ast -> print $ vsep $ map pretty ast
         Right decls -> let decls' = if null rest then decls else filter (not . isSynthesisGoal) decls in -- Remove implementations from libraries
           (decls' ++) <$> parseFromFiles rest    
+    requested goals = case goalFilter synquidParams of
+      Just filt -> filter (\goal -> gName goal `elem` filt) goals
+      _ -> goals
     
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do

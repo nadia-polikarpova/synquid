@@ -10,6 +10,7 @@ import qualified Data.Text as T
 
 import Control.Lens
 
+import Security
 import ConferenceVerification
 
 
@@ -93,6 +94,9 @@ mkPapers prows urows arows crows =
 
 {- Boolean stuff -}
 
+true = True
+false = False
+
 eq :: (Eq a, Ord a) => a -> a -> Bool
 eq x y = x == y
 
@@ -112,6 +116,10 @@ bind (Tagged a) f = f a
 return :: (Eq a, Ord a) => a -> Tagged a
 return = Tagged
 
+bindBool ::
+      (Eq b, Ord b) => Tagged Bool -> (Bool -> Tagged b) -> Tagged b
+bindBool = bind
+
 if_ ::
     (Eq a, Ord a) => Tagged Bool -> Tagged a -> Tagged a -> Tagged a
 if_ (Tagged cond) t e = if cond then t else e
@@ -128,13 +136,6 @@ lift2 f (Tagged a) (Tagged b) = Tagged $ f a b
 liftAnd = lift2 (&&)
 
 {- List -}
-
-elem :: (Eq a, Ord a) => a -> List a -> Bool
-elem x Nil = False
-elem x (Cons y xs) = (x == y) || elem x xs
-
-map :: (a -> b) -> List a -> List b
-map f = fromList . Prelude.map f . toList
 
 foldl1 :: (a -> a -> a) -> List a -> a
 foldl1 f = Prelude.foldl1 f . toList

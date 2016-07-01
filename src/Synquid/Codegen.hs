@@ -81,7 +81,7 @@ defaultImports = [ImportDecl {
   where
     ids = map (IAbs NoNamespace . Ident) ["Eq", "Ord", "Int", "Bool"] ++
           map (IVar . Ident) ["undefined"]
-    syms = map (IVar . Symbol) ["<=", "==", ">=", "<", ">", "/=", "+", "-"]
+    syms = map (IVar . Symbol) ["<=", "==", ">=", "<", ">", "/=", "&&", "||", "+", "-"]
 
 qualifyByDefault tArg = TyForall Nothing (map qual defaultTypeClasses)
   where qual cls = ClassA cls [TyVar $ Ident tArg]

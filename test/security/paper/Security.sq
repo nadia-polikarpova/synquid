@@ -5,6 +5,9 @@ not :: x: Bool -> {Bool | _v == !x}
 
 leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
 
+true :: {Bool | _v}
+false :: {Bool | !_v}
+
 {- Lists -}
 
 data List a where
@@ -20,6 +23,10 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
+elem = \x . \xs . 
+  match xs with
+    Nil -> false
+    Cons y ys -> eq x y || elem x ys
 
 {- Strings -}
 
