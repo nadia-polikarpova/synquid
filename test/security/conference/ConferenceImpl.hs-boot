@@ -30,7 +30,7 @@ foldl :: (a -> b -> a) -> a -> List b -> a
 
 forM_ ::
         (Eq a, Ord a) =>
-        World -> Tagged (List a) -> (World -> Tagged a -> World) -> World
+        World -> Tagged (List (Tagged a)) -> (World -> Tagged a -> World) -> World
 
 emptyString :: String
 s_colon :: String
@@ -68,6 +68,8 @@ lift1 ::
 lift2 ::
       (Eq a, Ord a, Eq b, Ord b, Eq c, Ord c) =>
         (a -> b -> c) -> Tagged a -> Tagged b -> Tagged c
+
+liftAnd :: Tagged Bool -> Tagged Bool -> Tagged Bool
 
 not :: Bool -> Bool
 
