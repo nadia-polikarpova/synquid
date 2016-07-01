@@ -2,8 +2,6 @@
 
 module ConferenceVerification where
 
-data List a
-
 data Phase
 
 data Status

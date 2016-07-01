@@ -1,82 +1,18 @@
--- Regular list
-data List a where
-	Nil :: List a
-	Cons :: x: a -> xs: List a -> List a
 
--- Length of a list
-termination measure len :: List a -> {Int | _v >= 0} where
-  Nil -> 0
-  Cons x xs -> 1 + len xs
-
--- Set of elements of a list
-measure elems :: List a -> Set a where
-  Nil -> []
-  Cons x xs -> [x] + elems xs
-
-eq :: x: a -> y: a -> {Bool | _v == (x == y)}
-not :: x: Bool -> {Bool | _v == !x}
 -- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
-elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 foldl :: (a -> b -> a) -> a -> (List b) -> a
 foldl1 :: f: (a -> a -> a) -> l: List a -> a
 
---forM_ :: <ap :: User -> Bool> . w: World -> l: Tagged (List a) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
-
--- Tagged things
-
-data User
-
-data Tagged a <visibleTo :: User -> Bool>!
-measure content :: Tagged a -> a
-
-return :: x: a -> Tagged {a | _v == x} <{True}>
-
-bind :: <bp :: User -> Bool> .
-  (Tagged a <bp>) -> (a -> Tagged b <bp>) -> Tagged b <bp>
-
-if_ :: <ip :: User -> Bool> . <ic :: Bool> .
-  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}>
-    -> thn: Tagged a <{ic && ip _0}>
-    -> els: Tagged a <ip>
-    -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
-
--- and_ :: <ap :: User -> Bool> .
-  -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>
-
-lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> .
-  f: (u: a -> {b | l1f u _v}) ->
-  x: Tagged a <l1p> ->
-  Tagged {b | l1f (content x) _v} <l1p>
-
-lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
-  f: (u: a -> v: b -> {c | l2f u v _v}) ->
-  x: Tagged a <l2p> ->
-  y: Tagged b <l2p> ->
-  Tagged {c | l2f (content x) (content y) _v} <l2p>
-
-liftAnd :: <l2p :: User -> Bool> .
-  x: Tagged Bool <l2p> ->
-  y: Tagged Bool <l2p> ->
-  Tagged {Bool | _v == (content x) && (content y)} <l2p>
-
 -- Strings
 
-data String
-emptyString :: String
 s_colon :: String
 s_comma :: String
 s_paperNo :: String
 s_authors :: String
 s_qmark :: String
 toString :: a -> String
-strcat :: String -> String -> String
 
 -- Conference management
-
-data World
-
-print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
-printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
 
 data PaperId
 
@@ -123,11 +59,11 @@ test1 :: World -> PaperId -> World
 test1 = \w . \pid .
   let title = getPaperTitle w pid in
   let authors = getPaperAuthors w pid in
-  let st = if_ (lift2 eq (getCurrentPhase w) (return Done))
+  let st = ifM (liftM2 eq (getCurrentPhase w) (return Done))
               (getPaperStatus w pid)
               (return NoDecision) in
-	let out = foldl1 (lift2 strcat) (Cons title (Cons (return s_colon) (Cons (lift1 toString st) Nil))) in
-  --                              ^ [title, return s_colon, lift1 toString st]
+	let out = foldl1 (liftM2 strcat) (Cons title (Cons (return s_colon) (Cons (liftM toString st) Nil))) in
+  --                              ^ [title, return s_colon, liftM toString st]
   printAll w authors out
 
 -- Print paper title to session user
@@ -136,7 +72,7 @@ silly :: World -> PaperId -> World
 silly = \w . \pid .
   let u = getSessionUser w in
   let title = getPaperTitle w pid in
-  print w u (lift1 toString title)
+  print w u (liftM toString title)
 
 sillys :: World -> (List PaperId) -> World
 sillys = \w . \pids .
@@ -148,56 +84,56 @@ sillys = \w . \pids .
     Nil -> w
     Cons pid rest ->
   		let title = getPaperTitle w pid in
-  		sillys (print w u (lift1 toString title)) rest
+  		sillys (print w u (liftM toString title)) rest
 -}
 -- Print paper status to chair
 test2 :: World -> PaperId -> World
 test2 = \w . \pid .
   let ch = getChair w in
   let st = getPaperStatus w pid in
-  print w ch (lift2 strcat (return s_paperNo)
-               (lift2 strcat (return (toString pid))
-                 (lift2 strcat (return s_colon)
-                   (lift1 toString st))))
+  print w ch (liftM2 strcat (return s_paperNo)
+               (liftM2 strcat (return (toString pid))
+                 (liftM2 strcat (return s_colon)
+                   (liftM toString st))))
 
 -- Print paper authors to session user
 test3 :: World -> PaperId -> World
 test3 = \w . \pid .
   let u = getSessionUser w in
   let authors = getPaperAuthors w pid in
-  let authors' = if_ (lift2 elem u authors) authors (return Nil) in
-  let out = (lift2 strcat (return s_paperNo)
-              (lift2 strcat (return (toString pid))
-                (lift2 strcat (return s_comma)
-                  (lift2 strcat (return s_authors)
-                    (lift1 toString authors'))))) in
+  let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
+  let out = (liftM2 strcat (return s_paperNo)
+              (liftM2 strcat (return (toString pid))
+                (liftM2 strcat (return s_comma)
+                  (liftM2 strcat (return s_authors)
+                    (liftM toString authors'))))) in
   print w u out
 
 -- Print paper status to session user
 test4 :: World -> PaperId -> World
 test4 = \w . \pid .
   let u = getSessionUser w in
-  let st = if_ (lift2 eq (getChair w) u)
+  let st = ifM (liftM2 eq (getChair w) u)
                 (getPaperStatus w pid)
-                (if_ (liftAnd (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
+                (ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid)
                   (return NoDecision)) in
-  print w u (lift1 toString st)
+  print w u (liftM toString st)
 
 -- Implicit flow: show status and session to session user
 test5 :: World -> PaperId -> World
 test5 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
-  let title = if_ (lift1 not (lift2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
+  let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
   -- let st = getPaperStatus w pid in -- Leaky version
-  let st = if_ (liftAnd (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
+  let st = ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid)
                   (return NoDecision) in
   let ses = bind st (\s . if s == Accepted
                             then getPaperSession w pid
                             else return emptyString) in
-  let out = lift2 strcat title (lift2 strcat (lift1 toString st) ses) in
+  let out = liftM2 strcat title (liftM2 strcat (liftM toString st) ses) in
   print w u out
 
 -- Print paper title and list of conflicts to the session user
@@ -205,24 +141,22 @@ test6 :: World -> PaperId -> World
 test6 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
-  let noConflict = lift1 not (lift2 elem u conflicts) in
-  let title = if_ noConflict (getPaperTitle w pid) (return emptyString) in
-  let conflicts' = if_ noConflict conflicts (return Nil) in
-  let out = lift2 strcat title (lift1 toString conflicts') in
+  let noConflict = liftM not (liftM2 elem u conflicts) in
+  let title = ifM noConflict (getPaperTitle w pid) (return emptyString) in
+  let conflicts' = ifM noConflict conflicts (return Nil) in
+  let out = liftM2 strcat title (liftM toString conflicts') in
   print w u out
-
-map :: f: (a -> b) -> l: (List a) -> List b
 
 selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> 
                  pids: List PaperId ->  List (Tagged String <{_0 == content u}>)
 selectFrom = \w. \u. \pids .
   map (\pid.
       let conflicts = getPaperConflicts w pid in
-      let title = if_ (lift1 not (lift2 elem u conflicts)) (getPaperTitle w pid) (return s_qmark) in
+      let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return s_qmark) in
       let authors = getPaperAuthors w pid in
-      let authors' = if_ (lift2 elem u authors) authors (return Nil) in
-      foldl1 (lift2 strcat) (Cons title (Cons (return s_comma) (Cons (return s_authors) (Cons (lift1 toString authors') Nil))))) pids
-      --                    ^ [title, ", ", "authors: ", toString authors']
+      let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
+      foldl1 (liftM2 strcat) (Cons title (Cons (return s_comma) (Cons (return s_authors) (Cons (liftM toString authors') Nil))))) pids
+      --                     ^ [title, ", ", "authors: ", toString authors']
 
 -- Print information about a bunch of papers to session user
 test7 :: World -> (List PaperId) -> World
@@ -236,16 +170,7 @@ test8 = \w.
   let u = getSessionUser w in
   let allPids = getAllPapers w in
   foldl (\w. \s. print w u s) w (selectFrom w u allPids)
-
-filter :: (a -> Bool) -> (List a) -> (List a)
-filter_ :: <ap :: User -> Bool>. (a -> (Tagged Bool <ap>)) -> (List a) -> (Tagged (List a) <ap>)
-filter_ = \f. \l.
-  match l with
-    Nil -> return Nil
-    Cons x xs -> 
-      let xs0 = filter_ f xs in
-      if_ (f x) (lift2 Cons (return x) xs0) xs0
-    
+  
 forM_ :: <ap :: User -> Bool> .
    w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
 
@@ -254,13 +179,13 @@ test9 :: World -> World
 test9 = \w.
   let u = getSessionUser w in
   let ownPids {- :: [PaperId]<> -} =
-     filter_ (\pid. lift2 elem u (if_ (lift2 elem u (getPaperAuthors w pid))
+     filterM (\pid. liftM2 elem u (ifM (liftM2 elem u (getPaperAuthors w pid))
                                       (getPaperAuthors w pid) (return Nil)))
              (getAllPapers w) in
-  forM_ w (lift1 (\l. selectFrom w u l) ownPids) (\w. \s. print w u s)
+  forM_ w (liftM (\l. selectFrom w u l) ownPids) (\w. \s. print w u s)
   --              ^ [PaperId]->[String<>]  ^ [PaperId]<>
   --       ^ [String<>]<>
 
 
 -- TODO unconflicted papers (for bidding)
--- lift1 not (lift2 elem u (getPaperConflicts w pid)))
+-- liftM not (liftM2 elem u (getPaperConflicts w pid)))

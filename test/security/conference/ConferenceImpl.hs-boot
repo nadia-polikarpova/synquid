@@ -4,6 +4,7 @@ import qualified Prelude
 import Prelude hiding (String)
 
 import {-# SOURCE #-} ConferenceVerification
+import {-# SOURCE #-} Security
 
 type String = Prelude.String
 
@@ -16,6 +17,10 @@ data World
 data Tagged a
 
 
+true :: Bool
+false :: Bool
+
+eq :: (Eq a, Ord a) => a -> a -> Bool
 
 and :: Bool -> Bool -> Bool
 
@@ -23,8 +28,11 @@ bind ::
      (Eq a, Ord a, Eq b, Ord b) =>
        Tagged a -> (a -> Tagged b) -> Tagged b
 
-elem :: (Eq a, Ord a) => a -> List a -> Bool
-map :: (a -> b) -> List a -> List b
+bindBool ::
+     (Eq b, Ord b) => Tagged Bool -> (Bool -> Tagged b) -> Tagged b
+
+return :: (Eq a, Ord a) => a -> Tagged a
+
 foldl1 :: (a -> a -> a) -> List a -> a
 foldl :: (a -> b -> a) -> a -> List b -> a
 
@@ -38,8 +46,6 @@ s_comma :: String
 s_authors :: String
 s_paperNo :: String
 s_qmark :: String
-
-eq :: (Eq a, Ord a) => a -> a -> Bool
 
 getChair :: World -> Tagged User
 
@@ -59,9 +65,6 @@ getSessionUser :: World -> Tagged User
 
 getAllPapers :: World -> List PaperId
 
-if_ ::
-    (Eq a, Ord a) => Tagged Bool -> Tagged a -> Tagged a -> Tagged a
-
 lift1 ::
       (Eq a, Ord a, Eq b, Ord b) => (a -> b) -> Tagged a -> Tagged b
 
@@ -69,15 +72,11 @@ lift2 ::
       (Eq a, Ord a, Eq b, Ord b, Eq c, Ord c) =>
         (a -> b -> c) -> Tagged a -> Tagged b -> Tagged c
 
-liftAnd :: Tagged Bool -> Tagged Bool -> Tagged Bool
-
 not :: Bool -> Bool
 
 print :: World -> Tagged User -> Tagged String -> World
 
 printAll :: World -> Tagged (List User) -> Tagged String -> World
-
-return :: (Eq a, Ord a) => a -> Tagged a
 
 strcat :: String -> String -> String
 
