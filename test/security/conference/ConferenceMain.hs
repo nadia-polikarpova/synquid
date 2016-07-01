@@ -44,7 +44,8 @@ tests opts =
          ("test5 w %d" % papid,          (`test5` papid)),
          ("test6 w %d" % papid,          (`test6` papid)),
          ("test7 w %s" % show (papids),  (`test7` papids)),
-         ("test8 w",                     test8)]
+         ("test8 w",                     test8),
+         ("test9 w",                     test9)]
 
 data CommandLineArgs = CommandLineArgs {
   db_ :: String,

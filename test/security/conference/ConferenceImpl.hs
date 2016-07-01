@@ -125,6 +125,8 @@ lift2 ::
         (a -> b -> c) -> Tagged a -> Tagged b -> Tagged c
 lift2 f (Tagged a) (Tagged b) = Tagged $ f a b
 
+liftAnd = lift2 (&&)
+
 {- List -}
 
 elem :: (Eq a, Ord a) => a -> List a -> Bool
@@ -142,9 +144,9 @@ foldl f a = Prelude.foldl f a . toList
 
 forM_ ::
         (Eq a, Ord a) =>
-        World -> Tagged (List a) -> (World -> Tagged a -> World) -> World
+        World -> Tagged (List (Tagged a)) -> (World -> Tagged a -> World) -> World
 forM_ w (Tagged Nil) f = w
-forM_ w (Tagged (Cons x xs)) f = forM_ (f w (Tagged x)) (Tagged xs) f
+forM_ w (Tagged (Cons x xs)) f = forM_ (f w x) (Tagged xs) f
 
 toList Nil = []
 toList (Cons x xs) = x : toList xs
