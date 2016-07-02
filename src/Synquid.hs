@@ -25,6 +25,7 @@ import System.Console.ANSI
 import System.FilePath
 import Data.Char
 import Data.Time.Calendar
+import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -244,41 +245,50 @@ defaultSynquidParams = SynquidParams {
 -- | Parameters for code extraction and Haskell output
 data CodegenParams = CodegenParams {
   filename :: Maybe String,               -- ^ Output filename (of Haskell code)
-  module_ :: Maybe String                 -- ^ Generated module name
-} deriving (Show)
+  module_ :: Maybe String,                -- ^ Generated module name
+  imports :: Map.Map String [Declaration] -- ^ Modules to depend on
+}
 
 defaultCodegenParams = CodegenParams {
   filename = Nothing,
-  module_ = Nothing
+  module_ = Nothing,
+  imports = Map.empty
 }
 
+fillinCodegenParams fn libs p = (fillinCodegenNames fn p) { imports = Map.mapKeys idfy libs }
+
 -- | figures out output filename from module name or vise versa
-fillinCodegenParams f p@(CodegenParams (Just "") _) = fillinCodegenParams f $ p { filename = Just (f -<.> ".hs") }
-fillinCodegenParams _ p@(CodegenParams (Just "-") Nothing) =                  p { module_ = Just "Synthed" }
-fillinCodegenParams _ p@(CodegenParams (Just filename) Nothing) =             p { module_ = Just $ idfy filename }
-fillinCodegenParams _ p@(CodegenParams Nothing (Just module_)) =              p { filename = Just (module_ <.> ".hs") }
-fillinCodegenParams _ p = p
+fillinCodegenNames f p@(CodegenParams (Just "") _ _) = fillinCodegenNames f $ p { filename = Just (f -<.> ".hs") }
+fillinCodegenNames _ p@(CodegenParams (Just "-") Nothing _) =                 p { module_ = Just "Synthed" }
+fillinCodegenNames _ p@(CodegenParams (Just filename) Nothing _) =            p { module_ = Just $ idfy filename }
+fillinCodegenNames _ p@(CodegenParams Nothing (Just module_) _) =             p { filename = Just (module_ <.> ".hs") }
+fillinCodegenNames _ p = p
 
 -- | E.g., "out/User-Module.hs" ---> "UserModule"
 idfy = filter isAlphaNum . dropExtension . takeFileName
 
 codegen params results = case params of
-  CodegenParams {filename = Just filePath, module_ = Just moduleName} ->
-      extractModule filePath moduleName results
+  CodegenParams {filename = Just filePath, module_ = Just moduleName, imports = imports} ->
+      extractModule filePath moduleName results imports
   _ -> return ()
+
+collectLibDecls libs declsByFile =
+  Map.filterWithKey (\k _ -> k `elem` libs) $ Map.fromList declsByFile
 
 -- | Parse and resolve file, then synthesize the specified goals
 runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParams
                            -> String -> [String] -> IO ()
 runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
-  decls <- parseFromFiles (libs ++ [file])
+  declsByFile <- parseFromFiles (libs ++ [file])
+  let decls = concat $ map snd declsByFile
   case resolveDecls decls of
     Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
       results <- mapM (synthesizeGoal cquals tquals) (requested goals)
       when (not (null results) && showStats synquidParams) $ printStats results
       -- Generate output if requested
-      codegen (fillinCodegenParams file codegenParams) results
+      let libsWithDecls = collectLibDecls libs declsByFile
+      codegen (fillinCodegenParams file libsWithDecls codegenParams) results
   where
     parseFromFiles [] = return []
     parseFromFiles (file:rest) = do
@@ -287,7 +297,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
         Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
         -- Right ast -> print $ vsep $ map pretty ast
         Right decls -> let decls' = if null rest then decls else filter (not . isSynthesisGoal) decls in -- Remove implementations from libraries
-          (decls' ++) <$> parseFromFiles rest    
+          ((file, decls') :) <$> parseFromFiles rest    
     requested goals = case goalFilter synquidParams of
       Just filt -> filter (\goal -> gName goal `elem` filt) goals
       _ -> goals
