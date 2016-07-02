@@ -15,9 +15,9 @@ import System.Console.CmdArgs
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromRow
 
-import ConferenceImpl hiding (print, elem, forM_, foldl, foldl1, map, String)
+import ConferenceImpl hiding (String, print, elem, forM_, foldl, foldl1, map, show)
+import Conference
 import ConferenceVerification
-
 
 instance FromRow PaperRow where
   fromRow = PaperRow <$> field <*> field <*> field <*> field
@@ -45,7 +45,9 @@ tests opts =
          ("test6 w %d" % papid,          (`test6` papid)),
          ("test7 w %s" % show (papids),  (`test7` papids)),
          ("test8 w",                     test8),
-         ("test9 w",                     test9)]
+         ("test9 w",                     test9),
+         ("test10 w",                    test10),
+         ("test11 w %d" % papid,         (`test11` papid))]
 
 data CommandLineArgs = CommandLineArgs {
   db_ :: String,

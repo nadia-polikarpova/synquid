@@ -1,9 +1,9 @@
 module ConferenceImpl where
 
 import qualified Prelude
-import Prelude hiding (String)
+import Prelude hiding (String, Maybe)
 
-import {-# SOURCE #-} ConferenceVerification
+import {-# SOURCE #-} Conference
 import {-# SOURCE #-} Security
 
 type String = Prelude.String
@@ -11,6 +11,8 @@ type String = Prelude.String
 type User = String
 
 type PaperId = Prelude.Int
+
+type Token = String
 
 data World
 
@@ -65,6 +67,8 @@ getSessionUser :: World -> Tagged User
 
 getAllPapers :: World -> List PaperId
 
+getPaperBidToken :: World -> PaperId -> Tagged (Maybe Token)
+
 lift1 ::
       (Eq a, Ord a, Eq b, Ord b) => (a -> b) -> Tagged a -> Tagged b
 
@@ -80,9 +84,10 @@ printAll :: World -> Tagged (List User) -> Tagged String -> World
 
 strcat :: String -> String -> String
 
-toString :: (Show a) => a -> String
+show :: (Show a) => a -> String
 
 instance Eq a => Eq (Tagged a)
 instance Ord a => Ord (Tagged a)
 instance Show Status
 instance Show a => Show (List a)
+instance Show a => Show (Maybe a)

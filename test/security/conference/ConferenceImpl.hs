@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving, TemplateHaskell #-}
 module ConferenceImpl where
 
-import Prelude hiding (String, elem, print, foldl, foldl1, map)
+import Prelude hiding (String, elem, print, foldl, foldl1, map, show)
 
 import qualified Prelude
 import Data.Map (Map, (!))
@@ -11,6 +11,8 @@ import qualified Data.Text as T
 import Control.Lens
 
 import Security
+import qualified Conference as C
+import Conference hiding (Maybe, Just, Nothing)
 import ConferenceVerification
 
 
@@ -19,6 +21,8 @@ type String = Prelude.String
 type User = String
 
 type PaperId = Int
+
+type Token = String
 
 data Tagged a = Tagged a
 deriving instance Eq a => Eq (Tagged a)
@@ -160,6 +164,14 @@ lfoldl f w (Cons x xs) = lfoldl f (f w x) xs
 instance Show a => Show (List a) where
   show = show . toList
 
+{- Maybe -}
+
+toMaybe C.Nothing = Nothing
+toMaybe (C.Just x) = Just x
+
+instance Show a => Show (C.Maybe a) where
+  show = show . toMaybe
+
 {- String -}
 
 emptyString = ""
@@ -174,8 +186,8 @@ s_qmark = "?"
 strcat :: String -> String -> String
 strcat s1 s2 = s1 ++ s2
 
-toString :: (Show a) => a -> String
-toString = show
+show :: (Show a) => a -> String
+show = Prelude.show
 
 {- Database access -}
 
@@ -205,6 +217,9 @@ getSessionUser w = Tagged $ w ^. sessionUser
 
 getAllPapers :: World -> List PaperId
 getAllPapers w = fromList $ M.keys $ w ^. db ^. papers
+
+getPaperBidToken :: World -> PaperId -> Tagged (C.Maybe Token)
+getPaperBidToken w pid = Tagged (C.Just "do it!")
 
 {- Output -}
 
