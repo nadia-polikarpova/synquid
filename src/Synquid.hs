@@ -312,7 +312,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       (mProg, stats) <- if repairPolicies synquidParams
                         then policyRepair explorerParams solverParams goal cquals tquals
-                        else undefined -- synthesize explorerParams solverParams goal cquals tquals
+                        else synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
