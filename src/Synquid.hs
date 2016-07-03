@@ -16,6 +16,7 @@ import Synquid.Explorer
 import Synquid.Synthesizer
 import Synquid.HtmlOutput
 import Synquid.Codegen
+import Synquid.Stats
 
 import Control.Monad
 import Control.Lens ((^.))
@@ -288,7 +289,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       when (not (null results) && showStats synquidParams) $ printStats results
       -- Generate output if requested
       let libsWithDecls = collectLibDecls libs declsByFile
-      codegen (fillinCodegenParams file libsWithDecls codegenParams) results
+      codegen (fillinCodegenParams file libsWithDecls codegenParams) (map fst results)
   where
     parseFromFiles [] = return []
     parseFromFiles (file:rest) = do
@@ -309,23 +310,26 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
-      mProg <- if repairPolicies synquidParams
-                then policyRepair explorerParams solverParams goal cquals tquals
-                else synthesize explorerParams solverParams goal cquals tquals
+      (mProg, stats) <- if repairPolicies synquidParams
+                        then policyRepair explorerParams solverParams goal cquals tquals
+                        else undefined -- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
           pdoc (prettySolution goal prog)
           pdoc empty
-          return (goal, prog)
+          return ((goal, prog), stats)
     printStats results = do
-      let env = gEnvironment (fst $ head results)
+      let env = gEnvironment (fst $ fst $ head results)
       let measureCount = Map.size $ _measures $ env
       let policySize = sum $ Set.map (typeNodeCount . toMonotype . unresolvedType env) (env ^. constants)
-      let getStatsFor (goal, prog) = (gName goal, 
-                                      typeNodeCount $ toMonotype $ unresolvedSpec goal,
-                                      programNodeCount $ gImpl goal,   -- size of implementation template (before synthesis/repair)
-                                      programNodeCount prog)           -- size of generated solution
+      let getStatsFor ((goal, prog), stats) = 
+             StatsRow
+             (gName goal)
+             (typeNodeCount $ toMonotype $ unresolvedSpec goal)
+             (programNodeCount $ gImpl goal)   -- size of implementation template (before synthesis/repair)
+             (programNodeCount prog)           -- size of generated solution
+             (stats ! TypeCheck) (stats ! Repair) (stats ! Recheck) (sum $ Map.elems stats)  -- time measurements
       let perResult = map getStatsFor results
       --let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst) results
       --let solutionSize = sum $ map (programNodeCount . snd) results
@@ -336,13 +340,3 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
               statsTable perResult,
               empty
               ]
-
-statsTable :: [(String, Int, Int, Int)] -> Doc
-statsTable dataRows =
-  let headerRow = [text "Goal", text "Spec", text "Templ", text "Solution"]
-      totalsRow = ("Totals", sum $ map (\(a,b,c,d) -> b) dataRows, sum $ map (\(a,b,c,d) -> c) dataRows, sum $ map (\(a,b,c,d) -> d) dataRows)
-      toDocs (a,b,c,d) = [text a, pretty b, pretty c, pretty d]
-      colWidths = [12, -8, -8, -8]
-  in
-    mkTable colWidths $ [headerRow] ++ 
-       (map (\(a,b,c,d) -> [text a, pretty b, pretty c, pretty d]) $ dataRows ++ [totalsRow])

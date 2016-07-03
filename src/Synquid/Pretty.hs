@@ -41,6 +41,7 @@ module Synquid.Pretty (
   hMapDoc,
   vMapDoc,
   mkTable,
+  mkTableLaTeX,
   -- * Programs
   prettySpec,
   prettySolution,
@@ -65,6 +66,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
+import Data.List
 
 import Control.Lens
 
@@ -479,10 +481,19 @@ programNodeCount (Program p _) = case p of
 -- Positive widths for left justification, negative for right.
 mkTable :: [Int] -> [[Doc]] -> Doc
 mkTable widths docs = vsep $ map (mkTableRow widths) docs
-mkTableRow widths docs = hsep $ map (\(w,doc) -> signedFill w doc) $ zip widths docs
+mkTableRow widths docs = hsep $ zipWith signedFill widths docs
 
 signedFill w doc | w < 0 = lfill (-w) doc
                  | otherwise = fill w doc
+
+mkTableLaTeX :: [Int] -> [[Doc]] -> Doc
+mkTableLaTeX widths docs =
+  uncurry mkTable $ insertSeps widths docs
+ where
+  insertSeps widths docs = (intersperse 3 widths ++ [3], 
+    map ((++ [nl]) . intersperse tab) docs)
+  tab = text " &"     
+  nl = text " \\\\"
 
 -- | Really? They didn't think I might want to right-align something?
 -- This implementation only works for simple documents with a single string.

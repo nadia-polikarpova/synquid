@@ -202,7 +202,8 @@ parseTypeAtom :: Parser RType
 parseTypeAtom = choice [
   parens parseType,
   parseScalarRefType,
-  parseUnrefTypeNoArgs
+  parseUnrefTypeNoArgs,
+  parseListType
   ]
   
 parseUnrefTypeNoArgs = do
@@ -231,6 +232,10 @@ parseScalarRefType = braces $ do
   refinement <- parseFormula
   return $ ScalarT baseType refinement  
 
+parseListType = do
+  elemType <- brackets parseType
+  return $ ScalarT (DatatypeT "List" [elemType] []) ftrue
+  
 parseFunctionType :: Parser RType
 parseFunctionType = do
   argIdMb <- optionMaybe (try parseArgName)
@@ -381,17 +386,25 @@ parseETerm = buildExpressionParser (exprTable mkUnary mkBinary False) parseAppTe
       args <- many (sameOrIndented >> (try parseAtomTerm <|> parens parseImpl))
       return $ foldl (\e1 e2 -> untyped $ PApp e1 e2) head args
     parseAtomTerm = choice [
-        parens (withOptionalType $ parseETerm)
+        parens (withOptionalType parseETerm)
       , parseHole
       , parseBoolLit
       , parseIntLit
       , parseSymbol
+      , parseList
       ]
     parseBoolLit = (reserved "False" >> return (untyped $ PSymbol "False")) <|> (reserved "True" >> return (untyped $ PSymbol "True"))
     parseIntLit = natural >>= return . untyped . PSymbol . show
     parseHole = reserved "??" >> return (untyped PHole)
     parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
     
+parseList = do
+  elems <- brackets (commaSep parseImpl)
+  return $ foldr cons nil elems
+  where 
+    cons x xs = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "Cons") x) xs
+    nil = untyped $ PSymbol "Nil"
+
 withOptionalType p = do
   (Program content _) <- p
   typ <- option AnyT $ reserved "::" >> parseType
