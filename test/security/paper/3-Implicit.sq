@@ -30,18 +30,20 @@ getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 -- | Paper title (public)
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
+getPaperStatus :: w: World -> pid: PaperId -> Tagged Bool <{currentPhase w == done}>
+defaultPaperStatus :: Tagged Bool <{True}>
+
 -- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
-getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>
-defaultPaperAuthors :: Tagged (List User) <{True}>
+--getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>
+--defaultPaperAuthors :: Tagged (List User) <{True}>
 
 {- Client code -}
   
--- | Show paper info to session user
+-- | Show session info to session user
 -- | Repair: for getPaperAuthors, check that u is chair or current phase is >= rebuttal
-showPaper :: w: World -> pid: PaperId -> World
-showPaper = \w . \pid .
+showSession :: w: World -> pid: PaperId -> World
+showSession = \w . \pid .
   let u = getSessionUser w in
-  let title = getPaperTitle w pid in
-  let authors = liftM show (getPaperAuthors w pid) in
-  let out = liftM2 strcat title authors in
+  let out = bind (getPaperStatus w pid) (\st.
+        if st then (getPaperTitle w pid) else return emptyString) in
   print w u out

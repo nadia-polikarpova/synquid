@@ -1,173 +1,102 @@
--- Regular list
-data List a where
-	Nil :: List a
-	Cons :: x: a -> xs: List a -> List a
 
--- Length of a list
-termination measure len :: List a -> {Int | _v >= 0} where
-  Nil -> 0
-  Cons x xs -> 1 + len xs
-
--- Set of elements of a list
-measure elems :: List a -> Set a where
-  Nil -> []
-  Cons x xs -> [x] + elems xs
-
-eq :: x: a -> y: a -> {Bool | _v == (x == y)}
-not :: x: Bool -> {Bool | _v == !x}
-and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
-elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
-
--- Tagged things
-
-data User
-
-data Tagged a <visibleTo :: User -> Bool>!
-measure content :: Tagged a -> a
-
-return :: x: a -> Tagged {a | _v == x} <{True}>
-
-bind :: <bp :: User -> Bool> .
-  (Tagged a <bp>) -> (a -> Tagged b <bp>) -> Tagged b <bp>
-
-if_ :: <ip :: User -> Bool> . <ic :: Bool> .
-  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}>
-    -> thn: Tagged a <{ic && ip _0}>
-    -> els: Tagged a <ip>
-    -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
-
--- and_ :: <ap :: User -> Bool> .
-  -- x: Tagged Bool <ap> -> y: Tagged Bool <ap> -> Tagged {Bool | _v == (content x && content y)} <ap>
-
-lift1 :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> .
-  f: (u: a -> {b | l1f u _v}) ->
-  x: Tagged a <l1p> ->
-  Tagged {b | l1f (content x) _v} <l1p>
-
-lift2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> .
-  f: (u: a -> v: b -> {c | l2f u v _v}) ->
-  x: Tagged a <l2p> ->
-  y: Tagged b <l2p> ->
-  Tagged {c | l2f (content x) (content y) _v} <l2p>
+-- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
+foldl :: (a -> b -> a) -> a -> (List b) -> a
+foldl1 :: f: (a -> a -> a) -> l: List a -> a
 
 -- Strings
 
-data String
-emptyString :: String
 s_colon :: String
 s_comma :: String
 s_paperNo :: String
 s_authors :: String
-toString :: a -> String
-strcat :: String -> String -> String
-
--- Conference management
-
-data World
-
-print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
-printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
-
-data PaperId
-
-data Phase where
-  Submission :: Phase
-  Review :: Phase
-  Done :: Phase
-
-data Status where
-  NoDecision :: Status
-  Accepted :: Status
-  Rejected :: Status
-
-predicate sessionUser :: World -> User
-getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
-
-predicate chair :: World -> User
-getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
-
-predicate currentPhase :: World -> Phase
-getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
-
-predicate paperConflicts :: World -> PaperId -> Set User
-getPaperConflicts :: w: World -> pid: PaperId
-                        -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_0 in paperConflicts w pid)}>
-
-getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{!(_0 in paperConflicts w pid)}>
-
-predicate paperAuthors :: World -> PaperId -> Set User
-getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
-
-predicate paperStatus :: World -> PaperId -> Status
-getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
-qualifier {_v == paperStatus w pid || _v == NoDecision}
-
-getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
-
--- qualifier {x == w, x in y, !(x in y)} -- ToDo: make this work
-qualifier {content x == chair w}
-qualifier {content x in paperAuthors w pid}
-qualifier {!(content x in paperConflicts w pid)}
+s_qmark :: String
 
 -- Print paper status to all its authors
 test1 :: World -> PaperId -> World
 test1 = \w . \pid .
   let title = getPaperTitle w pid in
   let authors = getPaperAuthors w pid in
-  let st = if_ (lift2 eq (getCurrentPhase w) (return Done))
+  let st = ifM (liftM2 eq (getCurrentPhase w) (return Done))
               (getPaperStatus w pid)
               (return NoDecision) in
-  let out = lift2 strcat title (lift2 strcat (return s_colon) (lift1 toString st)) in
+	let out = foldl1 (liftM2 strcat) [title, return s_colon, liftM show st] in 
   printAll w authors out
 
+{-
+test1ref :: {World|currentPhase _v == Done} -> PaperId -> World
+test1ref = \w . \pid .
+  let title = getPaperTitle w pid in
+  let authors = getPaperAuthors w pid in
+  printAll w authors title
+ -}
+
+-- Print paper title to session user
+{-
+silly :: World -> PaperId -> World
+silly = \w . \pid .
+  let u = getSessionUser w in
+  let title = getPaperTitle w pid in
+  print w u (liftM show title)
+
+sillys :: World -> (List PaperId) -> World
+sillys = \w . \pids .
+  let u = getSessionUser w in
+  foldl (\w. \pid. 
+    let title = getPaperTitle w pid in
+    print w u title) w pids
+  match pids with
+    Nil -> w
+    Cons pid rest ->
+  		let title = getPaperTitle w pid in
+  		sillys (print w u (liftM show title)) rest
+-}
 -- Print paper status to chair
 test2 :: World -> PaperId -> World
 test2 = \w . \pid .
   let ch = getChair w in
   let st = getPaperStatus w pid in
-  print w ch (lift2 strcat (return s_paperNo)
-	             (lift2 strcat (return (toString pid))
-	             	 (lift2 strcat (return s_colon)
-							     (lift1 toString st))))
+  print w ch (liftM2 strcat (return s_paperNo)
+               (liftM2 strcat (return (show pid))
+                 (liftM2 strcat (return s_colon)
+                   (liftM show st))))
 
 -- Print paper authors to session user
 test3 :: World -> PaperId -> World
 test3 = \w . \pid .
   let u = getSessionUser w in
   let authors = getPaperAuthors w pid in
-  let authors' = if_ (lift2 elem u authors) authors (return Nil) in
-  let out = (lift2 strcat (return s_paperNo)
-	             (lift2 strcat (return (toString pid))
-	             	 (lift2 strcat (return s_comma)
-							     (lift2 strcat (return s_authors)
-									   (lift1 toString authors'))))) in
+  let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
+  let out = (liftM2 strcat (return s_paperNo)
+              (liftM2 strcat (return (show pid))
+                (liftM2 strcat (return s_comma)
+                  (liftM2 strcat (return s_authors)
+                    (liftM show authors'))))) in
   print w u out
 
 -- Print paper status to session user
 test4 :: World -> PaperId -> World
 test4 = \w . \pid .
   let u = getSessionUser w in
-  let st = if_ (lift2 eq (getChair w) u)
+  let st = ifM (liftM2 eq (getChair w) u)
                 (getPaperStatus w pid)
-                (if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
+                (ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid)
                   (return NoDecision)) in
-  print w u (lift1 toString st)
+  print w u (liftM show st)
 
 -- Implicit flow: show status and session to session user
 test5 :: World -> PaperId -> World
 test5 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
-  let title = if_ (lift1 not (lift2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
-  -- let st = getPaperStatus w pid in -- Leaky version
-  let st = if_ (lift2 and (lift2 eq (getCurrentPhase w) (return Done)) (lift2 elem u (getPaperAuthors w pid)))
+  let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
+  let st = ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid)
                   (return NoDecision) in
   let ses = bind st (\s . if s == Accepted
                             then getPaperSession w pid
                             else return emptyString) in
-  let out = lift2 strcat title (lift2 strcat (lift1 toString st) ses) in
+  let out = {- liftM2 strcat title -} (liftM2 strcat (liftM show st) ses) in
   print w u out
 
 -- Print paper title and list of conflicts to the session user
@@ -175,24 +104,173 @@ test6 :: World -> PaperId -> World
 test6 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
-  let noConflict = lift1 not (lift2 elem u conflicts) in
-  let title = if_ noConflict (getPaperTitle w pid) (return emptyString) in
-  let conflicts' = if_ noConflict conflicts (return Nil) in
-  let out = lift2 strcat title (lift1 toString conflicts') in
+  let noConflict = liftM not (liftM2 elem u conflicts) in
+  let title = ifM noConflict (getPaperTitle w pid) (return emptyString) in
+  let conflicts' = ifM noConflict conflicts (return Nil) in
+  let out = liftM2 strcat title (liftM show conflicts') in
   print w u out
 
-selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> pids: List PaperId -> Tagged String <{_0 == content u}>
+selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> 
+                 pids: List PaperId ->  List (Tagged String <{_0 == content u}>)
 selectFrom = \w. \u. \pids .
-  match pids with
-    Nil -> return emptyString
-    Cons pid rest ->
+  map (\pid.
+      let conflicts = getPaperConflicts w pid in
+      let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return s_qmark) in
       let authors = getPaperAuthors w pid in
-      let authors' = if_ (lift2 elem u authors) authors (return Nil) in
-      let line = lift1 toString authors' in
-      lift2 strcat line (selectFrom w u rest)
+      let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
+      foldl1 (liftM2 strcat) (Cons title (Cons (return s_comma) (Cons (return s_authors) (Cons (liftM show authors') Nil))))) pids
+      --                     ^ [title, ", ", "authors: ", show authors']
 
--- Print all session user's papers
-test7 :: World -> (List PaperId) -> World
+-- Print information about a bunch of papers to session user
+test7 :: World -> [PaperId] -> World
 test7 = \w. \allPids .
   let u = getSessionUser w in
-  print w u (selectFrom w u allPids)
+  foldl (\w. \s. print w u s) w (selectFrom w u allPids)
+
+-- Print all papers to session user
+test8 :: World -> World
+test8 = \w.
+  let u = getSessionUser w in
+  let allPids = getAllPapers w in
+  foldl (\w. \s. print w u s) w (selectFrom w u allPids)
+  
+forM_ :: <ap :: User -> Bool> .
+   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
+
+-- Print all session user's papers
+test9 :: World -> World
+test9 = \w.
+  let u = getSessionUser w in
+  let ownPids {- :: [PaperId]<> -} =
+     filterM (\pid. liftM2 elem u (ifM (liftM2 elem u (getPaperAuthors w pid))
+                                      (getPaperAuthors w pid) (return Nil)))
+             (getAllPapers w) in
+  forM_ w (liftM (\l. selectFrom w u l) ownPids) (\w. \s. print w u s)
+  --              ^ [PaperId]->[String<>]  ^ [PaperId]<>
+  --       ^ [String<>]<>
+
+
+-- TODO unconflicted papers (for bidding)
+-- liftM not (liftM2 elem u (getPaperConflicts w pid)))
+
+-- Print the list of all unconflicted papers
+test10 :: World -> World
+test10 = \w.
+  let u = getSessionUser w in
+  let allPids = getAllPapers w in
+  --let isUnconflicted = \pid. bind u (\c. bind (getPaperConflicts w pid) 
+  --                                         (\cs. return (not (elem c cs)))) in
+  {-let isSafeUnconflicted = \pid. 
+    bind u (\c. 
+      bind (ifM 
+              (bind (getPaperConflicts w pid) (\cs. 
+                return (not (elem c cs)))) 
+              (getPaperConflicts w pid) 
+              (return Nil)) 
+           (\cs. return (not (elem c cs)))) in-}
+  {-let isSafeUnconflicted = \pid. 
+   bind u (\c. 
+     bind (ifM 
+            (bind u (\x. 
+              bind (getPaperConflicts w pid) (\cs. 
+                return (not (elem x cs))))) 
+            (getPaperConflicts w pid)
+            (return Nil))
+          (\cs. return (not (elem c cs)))) in-}
+  let isSafeUnconflicted = \pid. 
+   bind u (\c. 
+     bind (ifM 
+            (bind u (\x. 
+              bind (getPaperConflicts w pid) (\cs. 
+                return (not (elem x cs))))) 
+            (liftM Just (getPaperConflicts w pid))
+            (return Nothing))
+          (\cs. return (not (elemMaybe c cs)))) in
+  let out = filterM isSafeUnconflicted allPids in
+  print w u (liftM show out)
+
+-- BUG: remove parens after return ---> ireffutable pattern
+-- BUG: second let cannot use first let?
+
+-- Q: Why is (ifM c th el) not equiv (ifM (not c) el th)?
+--    IOW why is the tag for else <ip> and not <{!ic && ip _0}>
+
+--defaultPaperAuthors :: Tagged (List User) <{True}>
+--defaultPaperBidToken :: Tagged (Maybe Token) <{True}>
+
+-- Produces a token "permission to bid" for session user
+test11 :: World -> PaperId -> World
+test11 = \w. \pid.
+  let u = getSessionUser w in
+  let pc = getPC w in
+  let conflicts = getPaperConflicts w pid in
+  let tok = ifM (andM (liftM2 elem u pc) (liftM not (liftM2 elem u conflicts)))
+                (getPaperBidToken w pid) (return Nothing) in
+  -- NOTE: This is *not* equivalent:
+  -- let tok = ifM (orM (liftM not (liftM2 elem u pc)) (liftM2 elem u conflicts)) (return Nothing) (getPaperBidToken w pid) in
+  let out = [return s_paperNo, return (show pid), return s_colon, liftM show tok] in
+  print w u (foldl1 (liftM2 strcat) out)
+
+-- TODO Policy that does not allow authors to bid even if they are on the PC?
+--let tok = ifM (andM (liftM not (liftM2 elem u conflicts))
+--                    (liftM not (liftM2 elem u authors))) (getPaperBidToken w pid) (return Nothing) in
+
+printManyMaybe :: <pmp :: User -> Bool> . w: World -> 
+   viewers: Tagged (List {User | pmp _v}) <pmp> ->
+    x: Tagged (Maybe a) <pmp> -> {World | currentPhase w == currentPhase _v}
+
+swallowTruth :: (Tagged a <{True}>) -> a
+
+-- Print paper status to all its authors
+{-
+test1maybe :: w:{World|currentPhase _v == Done} -> pid:PaperId -> {World|currentPhase _v == Done}
+test1maybe = \w . \pid .
+  let title = getPaperTitle w pid in
+  let authors = getPaperAuthors w pid in
+  let st = ifM (liftM2 eq (getCurrentPhase w) (return Done))
+              (getPaperStatus w pid)
+              (return NoDecision) in
+	let out = liftM Just (foldl1 (liftM2 strcat) [title, return s_colon, liftM show st]) in 
+  printManyMaybe w authors out
+
+
+auxNotifyIter :: w:{World|currentPhase _v == Done} -> pid:PaperId -> {World|currentPhase _v == Done}
+auxNotifyIter = \w. \pid.
+  let fmtMsg = \st.
+      if st == Accepted then (Just s_delighted) 
+      else if st == Rejected then (Just s_regret)
+      else Nothing in
+  let title = getPaperTitle w pid in
+  let authors = getPaperAuthors w pid in
+  let msg = liftM fmtMsg (getPaperStatus w pid)  in
+  let out = bind msg (\mmsg. 
+      match mmsg with
+        Just msg' -> return (Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg']))
+        Nothing -> return Nothing) in
+  printManyMaybe w authors out
+-}
+
+-- Reviewing phase is done!
+-- Send notices to all authors about how well they did
+test12 :: World -> World
+test12 = \w.
+  let pids = getAllPapers w in
+  let u = getChair w in
+  let fmtMsg = \st.
+      if st == Accepted then (Just s_delighted) 
+      else if st == Rejected then (Just s_regret)
+      else Nothing in
+  --bind (getCurrentPhase w) (\phase. 
+  --  if phase == Done then return (
+  foldl (\w. \pid.
+    let title = getPaperTitle w pid in
+    let authors = getPaperAuthors w pid in
+    let st' = ifM (bind (getCurrentPhase w) (\phase. return (phase == Done))) 
+                  (getPaperStatus w pid) (return NoDecision) in
+    let msg = liftM fmtMsg st'  in
+    let out = bind msg (\mmsg. 
+        match mmsg with
+          Just msg' -> return (Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg']))
+          Nothing -> return Nothing) in
+    printManyMaybe w authors out) w pids --)
+    --else return w)

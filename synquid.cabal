@@ -45,6 +45,7 @@ executable synquid
                     , time
                     , haskell-src-exts
                     , safe
+                    , split
 
   ghc-options: -O2
 
