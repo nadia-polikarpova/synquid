@@ -1,7 +1,7 @@
 {-# LANGUAGE StandaloneDeriving, TemplateHaskell #-}
 module ConferenceImpl where
 
-import Prelude hiding (String, elem, print)
+import Prelude hiding (String, elem, print, foldl, foldl1, map, show)
 
 import qualified Prelude
 import Data.Map (Map, (!))
@@ -10,6 +10,9 @@ import qualified Data.Text as T
 
 import Control.Lens
 
+import Security
+import qualified Conference as C
+import Conference hiding (Maybe, Just, Nothing)
 import ConferenceVerification
 
 
@@ -19,7 +22,11 @@ type User = String
 
 type PaperId = Int
 
+type Token = String
+
 data Tagged a = Tagged a
+deriving instance Eq a => Eq (Tagged a)
+deriving instance Ord a => Ord (Tagged a)
 
 data Database = Database {
   _chair :: User,
@@ -61,7 +68,8 @@ data ConflictRow = ConflictRow Int Int deriving (Show)
 selectJoin table1 table2 cross = concatMap (\x -> concatMap (cross x) table2) table1
 
 mkPapers prows urows arows crows =
-    M.fromList $ map (\(PaperRow id title status session) ->
+    M.fromList $ 
+         Prelude.map (\(PaperRow id title status session) ->
                         (id, PaperRecord {
                             _papid = id,
                             _title = T.unpack title,
@@ -90,6 +98,9 @@ mkPapers prows urows arows crows =
 
 {- Boolean stuff -}
 
+true = True
+false = False
+
 eq :: (Eq a, Ord a) => a -> a -> Bool
 eq x y = x == y
 
@@ -109,6 +120,10 @@ bind (Tagged a) f = f a
 return :: (Eq a, Ord a) => a -> Tagged a
 return = Tagged
 
+bindBool ::
+      (Eq b, Ord b) => Tagged Bool -> (Bool -> Tagged b) -> Tagged b
+bindBool = bind
+
 if_ ::
     (Eq a, Ord a) => Tagged Bool -> Tagged a -> Tagged a -> Tagged a
 if_ (Tagged cond) t e = if cond then t else e
@@ -122,11 +137,21 @@ lift2 ::
         (a -> b -> c) -> Tagged a -> Tagged b -> Tagged c
 lift2 f (Tagged a) (Tagged b) = Tagged $ f a b
 
+liftAnd = lift2 (&&)
+
 {- List -}
 
-elem :: (Eq a, Ord a) => a -> List a -> Bool
-elem x Nil = False
-elem x (Cons y xs) = (x == y) || elem x xs
+foldl1 :: (a -> a -> a) -> List a -> a
+foldl1 f = Prelude.foldl1 f . toList
+
+foldl :: (a -> b -> a) -> a -> List b -> a
+foldl f a = Prelude.foldl f a . toList
+
+forM_ ::
+        (Eq a, Ord a) =>
+        World -> Tagged (List (Tagged a)) -> (World -> Tagged a -> World) -> World
+forM_ w (Tagged Nil) f = w
+forM_ w (Tagged (Cons x xs)) f = forM_ (f w x) (Tagged xs) f
 
 toList Nil = []
 toList (Cons x xs) = x : toList xs
@@ -139,6 +164,14 @@ lfoldl f w (Cons x xs) = lfoldl f (f w x) xs
 instance Show a => Show (List a) where
   show = show . toList
 
+{- Maybe -}
+
+toMaybe C.Nothing = Nothing
+toMaybe (C.Just x) = Just x
+
+instance Show a => Show (C.Maybe a) where
+  show = show . toMaybe
+
 {- String -}
 
 emptyString = ""
@@ -148,12 +181,13 @@ s_colon = ": "
 s_comma = ", "
 s_authors = "authors: "
 s_paperNo = "Paper #"
+s_qmark = "?"
 
 strcat :: String -> String -> String
 strcat s1 s2 = s1 ++ s2
 
-toString :: (Show a) => a -> String
-toString = show
+show :: (Show a) => a -> String
+show = Prelude.show
 
 {- Database access -}
 
@@ -181,11 +215,16 @@ getPaperTitle w papid = Tagged $ (w ^. db ^. papers) ! papid ^. title
 getSessionUser :: World -> Tagged User
 getSessionUser w = Tagged $ w ^. sessionUser
 
+getAllPapers :: World -> List PaperId
+getAllPapers w = fromList $ M.keys $ w ^. db ^. papers
+
+getPaperBidToken :: World -> PaperId -> Tagged (C.Maybe Token)
+getPaperBidToken w pid = Tagged (C.Just "do it!")
 
 {- Output -}
 
 print :: World -> Tagged User -> Tagged String -> World
-print w (Tagged u) (Tagged s) = over effects (M.insertWith (++) u [s]) w
+print w (Tagged u) (Tagged s) = over effects (M.insertWith (\new old -> old ++ new) u [s]) w
 
 printAll :: World -> Tagged (List User) -> Tagged String -> World
 printAll w (Tagged us) s = lfoldl (\w u -> print w (Tagged u) s) w us

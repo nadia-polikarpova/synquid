@@ -5,6 +5,8 @@ module Main where
 import Control.Monad
 import Control.Applicative
 import Control.Lens
+import Data.List
+import Data.List.Split (splitOn)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Text.Printf
@@ -14,9 +16,9 @@ import System.Console.CmdArgs
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromRow
 
-import ConferenceImpl hiding (print, String)
+import ConferenceImpl hiding (String, print, elem, forM_, foldl, foldl1, map, show)
+import Conference
 import ConferenceVerification
-
 
 instance FromRow PaperRow where
   fromRow = PaperRow <$> field <*> field <*> field <*> field
@@ -30,40 +32,52 @@ instance FromRow ConflictRow where
 (%) s n = printf s n
 infix 0 %
 
+tests :: CommandLineArgs -> [(String, World -> World)]
 tests opts =
   let papids = fromList $ paperIds opts
       papid = head $ paperIds opts
-  in
+      filt = if null $ actions opts then id else filter (\(title,_) -> or (map (\act -> act `isPrefixOf` title) (actions opts)))
+  in  filt
         [("test1 w %d" % papid,          (`test1` papid)),
          ("test2 w %d" % papid,          (`test2` papid)),
          ("test3 w %d" % papid,          (`test3` papid)),
          ("test4 w %d" % papid,          (`test4` papid)),
          ("test5 w %d" % papid,          (`test5` papid)),
          ("test6 w %d" % papid,          (`test6` papid)),
-         ("test7 w %s" % show (papids),  (`test7` papids))]
+         ("test7 w %s" % show (papids),  (`test7` papids)),
+         ("test8 w",                     test8),
+         ("test9 w",                     test9),
+         ("test10 w",                    test10),
+         ("test11 w %d" % papid,         (`test11` papid))]
 
 data CommandLineArgs = CommandLineArgs {
   db_ :: String,
   user :: String,
-  papers_ :: String
+  actions :: [String],
+  papers_ :: String,
+  phase_ :: String
 }
  deriving (Data)
 cla = CommandLineArgs {
-  db_ = "conf.db" &= typFile,
-  user = "Nadia" &= typ "NAME",
-  papers_ = "12" &= typ "ID,ID,..."
+  db_ = "conf.db"   &= typFile,
+  user = "Nadia"    &= typ "NAME",
+  actions = []      &= args,
+  papers_ = "12"    &= typ "ID,ID,...",
+  phase_ = "S"      &= typ "S/R/D" &= help "Phase of the conference (Submission/Review/Done)"
 }
 
-split :: String -> String -> [String]
-split sep s = map T.unpack $ T.splitOn (T.pack sep) $ T.pack s
+paperIds opts = map read $ splitOn "," (papers_ opts) :: [Int]
 
-paperIds opts = map read $ split "," (papers_ opts) :: [Int]
+parsePhase :: String -> Phase
+parsePhase s | s `isPrefixOf` "Submission" = Submission
+             | s `isPrefixOf` "Review" = Review
+             | s `isPrefixOf` "Done" = Done
 
 main :: IO ()
 main = do
   opts <- cmdArgs cla
+
   db <- open (db_ opts)
-  print $ paperIds opts
   execute_ db "CREATE TABLE IF NOT EXISTS papers (id INTEGER PRIMARY KEY, title TEXT, status TEXT, session TEXT)"
   execute_ db "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"
   execute_ db "CREATE TABLE IF NOT EXISTS authors (paperId INTEGER REFERENCES papers (id), userId INTEGER REFERENCES users (id))"
@@ -78,7 +92,7 @@ main = do
   let w = World {
             _db = Database {
               _chair = "Emery",
-              _phase = Review,
+              _phase = parsePhase $ phase_ opts,
               _papers = mkPapers papers users authors conflicts
             },
             _sessionUser = (user opts),
