@@ -1,0 +1,45 @@
+
+{- Datatypes -}
+
+data PaperId
+
+data PaperId
+
+type Phase = {Int | 0 <= _v && _v < 4}
+submission :: {Phase | _v == 0}
+review :: {Phase | _v == 1}
+rebuttal :: {Phase | _v == 2}
+done :: {Phase | _v == 3}
+
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+
+{- Sensitive data and policies -}
+   
+-- | Current phase (public)
+predicate currentPhase :: World -> Int
+getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
+
+-- | Paper authors (visible to themselves)
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId -> 
+  Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} 
+         <{_0 in paperAuthors w pid}>
+defaultPaperAuthors :: Tagged (List User) <{True}>  
+
+-- | Paper status (secret until done)
+getPaperStatus :: w: World -> pid: PaperId -> 
+  Tagged Status <{_0 in paperAuthors w pid && currentPhase w == done}>
+defaultPaperStatus :: Tagged Status <{True}>
+
+{- Client code -}
+
+-- | Send status notification to authors
+-- | Repair: check that phase is Done (we already know viewer is an author)
+notifyAuthors :: w: World -> pid: PaperId -> World
+notifyAuthors = \w . \pid .
+  let status = getPaperStatus w pid in
+  let authors = getPaperAuthors w pid in
+  printAll w authors status
