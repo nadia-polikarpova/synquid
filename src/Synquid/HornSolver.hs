@@ -378,11 +378,13 @@ pruneSolutions unknowns solutions =
 pruneValuations :: MonadSMT s => Formula -> [Valuation] -> FixPointSolver s [Valuation] 
 pruneValuations assumption vals = 
   let 
-      strictlyImplies l r = do
+      strictlyImplies ls rs = do
+        let l = conjunction ls
+        let r = conjunction rs
         res1 <- isValidFml $ (assumption |&| l) |=>| r
         res2 <- isValidFml $ (assumption |&| r) |=>| l
-        return $ res1 && not res2
-      isSubsumed val vals = anyM (\v -> strictlyImplies (conjunction val) (conjunction v)) vals
+        return $ (res1 && (not res2 || (Set.size ls > Set.size rs)))
+      isSubsumed val vals = anyM (\v -> strictlyImplies val v) vals
   in prune isSubsumed vals
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
