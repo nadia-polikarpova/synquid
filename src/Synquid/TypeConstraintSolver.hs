@@ -432,7 +432,7 @@ allScalars env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
       ScalarT IntT  (Binary Eq _ (IntLit n)) -> Just $ IntLit n
       ScalarT BoolT (Var _ _) -> Just $ BoolLit True
       ScalarT BoolT (Unary Not (Var _ _)) -> Just $ BoolLit False
-      ScalarT (DatatypeT dt [] []) (Binary Eq _ cons@(Cons _ _ [])) -> Just cons
+      ScalarT (DatatypeT dt [] []) (Binary Eq _ cons@(Cons _ name [])) | x == name -> Just cons
       ScalarT b _ -> Just $ Var (toSort b) x
       _ -> Nothing    
     
