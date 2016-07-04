@@ -23,6 +23,7 @@ executable confmain
                     , time
                     , safe
                     , text
+                    , split
                     , sqlite-simple
 
   default-language:   Haskell2010

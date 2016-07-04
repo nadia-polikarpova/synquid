@@ -1,5 +1,5 @@
 -- | Top-level synthesizer interface
-module Synquid.Synthesizer (synthesize, policyRepair) where
+module Synquid.Synthesizer (synthesize, policyRepair, SynthPhase(..)) where
 
 import Synquid.Util
 import Synquid.Logic
@@ -14,6 +14,7 @@ import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.TypeChecker
 import Synquid.PolicyChecker
+import Synquid.Stats
 
 import Data.Maybe
 import Data.Either
@@ -27,26 +28,37 @@ import Control.Monad.State
 import Control.Lens
 import Control.Applicative ((<$>))
 
+import Data.Time.Clock
+import Data.Time.Format
+
 import Debug.Trace
 
 type HornSolver = FixPointSolver Z3State
 
-policyRepair :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram)
+policyRepair :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram, TimeStats)
 policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
   where
-    go :: Z3State (Either ErrorMessage RProgram)
+    go :: Z3State (Either ErrorMessage RProgram, TimeStats)
     go = do
+ {--} cp0 <- lift startTiming {--}
       locResult <- evalFixPointSolver (localizationPhase False goal) (solverParams { isLeastFixpoint = True })
+      cp1 <- lift $ sample cp0 TypeCheck
       case locResult of
-        Left err -> return $ Left err -- Irreparable type error: report
+        Left err -> return (Left err, snd cp1) -- Irreparable type error: report
         Right (p, violations) -> if Map.null violations
-          then return $ Right p -- No errors
+          then return (Right p, snd cp1) -- No errors
           else do
             repairRes <- evalFixPointSolver (repairPhase p violations) (solverParams { isLeastFixpoint = False })
+       {--} cp2 <- lift $ sample cp1 Repair
             case repairRes of
-              Left err -> return $ Left err -- No repair
-              Right p' -> mapRight fst <$> evalFixPointSolver (localizationPhase True goal { gImpl = eraseTypes p' }) (solverParams { isLeastFixpoint = True })
-              
+              Left err -> return (Left err, snd cp2) -- No repair
+              Right p' -> do
+                recheckRes <- evalFixPointSolver (localizationPhase True goal { gImpl = eraseTypes p' }) (solverParams { isLeastFixpoint = True })
+           {--} cp3 <- lift $ sample cp2 Recheck
+                case recheckRes of
+                  Left err -> return (Left err, snd cp3)
+                  Right (p, _) -> return (Right p, snd cp3)
+                
     localizationPhase :: Bool -> Goal -> HornSolver (Either ErrorMessage (RProgram, Requirements))
     localizationPhase isRecheck goal = 
                             let typingParams = TypingParams { 
@@ -97,11 +109,11 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram)
+synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram, TimeStats)
 synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFixPointSolver reconstruction solverParams
   where
     -- | Stream of programs that satisfy the specification or type error
-    reconstruction :: HornSolver (Either ErrorMessage RProgram)
+    reconstruction :: HornSolver (Either ErrorMessage RProgram, TimeStats)
     reconstruction = let
         typingParams = TypingParams { 
                         _condQualsGen = condQuals,
@@ -110,7 +122,9 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _predQualsGen = predQuals,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
-      in reconstruct explorerParams typingParams goal
+      in do cp0 <- lift $ lift startTiming  -- TODO time stats for this one as well?
+            x <- reconstruct explorerParams typingParams goal
+            return (x, snd cp0)
       
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
