@@ -24,6 +24,9 @@ getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessio
 predicate chair :: World -> User
 getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 
+predicate pc :: World -> Set User
+getPC :: w: World -> Tagged {List {User | _v in pc w} | elems _v == pc w} <{True}>
+
 predicate currentPhase :: World -> Phase
 getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
 
@@ -31,10 +34,13 @@ predicate paperConflicts :: World -> PaperId -> Set User
 getPaperConflicts :: w: World -> pid: PaperId
                         -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_0 in paperConflicts w pid)}>
 
-getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{_0 in paperAuthors w pid || !(_0 in paperConflicts w pid)}>
+getPaperTitle :: w: World -> pid: PaperId 
+   -> Tagged String <{ !(_0 in paperConflicts w pid) }>
 
 predicate paperAuthors :: World -> PaperId -> Set User
-getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
+getPaperAuthors :: w: World -> pid: PaperId 
+   -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} 
+             <{_0 in paperAuthors w pid}>
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_0 == chair w || (currentPhase w == Done && _0 in paperAuthors w pid)}>
@@ -43,7 +49,7 @@ getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 getAllPapers :: w: World -> [PaperId]
 
-getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_0 in paperAuthors w pid) && -} !(_0 in paperConflicts w pid) }>
+getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_0 in paperAuthors w pid) && -} (_0 in pc w) && !(_0 in paperConflicts w pid) }>
 
 qualifier {x == w, x in y, !(x in y)}
 qualifier {_v == (x in y), _v == !(x in y)}
