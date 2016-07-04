@@ -90,11 +90,14 @@ sequence = \xs .
 mapM :: <mp :: User -> Bool> .(a -> Tagged b <mp>) -> xs: List a -> Tagged (List b) <mp>
 mapM = \f . \xs . sequence (map f xs)
   
-filterM :: <fp :: User -> Bool> . (a -> Tagged Bool <fp>) -> xs: List a -> Tagged (List a) <fp>
+filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
+  (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0}>) -> xs: List a -> Tagged (List a) <fp>
 filterM = \f . \xs .
   match xs with
     Nil -> return Nil
-    Cons y ys -> ifM (f y) (liftM2 Cons (return y) (filterM f ys)) (filterM f ys)
+    Cons y ys -> ifM (f y) 
+                    (liftM2 Cons (return y) (filterM f ys)) 
+                    (filterM f ys) 
     
 foldM :: <fp :: User -> Bool> . 
   (a -> b -> Tagged a <fp>) -> a: a -> xs: List b -> Tagged a <fp>

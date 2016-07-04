@@ -237,7 +237,7 @@ extractPredQGenFromQual useAllArgs env actualParams actualVars fml =
     filterAllArgs = if useAllArgs
                       then filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q)  -- Only take the qualifiers that use all predicate parameters
                       else id
-
+                      
 extractPredQGenFromType :: Bool -> Environment -> [Formula] -> [Formula] -> RType -> [Formula]
 extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQGenFromType' t
   where
@@ -271,7 +271,7 @@ extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQG
               -- atoms = Set.toList $ (atomsOf pArg' `Set.union` conjunctsOf pArg') -- Uncomment this to enable disjunctive qualifiers
               atoms = Set.toList $ atomsOf pArg'
               extractFromAtom atom =                 
-                filterAllArgs $ allSubstitutions env atom formalVars actualVars [] []              
+                filterAllArgs $ allSubstitutions env atom formalVars (actualVars ++ actualParams) [] []              
             in concatMap extractFromAtom atoms -- Substitute the variables, but leave predicate parameters unchanged (optimization)
       in extractFromRefinement fml ++ concatMap extractFromPArg pArgs ++ concatMap extractPredQGenFromType' tArgs
     extractPredQGenFromType' (ScalarT _ fml) = extractFromRefinement fml
