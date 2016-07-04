@@ -268,6 +268,7 @@ extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQG
             let
               pArg' = sortSubstituteFml sortInst pArg
               (formalParams, formalVars) = partition isParam (Set.toList $ varsOf pArg') 
+              -- atoms = Set.toList $ (atomsOf pArg' `Set.union` conjunctsOf pArg') -- Uncomment this to enable disjunctive qualifiers
               atoms = Set.toList $ atomsOf pArg'
               extractFromAtom atom =                 
                 filterAllArgs $ allSubstitutions env atom formalVars actualVars [] []              

@@ -62,7 +62,11 @@ repair eParams tParams goal violations = do
     go = do
       writeLog 1 $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty violations)) $+$ text "when checking" $+$ pretty (gImpl goal)
       requiredTypes .= violations
-      replaceViolations (gEnvironment goal) (gImpl goal)
+      replaceViolations (addBoundVars (gSpec goal) $ gEnvironment goal) (gImpl goal)
+      
+    addBoundVars (ForallT a sch) env = addTypeVar a $ addBoundVars sch env
+    addBoundVars (ForallP sig sch) env = addBoundPredicate sig $ addBoundVars sch env
+    addBoundVars (Monotype _) env = env
       
 {- Standard Tagged library -}
 
@@ -347,7 +351,7 @@ replaceViolations _ p = return p
 
 generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram)
 generateRepair env typ p = do
-  writeLog 1 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ
+  writeLog 1 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env
   cUnknown <- Unknown Map.empty <$> freshId "C"
   addConstraint $ WellFormedCond env cUnknown
   addConstraint $ Subtype (addAssumption cUnknown env) (typeOf p) typ False ""
@@ -380,9 +384,11 @@ generateRepair env typ p = do
     -- | Synthesize a tagged Boolean program with value equivalent to @fml@ and policy (@targetPolicy@ && @fml@)
     generateDisjunct:: MonadHorn s => Formula -> Explorer s ([(Id, RProgram)], RProgram)
     generateDisjunct fml = do
-      let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml) Map.empty)) env
-      let allConjuncts = Set.toList $ conjunctsOf fml
+      let fml' = removeContent fml
+      let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml') Map.empty)) env
+      let allConjuncts = Set.toList $ conjunctsOf fml'
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
+      writeLog 2 $ text "Generated pure disjunct for condition" <+> pretty fml' <+> pretty conjuncts
       lifted <- mapM (liftCondition env strippedEnv) conjuncts    
       let defs = concatMap fst lifted
       let conjuncts' = map snd lifted
@@ -410,33 +416,60 @@ generateRepair env typ p = do
         t' = stripTags t 
         symbolPreds = predsOfType t'
         targetPreds = predsOf targetRefinement
-      in if t /= t' && disjoint symbolPreds targetPreds 
+        isConstant = name `Set.member` (env ^. constants)
+      in if t /= t' && isConstant && disjoint symbolPreds targetPreds
           -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
-          then m -- This is a stripped component whose type has no predicates in common with our target: exclude it form the environment
+          then m -- This is a stripped constant whose type has no predicates in common with our target: exclude it form the environment
           else Map.insert name (Monotype t') m
     updateSymbol _ m name sch | -- This is a function from base tagged library: remove
       isTagged (lastType $ toMonotype sch)                = m                  
     updateSymbol _ m name sch = Map.insert name sch m
+    
+    removeContent (Pred s name args) = if name == "content"
+                                          then let [Var (DataS _ [varS]) v] = args
+                                               in Var varS v
+                                          else Pred s name (map removeContent args)
+    removeContent (Cons s name args) = Cons s name (map removeContent args)
+    removeContent (Unary op e) = Unary op (removeContent e)
+    removeContent (Binary op e1 e2) = Binary op (removeContent e1) (removeContent e2)
+    removeContent (Ite c t e) = Ite (removeContent c) (removeContent t) (removeContent e)
+    removeContent fml = fml    
         
     -- | 'liftCondition' @env strippedEnv p@: turn a pure E-term @p@ into a tagged one, 
     -- by binding all lets that have different types in @env@ and @strippedEnv@
-    liftCondition env strippedEnv (Program (PLet x def body) typ) = do
-      let arity = length (symbolList def) - 1
-      let headSymbol = head $ symbolList def
-      let realType = case lookupSymbol headSymbol arity env of
-                    Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in original environment"]
-                    Just t -> t
-      let strippedType = case lookupSymbol headSymbol arity strippedEnv of
-                        Nothing -> error $ unwords ["liftCondition: cannot find", headSymbol, "in stripped environment"]
+    liftCondition env strippedEnv p@(Program (PLet x def body) typ) = do      
+      let args = tail $ symbolList def      
+      p' <- liftArgs args
+      liftCondition' p'
+      where
+        liftCondition' p@(Program (PLet x def body) typ) = do
+          let f = head $ symbolList def
+          let arity = length (symbolList def) - 1
+          let addX = addLetBound x (typeOf def)
+          (defs', body') <- liftCondition (addX env) (addX strippedEnv) body
+          let realType = case lookupSymbol f arity env of
+                        Nothing -> error $ unwords ["liftCondition: cannot find", f, "in original environment"]
                         Just t -> t
-      let addX = addLetBound x (typeOf def)
-      (defs', body') <- liftCondition (addX env) (addX strippedEnv) body
-      if realType == strippedType
-        then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
-        else do -- This definition has been stripped: turn into a bind
-          y <- freshVar env "x"
-          let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
-          return ([(x, def)], mkBind x y body'')
+          let strippedType = case lookupSymbol f arity strippedEnv of
+                            Nothing -> error $ unwords ["liftCondition: cannot find", f, "in stripped environment"]
+                            Just t -> t      
+          if realType == strippedType
+            then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
+            else do -- This definition has been stripped: turn into a bind
+              y <- freshVar env "x"
+              let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
+              return ([(x, def)], mkBind x y body'')
+              
+        liftArgs (arg:args) = 
+          if allSymbols env Map.! arg == allSymbols strippedEnv Map.! arg
+            then liftArgs args
+            else do
+              y <- freshVar env "TT"
+              p' <- liftArgs args
+              let body' = programSubstituteSymbol arg (untyped (PSymbol y)) p'
+              return $ Program (PLet y (untyped (PSymbol arg)) body') (typeOf body')
+        liftArgs [] = return p
+      
     liftCondition env strippedEnv pCond = do
       tmp <- freshId "TT"
       return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
@@ -604,6 +637,9 @@ allCurrentValuations u = do
   runInSolver $ solveAllCandidates
   cands <- use (typingState . candidates)
   let candGroups = groupBy (\c1 c2 -> val c1 == val c2) $ sortBy (\c1 c2 -> setCompare (val c1) (val c2)) cands
+  -- Reset Horn solver (TODO: fix this hack):
+  (typingState . candidates) .= [initialCandidate]
+  (typingState . qualifierMap) .= Map.empty
   return $ map (val. head) candGroups
   where
     val c = valuation (solution c) u    
