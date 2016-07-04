@@ -106,7 +106,27 @@ foldM = \f . \a . \xs .
     match xs with 
       Nil -> return a
       Cons y ys -> bind (f a y) (\fay . foldM f fay ys)
-      
+
+{- auxiliary function for sortByM (below) -}
+insertM :: <inp :: User -> Bool> . 
+  (a -> a -> Tagged Bool <inp>) -> x: a -> xs: List a -> 
+            Tagged {List a | elems _v == elems xs + [x]} <inp>
+insertM = \leq . \x . \xs .
+  match xs with
+    Nil -> return (Cons x Nil)
+    Cons y ys -> bind (leq x y) (\c . 
+      if c
+        then return (Cons x xs)
+        else bind (insertM leq x ys) (\rec . return (Cons y rec))
+    )
+    
+sortByM :: <sop :: User -> Bool> .
+  (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
+sortByM = \leq . \xs .  
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> bind (sortByM leq ys) (\rec . insertM leq y rec) 
+
 {- Output -}      
       
 data World  
