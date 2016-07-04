@@ -62,7 +62,7 @@ test4 = \w . \pid .
   let st = getPaperStatus w pid  in
   print w u (liftM show st)
 
--- Implicit flow: show status and session to session user
+-- Implicit flow: show status and session number to session user
 test5 :: World -> PaperId -> World
 test5 = \w. \pid .
   let u = getSessionUser w in
@@ -71,22 +71,17 @@ test5 = \w. \pid .
   let ses = bind st (\s . if s == Accepted
                             then getPaperSession w pid
                             else return emptyString) in
-  let out = {- liftM2 strcat title -} (liftM2 strcat (liftM show st) ses) in
+  let out = liftM2 strcat title (liftM2 strcat (liftM show st) ses) in
   print w u out
   
--- TODO Seems like adding the commented part causes Synquid to diverge :(
---   is this a bug?
-
 -- Print paper title and list of conflicts to the session user
-{- DOESNT WORK 
 test6 :: World -> PaperId -> World
 test6 = \w. \pid .
   let u = getSessionUser w in
-  -- let conflicts = getPaperConflicts w pid in
+  let conflicts = getPaperConflicts w pid in
   let title = getPaperTitle w pid in
   let out = liftM2 strcat title (liftM show conflicts) in
-  print w u title
--}
+  print w u out
 
 selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> 
                  pids: List PaperId ->  List (Tagged String <{_0 == content u}>)
@@ -124,11 +119,13 @@ test9 = \w.
        (getAllPapers w) in
   forM_ w (liftM (\l. selectFrom w u l) ownPids) (\w. \s. print w u s)
 
+{- this is an auxiliary function just so we can have a different default val -}
 getPaperConflictsMaybe ::
   w: World -> pid: PaperId -> Tagged (Maybe [User]) <{!(_0 in paperConflicts w pid)}>
 getPaperConflictsMaybe = \w. \pid. liftM Just (getPaperConflicts w pid)
 
 defaultPaperConflictsMaybe :: Tagged (Maybe [User]) <{True}>
+defaultPaperConflictsMaybe = return Nothing
 
 -- Print the list of all unconflicted papers
 test10 :: World -> World
@@ -140,10 +137,13 @@ test10 = \w.
   let out = filterM isUnconflicted allPids in
   print w u (liftM show out)
 
--- Produces a token "permission to bid" for session user
+-- Produces a "permission to bid" token for session user
 test11 :: World -> PaperId -> World
 test11 = \w. \pid.
   let u = getSessionUser w in
   let tok = getPaperBidToken w pid in
   let out = [return s_paperNo, return (show pid), return s_colon, liftM show tok] in
   print w u (foldl1 (liftM2 strcat) out)
+
+-- Reviewing phase is done!
+-- Send notices to all authors about how well they did
