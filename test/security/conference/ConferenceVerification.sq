@@ -19,8 +19,7 @@ test1 = \w . \pid .
   let st = ifM (liftM2 eq (getCurrentPhase w) (return Done))
               (getPaperStatus w pid)
               (return NoDecision) in
-	let out = foldl1 (liftM2 strcat) [title, return s_colon, liftM show st] in -- (Cons title (Cons (return s_colon) (Cons (liftM show st) Nil))) in
-  --                              ^ [title, return s_colon, liftM show st]
+	let out = foldl1 (liftM2 strcat) [title, return s_colon, liftM show st] in 
   printAll w authors out
 
 -- Print paper title to session user
@@ -83,14 +82,13 @@ test5 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
   let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
-  -- let st = getPaperStatus w pid in -- Leaky version
   let st = ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid)
                   (return NoDecision) in
   let ses = bind st (\s . if s == Accepted
                             then getPaperSession w pid
                             else return emptyString) in
-  let out = liftM2 strcat title (liftM2 strcat (liftM show st) ses) in
+  let out = {- liftM2 strcat title -} (liftM2 strcat (liftM show st) ses) in
   print w u out
 
 -- Print paper title and list of conflicts to the session user
@@ -147,6 +145,7 @@ test9 = \w.
 -- TODO unconflicted papers (for bidding)
 -- liftM not (liftM2 elem u (getPaperConflicts w pid)))
 
+-- Print the list of all unconflicted papers
 test10 :: World -> World
 test10 = \w.
   let u = getSessionUser w in
@@ -188,24 +187,22 @@ test10 = \w.
 -- Q: Why is (ifM c th el) not equiv (ifM (not c) el th)?
 --    IOW why is the tag for else <ip> and not <{!ic && ip _0}>
 
-defaultPaperAuthors :: Tagged (List User) <{True}>
-defaultPaperBidToken :: Tagged (Maybe Token) <{True}>
+--defaultPaperAuthors :: Tagged (List User) <{True}>
+--defaultPaperBidToken :: Tagged (Maybe Token) <{True}>
 
+-- Produces a token "permission to bid" for session user
 test11 :: World -> PaperId -> World
 test11 = \w. \pid.
   let u = getSessionUser w in
-  let authors = getPaperAuthors w pid in
+  -- let authors = getPaperAuthors w pid in
   let conflicts = getPaperConflicts w pid in
   let tok = ifM (liftM not (liftM2 elem u conflicts))
                 (getPaperBidToken w pid) (return Nothing) in
   -- NOTE: This is *not* equivalent:
   -- let tok = ifM (liftM2 elem u conflicts) (return Nothing) (getPaperBidToken w pid) in
-  --let tok = ifM (andM (liftM not (liftM2 elem u conflicts))
-  --                    (liftM not (liftM2 elem u authors))) (getPaperBidToken w pid) (return Nothing) in
-
   let out = [return s_paperNo, return (show pid), return s_colon, liftM show tok] in
   print w u (foldl1 (liftM2 strcat) out)
 
 -- TODO Policy that does not allow authors to bid
---ifM (andM (liftM not (liftM2 elem u conflicts))
---                  (liftM not (liftM2 elem u authors))) (getPaperBidToken w pid) (return Nothing) in
+--let tok = ifM (andM (liftM not (liftM2 elem u conflicts))
+--                    (liftM not (liftM2 elem u authors))) (getPaperBidToken w pid) (return Nothing) in

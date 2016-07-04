@@ -6,6 +6,7 @@ import Control.Monad
 import Control.Applicative
 import Control.Lens
 import Data.List
+import Data.List.Split (splitOn)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Text.Printf
@@ -53,20 +54,24 @@ data CommandLineArgs = CommandLineArgs {
   db_ :: String,
   user :: String,
   actions :: [String],
-  papers_ :: String
+  papers_ :: String,
+  phase_ :: String
 }
  deriving (Data)
 cla = CommandLineArgs {
   db_ = "conf.db"   &= typFile,
   user = "Nadia"    &= typ "NAME",
   actions = []      &= args,
-  papers_ = "12"    &= typ "ID,ID,..."
+  papers_ = "12"    &= typ "ID,ID,...",
+  phase_ = "S"      &= typ "S/R/D" &= help "Phase of the conference (Submission/Review/Done)"
 }
 
-split :: String -> String -> [String]
-split sep s = map T.unpack $ T.splitOn (T.pack sep) $ T.pack s
+paperIds opts = map read $ splitOn "," (papers_ opts) :: [Int]
 
-paperIds opts = map read $ split "," (papers_ opts) :: [Int]
+parsePhase :: String -> Phase
+parsePhase s | s `isPrefixOf` "Submission" = Submission
+             | s `isPrefixOf` "Review" = Review
+             | s `isPrefixOf` "Done" = Done
 
 main :: IO ()
 main = do
@@ -87,7 +92,7 @@ main = do
   let w = World {
             _db = Database {
               _chair = "Emery",
-              _phase = Review,
+              _phase = parsePhase $ phase_ opts,
               _papers = mkPapers papers users authors conflicts
             },
             _sessionUser = (user opts),
