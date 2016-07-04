@@ -386,7 +386,7 @@ parseETerm = buildExpressionParser (exprTable mkUnary mkBinary False) parseAppTe
       args <- many (sameOrIndented >> (try parseAtomTerm <|> parens parseImpl))
       return $ foldl (\e1 e2 -> untyped $ PApp e1 e2) head args
     parseAtomTerm = choice [
-        parens (withOptionalType parseETerm)
+        parens (withOptionalType parseImpl)
       , parseHole
       , parseBoolLit
       , parseIntLit
