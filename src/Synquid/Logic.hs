@@ -447,6 +447,8 @@ data Candidate = Candidate {
     label :: String
   }
   
+initialCandidate = Candidate Map.empty Set.empty Set.empty "0"  
+  
 instance Eq Candidate where
   (==) c1 c2 = Map.filter (not . Set.null) (solution c1) == Map.filter (not . Set.null) (solution c2) &&
                validConstraints c1 == validConstraints c2 &&

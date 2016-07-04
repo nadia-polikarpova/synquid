@@ -20,6 +20,7 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
+sameElems :: x: List a -> y: List a -> {Bool | _v == (elems x == elems y)}
 
 {- Strings -}
 

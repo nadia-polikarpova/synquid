@@ -63,7 +63,7 @@ evalFixPointSolver = runReaderT
 instance MonadSMT s => MonadHorn (FixPointSolver s) where
   initHornSolver env = do
     lift (initSolver env)
-    return $ Candidate Map.empty Set.empty Set.empty "0"
+    return initialCandidate
     
   preprocessConstraint = preprocess
     
