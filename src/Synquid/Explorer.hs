@@ -283,7 +283,7 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
         let matchVars = Set.toList $ Set.unions (map varsOf matchValuation)
         condValuation <- currentValuation condUnknown
         let badError = isError p0 && length matchVars /= 1 -- null matchValuation && (not $ Set.null condValuation) -- Have we abduced a nontrivial vacuousness condition that is not a match branch?
-        writeLog 2 $ text "Match valuation" <+> pretty matchValuation <+> if badError then text ": discarding error" else empty
+        writeLog 3 $ text "Match valuation" <+> pretty matchValuation <+> if badError then text ": discarding error" else empty
         guard $ not badError -- Such vacuousness conditions are not productive (do not add to the environment assumptions and can be discovered over and over infinitely)        
         let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) matchVars -- group by vars
         d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer
@@ -385,7 +385,7 @@ generateEAt env typ d = do
 checkE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkE env typ p@(Program pTerm pTyp) = do
   ctx <- asks $ _context . fst
-  writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
+  writeLog 2 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
   -- ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
   
@@ -420,16 +420,16 @@ checkE env typ p@(Program pTerm pTyp) = do
               -- let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
               -- typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
 
-              -- writeLog 1 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
-              -- writeLog 1 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
+              -- writeLog 2 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
+              -- writeLog 2 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
 
               -- -- Check that pTyp is not a supertype of any prior programs.
               -- mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
                                -- ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
                                -- (\_ -> do
-                                    -- writeLog 1 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
-                                    -- writeLog 1 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
-                                    -- writeLog 1 $ text "Context:" <+> pretty fixedContext
+                                    -- writeLog 2 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
+                                    -- writeLog 2 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
+                                    -- writeLog 2 $ text "Context:" <+> pretty fixedContext
                                     -- typingState . qualifierMap .= qmap
                                     -- mzero)
                                -- (return ())) repeatPartials
@@ -459,7 +459,7 @@ enumerateAt env typ 0 = do
       when (Set.member name (env ^. letBound)) mzero
       t <- symbolType env name sch
       let p = Program (PSymbol name) t
-      writeLog 1 $ text "Trying" <+> pretty p
+      writeLog 2 $ text "Trying" <+> pretty p
       symbolUseCount %= Map.insertWith (+) name 1      
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
@@ -490,7 +490,7 @@ enumerateAt env typ d = do
       (envfinal, pApp) <- if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
           d <- asks $ _auxDepth . fst
-          when (d <= 0) $ writeLog 1 (text "Cannot synthesize higher-order argument: no auxiliary functions allowed") >> mzero
+          when (d <= 0) $ writeLog 2 (text "Cannot synthesize higher-order argument: no auxiliary functions allowed") >> mzero
           arg <- enqueueGoal env' tArg (untyped PHole) (d - 1)
           newAuxGoals %= (++ [symbolName arg])
           return (env', Program (PApp fun arg) tRes)
@@ -499,7 +499,7 @@ enumerateAt env typ d = do
           (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
                             $ inContext (\p -> Program (PApp fun p) tRes)
                             $ mbCut (genArg env' tArg)
-          writeLog 2 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
+          writeLog 3 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           (env''', y) <- toVar arg env''
           return (env''', Program (PApp fun arg) (substituteInType (isBound env) (Map.singleton x y) tRes))
       return (envfinal, pApp)
@@ -508,7 +508,7 @@ enumerateAt env typ d = do
 generateError :: MonadHorn s => Environment -> Explorer s RProgram
 generateError env = do
   ctx <- asks $ _context . fst  
-  writeLog 1 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
+  writeLog 2 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
   tass <- use (typingState . typeAssignment)
   let env' = typeSubstituteEnv tass env
   addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env')) (int ffalse) False ""
@@ -557,7 +557,7 @@ throwErrorWithDescription msg = do
 -- | Record type error and backtrack
 throwError :: MonadHorn s => ErrorMessage -> Explorer s a  
 throwError e = do
-  writeLog 1 $ text "TYPE ERROR:" <+> plain (emDescription e)
+  writeLog 2 $ text "TYPE ERROR:" <+> plain (emDescription e)
   lift . lift . lift $ typeErrors %= (e :)
   mzero
   
@@ -608,7 +608,7 @@ inContext ctx f = local (over (_1 . context) (. ctx)) f
 instantiate :: MonadHorn s => Environment -> RSchema -> Bool -> [Id] -> Explorer s RType
 instantiate env sch top argNames = do
   t <- instantiate' Map.empty Map.empty sch
-  writeLog 2 (text "INSTANTIATE" <+> pretty sch $+$ text "INTO" <+> pretty t)
+  writeLog 3 (text "INSTANTIATE" <+> pretty sch $+$ text "INTO" <+> pretty t)
   return t
   where
     instantiate' subst pSubst (ForallT a sch) = do

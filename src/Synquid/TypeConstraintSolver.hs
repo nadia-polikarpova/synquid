@@ -124,7 +124,7 @@ solveTypeConstraints = do
   simplifyAllConstraints
   
   scs <- use simpleConstraints
-  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))  
+  writeLog 3 (text "Simple Constraints" $+$ (vsep $ map pretty scs))  
   
   processAllPredicates
   processAllConstraints  
@@ -140,7 +140,7 @@ solveTypeConstraints = do
 getViolatingLabels :: MonadHorn s => TCSolver s (Set Id)
 getViolatingLabels = do
   scs <- use simpleConstraints
-  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
+  writeLog 3 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
 
   processAllPredicates
   processAllConstraints
@@ -152,7 +152,7 @@ getViolatingLabels = do
   cands <- use candidates
   env <- use initEnv
   
-  writeLog 2 (vsep [
+  writeLog 3 (vsep [
     nest 2 $ text "Terminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) termClauses), 
     nest 2 $ text "Nonterminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) nontermClauses), 
     nest 2 $ text "QMap" $+$ pretty qmap])        
@@ -176,14 +176,14 @@ getViolatingLabels = do
 simplifyAllConstraints :: MonadHorn s => TCSolver s () 
 simplifyAllConstraints = do
   tcs <- use typingConstraints
-  writeLog 2 (text "Typing Constraints" $+$ (vsep $ map pretty tcs))
+  writeLog 3 (text "Typing Constraints" $+$ (vsep $ map pretty tcs))
   typingConstraints .= []
   tass <- use typeAssignment
   mapM_ simplifyConstraint tcs
     
   -- If type assignment has changed, we might be able to process more shapeless constraints:  
   tass' <- use typeAssignment
-  writeLog 2 (text "Type assignment" $+$ vMapDoc text pretty tass')
+  writeLog 3 (text "Type assignment" $+$ vMapDoc text pretty tass')
   
   when (Map.size tass' > Map.size tass) simplifyAllConstraints
   
@@ -195,7 +195,7 @@ processAllPredicates = do
   mapM_ processPredicate tcs
   
   pass <- use predAssignment
-  writeLog 2 (text "Pred assignment" $+$ vMapDoc text pretty pass)          
+  writeLog 3 (text "Pred assignment" $+$ vMapDoc text pretty pass)          
     
 -- | Convert simple typing constraints into horn clauses and qualifier maps
 processAllConstraints :: MonadHorn s => TCSolver s ()
@@ -338,7 +338,7 @@ unify env a t = if a `Set.member` typeVarsOf t
   then error $ show $ text "simplifyConstraint: type variable occurs in the other type"
   else do
     t' <- fresh env t
-    writeLog 2 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
+    writeLog 3 (text "UNIFY" <+> text a <+> text "WITH" <+> pretty t <+> text "PRODUCING" <+> pretty t')
     addTypeAssignment a t'
     
 -- Predicate well-formedness: shapeless or simple depending on type variables  
@@ -347,7 +347,7 @@ processPredicate c@(WellFormedPredicate env argSorts p) = do
   let typeVars = Set.toList $ Set.unions $ map typeVarsOfSort argSorts
   if any (isFreeVariable tass) typeVars
     then do
-      writeLog 2 $ text "WARNING: free vars in predicate" <+> pretty c
+      writeLog 3 $ text "WARNING: free vars in predicate" <+> pretty c
       modify $ addTypingConstraint c -- Still has type variables: cannot determine shape
     else do                 
       -- u <- freshId "U"
@@ -553,7 +553,7 @@ addFixedUnknown name valuation = do
 -- and re-check all potentially affected constraints in all candidates 
 setUnknownRecheck :: MonadHorn s => Id -> Set Formula -> TCSolver s ()
 setUnknownRecheck name valuation = do
-  writeLog 2 $ text "Re-checking candidates after updating" <+> text name
+  writeLog 3 $ text "Re-checking candidates after updating" <+> text name
   cands@(cand:_) <- use candidates
   let clauses = Set.filter (\fml -> name `Set.member` (Set.map unknownName (unknownsOf fml))) (validConstraints cand) -- First candidate cannot have invalid constraints
   let cands' = map (\c -> c { solution = Map.insert name valuation (solution c) }) cands
@@ -586,7 +586,7 @@ instantiateConsAxioms env fml = let inst = instantiateConsAxioms env in
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d' 
   = do
-      writeLog 2 $ text "Matching constructor type" $+$ pretty formal $+$ text "with scrutinee" $+$ pretty actual
+      writeLog 3 $ text "Matching constructor type" $+$ pretty formal $+$ text "with scrutinee" $+$ pretty actual
       zipWithM_ (\(ScalarT (TypeVarT _ a) (BoolLit True)) t -> addTypeAssignment a t) vars args
       zipWithM_ (\(Pred BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'
