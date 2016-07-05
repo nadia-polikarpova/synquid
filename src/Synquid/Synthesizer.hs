@@ -41,7 +41,7 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
         Left err -> return $ Left err -- Irreparable type error: report
         Right (p, violations) -> if Map.null violations
           then return $ Right p -- No errors
-          else do
+          else do            
             repairRes <- evalFixPointSolver (repairPhase p violations) (solverParams { isLeastFixpoint = False })
             case repairRes of
               Left err -> return $ Left err -- No repair

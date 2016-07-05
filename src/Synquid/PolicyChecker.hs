@@ -37,7 +37,7 @@ localize isRecheck eParams tParams goal = do
   where
     go = do
       aImpl <- aNormalForm "T" (gImpl goal)
-      writeLog 2 (pretty aImpl)      
+      writeLog 3 (pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }
       labels <- runInSolver getViolatingLabels
@@ -60,7 +60,8 @@ repair eParams tParams goal violations = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
   where
     go = do
-      writeLog 1 $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty violations)) $+$ text "when checking" $+$ pretty (gImpl goal)
+      writeLog 1 $ text "Found" <+> pretty (length violations) <+> text "violation(s) in function" <+> text (gName goal)
+      writeLog 2 $ (nest 2 (text "Violated requirements:" $+$ vMapDoc text pretty violations)) $+$ text "when checking" $+$ pretty (gImpl goal)
       requiredTypes .= violations
       replaceViolations (addBoundVars (gSpec goal) $ gEnvironment goal) (gImpl goal)
       
@@ -279,13 +280,13 @@ localizeE' env typ (PApp iFun iArg) = do
             localizeETopLevel env tArg iArg 
           Just (env', def) -> do -- This is a locally defined function: check it against tArg as a fixpoint
             lambdaLets %= Map.delete f -- Remove from lambda-lets in case of recursive call
-            writeLog 1 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
+            writeLog 2 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
             def' <- inContext ctx $ localizeTopLevel (Goal f env' (Monotype tArg) def 0 noPos)
             lambdaLets %= Map.insert f (env', def')
             return iArg
       _ -> do -- Lambda-abstraction: check against tArg
             let tArg' = renameAsImpl (isBound env) iArg tArg
-            writeLog 1 $ text "Checking lambda argument" <+> pretty iArg <+> text "::" <+> pretty tArg' <+> text "in" $+$ pretty (ctx (untyped PHole))
+            writeLog 2 $ text "Checking lambda argument" <+> pretty iArg <+> text "::" <+> pretty tArg' <+> text "in" $+$ pretty (ctx (untyped PHole))
             inContext ctx $ localizeI env tArg' iArg
       
 localizeE' env typ impl = do
@@ -295,7 +296,7 @@ localizeE' env typ impl = do
 checkSymbol :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   ctx <- asks $ _context . fst
-  writeLog 1 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
+  writeLog 2 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
   requiredTypes %= Map.insertWith (++) name [typ]
   addConstraint $ Subtype env pTyp typ False name
@@ -351,7 +352,7 @@ replaceViolations _ p = return p
 
 generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram)
 generateRepair env typ p = do
-  writeLog 1 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env
+  writeLog 2 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env
   cUnknown <- Unknown Map.empty <$> freshId "C"
   addConstraint $ WellFormedCond env cUnknown
   addConstraint $ Subtype (addAssumption cUnknown env) (typeOf p) typ False ""
@@ -388,7 +389,7 @@ generateRepair env typ p = do
       let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml') Map.empty)) env
       let allConjuncts = Set.toList $ conjunctsOf fml'
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
-      writeLog 2 $ text "Generated pure disjunct for condition" <+> pretty fml' <+> pretty conjuncts
+      writeLog 3 $ text "Generated pure disjunct for condition" <+> pretty fml' <+> pretty conjuncts
       lifted <- mapM (liftCondition env strippedEnv) conjuncts    
       let defs = concatMap fst lifted
       let conjuncts' = map snd lifted
@@ -598,7 +599,7 @@ fillInAuxGoals pMain = do
   where
     reconstructAuxGoals = do
       goals <- use auxGoals
-      writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
+      writeLog 3 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
       case goals of
         [] -> return []
         (g : gs) -> do
@@ -606,7 +607,7 @@ fillInAuxGoals pMain = do
             -- let g' = g {
                           -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
                        -- }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g
+            writeLog 2 $ text "PICK AUXILIARY GOAL" <+> pretty g
             p <- reconstructTopLevel g
             rest <- reconstructAuxGoals
             return $ (gName g, p) : rest
