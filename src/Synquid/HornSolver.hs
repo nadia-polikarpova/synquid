@@ -106,7 +106,7 @@ preprocess fml = error $ unwords ["preprocess: encountered ill-formed constraint
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
 refine :: MonadSMT s => [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
 refine constraints quals extractAssumptions cands = do
-    writeLog 2 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
+    writeLog 3 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
     let constraints' = filter isNew constraints
     cands' <- mapM (addConstraints constraints') cands
     case find (Set.null . invalidConstraints) cands' of
@@ -127,11 +127,11 @@ refine constraints quals extractAssumptions cands = do
 -- use @extractAssumptions@ to extract axiom instantiations from formulas
 check :: MonadSMT s => Bool -> [Formula] ->  ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
 check consistency fmls extractAssumptions cands = do    
-    writeLog 2 (vsep [
+    writeLog 3 (vsep [
       nest 2 $ (if consistency then text "Checking consistency" else text "Checking validity") $+$ vsep (map pretty fmls), 
       nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands)])
     cands' <- filterM checkCand cands
-    writeLog 2 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
+    writeLog 3 (nest 2 $ text "Remaining Candidates" <+> parens (pretty $ length cands') $+$ (vsep $ map pretty cands'))
     return cands'
   where
     apply sol fml = let fml' = applySolution sol fml in fml' |&| conjunction (extractAssumptions fml')      
@@ -193,7 +193,7 @@ greatestFixPoint quals extractAssumptions candidates = do
         return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList invalids)
         
     debugOutput cands cand inv modified =
-      writeLog 2 (vsep [
+      writeLog 3 (vsep [
         nest 2 $ text "Candidates" <+> parens (pretty $ length cands) $+$ (vsep $ map pretty cands), 
         text "Chosen candidate:" <+> pretty cand,
         text "Invalid Constraint:" <+> pretty inv,
@@ -211,9 +211,9 @@ hornApplySolution extractAssumptions sol (Binary Implies lhs rhs) =
 strengthen :: MonadSMT s => QMap -> ExtractAssumptions -> Formula -> Solution -> FixPointSolver s [Solution]
 strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize qmap sol unknowns
-    writeLog 2 (text "Instantiated axioms for" <+> pretty fml $+$ commaSep (map pretty $ Set.toList assumptions))
+    writeLog 3 (text "Instantiated axioms for" <+> pretty fml $+$ commaSep (map pretty $ Set.toList assumptions))
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) (usedLhsQuals `Set.union` assumptions) rhs -- all minimal valid valuations of the whole antecedent
-    writeLog 2 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))    
+    writeLog 3 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))    
     let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
     let allSolutions = concat $ Map.elems splitting            
     pruned <- ifM (asks semanticPrune) 
@@ -221,11 +221,11 @@ strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
         (do
           let pruneAssumptions = if rhs == ffalse then Set.empty else usedLhsQuals -- TODO: is this dangerous??? the result might not cover the pruned alternatives in a different context!
           valuations' <- pruneValuations (conjunction pruneAssumptions) (Map.keys splitting)
-          writeLog 2 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
+          writeLog 3 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
           return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
         (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
       (return allSolutions)
-    writeLog 2 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned))
+    writeLog 3 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned))
     return pruned
   where
     unknowns = unknownsOf lhs
@@ -328,7 +328,7 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
     solMb' <- weaken modifiedConstraint sol
     case solMb' of
       Nothing -> do
-                  writeLog 2 (text "All constraints:" $+$ vsep (map pretty (Set.toList $ validConstraints cand `Set.union` invalidConstraints cand)))
+                  writeLog 3 (text "All constraints:" $+$ vsep (map pretty (Set.toList $ validConstraints cand `Set.union` invalidConstraints cand)))
                   leastFixPoint extractAssumptions rest -- No way to weaken this candidate, see if there are more
       Just sol' -> do
                       cand' <- updateCandidate fml cand sol'
@@ -353,7 +353,7 @@ leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
         return $ minimumBy (\x y -> compare (spaceSize x) (spaceSize y)) (Set.toList invalids)              
         
     debugOutput cand inv modified =
-      writeLog 2 (vsep [
+      writeLog 3 (vsep [
         text "Candidate:" <+> pretty cand,
         text "Invalid Constraint:" <+> pretty inv,
         text "Weakening:" <+> pretty modified])        
@@ -364,7 +364,7 @@ weaken :: MonadSMT s => Formula -> Solution -> FixPointSolver s (Maybe Solution)
 weaken (Binary Implies lhs (Unknown subst u)) sol = do
   let quals = Set.toList (sol Map.! u)
   quals' <- filterM (\q -> isValidFml (Binary Implies lhs (substitute subst q))) quals  
-  writeLog 2 (text "Weakened" <+> text u <+> text "to" <+> pretty quals')
+  writeLog 3 (text "Weakened" <+> text u <+> text "to" <+> pretty quals')
   return (Just $ Map.insert u (Set.fromList quals') sol)
 weaken (Binary Implies lhs _) sol = return Nothing
             

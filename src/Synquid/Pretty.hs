@@ -472,7 +472,7 @@ programNodeCount (Program p _) = case p of
   PFun _ e -> 1 + programNodeCount e
   PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
-  PFix _ e -> 1 + programNodeCount e
+  PFix _ e -> programNodeCount e
   PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
   PHole -> 0
   PErr -> 1
