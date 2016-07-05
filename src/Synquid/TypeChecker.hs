@@ -39,7 +39,7 @@ reconstruct eParams tParams goal = do
 
     reconstructAuxGoals = do
       goals <- use auxGoals
-      writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
+      writeLog 3 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
       case goals of
         [] -> return []
         (g : gs) -> do
@@ -47,7 +47,7 @@ reconstruct eParams tParams goal = do
             let g' = g {
                           gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
                        }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
+            writeLog 2 $ text "PICK AUXILIARY GOAL" <+> pretty g'
             p <- reconstructTopLevel g'
             rest <- reconstructAuxGoals
             return $ (gName g, p) : rest    
@@ -295,7 +295,7 @@ checkAnnotation env t t' p = do
     Left err -> throwError err
     Right t'' -> do
       ctx <- asks $ _context . fst
-      writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
+      writeLog 2 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
       addConstraint $ Subtype env t'' t True ""
       
       fT <- runInSolver $ finalizeType t
