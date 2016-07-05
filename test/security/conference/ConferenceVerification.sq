@@ -1,6 +1,6 @@
 
 -- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
-foldl :: (a -> b -> a) -> a -> (List b) -> a
+foldl :: <ff :: a -> Bool> . ({a|ff _v} -> b -> {a|ff _v}) -> {a|ff _v} -> (List b) -> {a|ff _v}
 foldl1 :: f: (a -> a -> a) -> l: List a -> a
 
 -- Strings
@@ -89,7 +89,7 @@ test5 :: World -> PaperId -> World
 test5 = \w. \pid .
   let u = getSessionUser w in
   let conflicts = getPaperConflicts w pid in
-  let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
+  -- let title = ifM (liftM not (liftM2 elem u conflicts)) (getPaperTitle w pid) (return emptyString) in
   let st = ifM (andM (liftM2 eq (getCurrentPhase w) (return Done)) (liftM2 elem u (getPaperAuthors w pid)))
                   (getPaperStatus w pid)
                   (return NoDecision) in
@@ -221,19 +221,7 @@ printManyMaybe :: <pmp :: User -> Bool> . w: World ->
 
 swallowTruth :: (Tagged a <{True}>) -> a
 
--- Print paper status to all its authors
 {-
-test1maybe :: w:{World|currentPhase _v == Done} -> pid:PaperId -> {World|currentPhase _v == Done}
-test1maybe = \w . \pid .
-  let title = getPaperTitle w pid in
-  let authors = getPaperAuthors w pid in
-  let st = ifM (liftM2 eq (getCurrentPhase w) (return Done))
-              (getPaperStatus w pid)
-              (return NoDecision) in
-	let out = liftM Just (foldl1 (liftM2 strcat) [title, return s_colon, liftM show st]) in 
-  printManyMaybe w authors out
-
-
 auxNotifyIter :: w:{World|currentPhase _v == Done} -> pid:PaperId -> {World|currentPhase _v == Done}
 auxNotifyIter = \w. \pid.
   let fmtMsg = \st.
@@ -250,18 +238,37 @@ auxNotifyIter = \w. \pid.
   printManyMaybe w authors out
 -}
 
+
 -- Reviewing phase is done!
 -- Send notices to all authors about how well they did
 test12 :: World -> World
 test12 = \w.
   let pids = getAllPapers w in
-  let u = getChair w in
+  {-
+  let auxNotifyIter' = \w. \pid.
+    let fmtMsg = \st.
+        if st == Accepted then (Just s_delighted) 
+        else if st == Rejected then (Just s_regret)
+        else Nothing in
+    let title = getPaperTitle w pid in
+    let authors = getPaperAuthors w pid in
+    let msg = liftM fmtMsg (getPaperStatus w pid)  in
+    let out = bind msg (\mmsg. 
+        match mmsg with
+          Just msg' -> return (Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg']))
+          Nothing -> return Nothing) in
+    printManyMaybe w authors out   in
+
+  
+  bind (getCurrentPhase w) (\phase. 
+    if phase == Done then return (foldl auxNotifyIter' w pids) else return w)
+  -}
+
   let fmtMsg = \st.
       if st == Accepted then (Just s_delighted) 
       else if st == Rejected then (Just s_regret)
       else Nothing in
-  --bind (getCurrentPhase w) (\phase. 
-  --  if phase == Done then return (
+  
   foldl (\w. \pid.
     let title = getPaperTitle w pid in
     let authors = getPaperAuthors w pid in
@@ -272,5 +279,11 @@ test12 = \w.
         match mmsg with
           Just msg' -> return (Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg']))
           Nothing -> return Nothing) in
-    printManyMaybe w authors out) w pids --)
-    --else return w)
+    printManyMaybe w authors out) w pids
+
+-- TODO put condition on the outside!! Cause it would be cooler!
+
+{-
+test12w :: World -> Tagged World <{True}>
+test12w = \w. ifM (bind (getCurrentPhase w) (\phase. return (phase == Done))) (test12 w) (return w)
+ -}
