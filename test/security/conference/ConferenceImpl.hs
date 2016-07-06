@@ -13,7 +13,7 @@ import Control.Lens
 import Security
 import qualified Conference as C
 import Conference hiding (Maybe, Just, Nothing)
-import ConferenceVerification
+import ConferenceRepair
 
 
 type String = Prelude.String
@@ -30,6 +30,7 @@ deriving instance Ord a => Ord (Tagged a)
 
 data Database = Database {
   _chair :: User,
+  _pc :: [User],
   _phase :: Phase,
   _papers :: Map PaperId PaperRecord
 }
@@ -64,6 +65,7 @@ data PaperRow = PaperRow Int T.Text (Maybe T.Text) (Maybe T.Text) deriving (Show
 data UserRow = UserRow Int T.Text deriving (Show)
 data AuthorRow = AuthorRow Int Int deriving (Show)
 data ConflictRow = ConflictRow Int Int deriving (Show)
+data PcRow = PcRow Int deriving (Show)
 
 selectJoin table1 table2 cross = concatMap (\x -> concatMap (cross x) table2) table1
 
@@ -92,6 +94,8 @@ mkPapers prows urows arows crows =
         conflicts papid = selectJoin crows urows (\(ConflictRow papid' usid') (UserRow usid name) ->
           [T.unpack name | papid == papid' && usid == usid'])
 
+mkPc pcrows urows =
+    selectJoin pcrows urows (\(PcRow usid') (UserRow usid name) -> [T.unpack name | usid == usid'])
 
 {- Actual impls! -}
 
@@ -182,6 +186,8 @@ s_comma = ", "
 s_authors = "authors: "
 s_paperNo = "Paper #"
 s_qmark = "?"
+s_delighted = "We are delighted to inform you"
+s_regret = "We regret to inform you"
 
 strcat :: String -> String -> String
 strcat s1 s2 = s1 ++ s2
@@ -194,23 +200,32 @@ show = Prelude.show
 getChair :: World -> Tagged User
 getChair w = Tagged $ w ^. db ^. chair
 
+getPC :: World -> Tagged (List User)
+getPC w = Tagged $ fromList $ w ^. db ^. pc
+
 getCurrentPhase :: World -> Tagged Phase
 getCurrentPhase w = Tagged $ w ^. db ^. phase
 
 getPaperAuthors :: World -> PaperId -> Tagged (List User)
 getPaperAuthors w papid = Tagged $ fromList $ (w ^. db ^. papers) ! papid ^. authors
+defaultPaperAuthors :: Tagged (List User)
+defaultPaperAuthors = Tagged Nil
 
 getPaperConflicts :: World -> PaperId -> Tagged (List User)
 getPaperConflicts w papid = Tagged $ fromList $ (w ^. db ^. papers) ! papid ^. conflicts
+defaultPaperConflicts :: Tagged (List User)
+defaultPaperConflicts = Tagged Nil
 
 getPaperSession :: World -> PaperId -> Tagged String
 getPaperSession w papid = Tagged $ (w ^. db ^. papers) ! papid ^. session
 
 getPaperStatus :: World -> PaperId -> Tagged Status
 getPaperStatus w papid = Tagged $ (w ^. db ^. papers) ! papid ^. status
+defaultPaperStatus = Tagged NoDecision
 
 getPaperTitle :: World -> PaperId -> Tagged String
 getPaperTitle w papid = Tagged $ (w ^. db ^. papers) ! papid ^. title
+defaultPaperTitle = Tagged ""
 
 getSessionUser :: World -> Tagged User
 getSessionUser w = Tagged $ w ^. sessionUser
@@ -220,6 +235,8 @@ getAllPapers w = fromList $ M.keys $ w ^. db ^. papers
 
 getPaperBidToken :: World -> PaperId -> Tagged (C.Maybe Token)
 getPaperBidToken w pid = Tagged (C.Just "do it!")
+defaultPaperBidToken :: Tagged (C.Maybe Token)
+defaultPaperBidToken = Tagged C.Nothing
 
 {- Output -}
 
@@ -228,3 +245,7 @@ print w (Tagged u) (Tagged s) = over effects (M.insertWith (\new old -> old ++ n
 
 printAll :: World -> Tagged (List User) -> Tagged String -> World
 printAll w (Tagged us) s = lfoldl (\w u -> print w (Tagged u) s) w us
+
+printManyMaybe :: World -> Tagged (List User) -> Tagged (C.Maybe String) -> World
+printManyMaybe w us (Tagged (C.Just s)) = printAll w us (Tagged s)
+printManyMaybe w _ _ = w

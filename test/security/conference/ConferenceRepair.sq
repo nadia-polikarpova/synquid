@@ -1,5 +1,3 @@
-foldl :: (a -> b -> a) -> a -> (List b) -> a
-foldl1 :: f: (a -> a -> a) -> l: List a -> a
 
 -- Strings
 
@@ -71,7 +69,7 @@ test5 = \w. \pid .
   let ses = bind st (\s . if s == Accepted
                             then getPaperSession w pid
                             else return emptyString) in
-  let out = {- liftM2 strcat title -} (liftM2 strcat (liftM show st) ses) in
+  let out = foldl1 (liftM2 strcat) [liftM show st, return s_comma, ses]  in -- {- liftM2 strcat title -} (liftM2 strcat (liftM show st) ses) in
   print w u out
   
 -- NOTE: This also works with title etc. uncommented, but *much* slower
@@ -107,18 +105,18 @@ test8 = \w.
   let allPids = getAllPapers w in
   foldl (\w. \s. print w u s) w (selectFrom w u allPids)
 
-forM_ :: <ap :: User -> Bool> .
-   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
-
--- Print all session user's papers
-test9 :: World -> World
-test9 = \w.
+-- Print all session user's (accepted) papers
+test9 :: World -> (Maybe Status) -> World
+test9 = \w. \q.
   let u = getSessionUser w in
   let ownPids {- :: [PaperId]<> -} =
-     filterM (\pid. 
-       bind u (\c. 
-         bind (getPaperAuthors w pid) (\cs. return (elem c cs))))
-       (getAllPapers w) in
+      filterM (\pid.
+        andM
+          (bind u (\c. 
+            bind (getPaperAuthors w pid) (\cs. return (elem c cs))))
+          (ifJust q (\st. bind (getPaperStatus w pid) (\st'. return (st == st'))))
+        )
+        (getAllPapers w) in
   forM_ w (liftM (\l. selectFrom w u l) ownPids) (\w. \s. print w u s)
 
 {- this is an auxiliary function just so we can have a different default val -}
@@ -166,6 +164,6 @@ test12 = \w.
     let msg = liftM fmtMsg (getPaperStatus w pid)  in
     let out = bind msg (\mmsg. 
         match mmsg with
-          Just msg' -> return (Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg']))
+          Just msg' -> liftM Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg'])
           Nothing -> return Nothing) in
     printManyMaybe w authors out) w pids 

@@ -38,7 +38,7 @@ return :: (Eq a, Ord a) => a -> Tagged a
 foldl1 :: (a -> a -> a) -> List a -> a
 foldl :: (a -> b -> a) -> a -> List b -> a
 
-sameElem :: List a -> List a -> Bool
+--sameElem :: List a -> List a -> Bool
 
 forM_ ::
         (Eq a, Ord a) =>
@@ -50,8 +50,12 @@ s_comma :: String
 s_authors :: String
 s_paperNo :: String
 s_qmark :: String
+s_delighted :: String
+s_regret :: String
 
 getChair :: World -> Tagged User
+
+getPC :: World -> Tagged (List User)
 
 getCurrentPhase :: World -> Tagged Phase
 
@@ -71,6 +75,12 @@ getAllPapers :: World -> List PaperId
 
 getPaperBidToken :: World -> PaperId -> Tagged (Maybe Token)
 
+defaultPaperAuthors :: Tagged (List User)
+defaultPaperBidToken :: Tagged (Maybe Token)
+defaultPaperConflicts :: Tagged (List User)
+defaultPaperStatus :: Tagged Status
+defaultPaperTitle :: Tagged String
+
 lift1 ::
       (Eq a, Ord a, Eq b, Ord b) => (a -> b) -> Tagged a -> Tagged b
 
@@ -83,6 +93,8 @@ not :: Bool -> Bool
 print :: World -> Tagged User -> Tagged String -> World
 
 printAll :: World -> Tagged (List User) -> Tagged String -> World
+
+printManyMaybe :: World -> Tagged (List User) -> Tagged (Maybe String) -> World
 
 strcat :: String -> String -> String
 

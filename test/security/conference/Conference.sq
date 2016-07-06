@@ -59,6 +59,15 @@ qualifier {_v == (x in y), _v == !(x in y)}
 s_delighted :: String
 s_regret :: String
 
+{- Extra combinators -}
+
+foldl :: (a -> b -> a) -> a -> (List b) -> a
+foldl1 :: f: (a -> a -> a) -> l: List a -> a
+
+forM_ :: <ap :: User -> Bool> .
+   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
+
+ifJust :: (Maybe a) -> (a -> b) -> b
 
 -- TODO currently there has to be something here, otherwise nothing gets emitted
 
