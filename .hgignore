@@ -10,6 +10,7 @@ syntax: glob
 *.db-journal
 test/current/*.hs
 test/security/paper/*.hs
+test/security/conference/Conference.hs
 test/security/conference/ConferenceVerification.hs
 test/security/conference/ConferenceRepair.hs
 test/security/conference/Security.hs
