@@ -18,7 +18,7 @@ import Database.SQLite.Simple.FromRow
 
 import ConferenceImpl hiding (String, print, elem, forM_, foldl, foldl1, map, show)
 import Conference
-import ConferenceVerification
+import ConferenceRepair
 
 instance FromRow PaperRow where
   fromRow = PaperRow <$> field <*> field <*> field <*> field
@@ -28,6 +28,8 @@ instance FromRow AuthorRow where
   fromRow = AuthorRow <$> field <*> field
 instance FromRow ConflictRow where
   fromRow = ConflictRow <$> field <*> field
+instance FromRow PcRow where
+  fromRow = PcRow <$> field
 
 (%) s n = printf s n
 infix 0 %
@@ -48,7 +50,8 @@ tests opts =
          ("test8 w",                     test8),
          ("test9 w",                     test9),
          ("test10 w",                    test10),
-         ("test11 w %d" % papid,         (`test11` papid))]
+         ("test11 w %d" % papid,         (`test11` papid)),
+         ("test12 w",                    test12)]
 
 data CommandLineArgs = CommandLineArgs {
   db_ :: String,
@@ -82,16 +85,18 @@ main = do
   execute_ db "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"
   execute_ db "CREATE TABLE IF NOT EXISTS authors (paperId INTEGER REFERENCES papers (id), userId INTEGER REFERENCES users (id))"
   execute_ db "CREATE TABLE IF NOT EXISTS conflicts (paperId INTEGER REFERENCES papers (id), userId INTEGER REFERENCES users (id))"
+  execute_ db "CREATE TABLE IF NOT EXISTS pc (userId INTEGER REFERENCES users (id))"
 
   users <- query_ db "SELECT * FROM users" :: IO [UserRow]
   papers <- query_ db "SELECT * FROM papers" :: IO [PaperRow]
   authors <- query_ db "SELECT * FROM authors" :: IO [AuthorRow]
   conflicts <- query_ db "SELECT * FROM conflicts" :: IO [ConflictRow]
-
+  pc <- query_ db "SELECT * FROM pc" :: IO [PcRow]
 
   let w = World {
             _db = Database {
               _chair = "Emery",
+              _pc = mkPc pc users,
               _phase = parsePhase $ phase_ opts,
               _papers = mkPapers papers users authors conflicts
             },
