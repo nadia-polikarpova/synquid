@@ -11,4 +11,5 @@ syntax: glob
 test/current/*.hs
 test/security/paper/*.hs
 test/security/conference/ConferenceVerification.hs
+test/security/conference/ConferenceRepair.hs
 test/security/conference/Security.hs

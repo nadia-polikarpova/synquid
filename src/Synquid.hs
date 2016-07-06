@@ -29,6 +29,7 @@ import Data.Time.Calendar
 import Data.Map ((!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Maybe (mapMaybe)
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen (fill, column)
@@ -286,7 +287,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
     Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
       results <- mapM (synthesizeGoal cquals tquals) (requested goals)
-      when (not (null results) && showStats synquidParams) $ printStats results
+      when (not (null results) && showStats synquidParams) $ printStats results declsByFile
       -- Generate output if requested
       let libsWithDecls = collectLibDecls libs declsByFile
       codegen (fillinCodegenParams file libsWithDecls codegenParams) (map fst results)
@@ -319,10 +320,16 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
           pdoc (prettySolution goal prog)
           pdoc empty
           return ((goal, prog), stats)
-    printStats results = do
+    printStats results declsByFile = do
       let env = gEnvironment (fst $ fst $ head results)
       let measureCount = Map.size $ _measures $ env
-      let policySize = sum $ Set.map (typeNodeCount . toMonotype . unresolvedType env) (env ^. constants)
+      let namesOfConstants decls = mapMaybe (\decl ->
+           case decl of
+             Pos { node = FuncDecl name _ } -> Just name
+             _ -> Nothing
+           ) decls
+      let totalSizeOf = sum . map (typeNodeCount . toMonotype .unresolvedType env)
+      let policySize = Map.fromList $ map (\(file, decls) -> (file, totalSizeOf $ namesOfConstants decls)) declsByFile
       let getStatsFor ((goal, prog), stats) = 
              StatsRow
              (gName goal)
@@ -336,7 +343,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       pdoc $ vsep $ [
               parens (text "Goals:" <+> pretty (length results)),
               parens (text "Measures:" <+> pretty measureCount),
-              parens (text "Policy size:" <+> pretty policySize),
+              parens (text "Policy size:" <+> (text $ show policySize)),
               statsTable perResult,
               empty
               ]
