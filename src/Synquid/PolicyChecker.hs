@@ -57,7 +57,13 @@ localize isRecheck eParams tParams goal = do
 repair :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> Requirements -> s (Either ErrorMessage RProgram)
 repair eParams tParams goal violations = do
     initTS <- initTypingState $ gEnvironment goal
-    runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
+    runExplorer (eParams {  _sourcePos = gSourcePos goal, 
+                            _eGuessDepth = 3,
+                            _scrutineeDepth = 0,
+                            _matchDepth = 0,
+                            _auxDepth = 0,
+                            _fixStrategy = DisableFixpoint
+                            }) tParams initTS go
   where
     go = do
       writeLog 1 $ text "Found" <+> pretty (length violations) <+> text "violation(s) in function" <+> text (gName goal)
@@ -76,6 +82,9 @@ isDefaultValue name = take (length defaultPrefix) name == defaultPrefix
 defaultValueOf name = defaultPrefix ++ drop 3 name
 
 mkTagged a policy = DatatypeT "Tagged" [a] [policy]
+
+stringType = DatatypeT "String" [] []
+worldType = DatatypeT "World" [] []
 
 isTagged (ScalarT (DatatypeT dtName _ _) _) | dtName == "Tagged" = True
 isTagged t = False
@@ -354,7 +363,9 @@ generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s 
 generateRepair env typ p = do
   writeLog 2 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env
   cUnknown <- Unknown Map.empty <$> freshId "C"
-  addConstraint $ WellFormedCond env cUnknown
+  let isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf p))
+  let env' = over globalPredicates (Map.filterWithKey isRelevant) env
+  addConstraint $ WellFormedCond env' cUnknown
   addConstraint $ Subtype (addAssumption cUnknown env) (typeOf p) typ False ""
   pElse <- defaultValue
   ifte (runInSolver $ solveTypeConstraints)
@@ -421,10 +432,18 @@ generateRepair env typ p = do
       in if t /= t' && isConstant && disjoint symbolPreds targetPreds
           -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
           then m -- This is a stripped constant whose type has no predicates in common with our target: exclude it form the environment
-          else Map.insert name (Monotype t') m
-    updateSymbol _ m name sch | -- This is a function from base tagged library: remove
-      isTagged (lastType $ toMonotype sch)                = m                  
-    updateSymbol _ m name sch = Map.insert name sch m
+          else if isConstant && ((baseTypeOf (lastType t') `elem` [stringType, worldType]) || hasHOArg t')
+            then m
+            else Map.insert name (Monotype t') m
+    updateSymbol _ m name sch =
+      let 
+        t = toMonotype sch
+        retT = lastType t
+      in if isTagged retT || (baseTypeOf retT == worldType) || (hasHOArg t)
+          then m -- This is a function from base tagged library: remove
+          else Map.insert name sch m    
+    
+    hasHOArg t = any (\t -> arity t > 0) (allArgTypes t)
     
     removeContent (Pred s name args) = if name == "content"
                                           then let [Var (DataS _ [varS]) v] = args
