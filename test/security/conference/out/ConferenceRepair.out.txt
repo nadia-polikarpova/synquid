@@ -139,14 +139,13 @@ test5 = \w . \pid .
                                                                                         (elem
                                                                                            x16
                                                                                            x15)))))
-                                                                        (getPaperStatus
-                                                                           w
-              Found 2 violation(s) in function test6
+                                           Found 2 violation(s) in function test6
 Found 2 violation(s) in function selectFrom
 Found 1 violation(s) in function test9
 Found 1 violation(s) in function test10
-Found 1 violation(s) in function test11
-                                                             pid)
+                             (getPaperStatus
+                                                                           w
+                                                                           pid)
                                                                         defaultPaperStatus)
       in
     
@@ -293,7 +292,9 @@ test10 = \w .
                                                 (getPaperConflictsMaybe w pid)
                                                 defaultPaperConflictsMaybe)
                                           (\cs . return (not (elemMaybe c
-                                                                cs)))) in
+            Found 1 violation(s) in function test11
+Found 1 violation(s) in function test12
+                                                    cs)))) in
   
   let out = filterM isUnconflicted
               allPids in
@@ -303,8 +304,7 @@ test11 :: arg1:World -> arg0:PaperId -> World
 test11 = \w . \pid . 
     let u = getSessionUser w in
     
-    let tok = ifM (andM (Found 1 violation(s) in function test12
-bind u
+    let tok = ifM (andM (bind u
                            (\x11 . bind (getPaperConflicts
                                            w pid) (\x10 . return (not (elem
                                                                          x11
@@ -369,20 +369,20 @@ test12 = \w .
 (Measures: 3)
 (Policy size: fromList [("../paper/Security.sq",148),("Conference.sq",105),("ConferenceRepair.sq",27)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-test0                 &        23  &        70  &             0.09s  &      9.17s  &      5.37s  &       14.64s  \\
-test1                 &        53  &        72  &             0.43s  &      6.89s  &      2.21s  &        9.54s  \\
-test2                 &        49  &        49  &             0.43s  &      0.00s  &      0.00s  &        0.43s  \\
-test3                 &        59  &        85  &             0.58s  &      6.39s  &      4.27s  &       11.25s  \\
-test4                 &        23  &        94  &             0.09s  &     15.50s  &      8.77s  &       24.38s  \\
-test5                 &        65  &       136  &             0.57s  &     15.59s  &      9.99s  &       26.16s  \\
-test6                 &        37  &        93  &             0.19s  &    107.96s  &      8.42s  &      116.59s  \\
-selectFrom            &        51  &       105  &             0.70s  &    218.96s  &     13.62s  &      233.28s  \\
+test0                 &        23  &        70  &             0.09s  &      1.23s  &      4.67s  &        5.99s  \\
+test1                 &        53  &        72  &             0.36s  &      0.51s  &      1.91s  &        2.79s  \\
+test2                 &        49  &        49  &             0.39s  &      0.00s  &      0.00s  &        0.39s  \\
+test3                 &        59  &        85  &             0.50s  &      0.59s  &      4.00s  &        5.10s  \\
+test4                 &        23  &        94  &             0.10s  &      1.86s  &      8.45s  &       10.41s  \\
+test5                 &        65  &       136  &             0.54s  &      1.87s  &      9.19s  &       11.61s  \\
+test6                 &        37  &        93  &             0.19s  &     13.51s  &      7.31s  &       21.02s  \\
+selectFrom            &        51  &       105  &             0.69s  &      6.91s  &     11.67s  &       19.28s  \\
 test7                 &        27  &        27  &             0.09s  &      0.00s  &      0.00s  &        0.09s  \\
 test8                 &        30  &        30  &             0.08s  &      0.00s  &      0.00s  &        0.08s  \\
-test9                 &        85  &       132  &             5.27s  &     17.26s  &     12.46s  &       35.01s  \\
+test9                 &        85  &       132  &             4.34s  &      1.84s  &     10.60s  &       16.79s  \\
 getPaperConflictsMaybe  &        11  &        11  &             0.07s  &      0.00s  &      0.00s  &        0.07s  \\
 defaultPaperConflictsMaybe  &         3  &         3  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-test10                &        51  &        79  &             2.88s  &     79.02s  &      8.69s  &       90.60s  \\
-test11                &        55  &       105  &             0.58s  &     77.49s  &      8.65s  &       86.73s  \\
-test12                &       105  &       124  &             0.98s  &      7.38s  &      3.26s  &       11.63s  \\
-Totals                &       727  &      1215  &            13.11s  &    561.68s  &     85.76s  &      660.56s  \\
+test10                &        51  &        79  &             2.47s  &      5.58s  &      7.39s  &       15.45s  \\
+test11                &        55  &       105  &             0.57s  &      9.44s  &      7.26s  &       17.28s  \\
+test12                &       105  &       124  &             0.92s  &      0.57s  &      2.80s  &        4.30s  \\
+Totals                &       727  &      1215  &            11.47s  &     43.96s  &     75.29s  &      130.74s  \\
