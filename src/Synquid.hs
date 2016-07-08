@@ -13,7 +13,8 @@ import Synquid.SolverMonad
 import Synquid.HornSolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
-import Synquid.Synthesizer
+import Synquid.Synthesizer hiding (verify)
+import qualified Synquid.Synthesizer (verify)
 import Synquid.HtmlOutput
 import Synquid.Codegen
 import Synquid.Stats
@@ -65,6 +66,7 @@ main = do
                    outFormat
                    resolve
                    repair
+                   verify
                    print_spec
                    print_stats
                    log_) <- cmdArgs cla
@@ -94,6 +96,7 @@ main = do
     outputFormat = outFormat,
     resolveOnly = resolve,
     repairPolicies = repair,
+    verifyOnly = verify,
     showSpec = print_spec,
     showStats = print_stats
   }
@@ -143,6 +146,7 @@ data CommandLineArgs
         output :: OutputFormat,
         resolve :: Bool,
         repair :: Bool,
+        verify :: Bool,
         print_spec :: Bool,
         print_stats :: Bool,
         log_ :: Int
@@ -170,6 +174,7 @@ cla = CommandLineArgs {
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   repair              = False           &= help ("Policy repair mode (default: False)") &= name "r",
+  verify              = False           &= help ("Verification only mode (default: False)") &= name "v",
   out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
   out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
@@ -231,6 +236,7 @@ data SynquidParams = SynquidParams {
   outputFormat :: OutputFormat,                -- ^ Output format
   resolveOnly :: Bool,                         -- ^ Stop after resolution step
   repairPolicies :: Bool,
+  verifyOnly :: Bool,
   showSpec :: Bool,                            -- ^ Print specification for every synthesis goal
   showStats :: Bool                            -- ^ Print specification and solution size
 }
@@ -240,6 +246,7 @@ defaultSynquidParams = SynquidParams {
   outputFormat = Plain,
   resolveOnly = False,
   repairPolicies = False,
+  verifyOnly = False,
   showSpec = True,
   showStats = False
 }
@@ -313,7 +320,9 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       (mProg, stats) <- if repairPolicies synquidParams
                         then policyRepair explorerParams solverParams goal cquals tquals
-                        else synthesize explorerParams solverParams goal cquals tquals
+                        else if verifyOnly synquidParams 
+                               then Synquid.Synthesizer.verify explorerParams solverParams goal cquals tquals
+                               else synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
