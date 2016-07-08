@@ -7,11 +7,11 @@
 
 data PaperId
 
-type Phase = {Int | 0 <= _v && _v < 4}
-submission :: {Phase | _v == 0}
-review :: {Phase | _v == 1}
-rebuttal :: {Phase | _v == 2}
-done :: {Phase | _v == 3}
+-- type Phase = {Int | 0 <= _v && _v < 4}
+-- submission :: {Phase | _v == 0}
+-- review :: {Phase | _v == 1}
+-- rebuttal :: {Phase | _v == 2}
+-- done :: {Phase | _v == 3}
 
 {- Sensitive data and policies -}
    
@@ -25,9 +25,9 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 
 getAllPaperIds :: w: World -> Tagged (List PaperId) <{True}>
 
--- | Current phase
-predicate currentPhase :: World -> Int
-getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
+-- -- | Current phase
+-- predicate currentPhase :: World -> Int
+-- getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 
 -- | Paper title (public)
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
