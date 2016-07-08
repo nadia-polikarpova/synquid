@@ -140,7 +140,7 @@ solveTypeConstraints = do
 getViolatingLabels :: MonadHorn s => TCSolver s (Set Id)
 getViolatingLabels = do
   scs <- use simpleConstraints
-  writeLog 3 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
+  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
 
   processAllPredicates
   processAllConstraints
@@ -152,7 +152,7 @@ getViolatingLabels = do
   cands <- use candidates
   env <- use initEnv
   
-  writeLog 3 (vsep [
+  writeLog 2 (vsep [
     nest 2 $ text "Terminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) termClauses), 
     nest 2 $ text "Nonterminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) nontermClauses), 
     nest 2 $ text "QMap" $+$ pretty qmap])        

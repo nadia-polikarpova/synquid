@@ -37,7 +37,7 @@ localize isRecheck eParams tParams goal = do
   where
     go = do
       aImpl <- aNormalForm "T" (gImpl goal)
-      writeLog 3 (pretty aImpl)      
+      writeLog 2 (pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }
       labels <- runInSolver getViolatingLabels
