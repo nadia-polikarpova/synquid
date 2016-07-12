@@ -14,6 +14,7 @@ import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.Tokens
 
+import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -279,7 +280,8 @@ localizeE' env typ (PApp iFun iArg) = do
     return $ argCtx pArg
   else do -- First-order argument: generate now
     pArg@(Program (PSymbol y) t) <- inContext argCtx $ localizeE env tArg iArg
-    return $ Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x (Var (toSort $ baseTypeOf t) y)) tRes)
+    let fml = fromJust $ lookupAsFormula y env
+    return $ Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x fml) tRes)
   where
     generateHOArg env ctx tArg iArg = case content iArg of
       PSymbol f -> do

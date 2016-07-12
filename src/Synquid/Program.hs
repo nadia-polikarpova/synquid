@@ -229,6 +229,17 @@ lookupSymbol name a env
   where
     asInt = asInteger name
     
+lookupAsFormula :: Id -> Environment -> Maybe Formula
+lookupAsFormula name env
+  | name == "True"                          = Just $ BoolLit True
+  | name == "False"                         = Just $ BoolLit False
+  | isJust asInt                            = Just $ IntLit (fromJust asInt)
+  | otherwise                               = case Map.lookup name (allSymbols env) of
+                                                Just (Monotype (ScalarT baseT _)) -> Just $ Var (toSort baseT) name
+                                                _ -> Nothing
+  where
+    asInt = asInteger name
+    
 unOpType Neg       = Monotype $ FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))
 unOpType Not       = Monotype $ FunctionT "x" boolAll (bool (valBool |=| fnot (boolVar "x")))
 binOpType Times    = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |*| intVar "y")))
