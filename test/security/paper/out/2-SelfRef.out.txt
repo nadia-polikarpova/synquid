@@ -33,5 +33,5 @@ showPaper = \w . \pid .
 (Measures: 3)
 (Policy size: fromList [("2-SelfRef.sq",29),("Security.sq",148)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showPaper             &        37  &        91  &             0.02s  &      0.40s  &      0.36s  &        0.78s  \\
-Totals                &        37  &        91  &             0.02s  &      0.40s  &      0.36s  &        0.78s  \\
+showPaper             &        37  &        91  &             0.04s  &      0.36s  &      0.49s  &        0.90s  \\
+Totals                &        37  &        91  &             0.04s  &      0.36s  &      0.49s  &        0.90s  \\

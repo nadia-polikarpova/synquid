@@ -215,9 +215,11 @@ addRefinementToLastSch (ForallP sig sch) fml = ForallP sig $ addRefinementToLast
 substituteInType :: (Id -> Bool) -> Substitution -> RType -> RType
 substituteInType isBound subst (ScalarT baseT fml) = ScalarT (substituteBase baseT) (substitute subst fml)
   where
-    substituteBase (TypeVarT oldSubst a) = if isBound a
-                                              then TypeVarT oldSubst a
-                                              else TypeVarT (oldSubst `composeSubstitutions` subst) a
+    substituteBase (TypeVarT oldSubst a) = TypeVarT oldSubst a 
+      -- Looks like pending substitutions on types are not actually needed, since renamed variables are always out of scope
+       -- if isBound a
+          -- then TypeVarT oldSubst a
+          -- else TypeVarT (oldSubst `composeSubstitutions` subst) a
     substituteBase (DatatypeT name tArgs pArgs) = DatatypeT name (map (substituteInType isBound subst) tArgs) (map (substitute subst) pArgs)
     substituteBase baseT = baseT
 substituteInType isBound subst (FunctionT x tArg tRes) = FunctionT x (substituteInType isBound subst tArg) (substituteInType isBound subst tRes)

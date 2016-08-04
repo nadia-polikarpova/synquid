@@ -15,7 +15,7 @@ BENCH_PATH = '.'
 LOGFILE_NAME = 'results.log'
 ORACLE_NAME = 'oracle'
 OUTFILE_NAME = 'results.csv'
-COMMON_OPTS = ['-c']
+COMMON_OPTS = []
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
 

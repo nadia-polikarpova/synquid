@@ -579,7 +579,6 @@ runInSolver f = do
 solveIncrementally :: MonadHorn s => Explorer s ()        
 solveIncrementally = ifM (asks $ _incrementalChecking . fst) (runInSolver solveTypeConstraints) (return ())
 
-
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId
 
