@@ -17,5 +17,5 @@ showSession = \w . \pid .
 (Measures: 3)
 (Policy size: fromList [("3-Implicit.sq",28),("Security.sq",148)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showSession           &        33  &        52  &             0.04s  &      0.39s  &      0.64s  &        1.07s  \\
-Totals                &        33  &        52  &             0.04s  &      0.39s  &      0.64s  &        1.07s  \\
+showSession           &        33  &        52  &             0.06s  &      0.40s  &      0.69s  &        1.16s  \\
+Totals                &        33  &        52  &             0.06s  &      0.40s  &      0.69s  &        1.16s  \\

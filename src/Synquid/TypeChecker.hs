@@ -33,7 +33,6 @@ reconstruct eParams tParams goal = do
     go = do
       pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
       pAuxs <- reconstructAuxGoals
-      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
       let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
       runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False >> finalizeProgram p      
 

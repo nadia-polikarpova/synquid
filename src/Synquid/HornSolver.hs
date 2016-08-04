@@ -212,19 +212,19 @@ strengthen :: MonadSMT s => QMap -> ExtractAssumptions -> Formula -> Solution ->
 strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize qmap sol unknowns
     writeLog 3 (text "Instantiated axioms for" <+> pretty fml $+$ commaSep (map pretty $ Set.toList assumptions))
-    lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) (usedLhsQuals `Set.union` assumptions) rhs -- all minimal valid valuations of the whole antecedent
+    let allAssumptions = usedLhsQuals `Set.union` assumptions
+    lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) allAssumptions rhs -- all minimal valid valuations of the whole antecedent
     writeLog 3 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))    
-    let splitting = Map.filter (not . null) $ Map.fromList $ zip lhsValuations (map splitLhsValuation lhsValuations) -- map of lhsValuations with a non-empty split to their split
-    let allSolutions = concat $ Map.elems splitting            
+    let splitVals vals = nub $ concatMap splitLhsValuation vals 
     pruned <- ifM (asks semanticPrune) 
       (ifM (asks agressivePrune)
         (do
-          let pruneAssumptions = if rhs == ffalse then Set.empty else usedLhsQuals -- TODO: is this dangerous??? the result might not cover the pruned alternatives in a different context!
-          valuations' <- pruneValuations (conjunction pruneAssumptions) (Map.keys splitting)
+          let pruneAssumptions = if rhs == ffalse then Set.empty else allAssumptions -- TODO: is this dangerous??? the result might not cover the pruned alternatives in a different context!
+          valuations' <- pruneValuations (conjunction pruneAssumptions) lhsValuations
           writeLog 3 (text "Pruned valuations:" $+$ vsep (map pretty valuations'))
-          return $ concatMap (splitting Map.!) valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
-        (pruneSolutions unknownsList allSolutions))           -- Prune per-variable
-      (return allSolutions)
+          return $ splitVals valuations')   -- Prune LHS valuations and then return the splits of only optimal valuations
+        (pruneSolutions unknownsList (splitVals lhsValuations)))           -- Prune per-variable
+      (return $ splitVals lhsValuations)
     writeLog 3 (text "Diffs:" <+> parens (pretty $ length pruned) $+$ vsep (map pretty pruned))
     return pruned
   where

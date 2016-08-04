@@ -339,9 +339,11 @@ allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dt
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env = 
-    let allMeasures = Map.toList $ allMeasuresOf dtName env 
+    let 
+      allMeasures = Map.toList $ allMeasuresOf dtName env 
+      isAbstract = null $ ((env ^. datatypes) Map.! dtName) ^. constructors
     in catMaybes $ map extractPost allMeasures ++ 
-                   map contentProperties allMeasures ++
+                   if isAbstract then map contentProperties allMeasures else [] ++
                    if includeQuanitifed then map elemProperties allMeasures else []
   where
     extractPost (mName, MeasureDef _ outSort _ fml) = 

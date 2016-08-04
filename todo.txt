@@ -1,25 +1,19 @@
-- Split subtyping constraints with multiple measures?  
-- Multisets
-
+- Split subtyping constraints with multiple measures?
 - Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
-- Named arguments for abstract predicates
-- Mutual recursion
 - Type classes (for type variables and abstract datatypes)
-- Default components
-- Intersection types (carry multiple environments and type constraint checkers), good example: allPos :: (List Int -> Bool) &&& (List Pos -> {Bool | _v}) &&& ({List Nonpos | len _v > 0} -> {Bool | !_v})
+- Symmetry reduction
 
-- Irrefutable type errors (like symbol not in scope)
+- Examples to make work:
+  - More complex uses of indexed list (e.g. reverse, Okazaki)
+  - Jeevana's/Leon's desugaring
+  - foldl
+  - AVL trees without auxiliary functions  
+
+- Mutual recursion
+- Importing modules
 - Prove measure postconditions
-- BUG: polymorphic qualifier extraction
+- Irrefutable type errors (like symbol not in scope)
 - Check that the first constructor is the base case
-- When a measure is not mentioned in the goal spec, remove it from the components?
-
-Security:
-- Make use of abstract predicates:
-  - Simple way: when the goal type contains an abstract predicate, either function return type or the argument types should contain that predicate
-  - More complex way: in addition to above, also propagate the information about the arguments of the predicate:
-    if it's in the function return type, unify the arguments and propagate that spec to the argument,
-    otherwise, function must be univalent (~ contain _v = f x), then substitute f _v for _v in the original predicate and propagate that to the argument
-
-When goal type contains abstract predicate, the only functions we should consider are the ones that produce the predicate or propagate the value, when a variable with this predicate is around
-- Try encoding of atomic flow with HO functions
+- Multisets
+- Named arguments for abstract predicates
+- Intersection types (carry multiple environments and type constraint checkers), good example: allPos :: (List Int -> Bool) &&& (List Pos -> {Bool | _v}) &&& ({List Nonpos | len _v > 0} -> {Bool | !_v})
