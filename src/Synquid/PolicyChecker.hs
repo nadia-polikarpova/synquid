@@ -430,11 +430,10 @@ generateRepair env typ p = do
         t' = stripTags t 
         symbolPreds = predsOfType t'
         targetPreds = predsOf targetRefinement
-        isConstant = name `Set.member` (env ^. constants)
-      in if t /= t' && isConstant && disjoint symbolPreds targetPreds
+      in if t /= t' && isConstant name env && disjoint symbolPreds targetPreds
           -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
           then m -- This is a stripped constant whose type has no predicates in common with our target: exclude it form the environment
-          else if isConstant && ((baseTypeOf (lastType t') `elem` [stringType, worldType]) || hasHOArg t')
+          else if isConstant name env && ((baseTypeOf (lastType t') `elem` [stringType, worldType]) || hasHOArg t')
             then m
             else Map.insert name (Monotype t') m
     updateSymbol _ m name sch =

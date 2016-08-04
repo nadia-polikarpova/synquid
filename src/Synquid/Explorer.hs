@@ -14,6 +14,7 @@ import Synquid.Util
 import Synquid.Pretty
 import Synquid.Tokens
 
+import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -522,7 +523,7 @@ generateError env = do
 
 -- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
 toVar (Program (PSymbol name) t) env
-  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = return (env, Var (toSort $ baseTypeOf t) name)
+  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = return (env, fromJust $ lookupAsFormula name env)
   -- | not (isConstant name env) = return (env, Var (toSort $ baseTypeOf t) name)
 toVar p@(Program _ t) env = do
   g <- freshId "G"
