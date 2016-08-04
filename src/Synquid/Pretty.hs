@@ -164,6 +164,8 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
+power (Pred _ _ []) = 10
+power (Cons _ _ []) = 10
 power Pred {} = 9
 power Cons {} = 9
 power Unary {} = 8
