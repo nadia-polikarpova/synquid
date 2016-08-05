@@ -1,0 +1,25 @@
+Found 1 violation(s) in function showPaper
+showPaper :: w:World -> pid:PaperId -> World
+showPaper = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let title = getPaperTitle w pid
+      in
+    
+    let authors = liftM show (ifM
+                                (bind (getChair w) (\x5 . bind u
+                                                            (\x4 . return (eq x5
+                                                                             x4))))
+                                (getPaperAuthors w pid)
+                                defaultPaperAuthors) in
+    
+    let out = liftM2 strcat title
+                authors in
+    print w u out
+
+(Goals: 1)
+(Measures: 3)
+(Policy size: fromList [("1-Basic.sq",12),("Security.sq",148)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showPaper             &        37  &        61  &             0.03s  &      0.23s  &      0.12s  &        0.39s  \\
+Totals                &        37  &        61  &             0.03s  &      0.23s  &      0.12s  &        0.39s  \\

@@ -1,5 +1,5 @@
 -- | Refinement type reconstruction for programs with holes
-module Synquid.TypeChecker where
+module Synquid.TypeChecker (reconstruct, reconstructTopLevel) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -33,13 +33,12 @@ reconstruct eParams tParams goal = do
     go = do
       pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }
       pAuxs <- reconstructAuxGoals
-      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False
       let p = foldr (\(x, e1) e2 -> insertAuxSolution x e1 e2) pMain pAuxs
-      runInSolver $ finalizeProgram p      
+      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False >> finalizeProgram p      
 
     reconstructAuxGoals = do
       goals <- use auxGoals
-      writeLog 2 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
+      writeLog 3 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
       case goals of
         [] -> return []
         (g : gs) -> do
@@ -47,7 +46,7 @@ reconstruct eParams tParams goal = do
             let g' = g {
                           gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
                        }
-            writeLog 1 $ text "PICK AUXILIARY GOAL" <+> pretty g'
+            writeLog 2 $ text "PICK AUXILIARY GOAL" <+> pretty g'
             p <- reconstructTopLevel g'
             rest <- reconstructAuxGoals
             return $ (gName g, p) : rest    
@@ -159,7 +158,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     return $ Program (PLet x pDef pBody) t
   
   PIf (Program PHole AnyT) iThen iElse -> do
-    cUnknown <- Unknown Map.empty <$> freshId "U"
+    cUnknown <- Unknown Map.empty <$> freshId "C"
     addConstraint $ WellFormedCond env cUnknown
     pThen <- inContext (\p -> Program (PIf (Program PHole boolAll) p (Program PHole t)) t) $ reconstructI (addAssumption cUnknown env) t iThen
     cond <- conjunction <$> currentValuation cUnknown
@@ -176,7 +175,7 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     
   PMatch iScr iCases -> do
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
-    let scrT = refineTop $ shape $ lastType $ head consTypes
+    let scrT = refineTop env $ shape $ lastType $ head consTypes
     
     (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
     let scrutineeSymbols = symbolList pScrutinee
@@ -248,7 +247,7 @@ reconstructE' env typ (PSymbol name) = do
       symbolUseCount %= Map.insertWith (+) name 1
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
-        Just sc -> addConstraint $ Subtype env (refineBot $ shape t) (refineTop sc) False
+        Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
       checkE env typ p
       return (env, p)
 reconstructE' env typ (PApp iFun iArg) = do
@@ -261,6 +260,8 @@ reconstructE' env typ (PApp iFun iArg) = do
       d <- asks $ _auxDepth . fst
       pArg <- generateHOArg env' (d - 1) tArg iArg
       return (env', Program (PApp pFun pArg) tRes)
+      -- pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructI env' tArg iArg
+      -- return (env', Program (PApp pFun pArg) tRes)      
     else do -- First-order argument: generate now
       (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
       (env''', y) <- toVar pArg env''
@@ -293,8 +294,8 @@ checkAnnotation env t t' p = do
     Left err -> throwError err
     Right t'' -> do
       ctx <- asks $ _context . fst
-      writeLog 1 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
-      addConstraint $ Subtype env t'' t True
+      writeLog 2 $ text "Checking consistency of type annotation" <+> pretty t'' <+> text "with" <+> pretty t <+> text "in" $+$ pretty (ctx (Program p t''))
+      addConstraint $ Subtype env t'' t True ""
       
       fT <- runInSolver $ finalizeType t
       fT'' <- runInSolver $ finalizeType t''

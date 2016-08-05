@@ -1,0 +1,78 @@
+-- Conference management
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Done :: Phase
+
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+
+data Token
+
+data Maybe a where
+  Nothing :: Maybe a
+  Just :: a -> Maybe a
+
+predicate sessionUser :: World -> User
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
+
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+predicate pc :: World -> Set User
+getPC :: w: World -> Tagged {List {User | _v in pc w} | elems _v == pc w} <{True}>
+
+predicate currentPhase :: World -> Phase
+getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
+
+predicate paperConflicts :: World -> PaperId -> Set User
+getPaperConflicts :: w: World -> pid: PaperId
+                        -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_0 in paperConflicts w pid)}>
+
+getPaperTitle :: w: World -> pid: PaperId 
+   -> Tagged String <{ !(_0 in paperConflicts w pid) }>
+
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId 
+   -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} 
+             <{_0 in paperAuthors w pid}>
+
+predicate paperStatus :: World -> PaperId -> Status
+getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_0 == chair w || (currentPhase w == Done && _0 in paperAuthors w pid)}>
+
+getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
+
+getAllPapers :: w: World -> [PaperId]
+
+getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_0 in paperAuthors w pid) && -} (_0 in pc w) && !(_0 in paperConflicts w pid) }>
+
+qualifier {x == w, x in y, !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y)}
+
+{- Some Strings -}
+
+s_delighted :: String
+s_regret :: String
+
+{- Extra combinators -}
+
+foldl :: (a -> b -> a) -> a -> (List b) -> a
+foldl1 :: f: (a -> a -> a) -> l: List a -> a
+
+forM_ :: <ap :: User -> Bool> .
+   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
+
+ifJust :: (Maybe a) -> (a -> b) -> b
+
+-- TODO currently there has to be something here, otherwise nothing gets emitted
+
+elemMaybe :: x: a -> xs: Maybe [a] -> Bool
+elemMaybe = \x. \xs.
+  match xs with
+    Just l -> elem x l
+    Nothing -> 0 == 0

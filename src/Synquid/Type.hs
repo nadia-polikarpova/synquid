@@ -36,6 +36,13 @@ isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
 
+hasAny AnyT = True
+hasAny (ScalarT baseT _) = baseHasAny baseT
+  where
+    baseHasAny (DatatypeT _ tArgs _) = any hasAny tArgs
+    baseHasAny _ = False
+hasAny (FunctionT _ tArg tRes) = hasAny tArg || hasAny tRes    
+
 toSort BoolT = BoolS
 toSort IntT = IntS
 toSort (DatatypeT name tArgs _) = DataS name (map (toSort . baseTypeOf) tArgs)
@@ -69,6 +76,15 @@ varsOfType (ScalarT baseT fml) = varsOfBase baseT `Set.union` (Set.map varName $
     varsOfBase _ = Set.empty
 varsOfType (FunctionT x tArg tRes) = varsOfType tArg `Set.union` (Set.delete x $ varsOfType tRes)
 varsOfType AnyT = Set.empty    
+
+-- | Free variables of a type
+predsOfType :: RType -> Set Id
+predsOfType (ScalarT baseT fml) = predsOfBase baseT `Set.union` predsOf fml
+  where
+    predsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map predsOfType tArgs) `Set.union` (Set.unions (map predsOf pArgs))
+    predsOfBase _ = Set.empty
+predsOfType (FunctionT x tArg tRes) = predsOfType tArg `Set.union` predsOfType tRes
+predsOfType AnyT = Set.empty    
   
 varRefinement x s = Var s valueVarName |=| Var s x
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName
@@ -178,22 +194,6 @@ shape (ScalarT (TypeVarT _ a) _) = ScalarT (TypeVarT Map.empty a) ()
 shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
 shape AnyT = AnyT
 
--- | Insert weakest refinement
-refineTop :: SType -> RType
-refineTop (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map refineTop tArgs) (replicate (length pArgs) ftrue)) ftrue
-refineTop (ScalarT IntT _) = ScalarT IntT ftrue
-refineTop (ScalarT BoolT _) = ScalarT BoolT ftrue
-refineTop (ScalarT (TypeVarT vSubst a) _) = ScalarT (TypeVarT vSubst a) ftrue
-refineTop (FunctionT x tArg tFun) = FunctionT x (refineBot tArg) (refineTop tFun)
-
--- | Insert strongest refinement
-refineBot :: SType -> RType
-refineBot (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map refineBot tArgs) (replicate (length pArgs) ffalse)) ffalse
-refineBot (ScalarT IntT _) = ScalarT IntT ffalse
-refineBot (ScalarT BoolT _) = ScalarT BoolT ffalse
-refineBot (ScalarT (TypeVarT vSubst a) _) = ScalarT (TypeVarT vSubst a) ffalse
-refineBot (FunctionT x tArg tFun) = FunctionT x (refineTop tArg) (refineBot tFun)
-
 -- | Conjoin refinement to a type
 addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
   then ScalarT base fml' -- the type of a polymorphic variable does not require any other refinements
@@ -215,9 +215,11 @@ addRefinementToLastSch (ForallP sig sch) fml = ForallP sig $ addRefinementToLast
 substituteInType :: (Id -> Bool) -> Substitution -> RType -> RType
 substituteInType isBound subst (ScalarT baseT fml) = ScalarT (substituteBase baseT) (substitute subst fml)
   where
-    substituteBase (TypeVarT oldSubst a) = if isBound a
-                                              then TypeVarT oldSubst a
-                                              else TypeVarT (oldSubst `composeSubstitutions` subst) a
+    substituteBase (TypeVarT oldSubst a) = TypeVarT oldSubst a 
+      -- Looks like pending substitutions on types are not actually needed, since renamed variables are always out of scope
+       -- if isBound a
+          -- then TypeVarT oldSubst a
+          -- else TypeVarT (oldSubst `composeSubstitutions` subst) a
     substituteBase (DatatypeT name tArgs pArgs) = DatatypeT name (map (substituteInType isBound subst) tArgs) (map (substitute subst) pArgs)
     substituteBase baseT = baseT
 substituteInType isBound subst (FunctionT x tArg tRes) = FunctionT x (substituteInType isBound subst tArg) (substituteInType isBound subst tRes)

@@ -1,0 +1,169 @@
+
+-- Strings
+
+s_colon :: String
+s_comma :: String
+s_paperNo :: String
+s_authors :: String
+s_qmark :: String
+
+-- Default values yay!!
+
+defaultPaperTitle    :: Tagged String <{True}>
+defaultPaperAuthors  :: Tagged (List User) <{True}>
+defaultPaperConflicts :: Tagged (List User) <{True}>
+defaultPaperStatus   :: Tagged Status <{True}>
+defaultPaperBidToken :: Tagged (Maybe Token) <{True}>
+
+-- Print paper status to an author
+test0 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
+test0 = \w . \pid .
+  let u = getSessionUser w in  
+  let out = liftM show (getPaperStatus w pid) in
+  print w u out
+
+-- Print paper status to all its authors
+test1 :: World -> PaperId -> World
+test1 = \w . \pid .
+  let title = getPaperTitle w pid in
+  let authors = getPaperAuthors w pid in
+  let st = getPaperStatus w pid in
+	let out = foldl1 (liftM2 strcat) [title, return s_colon, liftM show st] in 
+  printAll w authors out
+  
+-- Print paper status to chair  (no repair needed actually)
+test2 :: World -> PaperId -> World
+test2 = \w . \pid .
+  let ch = getChair w in
+  let st = getPaperStatus w pid in
+  print w ch (liftM2 strcat (return s_paperNo)
+               (liftM2 strcat (return (show pid))
+                 (liftM2 strcat (return s_colon)
+                   (liftM show st))))
+
+-- Print paper authors to session user
+test3 :: World -> PaperId -> World
+test3 = \w . \pid .
+  let u = getSessionUser w in
+  let authors = getPaperAuthors w pid in
+  let out = (liftM2 strcat (return s_paperNo)
+              (liftM2 strcat (return (show pid))
+                (liftM2 strcat (return s_comma)
+                  (liftM2 strcat (return s_authors)
+                    (liftM show authors))))) in
+  print w u out
+
+-- Print paper status to session user
+test4 :: World -> PaperId -> World
+test4 = \w . \pid .
+  let u = getSessionUser w in
+  let st = getPaperStatus w pid  in
+  print w u (liftM show st)
+
+-- Implicit flow: show status and session number to session user
+test5 :: World -> PaperId -> World
+test5 = \w. \pid .
+  let u = getSessionUser w in
+  -- let title = getPaperTitle w pid in
+  let st = getPaperStatus w pid in
+  let ses = bind st (\s . if s == Accepted
+                            then getPaperSession w pid
+                            else return emptyString) in
+  let out = foldl1 (liftM2 strcat) [liftM show st, return s_comma, ses]  in -- {- liftM2 strcat title -} (liftM2 strcat (liftM show st) ses) in
+  print w u out
+  
+-- NOTE: This also works with title etc. uncommented, but *much* slower
+
+-- Print paper title and list of conflicts to the session user
+test6 :: World -> PaperId -> World
+test6 = \w. \pid .
+  let u = getSessionUser w in
+  let conflicts = getPaperConflicts w pid in
+  let title = getPaperTitle w pid in
+  let out = liftM2 strcat title (liftM show conflicts) in
+  print w u out
+
+selectFrom :: <sp :: User -> Bool> . World -> u: Tagged {User | sp _v} <sp> -> 
+                 pids: List PaperId ->  List (Tagged String <{_0 == content u}>)
+selectFrom = \w. \u. \pids .
+  map (\pid.
+      let title = getPaperTitle w pid in
+      let authors = getPaperAuthors w pid in
+      foldl1 (liftM2 strcat) (Cons title (Cons (return s_comma) (Cons (return s_authors) (Cons (liftM show authors) Nil))))) pids
+      --                     ^ [title, ", ", "authors: ", show authors']
+
+-- Print information about a bunch of papers to session user
+test7 :: World -> [PaperId] -> World
+test7 = \w. \allPids .
+  let u = getSessionUser w in
+  foldl (\w. \s. print w u s) w (selectFrom w u allPids)
+
+-- Print all papers to session user
+test8 :: World -> World
+test8 = \w.
+  let u = getSessionUser w in
+  let allPids = getAllPapers w in
+  foldl (\w. \s. print w u s) w (selectFrom w u allPids)
+
+-- Print all session user's (accepted) papers
+test9 :: World -> (Maybe Status) -> World
+test9 = \w. \q.
+  let u = getSessionUser w in
+  let ownPids {- :: [PaperId]<> -} =
+      filterM (\pid.
+        andM
+          (bind u (\c. 
+            bind (getPaperAuthors w pid) (\cs. return (elem c cs))))
+          (ifJust q (\st. bind (getPaperStatus w pid) (\st'. return (st == st'))))
+        )
+        (getAllPapers w) in
+  forM_ w (liftM (\l. selectFrom w u l) ownPids) (\w. \s. print w u s)
+
+{- this is an auxiliary function just so we can have a different default val -}
+getPaperConflictsMaybe ::
+  w: World -> pid: PaperId -> Tagged (Maybe [User]) <{!(_0 in paperConflicts w pid)}>
+getPaperConflictsMaybe = \w. \pid. liftM Just (getPaperConflicts w pid)
+
+defaultPaperConflictsMaybe :: Tagged (Maybe [User]) <{True}>
+defaultPaperConflictsMaybe = return Nothing
+
+-- Print the list of all unconflicted papers
+test10 :: World -> World
+test10 = \w.
+  let u = getSessionUser w in
+  let allPids = getAllPapers w in
+  let isUnconflicted = \pid. bind u (\c. bind (getPaperConflictsMaybe w pid) 
+                                           (\cs. return (not (elemMaybe c cs)))) in
+  let out = filterM isUnconflicted allPids in
+  print w u (liftM show out)
+
+-- Produces a "permission to bid" token for session user
+test11 :: World -> PaperId -> World
+test11 = \w. \pid.
+  let u = getSessionUser w in
+  let tok = getPaperBidToken w pid in
+  let out = [return s_paperNo, return (show pid), return s_colon, liftM show tok] in
+  print w u (foldl1 (liftM2 strcat) out)
+
+printMaybe :: <pmp :: User -> Bool> . w: World -> viewer: Tagged {User | pmp _v} <pmp> -> x: Tagged (Maybe a) <pmp> -> World
+printManyMaybe :: <pmp :: User -> Bool> . w: World -> viewers: Tagged (List {User | pmp _v}) <pmp> -> x: Tagged (Maybe a) <pmp> -> World
+
+-- Reviewing phase is done!
+-- Send notices to all authors about how well they did
+test12 :: World -> World
+test12 = \w.
+  let pids = getAllPapers w in
+  let u = getChair w in
+  let fmtMsg = \st.
+      if st == Accepted then (Just s_delighted) 
+      else if st == Rejected then (Just s_regret)
+      else Nothing in
+  foldl (\w. \pid.
+    let title = getPaperTitle w pid in
+    let authors = getPaperAuthors w pid in
+    let msg = liftM fmtMsg (getPaperStatus w pid)  in
+    let out = bind msg (\mmsg. 
+        match mmsg with
+          Just msg' -> liftM Just (foldl1 (liftM2 strcat) [title, return s_colon, return msg'])
+          Nothing -> return Nothing) in
+    printManyMaybe w authors out) w pids 

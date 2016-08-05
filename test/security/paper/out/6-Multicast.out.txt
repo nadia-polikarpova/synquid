@@ -1,0 +1,19 @@
+Found 1 violation(s) in function notifyAuthors
+notifyAuthors :: w:World -> pid:PaperId -> World
+notifyAuthors = \w . \pid . 
+    let status = ifM (bind
+                        (getCurrentPhase w) (\x3 .
+                          return (eq done x3)))
+                   (getPaperStatus w pid)
+                   defaultPaperStatus in
+    
+    let authors = getPaperAuthors w
+                    pid in
+    printAll w authors status
+
+(Goals: 1)
+(Measures: 3)
+(Policy size: fromList [("6-Multicast.sq",42),("Security.sq",148)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+notifyAuthors         &        21  &        40  &             0.02s  &      0.51s  &      0.65s  &        1.19s  \\
+Totals                &        21  &        40  &             0.02s  &      0.51s  &      0.65s  &        1.19s  \\

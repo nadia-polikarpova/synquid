@@ -1,0 +1,21 @@
+Found 1 violation(s) in function showSession
+showSession :: w:World -> pid:PaperId -> World
+showSession = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let out = bind (ifM (bind
+                           (getCurrentPhase w) (\x3 .
+                             return (eq done x3)))
+                      (getPaperStatus w pid)
+                      defaultPaperStatus) (\st . 
+                  if st
+                    then getPaperTitle w pid
+                    else return emptyString) in
+    print w u out
+
+(Goals: 1)
+(Measures: 3)
+(Policy size: fromList [("3-Implicit.sq",28),("Security.sq",148)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showSession           &        33  &        52  &             0.06s  &      0.40s  &      0.69s  &        1.16s  \\
+Totals                &        33  &        52  &             0.06s  &      0.40s  &      0.69s  &        1.16s  \\

@@ -40,6 +40,8 @@ module Synquid.Pretty (
   -- * Structures
   hMapDoc,
   vMapDoc,
+  mkTable,
+  mkTableLaTeX,
   -- * Programs
   prettySpec,
   prettySolution,
@@ -64,6 +66,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
+import Data.List
 
 import Control.Lens
 
@@ -78,18 +81,14 @@ isEmpty d = case renderCompact d of
   _ -> False
 
 -- | Separate two documents by space if both are nonempty
-doc1 <+> doc2 = if isEmpty doc1
-  then doc2
-  else if isEmpty doc2
-    then doc1
-    else doc1 L.<+> doc2
+doc1 <+> doc2 | isEmpty doc1 = doc2
+              | isEmpty doc2 = doc1
+              | otherwise    = doc1 L.<+> doc2
 
 -- | Separate two documents by linebreak if both are nonempty
-doc1 $+$ doc2 = if isEmpty doc1
-  then doc2
-  else if isEmpty doc2
-    then doc1
-    else doc1 L.<$> doc2
+doc1 $+$ doc2 | isEmpty doc1 = doc2
+              | isEmpty doc2 = doc1
+              | otherwise    = doc1 L.<$> doc2
 
 -- | Separate by spaces
 hsep = foldr (<+>) empty
@@ -149,7 +148,7 @@ instance Show Sort where
   show = show . pretty
   
 instance Pretty PredSig where
-  pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort  
+  pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
 
 instance Pretty UnOp where
   pretty op = operator $ unOpTokens Map.! op
@@ -165,9 +164,11 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Pred _ _ _) = 9
-power (Cons _ _ _) = 9
-power (Unary _ _) = 8
+power (Pred _ _ []) = 10
+power (Cons _ _ []) = 10
+power Pred {} = 9
+power Cons {} = 9
+power Unary {} = 8
 power (Binary op _ _)
   | op `elem` [Times, Intersect] = 7
   | op `elem` [Plus, Minus, Union, Diff] = 6
@@ -175,13 +176,13 @@ power (Binary op _ _)
   | op `elem` [And, Or] = 4
   | op `elem` [Implies] = 3
   | op `elem` [Iff] = 2
-power (All _ _) = 1
-power (Ite _ _ _) = 1
+power All {} = 1
+power Ite {} = 1
 power _ = 10
 
 -- | Pretty-printed formula
 fmlDoc :: Formula -> Doc
-fmlDoc fml = fmlDocAt 0 fml
+fmlDoc = fmlDocAt 0
 
 -- | 'fmlDocAt' @n fml@ : print @expr@ in a context with binding power @n@
 fmlDocAt :: Int -> Formula -> Doc
@@ -258,7 +259,7 @@ prettyType t = prettyTypeAt 0 t
 
 -- | Binding power of a type
 typePower :: RType -> Int
-typePower (FunctionT _ _ _) = 1
+typePower FunctionT {} = 1
 typePower (ScalarT (DatatypeT _ tArgs pArgs) r)
   | ((not (null tArgs) || not (null pArgs)) && (r == ftrue)) = 2
 typePower _ = 3
@@ -328,9 +329,11 @@ prettyProgram (Program p typ) = case p of
     PIf c t e -> linebreak <> (hang tab $ keyword "if" <+> prettyProgram c $+$ (hang tab (keyword "then" </> prettyProgram t)) $+$ (hang tab (keyword "else" </> prettyProgram e)))
     PMatch l cases -> linebreak <> (hang tab $ keyword "match" <+> prettyProgram l <+> keyword "with" $+$ vsep (map prettyCase cases))
     PFix fs e -> prettyProgram e
-    PLet x e e' -> align $ hang tab (keyword "let" <+> text x <+> operator "=" </> prettyProgram e </> keyword "in") $+$ prettyProgram e'
+    PLet x e e' -> linebreak <> (align $ hang tab (keyword "let" <+> withType (text x) (typeOf e) <+> operator "=" </> prettyProgram e </> keyword "in") $+$ prettyProgram e')
     PHole -> if show (pretty typ) == dontCare then operator "??" else hlParens $ operator "?? ::" <+> pretty typ
     PErr -> keyword "error"
+  where
+    withType doc t = doc -- <> text ":" <+> pretty t
 
 instance (Pretty t) => Pretty (Program t) where
   pretty = prettyProgram
@@ -353,7 +356,8 @@ prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions))
 prettyBindings env = commaSep (map pretty (Map.keys $ removeDomain (env ^. constants) (allSymbols env)))
 -- prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
-prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
+-- prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
+prettyGhosts env = commaSep (map pretty (Map.keys (env ^. ghosts)))
 
 instance Pretty Environment where
   pretty env = prettyBindings env <+> prettyGhosts env <+> prettyAssumptions env
@@ -369,8 +373,8 @@ instance Show SortConstraint where
   show = show . pretty
 
 prettyConstraint :: Constraint -> Doc
-prettyConstraint (Subtype env t1 t2 False) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2
-prettyConstraint (Subtype env t1 t2 True) = prettyBindings env <+> prettyAssumptions env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2
+prettyConstraint (Subtype env t1 t2 False label) = pretty env <+> operator "|-" <+> pretty t1 <+> operator "<:" <+> pretty t2 <+> parens (text label)
+prettyConstraint (Subtype env t1 t2 True label) = pretty env <+> operator "|-" <+> pretty t1 <+> operator "/\\" <+> pretty t2 <+> parens (text label)
 prettyConstraint (WellFormed env t) = prettyBindings env <+> operator "|-" <+> pretty t
 prettyConstraint (WellFormedCond env c) = prettyBindings env <+> operator "|-" <+> pretty c
 prettyConstraint (WellFormedMatchCond env c) = prettyBindings env <+> operator "|- (match)" <+> pretty c
@@ -401,13 +405,15 @@ prettySolution (Goal name _ _ _ _ _) prog = text name <+> operator "=" </> prett
 
 instance Pretty ConstructorSig where
   pretty (ConstructorSig name t) = text name <+> text "::" <+> pretty t
+  
+prettyVarianceParam (predSig, contra) = pretty predSig <> (if contra then pretty Not else empty)  
 
 instance Pretty BareDeclaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
   pretty (QualifierDecl fmls) = keyword "qualifier" <+> hlBraces (commaSep $ map pretty fmls)
   pretty (FuncDecl name t) = text name <+> operator "::" <+> pretty t
-  pretty (DataDecl name typeVars predParams ctors) = hang tab $ 
-    keyword "data" <+> text name <+> hsep (map text typeVars) <+> hsep (map pretty predParams) <+> keyword "where" 
+  pretty (DataDecl name tParams pParams ctors) = hang tab $ 
+    keyword "data" <+> text name <+> hsep (map text tParams) <+> hsep (map prettyVarianceParam pParams) <+> keyword "where" 
     $+$ vsep (map pretty ctors)
   pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $ 
     if isTermination then keyword "termination" else empty
@@ -428,11 +434,14 @@ prettyError (ErrorMessage ResolutionError pos descr) = hang tab $
   errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Resolution Error"]) $+$
   pretty descr  
 prettyError (ErrorMessage TypeError pos descr) = hang tab $ 
-  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " No Solution. Last candidate failed with error"]) $+$
+  errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Error"]) $+$
   pretty descr
     
 instance Pretty ErrorMessage where
-  pretty = prettyError        
+  pretty = prettyError
+  
+instance Show ErrorMessage where
+  show = show . pretty
 
 {- AST node counting -}
 
@@ -465,7 +474,35 @@ programNodeCount (Program p _) = case p of
   PFun _ e -> 1 + programNodeCount e
   PIf c e1 e2 -> 1 + programNodeCount c + programNodeCount e1 + programNodeCount e2
   PMatch e cases -> 1 + programNodeCount e + sum (map (\(Case _ _ e) -> programNodeCount e) cases)
-  PFix _ e -> 1 + programNodeCount e
+  PFix _ e -> programNodeCount e
   PLet x e e' -> 1 + programNodeCount e + programNodeCount e'
   PHole -> 0
   PErr -> 1
+
+-- | Prints data in a table, with fixed column widths.
+-- Positive widths for left justification, negative for right.
+mkTable :: [Int] -> [[Doc]] -> Doc
+mkTable widths docs = vsep $ map (mkTableRow widths) docs
+mkTableRow widths docs = hsep $ zipWith signedFill widths docs
+
+signedFill w doc | w < 0 = lfill (-w) doc
+                 | otherwise = fill w doc
+
+mkTableLaTeX :: [Int] -> [[Doc]] -> Doc
+mkTableLaTeX widths docs =
+  uncurry mkTable $ insertSeps widths docs
+ where
+  insertSeps widths docs = (intersperse 3 widths ++ [3], 
+    map ((++ [nl]) . intersperse tab) docs)
+  tab = text " &"     
+  nl = text " \\\\"
+
+-- | Really? They didn't think I might want to right-align something?
+-- This implementation only works for simple documents with a single string.
+-- Implementing the general case seemed not worth it.
+lfill :: Int -> Doc -> Doc
+lfill w d        = case renderCompact d of
+  SText l s _ -> spaces (w - l) <> d
+ where
+  spaces n | n <= 0    = empty
+           | otherwise = text $ replicate n ' '
