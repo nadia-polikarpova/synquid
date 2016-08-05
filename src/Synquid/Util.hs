@@ -85,7 +85,27 @@ boundedSubsets n s
   | Set.null s = Set.singleton Set.empty
   | otherwise = let (x, xs) = Set.deleteFindMin s in
       Set.map (Set.insert x) (boundedSubsets (n - 1) xs) `Set.union` boundedSubsets n xs -- x is in or x is out
-        
+      
+-- | Partition a set-valued map into sub-maps where value non-disjoint value sets are grouped together
+toDisjointGroups :: (Ord k, Ord v) => Map k (Set v) -> [(Set k, Set v)]
+toDisjointGroups m = toDisjointGroups' m []
+  where
+    toDisjointGroups' :: (Ord k, Ord v) => Map k (Set v) -> [(Set k, Set v)] -> [(Set k, Set v)]
+    toDisjointGroups' m acc
+      | Map.null m  = acc
+      | otherwise   = let ((key, vals), m') = Map.deleteFindMin m in
+                      let (keys', vals') = close (Set.singleton key) vals m' in
+                      let m'' = removeDomain keys' m' in
+                      toDisjointGroups' m'' ((keys', vals'):acc)
+         
+    close :: (Ord k, Ord v) => Set k -> Set v -> Map k (Set v) -> (Set k, Set v)
+    close keys vals m = 
+      let (mDisj, mNonDisj) = Map.partition (disjoint vals) m in
+      if Map.null mNonDisj
+        then (keys, vals)
+        else close (keys `Set.union` Map.keysSet mNonDisj) (vals `Set.union` (Set.unions $ Map.elems mNonDisj)) mDisj
+    
+      
 -- | Monadic equivalent of 'partition'
 partitionM :: Monad m => (a -> m Bool) -> [a] -> m ([a], [a])
 partitionM f [] = return ([], [])

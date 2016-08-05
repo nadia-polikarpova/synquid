@@ -66,6 +66,7 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
                               _matchQualsGen = \_ _ -> emptyQSpace,
                               _typeQualsGen = \_ _ _ -> emptyQSpace,
                               _predQualsGen = predQuals False,
+                              _tcSolverSplitMeasures = _splitMeasures explorerParams,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
                             }
                         in localize isRecheck explorerParams typingParams goal
@@ -76,6 +77,7 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
                                       _matchQualsGen = \_ _ -> emptyQSpace,
                                       _typeQualsGen = \_ _ _ -> emptyQSpace,
                                       _predQualsGen = \_ _ _ -> emptyQSpace, -- predQuals True,
+                                      _tcSolverSplitMeasures = _splitMeasures explorerParams,
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
                                in repair explorerParams typingParams (goal {gImpl = p}) violations
@@ -124,6 +126,7 @@ verify explorerParams solverParams goal cquals tquals = evalZ3State go
               _matchQualsGen = \_ _ -> emptyQSpace,
               _typeQualsGen = typeQuals,
               _predQualsGen = predQuals,
+              _tcSolverSplitMeasures = _splitMeasures explorerParams,
               _tcSolverLogLevel = _explorerLogLevel explorerParams
             }
         in localize True explorerParams typingParams goal
@@ -162,6 +165,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _matchQualsGen = matchQuals,
                         _typeQualsGen = typeQuals,
                         _predQualsGen = predQuals,
+                        _tcSolverSplitMeasures = _splitMeasures explorerParams,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
       in do cp0 <- lift $ lift startTiming  -- TODO time stats for this one as well?

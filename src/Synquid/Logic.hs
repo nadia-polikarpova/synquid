@@ -363,7 +363,23 @@ atomsOf fml = atomsOf' (negationNF fml)
     atomsOf' (Binary And l r) = atomsOf' l `Set.union` atomsOf' r
     -- atomsOf' fml@(Binary Or l r) = Set.insert fml (atomsOf' l `Set.union` atomsOf' r)
     atomsOf' (Binary Or l r) = atomsOf' l `Set.union` atomsOf' r
-    atomsOf' fml = Set.singleton fml    
+    atomsOf' fml = Set.singleton fml
+    
+splitByPredicate :: Set Id -> Formula -> [Formula] -> Maybe (Map Id (Set Formula))
+splitByPredicate preds arg fmls = foldM (\m fml -> checkFml fml m fml) Map.empty fmls
+  where
+    checkFml _ _ fml | fml == arg   = Nothing
+    checkFml whole m fml = case fml of
+      Pred _ name args -> 
+        if name `Set.member` preds && length args == 1 && head args == arg 
+          then return $ Map.insertWith Set.union name (Set.singleton whole) m
+          else foldM (checkFml whole) m args
+      SetLit _ args -> foldM (checkFml whole) m args
+      Unary _ f -> checkFml whole m f
+      Binary _ l r -> foldM (checkFml whole) m [l, r]
+      Ite c t e -> foldM (checkFml whole) m [c, t, e]
+      Cons _ _ args -> foldM (checkFml whole) m args
+      _ -> return m
 
 {- Qualifiers -}
 

@@ -199,6 +199,7 @@ defaultExplorerParams = ExplorerParams {
   _partialSolution = False,
   _incrementalChecking = True,
   _consistencyChecking = True,
+  _splitMeasures = True,
   _useMemoization = False,
   _symmetryReduction = False,
   _context = id,
