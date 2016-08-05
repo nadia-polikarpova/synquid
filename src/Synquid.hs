@@ -347,12 +347,17 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
              (programNodeCount prog)           -- size of generated solution
              (stats ! TypeCheck) (stats ! Repair) (stats ! Recheck) (sum $ Map.elems stats)  -- time measurements
       let perResult = map getStatsFor results
-      --let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst) results
-      --let solutionSize = sum $ map (programNodeCount . snd) results
+      let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst . fst) results
+      let solutionSize = sum $ map (programNodeCount . snd . fst) results
       pdoc $ vsep $ [
-              parens (text "Goals:" <+> pretty (length results)),
-              parens (text "Measures:" <+> pretty measureCount),
-              parens (text "Policy size:" <+> (text $ show policySize)),
-              statsTable perResult,
-              empty
-              ]
+                parens (text "Goals:" <+> pretty (length results)),
+                parens (text "Measures:" <+> pretty measureCount)] ++
+              if repairPolicies synquidParams 
+                then [
+                  parens (text "Policy size:" <+> (text $ show policySize)),
+                  statsTable perResult]
+                else [
+                  parens (text "Spec size:" <+> pretty specSize),
+                  parens (text "Solution size:" <+> pretty solutionSize)
+                ] ++
+              [empty]
