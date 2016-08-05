@@ -64,11 +64,9 @@ unifySorts boundTvs = unifySorts' Map.empty
       = unifySorts' subst (x:xs) (y:ys)
     unifySorts' subst (DataS name args : xs) (DataS name' args' :ys) 
       = if name == name' 
-          then if length args == length args'
-                then unifySorts' subst (args ++ xs) (args' ++ ys) 
-                else error $ unwords ["unifySorts: different number of arguments for datatype", name, show (length args), "and", show (length args')]
+          then unifySorts' subst (args ++ xs) (args' ++ ys) 
           else Left (DataS name [], DataS name' [])
-    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys -- TODO: do we still need these?
+    unifySorts' subst (AnyS : xs) (_ : ys) = unifySorts' subst xs ys
     unifySorts' subst (_ : xs) (AnyS : ys) = unifySorts' subst xs ys
     unifySorts' subst (VarS x : xs) (y : ys)                 
       | not (Set.member x boundTvs)
@@ -351,7 +349,7 @@ negationNF fml = case fml of
 uDNF :: Formula -> [Formula]
 uDNF = dnf' . negationNF
   where
-    dnf' e@(Binary Or e1 e2) = if (Set.null $ unknownsOf e1) || (Set.null $ unknownsOf e2) 
+    dnf' e@(Binary Or e1 e2) = if (Set.null $ unknownsOf e1) && (Set.null $ unknownsOf e2) 
                                 then return e
                                 else dnf' e1 ++ dnf' e2
     dnf' (Binary And e1 e2) = do
@@ -359,6 +357,13 @@ uDNF = dnf' . negationNF
                                 rClause <- dnf' e2
                                 return $ lClause |&| rClause
     dnf' fml = [fml]
+    
+atomsOf fml = atomsOf' (negationNF fml)
+  where
+    atomsOf' (Binary And l r) = atomsOf' l `Set.union` atomsOf' r
+    -- atomsOf' fml@(Binary Or l r) = Set.insert fml (atomsOf' l `Set.union` atomsOf' r)
+    atomsOf' (Binary Or l r) = atomsOf' l `Set.union` atomsOf' r
+    atomsOf' fml = Set.singleton fml    
 
 {- Qualifiers -}
 
@@ -441,6 +446,8 @@ data Candidate = Candidate {
     invalidConstraints :: Set Formula,
     label :: String
   }
+  
+initialCandidate = Candidate Map.empty Set.empty Set.empty "0"  
   
 instance Eq Candidate where
   (==) c1 c2 = Map.filter (not . Set.null) (solution c1) == Map.filter (not . Set.null) (solution c2) &&

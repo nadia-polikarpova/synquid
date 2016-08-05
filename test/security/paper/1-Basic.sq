@@ -1,0 +1,37 @@
+{-
+  This example assumes that all users are either PC members or chair,
+  and only chair can see paper authors
+-}
+
+{- Datatypes -}
+
+data PaperId
+
+{- Sensitive data and policies -}
+   
+-- | Current session user
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+-- | PC chair (public)
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+-- | Paper title (public)
+getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
+
+-- | Paper authors (visible only to the chair)
+getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w}>
+defaultPaperAuthors :: Tagged (List User) <{True}>
+
+{- Client code -}
+  
+-- | Show paper info to session user
+-- | Repair: check that u is chair
+showPaper :: w: World -> pid: PaperId -> World
+showPaper = \w . \pid .
+  let u = getSessionUser w in
+  let title = getPaperTitle w pid in
+  let authors = liftM show (getPaperAuthors w pid) in
+  let out = liftM2 strcat title authors in
+  print w u out

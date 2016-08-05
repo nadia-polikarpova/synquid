@@ -1,0 +1,114 @@
+-- Regular list
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+-- Length of a list
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+-- Set of elements of a list
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+not :: x: Bool -> {Bool | _v == !x}
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
+  
+-- Tagged things
+
+data User 
+  
+data Tagged a <visibleTo :: User -> Bool>!
+measure content :: Tagged a -> a
+
+return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
+
+bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
+  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
+    -> thn: Tagged a <{ic && ip _0}> 
+    -> els: Tagged a <ip> 
+    -- -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
+    -> Tagged a <ip>
+        
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+  f: (u: a -> {b | l1f u _v}) ->
+  x: Tagged a <l1p> ->
+  Tagged {b | l1f (content x) _v} <l1p>    
+
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+  f: (u: a -> v: b -> {c | l2f u v _v}) ->
+  x: Tagged a <l2p> ->
+  y: Tagged b <l2p> ->
+  Tagged {c | l2f (content x) (content y) _v} <l2p>  
+  
+andM :: <l2p :: User -> Bool> . 
+  x: Tagged Bool <l2p> ->
+  y: Tagged Bool <l2p> ->
+  Tagged {Bool | _v == (content x) && (content y)} <l2p>  
+  
+sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
+  
+sortBy :: <sop :: User -> Bool> . leq: (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
+    
+-- Strings
+
+data String
+emptyString :: String
+show :: a -> String
+strcat :: String -> String -> String  
+  
+-- Conference management  
+
+data World  
+
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
+printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
+          
+data PaperId
+   
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Done :: Phase
+  
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{_0 == sessionUser w}>
+
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+getPaperScore :: w: World -> PaperId -> Tagged Int <{_0 == chair w}>
+defaultPaperScore :: Tagged Int <{True}>
+
+-- qualifier {_v == (x == y), _v == (x in y)}
+qualifier {x == y, x in y, !(x in y)}
+
+-- Sort papers according to score
+test :: w: World -> pids: List PaperId -> World
+test = \w . \pids .
+  let u = getSessionUser w in
+  -- Leaky version:
+  let scoreLeq = \pid1 . \pid2 . 
+                    bind (getPaperScore w pid1) (\score1 .
+                      bind (getPaperScore w pid2) (\score2 .
+                        return (score1 <= score2)
+                      )
+                    ) in
+  -- let scoreLeq = \pid1 . \pid2 . 
+                    -- bind (ifM (liftM2 eq u (getChair w)) (getPaperScore w pid1) defaultPaperScore) (\score1 .
+                      -- bind (ifM (liftM2 eq u (getChair w)) (getPaperScore w pid2) defaultPaperScore) (\score2 .
+                        -- return (score1 <= score2)
+                      -- )
+                    -- ) in
+  print w u (liftM show (sortBy scoreLeq pids))

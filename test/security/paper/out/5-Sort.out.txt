@@ -1,0 +1,40 @@
+Found 2 violation(s) in function sortPapersByScore
+sortPapersByScore :: w:World -> World
+sortPapersByScore = \w . 
+  let u = getSessionUser w in
+  
+  let cmpScore = \pid1 . \pid2 .
+        bind (ifM (bind u (\x7 . bind
+                                   (getPaperConflicts w pid1)
+                                   (\x6 . return (not (elem x7
+                                                         x6))))) (getPaperScore
+                                                                    w pid1)
+                defaultPaperScore) (\x1 . bind
+                                            (ifM (bind u (\x15 . bind
+                                                                   (getPaperConflicts
+                                                                      w pid2)
+                                                                   (\x14 .
+                                                                     return (not
+                                                                               (elem
+                                                                                  x15
+                                                                                  x14)))))
+                                               (getPaperScore w pid2)
+                                               defaultPaperScore) (\x2 . return
+                                                                           (x1
+                                                                              <=
+                                                                              x2)))
+    in
+  
+  let pids = bind (getAllPaperIds
+                     w) (\pids . sortByM cmpScore
+                                   pids) in
+  
+  let out = liftM show pids in
+  print w u out
+
+(Goals: 1)
+(Measures: 3)
+(Policy size: fromList [("5-Sort.sq",25),("Security.sq",148)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+sortPapersByScore     &        59  &       115  &             0.23s  &      3.85s  &      1.37s  &        5.46s  \\
+Totals                &        59  &       115  &             0.23s  &      3.85s  &      1.37s  &        5.46s  \\

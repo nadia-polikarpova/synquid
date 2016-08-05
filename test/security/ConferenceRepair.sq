@@ -1,0 +1,137 @@
+-- Regular list
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+-- Length of a list
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+-- Set of elements of a list
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+eq :: x: a -> y: a -> {Bool | _v == (x == y)}
+not :: x: Bool -> {Bool | _v == !x}
+-- and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
+elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
+  
+-- Tagged things
+
+data User 
+  
+data Tagged a <visibleTo :: User -> Bool>!
+measure content :: Tagged a -> a
+
+return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
+
+bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
+    cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}>
+    -> thn: Tagged a <{ic && ip _0}> 
+    -> els: Tagged a <ip> 
+    -> Tagged a <ip>
+    -- -- -> Tagged {a | (_v == content thn) || (_v == content els)} <ip>
+        
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+  f: (u: a -> {b | l1f u _v}) ->
+  x: Tagged a <l1p> ->
+  Tagged {b | l1f (content x) _v} <l1p>
+
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+  f: (u: a -> v: b -> {c | l2f u v _v}) ->
+  x: Tagged a <l2p> ->
+  y: Tagged b <l2p> ->
+  Tagged {c | l2f (content x) (content y) _v} <l2p>
+  
+andM :: <l2p :: User -> Bool> . 
+  x: Tagged Bool <l2p> ->
+  y: Tagged Bool <l2p> ->
+  Tagged {Bool | _v == (content x) && (content y)} <l2p>
+  
+-- Strings
+
+data String
+emptyString :: String
+show :: a -> String
+strcat :: String -> String -> String  
+  
+-- Conference management  
+
+data World  
+
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
+printAll :: <pap :: User -> Bool> . w: World -> viewers: Tagged (List {User | pap _v}) <pap> -> x: Tagged String <pap> -> World
+          
+data PaperId
+   
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Done :: Phase
+  
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+predicate currentPhase :: World -> Phase
+getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
+
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId -> Tagged {List {User | (_v in paperAuthors w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
+defaultPaperAuthors :: Tagged (List User) <{True}>
+
+getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{_0 in paperAuthors w pid}>
+defaultPaperTitle :: Tagged String <{True}>
+
+predicate paperStatus :: World -> PaperId -> Status
+-- getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(_0 == chair w) || ((currentPhase w == Done) && (_0 in paperAuthors w pid))}>
+getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{(currentPhase w == Done) && (_0 in paperAuthors w pid)}>
+defaultPaperStatus :: Tagged Status <{True}>
+
+qualifier {x == y, x in y, !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y)}
+  
+-- Print paper status to an author
+test1 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
+test1 = \w . \pid .
+  let u = getSessionUser w in
+  let out = liftM show (getPaperStatus w pid) in
+  -- let out = liftM show (
+              -- ifM 
+                -- (liftM2 eq (getCurrentPhase w) (return Done)) 
+                -- (getPaperStatus w pid) 
+                -- (ifM (liftM2 eq u (getChair w)) (getPaperStatus w pid) (return NoDecision))) in
+                -- -- (return NoDecision)) in
+  print w u out
+      
+test2 :: w: World -> pid: PaperId -> World
+test2 = \w . \pid .
+  let u = getSessionUser w in
+  let out1 = liftM show (getPaperAuthors w pid) in 
+  let out2 = liftM show (getPaperStatus w pid) in  
+  -- let out1 = liftM show (ifM (liftM2 elem u (getPaperAuthors w pid)) (getPaperAuthors w pid) (return Nil)) in 
+  -- let out2 = liftM show (ifM (andM (liftM2 elem u (getPaperAuthors w pid)) (liftM2 eq (getCurrentPhase w) (return Done))) (getPaperStatus w pid) (return NoDecision)) in
+  let out = liftM2 strcat out1 out2 in
+  print w u out
+  
+sillys :: World -> (List PaperId) -> World
+sillys = \w . \pids .
+  let u = getSessionUser w in
+  match pids with
+    Nil -> w
+    Cons pid rest ->
+      let title = getPaperTitle w pid in
+      sillys (print w u (liftM show title)) rest  
+            

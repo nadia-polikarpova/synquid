@@ -1,0 +1,73 @@
+-- Here we show that we can verify all policy combinators using just return and bind
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+-- Set of elements of a list
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs  
+  
+data User 
+  
+data Tagged a <visibleTo :: User -> Bool>!
+measure content :: Tagged a -> a
+
+return :: x: a -> Tagged {a | _v == x} <{True}>
+
+bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+        
+liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
+  f: (u: a -> {b | l1f u _v}) ->
+  x: Tagged a <l1p> ->
+  Tagged {b | l1f (content x) _v} <l1p>
+liftM = \f . \x . bind x (\x' . return (f x'))  
+
+liftM2 :: <l2p :: User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+  f: (u: a -> v: b -> {c | l2f u v _v}) ->
+  x: Tagged a <l2p> ->
+  y: Tagged b <l2p> ->
+  Tagged {c | l2f (content x) (content y) _v} <l2p>
+liftM2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))
+
+-- Unfortunately this strengthened bind only works for Booleans
+-- The general case would be: in `bind x f`, violation of the additional policy on x compels x to be a particular value,
+-- but that is not expressible
+bindBool :: <bp :: User -> Bool> . <bf :: Bool -> b -> Bool> . <bc :: Bool> .
+  x: Tagged {Bool | _v ==> bc} <{bp _0 && bc}> -> (u: {Bool | _v ==> bc} -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+  
+ifM :: <ip :: User -> Bool> . <ic :: Bool> .
+  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
+    -> thn: Tagged a <{ic && ip _0}> 
+    -> els: Tagged a <ip> 
+    -> Tagged a <ip>
+ifM = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)
+
+sequence :: <seqp :: User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
+sequence = \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> liftM2 Cons y (sequence ys)
+
+insert :: <inp :: User -> Bool> . leq: (a -> a -> Tagged Bool <inp>) -> x: a -> xs: List a -> 
+            Tagged {List a | elems _v == elems xs + [x]} <inp>
+insert = \leq . \x . \xs .
+  match xs with
+    Nil -> return (Cons x Nil)
+    Cons y ys -> bind (leq x y) (\c . 
+      if c
+        then return (Cons x xs)
+        else bind (insert leq x ys) (\rec . return (Cons y rec))
+    )
+    
+sortBy :: <sop :: User -> Bool> . leq: (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
+sortBy = \leq . \xs .  
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> bind (sortBy leq ys) (\rec . insert leq y rec) 

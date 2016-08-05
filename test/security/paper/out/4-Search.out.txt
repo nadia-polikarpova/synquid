@@ -1,0 +1,42 @@
+Found 1 violation(s) in function searchByAuthor
+searchByAuthor :: w:World -> a:User -> World
+searchByAuthor = \w . \a . 
+    let u = getSessionUser w in
+    
+    let isAuthor = \pid . bind (ifM
+                                  (bind (getChair w) (\x5 . bind u
+                                                              (\x4 . return (eq
+                                                                               x5
+                                                                               x4))))
+                                  (getPaperAuthors w pid) (ifM
+                                                             (bind
+                                                                (getCurrentPhase
+                                                                   w) (\x9 .
+                                                                  return (leq
+                                                                            rebuttal
+                                                                            x9)))
+                                                             (getPaperAuthors w
+                                                                pid)
+                                                             defaultPaperAuthors))
+                            (\auths . return (elem a auths))
+      in
+    
+    let aPids = bind (getAllPaperIds
+                        w) (\pids . filterM isAuthor
+                                      pids) in
+    
+    let titles = bind aPids (\pids .
+                     mapM (\pid . getPaperTitle w
+                                    pid) pids) in
+    
+    let out = bind titles (\xs .
+                  foldM (\x . \y . return (strcat
+                                             x y)) emptyString xs) in
+    print w u out
+
+(Goals: 1)
+(Measures: 3)
+(Policy size: fromList [("4-Search.sq",33),("Security.sq",148)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+searchByAuthor        &        81  &       128  &             1.06s  &      1.11s  &      3.17s  &        5.36s  \\
+Totals                &        81  &       128  &             1.06s  &      1.11s  &      3.17s  &        5.36s  \\

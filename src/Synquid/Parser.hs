@@ -10,7 +10,6 @@ import Synquid.Error
 import Synquid.Tokens
 import Synquid.Util
 
-import Data.Char
 import Data.List
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -111,10 +110,15 @@ parseDataDecl :: Parser BareDeclaration
 parseDataDecl = do
   reserved "data"
   typeName <- parseTypeName
-  typeParams <- many (sameOrIndented >> parseIdentifier)
-  predParams <- many (sameOrIndented >> angles parsePredSig)
+  tParams <- many (sameOrIndented >> parseIdentifier)
+  pParams <- many (sameOrIndented >> parsePredParam)
   constructors <- option [] (reserved "where" >> indented >> block parseConstructorSig) 
-  return $ DataDecl typeName typeParams predParams constructors  
+  return $ DataDecl typeName tParams pParams constructors  
+  where
+    parsePredParam = do
+      p <- angles parsePredSig
+      var <- option False (reservedOp (unOpTokens Map.! Not) >> return True)
+      return (p, var)
 
 parseConstructorSig :: Parser ConstructorSig
 parseConstructorSig = do
@@ -132,8 +136,7 @@ parseMeasureDecl = do
   inSort <- parseSort
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
-  reserved "where"
-  cases <- indented >> block parseDefCase
+  cases <- option [] (reserved "where" >> indented >> block parseDefCase) 
   return $ MeasureDecl measureName inSort outSort post cases isTermination
   where
     parseDefCase = do
@@ -199,7 +202,8 @@ parseTypeAtom :: Parser RType
 parseTypeAtom = choice [
   parens parseType,
   parseScalarRefType,
-  parseUnrefTypeNoArgs
+  parseUnrefTypeNoArgs,
+  parseListType
   ]
   
 parseUnrefTypeNoArgs = do
@@ -228,6 +232,10 @@ parseScalarRefType = braces $ do
   refinement <- parseFormula
   return $ ScalarT baseType refinement  
 
+parseListType = do
+  elemType <- brackets parseType
+  return $ ScalarT (DatatypeT "List" [elemType] []) ftrue
+  
 parseFunctionType :: Parser RType
 parseFunctionType = do
   argIdMb <- optionMaybe (try parseArgName)
@@ -378,17 +386,25 @@ parseETerm = buildExpressionParser (exprTable mkUnary mkBinary False) parseAppTe
       args <- many (sameOrIndented >> (try parseAtomTerm <|> parens parseImpl))
       return $ foldl (\e1 e2 -> untyped $ PApp e1 e2) head args
     parseAtomTerm = choice [
-        parens (withOptionalType $ parseETerm)
+        parens (withOptionalType parseImpl)
       , parseHole
       , parseBoolLit
       , parseIntLit
       , parseSymbol
+      , parseList
       ]
     parseBoolLit = (reserved "False" >> return (untyped $ PSymbol "False")) <|> (reserved "True" >> return (untyped $ PSymbol "True"))
     parseIntLit = natural >>= return . untyped . PSymbol . show
     parseHole = reserved "??" >> return (untyped PHole)
     parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
     
+parseList = do
+  elems <- brackets (commaSep parseImpl)
+  return $ foldr cons nil elems
+  where 
+    cons x xs = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "Cons") x) xs
+    nil = untyped $ PSymbol "Nil"
+
 withOptionalType p = do
   (Program content _) <- p
   typ <- option AnyT $ reserved "::" >> parseType
@@ -406,19 +422,19 @@ parsePredSig = do
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do
   name <- identifier
-  if isUpper $ head name 
+  if isTypeName name 
     then unexpected ("capitalized " ++ show name) 
     else if name == dontCare then unexpected ("blank") else return name
   
 parseIdentifierOrBlank :: Parser Id
 parseIdentifierOrBlank = try $ do
   name <- identifier
-  if isUpper $ head name then unexpected ("capitalized " ++ show name) else return name  
+  if isTypeName name then unexpected ("capitalized " ++ show name) else return name  
 
 parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
-  if not (isUpper $ head name) then unexpected ("non-capitalized " ++ show name) else return name
+  if not (isTypeName name) then unexpected ("non-capitalized " ++ show name) else return name
   
 -- | 'attachPosBefore' @p@ : parser that behaves like @p@, but also attaches the source position before the first token it parsed to the result
 attachPosBefore :: Parser a -> Parser (Pos a)

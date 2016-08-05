@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections, FlexibleContexts, TemplateHaskell #-}
 
 -- | Functions for processing the AST created by the Parser (eg filling in unknown types, verifying that refinement formulas evaluate to a boolean, etc.)
-module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, addAllVariables, ResolverState (..)) where
+module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, addAllVariables, ResolverState (..), instantiateSorts) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -77,10 +77,13 @@ resolveDecls declarations =
       pass decl
       
 resolveRefinement :: Environment -> Formula -> Either ErrorMessage Formula
-resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env})) --, _fmlSubstitution = subst}))
+resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env}))
 
 resolveRefinedType :: Environment -> RType -> Either ErrorMessage RType
 resolveRefinedType env t = runExcept (evalStateT (resolveType t) (initResolverState {_environment = env}))
+
+instantiateSorts :: [Sort] -> [Sort]
+instantiateSorts sorts = fromRight $ runExcept (evalStateT (instantiate sorts) (initResolverState))
 
 addAllVariables :: [Formula] -> Environment -> Environment
 addAllVariables = flip (foldr (\(Var s x) -> addVariable x (fromSort s)))
@@ -102,11 +105,13 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
     else throwResError (text "Type variable(s)" <+> hsep (map text $ Set.toList extraTypeVars) <+> 
               text "in the definition of type synonym" <+> text typeName <+> text "are undefined")
 resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
-resolveDeclaration (DataDecl dtName tParams pParams ctors) = do
+resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
   let
+    (pParams, pVariances) = unzip pVarParams
     datatype = DatatypeDef {
       _typeParams = tParams,
-      _predArgs = pParams,
+      _predParams = pParams,
+      _predVariances = pVariances,
       _constructors = map constructorName ctors,
       _wfMetric = Nothing
     }
@@ -177,7 +182,7 @@ resolveSignatures (DataDecl dtName tParams pParams ctors) = mapM_ resolveConstru
     resolveConstructorSignature (ConstructorSig name _) = do
       sch <- uses environment ((Map.! name) . allSymbols)
       sch' <- resolveSchema sch
-      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map nominalPredApp pParams)) ftrue
+      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map nominalPredApp (map fst pParams))) ftrue
       let returnType = lastType (toMonotype sch')
       if nominalType == returnType
         then do
@@ -250,7 +255,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       t' <- substituteTypeSynonym name tArgs >>= resolveType      
       fml' <- resolveTypeRefinement (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
-    Just (DatatypeDef tParams pParams _ _) -> do
+    Just (DatatypeDef tParams pParams _ _ _) -> do
       when (length tArgs /= length tParams) $ 
         throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length tParams) <+> text "type arguments and got" <+> pretty (length tArgs)
       when (length pArgs /= length pParams) $ 
@@ -297,7 +302,7 @@ resolveSort s@(DataS name sArgs) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
     Nothing -> throwResError $ text "Datatype" <+> text name <+> text "is undefined in sort" <+> pretty s
-    Just (DatatypeDef tParams _ _ _) -> do
+    Just (DatatypeDef tParams _ _ _ _) -> do
       let n = length tParams
       when (length sArgs /= n) $ throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty n <+> text "type arguments and got" <+> pretty (length sArgs)
       mapM_ resolveSort sArgs
@@ -323,10 +328,10 @@ resolveTypeRefinement valueSort fml = do
   let freeTvs = typeVarsOfSort (sortOf fml'') Set.\\ (Set.fromList boundTvs) -- Remaining free type variables
   let resolvedFml = if Set.null freeTvs then fml'' else sortSubstituteFml (constMap freeTvs IntS) fml''   
   
-  boundPreds <- uses (environment . boundPredicates) (Set.fromList . map predSigName)
-  let invalidPreds = negPreds resolvedFml `Set.intersection` boundPreds
-  when (not $ Set.null invalidPreds) $ 
-    throwResError $ text "Bound predicate(s)" <+> commaSep (map text $ Set.toList invalidPreds)<+> text "occur negatively in a refinement" <+> pretty resolvedFml
+  -- boundPreds <- uses (environment . boundPredicates) (Set.fromList . map predSigName)
+  -- let invalidPreds = negPreds resolvedFml `Set.intersection` boundPreds
+  -- when (not $ Set.null invalidPreds) $ 
+    -- throwResError $ text "Bound predicate(s)" <+> commaSep (map text $ Set.toList invalidPreds)<+> text "occur negatively in a refinement" <+> pretty resolvedFml
   return resolvedFml
 
 resolveFormula :: Formula -> Resolver Formula
@@ -415,7 +420,9 @@ resolveFormula (Pred _ name argFmls) = do
       ps <- uses environment allPredicates
       (resSort : argSorts) <- case Map.lookup name ps of
                                 Nothing -> throwResError $ text "Predicate or measure" <+> text name <+> text "is undefined"
-                                Just sorts -> instantiate sorts
+                                Just sorts -> ifM (Map.member name <$> use (environment . globalPredicates))
+                                                (instantiate sorts) -- if global, treat type variables as free
+                                                (return sorts) -- otherwise, treat type variables as bound
       if length argFmls /= length argSorts
           then throwResError $ text "Expected" <+> pretty (length argSorts) <+> text "arguments for predicate or measure" <+> text name <+> text "and got" <+> pretty (length argFmls)
           else do
@@ -449,7 +456,7 @@ solveSortConstraints = do
   tvs <- uses (environment . boundTypeVars) Set.fromList
   sortConstraints .= []
   idCount .= 0
-  let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs  
+  let (sls, srs) = unzip $ map (\(SameSort s1 s2) -> (s1, s2)) unificationCs
   subst <- case unifySorts tvs sls srs of
     Left (x, y) -> throwResError $ text "Cannot unify sorts" <+> pretty x <+> text "and" <+> pretty y
     Right subst -> return subst

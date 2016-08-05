@@ -1,0 +1,49 @@
+{-
+  In this example we assume that all users are either PC members or chair,
+  and only chair can see paper authors
+-}
+
+{- Datatypes -}
+
+data PaperId
+
+type Phase = {Int | 0 <= _v && _v < 4}
+submission :: {Phase | _v == 0}
+review :: {Phase | _v == 1}
+rebuttal :: {Phase | _v == 2}
+done :: {Phase | _v == 3}
+
+{- Sensitive data and policies -}
+   
+-- | Current session user
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+-- | PC chair (public)
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+-- | Current phase
+predicate currentPhase :: World -> Int
+getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
+
+-- | Paper title (public)
+getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
+
+getPaperStatus :: w: World -> pid: PaperId -> Tagged Bool <{currentPhase w == done}>
+defaultPaperStatus :: Tagged Bool <{True}>
+
+-- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
+--getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>
+--defaultPaperAuthors :: Tagged (List User) <{True}>
+
+{- Client code -}
+  
+-- | Show session info to session user
+-- | Repair: for getPaperAuthors, check that u is chair or current phase is >= rebuttal
+showSession :: w: World -> pid: PaperId -> World
+showSession = \w . \pid .
+  let u = getSessionUser w in
+  let out = bind (getPaperStatus w pid) (\st.
+        if st then (getPaperTitle w pid) else return emptyString) in
+  print w u out
