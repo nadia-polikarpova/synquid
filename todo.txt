@@ -1,4 +1,3 @@
-- Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
 - Type classes (for type variables and abstract datatypes)
 - Symmetry reduction
 
