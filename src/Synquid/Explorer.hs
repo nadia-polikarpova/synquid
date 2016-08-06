@@ -225,8 +225,9 @@ generateFirstCase env scrVar pScrutinee t consName = do
               deadUnknown <- Unknown Map.empty <$> freshId "C"
               addConstraint $ WellFormedCond env deadUnknown
               err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
-              deadValuation <- currentValuation deadUnknown
-              return (err, conjunction deadValuation)) 
+              deadValuation <- conjunction <$> currentValuation deadUnknown
+              ifte (generateError (addAssumption deadValuation env)) (const mzero) (return ()) -- The error must be possible only in this case
+              return (err, deadValuation)) 
             (\(err, deadCond) -> return $ (Case consName binders err, deadCond)) 
             (do
               pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) 
@@ -247,7 +248,7 @@ generateCase env scrVar pScrutinee t consName = do
       (syms, ass) <- caseSymbols env scrVar binders consT'      
       unfoldSyms <- asks $ _unfoldLocals . fst
       
-      cUnknown <- Unknown Map.empty <$> freshId "C"
+      cUnknown <- Unknown Map.empty <$> freshId "M"
       runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton ass) -- Create a fixed-valuation unknown to assume @ass@      
       
       let caseEnv = (if unfoldSyms then unfoldAllVariables else id) $ foldr (uncurry addVariable) (addAssumption cUnknown env) syms
@@ -506,16 +507,16 @@ enumerateAt env typ d = do
           return (env''', Program (PApp fun arg) (substituteInType (isBound env) (Map.singleton x y) tRes))
       return (envfinal, pApp)
       
--- | Make environment inconsistent (if possible with current unknown assumptions)      
+-- | Make environment inconsistent (if possible with current unknown assumptions)
 generateError :: MonadHorn s => Environment -> Explorer s RProgram
 generateError env = do
   ctx <- asks $ _context . fst  
   writeLog 2 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
-  tass <- use (typingState . typeAssignment)
+  tass <- use (typingState . typeAssignment)  
   let env' = typeSubstituteEnv tass env
   addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env')) (int ffalse) False ""
-  pos <- asks $ _sourcePos . fst  
-  typingState . errorContext .= (pos, text "when checking" </> pretty errorProgram </> text "in" $+$ pretty (ctx errorProgram))
+  pos <- asks $ _sourcePos . fst
+  typingState . errorContext .= (pos, text "when checking" </> pretty errorProgram </> text "in" $+$ pretty (ctx errorProgram))  
   runInSolver solveTypeConstraints
   typingState . errorContext .= (noPos, empty)
   return errorProgram
