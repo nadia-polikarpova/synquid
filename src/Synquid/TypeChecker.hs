@@ -153,8 +153,9 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
                            text "to lambda term" </> squotes (pretty $ untyped impl)
                            
   PLet x iDef iBody -> do -- E-term let (since lambda-let was considered before)
-    (env', pDef) <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
-    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x (typeOf pDef) env') t iBody
+    pDef <- inContext (\p -> Program (PLet x p (Program PHole t)) t) $ reconstructETopLevel env AnyT iDef
+    let (env', tDef) = embedContext env (typeOf pDef)
+    pBody <- inContext (\p -> Program (PLet x pDef p) t) $ reconstructI (addVariable x tDef env') t iBody
     return $ Program (PLet x pDef pBody) t
   
   PIf (Program PHole AnyT) iThen iElse -> do
@@ -167,8 +168,8 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     return $ Program (PIf pCond pThen pElse) t
   
   PIf iCond iThen iElse -> do
-    (env', pCond) <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
-    let ScalarT BoolT cond = typeOf pCond
+    pCond <- inContext (\p -> Program (PIf p (Program PHole t) (Program PHole t)) t) $ reconstructETopLevel env (ScalarT BoolT ftrue) iCond
+    let (env', ScalarT BoolT cond) = embedContext env $ typeOf pCond
     pThen <- inContext (\p -> Program (PIf pCond p (Program PHole t)) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ftrue) cond) $ env') t iThen
     pElse <- inContext (\p -> Program (PIf pCond pThen p) t) $ reconstructI (addAssumption (substitute (Map.singleton valueVarName ffalse) cond) $ env') t iElse
     return $ Program (PIf pCond pThen pElse) t
@@ -177,17 +178,18 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
     let scrT = refineTop env $ shape $ lastType $ head consTypes
     
-    (env', pScrutinee) <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
+    pScrutinee <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
+    let (env', tScr) = embedContext env (typeOf pScrutinee)
     let scrutineeSymbols = symbolList pScrutinee
     let isGoodScrutinee = (not $ head scrutineeSymbols `elem` consNames) &&                 -- Is not a value
                           (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
     when (not isGoodScrutinee) $ throwErrorWithDescription $ text "Match scrutinee" </> squotes (pretty pScrutinee) </> text "is constant"
             
-    (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
+    (env'', x) <- toVar (addScrutinee pScrutinee env') pScrutinee
     pCases <- zipWithM (reconstructCase env'' x pScrutinee t) iCases consTypes    
     return $ Program (PMatch pScrutinee pCases) t
       
-  _ -> snd <$> reconstructETopLevel env t (untyped impl)
+  _ -> reconstructETopLevel env t (untyped impl)
   
   where
     -- Check that all constructors are known and belong to the same datatype
@@ -223,13 +225,13 @@ reconstructCase env scrVar pScrutinee t (Case consName args iBody) consT = cut $
 
 -- | 'reconstructE' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is an elimination term
 -- (bottom-up phase of bidirectional reconstruction)    
-reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)    
+reconstructETopLevel :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructETopLevel env t impl = do
-  (finalEnv, Program pTerm pTyp) <- reconstructE env t impl
+  (Program pTerm pTyp) <- reconstructE env t impl
   pTyp' <- runInSolver $ currentAssignment pTyp
-  return (finalEnv, Program pTerm pTyp')
+  return $ Program pTerm pTyp'
 
-reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s (Environment, RProgram)
+reconstructE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
 reconstructE env t (Program p AnyT) = reconstructE' env t p
 reconstructE env t (Program p t') = do
   t'' <- checkAnnotation env t t' p
@@ -249,25 +251,23 @@ reconstructE' env typ (PSymbol name) = do
         Nothing -> return ()
         Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
       checkE env typ p
-      return (env, p)
+      return p
 reconstructE' env typ (PApp iFun iArg) = do
   x <- freshVar env "x"
-  (env', pFun) <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
+  pFun <- inContext (\p -> Program (PApp p uHole) typ) $ reconstructE env (FunctionT x AnyT typ) iFun
   let FunctionT x tArg tRes = typeOf pFun
 
-  (envfinal, pApp) <- if isFunctionType tArg
+  pApp <- if isFunctionType tArg
     then do -- Higher-order argument: its value is not required for the function type, enqueue an auxiliary goal
       d <- asks $ _auxDepth . fst
-      pArg <- generateHOArg env' (d - 1) tArg iArg
-      return (env', Program (PApp pFun pArg) tRes)
-      -- pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructI env' tArg iArg
-      -- return (env', Program (PApp pFun pArg) tRes)      
+      pArg <- generateHOArg env (d - 1) tArg iArg
+      return $ Program (PApp pFun pArg) tRes
     else do -- First-order argument: generate now
-      (env'', pArg) <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env' tArg iArg
-      (env''', y) <- toVar pArg env''
-      return (env''', Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x y) tRes))
-  checkE envfinal typ pApp
-  return (envfinal, pApp)
+      pArg <- inContext (\p -> Program (PApp pFun p) typ) $ reconstructE env tArg iArg
+      let tRes' = appType env pArg x tRes
+      return $ Program (PApp pFun pArg) tRes'
+  checkE env typ pApp
+  return pApp
   where
     generateHOArg env d tArg iArg = case content iArg of
       PSymbol f -> do

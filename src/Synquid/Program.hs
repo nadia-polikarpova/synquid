@@ -166,7 +166,6 @@ makeLenses ''MeasureDef
 data Environment = Environment {
   -- | Variable part:
   _symbols :: Map Int (Map Id RSchema),    -- ^ Variables and constants (with their refinement types), indexed by arity
-  _ghosts :: Map Id RType,                 -- ^ Ghost variables (to be used in embedding but not in the program)
   _boundTypeVars :: [Id],                  -- ^ Bound type variables
   _boundPredicates :: [PredSig],           -- ^ Argument sorts of bound abstract refinements
   _assumptions :: Set Formula,             -- ^ Unknown assumptions
@@ -194,7 +193,6 @@ instance Ord Environment where
 -- | Empty environment
 emptyEnv = Environment {
   _symbols = Map.empty,
-  _ghosts = Map.empty,
   _boundTypeVars = [],
   _boundPredicates = [],
   _assumptions = Set.empty,
@@ -292,10 +290,16 @@ removeVariable name env = case Map.lookup name (allSymbols env) of
   Nothing -> env
   Just sch -> over symbols (Map.insertWith (flip Map.difference) (arity $ toMonotype sch) (Map.singleton name sch)) . over constants (Set.delete name) $ env
   
-unfoldAllVariables env = over unfoldedVars (Set.union (Map.keysSet (symbolsOfArity 0 env) Set.\\ (env ^. constants))) env  
+embedContext :: Environment -> RType -> (Environment, RType)
+embedContext env (LetT x tDef tBody) = 
+  let 
+    (env', tDef') = embedContext (removeVariable x env) tDef
+    (env'', tBody') = embedContext env' tBody
+  in (addLetBound x tDef' env'', tBody')
+-- TODO: function?  
+embedContext env t = (env, t)
   
-addGhost :: Id -> RType -> Environment -> Environment  
-addGhost name t = over ghosts (Map.insert name t)
+unfoldAllVariables env = over unfoldedVars (Set.union (Map.keysSet (symbolsOfArity 0 env) Set.\\ (env ^. constants))) env  
 
 addMeasure :: Id -> MeasureDef -> Environment -> Environment
 addMeasure measureName m = over measures (Map.insert measureName m)

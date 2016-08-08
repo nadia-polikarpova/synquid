@@ -606,7 +606,7 @@ reconstructE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 reconstructE env t = do
   oldGoals <- use auxGoals
   auxGoals .= []
-  (finalEnv, p) <- generateE env t
+  p <- generateE env t
   (Program pTerm pTyp) <- fillInAuxGoals p
   auxGoals .= oldGoals
   pTyp' <- runInSolver $ currentAssignment pTyp

@@ -91,7 +91,7 @@ instance Pretty MemoKey where
   pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (st ^. typingState . candidates))
 
 -- | Memoization store
-type Memo = Map MemoKey [(Environment, RProgram, ExplorerState)]
+type Memo = Map MemoKey [(RProgram, ExplorerState)]
 
 data PartialKey = PartialKey {
     pKeyContext :: RProgram
@@ -141,7 +141,7 @@ generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (genera
     generateThen = do
       cUnknown <- Unknown Map.empty <$> freshId "C"
       addConstraint $ WellFormedCond env cUnknown
-      (_, pThen) <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
+      pThen <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
       cond <- conjunction <$> currentValuation cUnknown
       return (cond, pThen)
 
@@ -173,7 +173,7 @@ generateCondition env fml = do
     allConjuncts = Set.toList $ conjunctsOf fml
     genConjunct c = if isExecutable c
                               then return $ fmlToProgram c
-                              else snd <$> cut (generateE env (ScalarT BoolT $ valBool |=| c))
+                              else cut (generateE env (ScalarT BoolT $ valBool |=| c))
     andSymb = Program (PSymbol $ binOpTokens Map.! And) (toMonotype $ binOpType And)
     conjoin p1 p2 = Program (PApp (Program (PApp andSymb p1) boolAll) p2) boolAll
                 
@@ -187,11 +187,13 @@ generateMatch env t = do
   if d == 0
     then mzero
     else do
-      (env', pScrutinee) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
-                                  $ inContext (\p -> Program (PMatch p []) t)
-                                  $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
+      (Program p tScr) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
+                      $ inContext (\p -> Program (PMatch p []) t)
+                      $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
+      let (env', tScr') = embedContext env tScr
+      let pScrutinee = Program p tScr'
 
-      case typeOf pScrutinee of
+      case tScr of
         (ScalarT (DatatypeT scrDT _ _) _) -> do -- Type of the scrutinee is a datatype
           let ctors = ((env ^. datatypes) Map.! scrDT) ^. constructors
 
@@ -202,7 +204,7 @@ generateMatch env t = do
                                 (any (not . flip Set.member (env ^. constants)) scrutineeSymbols) -- Has variables (not just constants)
           guard isGoodScrutinee
 
-          (env'', x) <- toVar pScrutinee (addScrutinee pScrutinee env')
+          (env'', x) <- toVar (addScrutinee pScrutinee env') pScrutinee
           (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)                  -- First case generated separately in an attempt to abduce a condition for the whole match
           pCases <- map fst <$> mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
           let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
@@ -293,7 +295,7 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
         guard $ length matchConds <= d
         return (matchConds, conjunction condValuation, p0)
         
-    generateEOrError env typ = generateError env `mplus` (snd <$> generateE env typ)
+    generateEOrError env typ = generateError env `mplus` generateE env typ
 
     -- | Proceed after solution @p0@ has been found under assumption @cond@ and match-assumption @matchCond@
     generateOtherBranches (matchConds, cond, p0) = do
@@ -323,13 +325,13 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
 
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
 -- (bottom-up phase of bidirectional typechecking)
-generateE :: MonadHorn s => Environment -> RType -> Explorer s (Environment, RProgram)
+generateE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 generateE env typ = do
   d <- asks $ _eGuessDepth . fst
-  (finalEnv, Program pTerm pTyp) <- generateEUpTo env typ d
+  (Program pTerm pTyp) <- generateEUpTo env typ d
   pTyp' <- runInSolver $ currentAssignment pTyp
   pTerm' <- addLambdaLets pTyp' (Program pTerm pTyp')
-  return (finalEnv, pTerm')
+  return pTerm'
   where
     addLambdaLets t body = do
       newGoals <- use newAuxGoals      
@@ -337,19 +339,19 @@ generateE env typ = do
       return $ foldr (\f p -> Program (PLet f uHole p) t) body newGoals
   
 -- | 'generateEUpTo' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth up to @d@
-generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
+generateEUpTo :: MonadHorn s => Environment -> RType -> Int -> Explorer s RProgram
 generateEUpTo env typ d = msum $ map (generateEAt env typ) [0..d]
 
 -- | 'generateEAt' @env typ d@ : explore all applications of type shape @shape typ@ in environment @env@ of depth exactly to @d@
-generateEAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
+generateEAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s RProgram
 generateEAt _ _ d | d < 0 = mzero
 generateEAt env typ d = do
   useMem <- asks $ (_useMemoization . fst)
   if not useMem || d == 0
     then do -- Do not use memoization
-      (envFinal, p) <- enumerateAt env typ d
-      checkE envFinal typ p
-      return (envFinal, p)
+      p <- enumerateAt env typ d
+      checkE env typ p
+      return p
     else do -- Try to fetch from memoization store
       startState <- get
       let tass = startState ^. typingState . typeAssignment
@@ -358,29 +360,26 @@ generateEAt env typ d = do
       case Map.lookup memoKey startMemo of
         Just results -> do -- Found memoized results: fetch
           writeLog 3 (text "Fetching for:" <+> pretty memoKey $+$
-                      text "Result:" $+$ vsep (map (\(env', p, _) -> pretty p) results))
+                      text "Result:" $+$ vsep (map (\(p, _) -> pretty p) results))
           msum $ map applyMemoized results
         Nothing -> do -- Nothing found: enumerate and memoize
           writeLog 3 (text "Nothing found for:" <+> pretty memoKey)
-          (envFinal, p) <- enumerateAt env typ d
+          p <- enumerateAt env typ d
 
           memo <- getMemo
           finalState <- get
-          let memo' = Map.insertWith (flip (++)) memoKey [(envFinal, p, finalState)] memo
+          let memo' = Map.insertWith (flip (++)) memoKey [(p, finalState)] memo
           writeLog 3 (text "Memoizing for:" <+> pretty memoKey <+> pretty p <+> text "::" <+> pretty (typeOf p))
 
           putMemo memo'
 
-          checkE envFinal typ p
-          return (envFinal, p)
+          checkE env typ p
+          return p
   where
-    applyMemoized (finalEnv, p, finalState) = do
+    applyMemoized (p, finalState) = do
       put finalState
-      let env' = joinEnv env finalEnv
-      checkE env' typ p
-      return (env', p)
-
-    joinEnv currentEnv memoEnv = over ghosts (Map.union (memoEnv ^. ghosts)) currentEnv
+      checkE env typ p
+      return p
 
 -- | Perform a gradual check that @p@ has type @typ@ in @env@:
 -- if @p@ is a scalar, perform a full subtyping check;
@@ -449,7 +448,7 @@ checkE env typ p@(Program pTerm pTyp) = do
       -- combineEnv env oldEnv =
         -- env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
 
-enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s (Environment, RProgram)
+enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s RProgram
 enumerateAt env typ 0 = do
     let symbols = Map.toList $ symbolsOfArity (arity typ) env
     useCounts <- use symbolUseCount
@@ -467,13 +466,7 @@ enumerateAt env typ 0 = do
       case Map.lookup name (env ^. shapeConstraints) of
         Nothing -> return ()
         Just sc -> addConstraint $ Subtype env (refineBot env $ shape t) (refineTop env sc) False ""
-      return (env, p)
-
-    soleConstructor (ScalarT (DatatypeT name _ _) _) = let ctors = _constructors ((env ^. datatypes) Map.! name)
-      in if length ctors == 1
-          then Just (head ctors, allSymbols env Map.! (head ctors))
-          else Nothing
-    soleConstructor _ = Nothing
+      return p
     
 enumerateAt env typ d = do
   let maxArity = fst $ Map.findMax (env ^. symbols)
@@ -486,26 +479,26 @@ enumerateAt env typ d = do
 
     generateApp genFun genArg = do
       x <- freshId "X"
-      (env', fun) <- inContext (\p -> Program (PApp p uHole) typ)
-                            $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
+      fun <- inContext (\p -> Program (PApp p uHole) typ)
+                $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
-      (envfinal, pApp) <- if isFunctionType tArg
+      pApp <- if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
           d <- asks $ _auxDepth . fst
           when (d <= 0) $ writeLog 2 (text "Cannot synthesize higher-order argument: no auxiliary functions allowed") >> mzero
-          arg <- enqueueGoal env' tArg (untyped PHole) (d - 1)
+          arg <- enqueueGoal env tArg (untyped PHole) (d - 1)
           newAuxGoals %= (++ [symbolName arg])
-          return (env', Program (PApp fun arg) tRes)
+          return $ Program (PApp fun arg) tRes
         else do -- First-order argument: generate now
           let mbCut = if Set.member x (varsOfType tRes) then id else cut
-          (env'', arg) <- local (over (_1 . eGuessDepth) (-1 +))
-                            $ inContext (\p -> Program (PApp fun p) tRes)
-                            $ mbCut (genArg env' tArg)
+          arg <- local (over (_1 . eGuessDepth) (-1 +))
+                    $ inContext (\p -> Program (PApp fun p) tRes)
+                    $ mbCut (genArg env tArg)
           writeLog 3 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
-          (env''', y) <- toVar arg env''
-          return (env''', Program (PApp fun arg) (substituteInType (isBound env) (Map.singleton x y) tRes))
-      return (envfinal, pApp)
+          let tRes' = appType env arg x tRes
+          return $ Program (PApp fun arg) tRes'
+      return pApp
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)
 generateError :: MonadHorn s => Environment -> Explorer s RProgram
@@ -524,12 +517,23 @@ generateError env = do
     trivial var = var |=| var
 
 -- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
-toVar (Program (PSymbol name) t) env
-  | Set.null (typeVarsOf t Set.\\ Set.fromList (env ^. boundTypeVars)) = return (env, fromJust $ lookupAsFormula name env)
-  -- | not (isConstant name env) = return (env, Var (toSort $ baseTypeOf t) name)
-toVar p@(Program _ t) env = do
+toVar :: MonadHorn s => Environment -> RProgram -> Explorer s (Environment, Formula)
+toVar env p@(Program (PSymbol name) t)
+  | not $ isPolyConstructor p = return (env, fromJust $ lookupAsFormula name env)
+toVar env (Program _ t) = do
   g <- freshId "G"
-  return (addGhost g t env, (Var (toSort $ baseTypeOf t) g))
+  return (addLetBound g t env, (Var (toSort $ baseTypeOf t) g))
+  
+-- | 'appType' @env p x tRes@: a type semantically equivalent to [p/x]tRes;
+-- if @p@ is not a variable, instead of a literal substitution use the contextual type LET x : (typeOf p) IN tRes
+appType :: Environment -> RProgram -> Id -> RType -> RType
+appType env p@(Program (PSymbol name) t) x tRes
+  | not $ isPolyConstructor p = 
+      let y = fromJust $ lookupAsFormula name env
+      in substituteInType (isBound env) (Map.singleton x y) tRes
+appType env (Program _ t) x tRes = contextual x t tRes
+
+isPolyConstructor (Program (PSymbol name) t) = isTypeName name && (not . Set.null . typeVarsOf $ t)
 
 enqueueGoal env typ impl depth = do
   g <- freshVar env "f"
