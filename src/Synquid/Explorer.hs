@@ -80,15 +80,14 @@ makeLenses ''ExplorerState
 
 -- | Key in the memoization store
 data MemoKey = MemoKey {
-  keyEnv :: Environment,
   keyTypeArity :: Int,
   keyLastShape :: SType,
   keyState :: ExplorerState,
   keyDepth :: Int
 } deriving (Eq, Ord)
 instance Pretty MemoKey where
-  -- pretty (MemoKey env arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
-  pretty (MemoKey env arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (st ^. typingState . candidates))
+  -- pretty (MemoKey arity t d st) = pretty env <+> text "|-" <+> hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d
+  pretty (MemoKey arity t st d) = hsep (replicate arity (text "? ->")) <+> pretty t <+> text "AT" <+> pretty d <+> parens (pretty (st ^. typingState . candidates))
 
 -- | Memoization store
 type Memo = Map MemoKey [(RProgram, ExplorerState)]
@@ -327,6 +326,7 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
 -- (bottom-up phase of bidirectional typechecking)
 generateE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 generateE env typ = do
+  putMemo Map.empty -- Starting E-term enumeration in a new environment: clear memoization store
   d <- asks $ _eGuessDepth . fst
   (Program pTerm pTyp) <- generateEUpTo env typ d
   pTyp' <- runInSolver $ currentAssignment pTyp
@@ -355,7 +355,7 @@ generateEAt env typ d = do
     else do -- Try to fetch from memoization store
       startState <- get
       let tass = startState ^. typingState . typeAssignment
-      let memoKey = MemoKey env (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
+      let memoKey = MemoKey (arity typ) (shape $ typeSubstitute tass (lastType typ)) startState d
       startMemo <- getMemo
       case Map.lookup memoKey startMemo of
         Just results -> do -- Found memoized results: fetch
