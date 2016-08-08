@@ -271,6 +271,7 @@ prettyTypeAt n t = condHlParens (n' <= n) (
     ScalarT base fml -> hlBraces (pretty base <> operator "|" <> pretty fml)
     AnyT -> text "_"
     FunctionT x t1 t2 -> text x <> operator ":" <> prettyTypeAt n' t1 <+> operator "->" <+> prettyTypeAt 0 t2
+    LetT x t1 t2 -> text "LET" <+> text x <> operator ":" <> prettyTypeAt n' t1 <+> operator "IN" <+> prettyTypeAt 0 t2
   )
   where
     n' = typePower t
@@ -356,11 +357,9 @@ prettyAssumptions env = commaSep (map pretty (Set.toList $ env ^. assumptions))
 prettyBindings env = commaSep (map pretty (Map.keys $ removeDomain (env ^. constants) (allSymbols env)))
 -- prettyBindings env = hMapDoc pretty pretty (removeDomain (env ^. constants) (allSymbols env))
 -- prettyBindings env = empty
--- prettyGhosts env = hMapDoc pretty pretty (env ^. ghosts)
-prettyGhosts env = commaSep (map pretty (Map.keys (env ^. ghosts)))
 
 instance Pretty Environment where
-  pretty env = prettyBindings env <+> prettyGhosts env <+> prettyAssumptions env
+  pretty env = prettyBindings env <+> prettyAssumptions env
   
 prettySortConstraint :: SortConstraint -> Doc
 prettySortConstraint (SameSort sl sr) = pretty sl <+> text "=" <+> pretty sr

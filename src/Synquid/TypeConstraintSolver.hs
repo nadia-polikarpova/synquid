@@ -312,16 +312,19 @@ simplifyConstraint' _ _ (Subtype env (ScalarT (DatatypeT name [] (pArg:pArgs)) f
         else simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent label)
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name [] pArgs) fml) (ScalarT (DatatypeT name' [] pArgs') fml') consistent label)      
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False label)
-  = do -- TODO: rename type vars
+  = do
       simplifyConstraint (Subtype env tArg2 tArg1 False label)
       if isScalarType tArg1
         then simplifyConstraint (Subtype (addVariable y tArg2 env) (renameVar (isBound env) x y tArg1 tRes1) tRes2 False label)
         else simplifyConstraint (Subtype env tRes1 tRes2 False label)
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) True label)
-  = -- TODO: rename type vars
-      if isScalarType tArg1
-        then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True label)
-        else simplifyConstraint (Subtype env tRes1 tRes2 True label)
+  = if isScalarType tArg1
+      then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True label)
+      else simplifyConstraint (Subtype env tRes1 tRes2 True label)
+simplifyConstraint' _ _ (Subtype env (LetT x tDef tBody) t consistent label)
+  = simplifyConstraint (Subtype (addVariable x tDef env) tBody t consistent label) -- ToDo: make x unique?
+simplifyConstraint' _ _ (Subtype env t (LetT x tDef tBody) consistent label)
+  = simplifyConstraint (Subtype (addVariable x tDef env) t tBody consistent label) -- ToDo: make x unique? 
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (DatatypeT name tArgs _) fml))
   = do
       mapM_ (simplifyConstraint . WellFormed env) tArgs
@@ -330,6 +333,8 @@ simplifyConstraint' _ _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)
       simplifyConstraint (WellFormed (addVariable x tArg env) tRes)
+simplifyConstraint' _ _ (WellFormed env (LetT x tDef tBody))
+  = simplifyConstraint (WellFormed (addVariable x tDef env) tBody)
 
 -- Simple constraint: return
 simplifyConstraint' _ _ c@(Subtype _ (ScalarT baseT _) (ScalarT baseT' _) _ _) | baseT == baseT' = simpleConstraints %= (c :)
@@ -505,24 +510,25 @@ embedding env vars includeQuantified = do
     qmap <- use qualifierMap
     let ass = Set.map (substitutePredicate pass) $ (env ^. assumptions)
     let allVars = vars `Set.union` potentialVars qmap (conjunction ass)
-    return $ addBindings tass pass qmap ass allVars    
+    return $ addBindings env tass pass qmap ass allVars    
   where
-    addBindings tass pass qmap fmls vars = 
+    addBindings env tass pass qmap fmls vars = 
       if Set.null vars
         then fmls
         else let (x, rest) = Set.deleteFindMin vars in
-              case Map.lookup x allSymbols of
-                Nothing -> addBindings tass pass qmap fmls rest -- Variable not found (useful to ignore value variables)
+              case Map.lookup x (allSymbols env) of
+                Nothing -> addBindings env tass pass qmap fmls rest -- Variable not found (useful to ignore value variables)
                 Just (Monotype t) -> case typeSubstitute tass t of
                   ScalarT baseT fml -> 
                     let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x)) . substitutePredicate pass)
                                           (fml : allMeasurePostconditions includeQuantified baseT env) in
                     let newVars = Set.delete x $ setConcatMap (potentialVars qmap) fmls' in
-                    addBindings tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` newVars)
+                    addBindings env tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` newVars)
+                  LetT y tDef tBody -> addBindings (addVariable x tBody . addVariable y tDef . removeVariable x $ env) tass pass qmap fmls vars
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
-                Just sch -> addBindings tass pass qmap fmls rest -- TODO: why did this work before?
-    allSymbols = symbolsOfArity 0 env `Map.union` Map.map Monotype (env ^. ghosts)
+                Just sch -> addBindings env tass pass qmap fmls rest -- TODO: why did this work before?
+    allSymbols env = symbolsOfArity 0 env
     
 bottomValuation :: QMap -> Formula -> Formula
 bottomValuation qmap fml = applySolution bottomSolution fml

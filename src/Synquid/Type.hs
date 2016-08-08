@@ -24,14 +24,23 @@ data BaseType r = BoolT | IntT | DatatypeT Id [TypeSkeleton r] [r] | TypeVarT Su
 data TypeSkeleton r =
   ScalarT (BaseType r) r |
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r) |
+  LetT Id (TypeSkeleton r) (TypeSkeleton r) |
   AnyT
   deriving (Eq, Ord)
 
+contextual x tDef (FunctionT y tArg tRes) = FunctionT y (contextual x tDef tArg) (contextual x tDef tRes)
+contextual _ _ AnyT = AnyT
+contextual x tDef t = LetT x tDef t
+  
 isScalarType (ScalarT _ _) = True
+-- isScalarType (LetT _ _ t) = isScalarType t
+isScalarType (LetT _ _ _) = True
 isScalarType _ = False
 baseTypeOf (ScalarT baseT _) = baseT
+baseTypeOf (LetT _ _ t) = baseTypeOf t
 baseTypeOf _ = error "baseTypeOf: applied to a function type"
 isFunctionType (FunctionT _ _ _) = True
+-- isFunctionType (LetT _ _ t) = isFunctionType t
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
 resType (FunctionT _ _ t) = t
@@ -41,7 +50,8 @@ hasAny (ScalarT baseT _) = baseHasAny baseT
   where
     baseHasAny (DatatypeT _ tArgs _) = any hasAny tArgs
     baseHasAny _ = False
-hasAny (FunctionT _ tArg tRes) = hasAny tArg || hasAny tRes    
+hasAny (FunctionT _ tArg tRes) = hasAny tArg || hasAny tRes
+hasAny (LetT _ tDef tBody) = hasAny tDef || hasAny tBody    
 
 toSort BoolT = BoolS
 toSort IntT = IntS
@@ -56,17 +66,21 @@ fromSort AnyS = AnyT
 
 arity :: TypeSkeleton r -> Int
 arity (FunctionT _ _ t) = 1 + arity t
+arity (LetT _ _ t) = arity t
 arity _ = 0
 
 lastType (FunctionT _ _ tRes) = lastType tRes
+lastType (LetT _ _ t) = lastType t
 lastType t = t
 
 allArgTypes (FunctionT x tArg tRes) = tArg : (allArgTypes tRes)
+allArgTypes (LetT _ _ t) = allArgTypes t
 allArgTypes _ = []
 
 allArgs (ScalarT _ _) = []
 allArgs (FunctionT x (ScalarT baseT _) tRes) = (Var (toSort baseT) x) : (allArgs tRes)
 allArgs (FunctionT x _ tRes) = (allArgs tRes)
+allArgs (LetT _ _ t) = allArgs t
 
 -- | Free variables of a type
 varsOfType :: RType -> Set Id
@@ -75,6 +89,7 @@ varsOfType (ScalarT baseT fml) = varsOfBase baseT `Set.union` (Set.map varName $
     varsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map varsOfType tArgs) `Set.union` (Set.map varName $ Set.unions (map varsOf pArgs))
     varsOfBase _ = Set.empty
 varsOfType (FunctionT x tArg tRes) = varsOfType tArg `Set.union` (Set.delete x $ varsOfType tRes)
+varsOfType (LetT x tDef tBody) = varsOfType tDef `Set.union` (Set.delete x $ varsOfType tBody)
 varsOfType AnyT = Set.empty    
 
 -- | Free variables of a type
@@ -84,6 +99,7 @@ predsOfType (ScalarT baseT fml) = predsOfBase baseT `Set.union` predsOf fml
     predsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map predsOfType tArgs) `Set.union` (Set.unions (map predsOf pArgs))
     predsOfBase _ = Set.empty
 predsOfType (FunctionT x tArg tRes) = predsOfType tArg `Set.union` predsOfType tRes
+predsOfType (LetT x tDef tBody) = predsOfType tDef `Set.union` predsOfType tBody
 predsOfType AnyT = Set.empty    
   
 varRefinement x s = Var s valueVarName |=| Var s x
@@ -142,6 +158,7 @@ typeSubstitute subst (ScalarT baseT r) = addRefinement substituteBase (sortSubst
         in ScalarT (DatatypeT name tArgs' pArgs') ftrue
       _ -> ScalarT baseT ftrue
 typeSubstitute subst (FunctionT x tArg tRes) = FunctionT x (typeSubstitute subst tArg) (typeSubstitute subst tRes)
+typeSubstitute subst (LetT x tDef tBody) = LetT x (typeSubstitute subst tDef) (typeSubstitute subst tBody)
 typeSubstitute _ AnyT = AnyT
 
 noncaptureTypeSubst :: [Id] -> [RType] -> RType -> RType  
@@ -160,6 +177,7 @@ typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
     ScalarT (DatatypeT name tArgs pArgs) fml -> ScalarT (DatatypeT name (map tsp tArgs) (map (substitutePredicate pSubst) pArgs)) (substitutePredicate pSubst fml)
     ScalarT baseT fml -> ScalarT baseT (substitutePredicate pSubst fml)
     FunctionT x tArg tRes -> FunctionT x (tsp tArg) (tsp tRes)
+    LetT x tDef tBody -> FunctionT x (tsp tDef) (tsp tBody)
     AnyT -> AnyT
   
 -- | 'typeVarsOf' @t@ : all type variables in @t@
@@ -169,6 +187,7 @@ typeVarsOf t@(ScalarT baseT r) = case baseT of
   DatatypeT _ tArgs _ -> Set.unions (map typeVarsOf tArgs)
   _ -> Set.empty
 typeVarsOf (FunctionT _ tArg tRes) = typeVarsOf tArg `Set.union` typeVarsOf tRes
+typeVarsOf (LetT _ tDef tBody) = typeVarsOf tDef `Set.union` typeVarsOf tBody
 typeVarsOf _ = Set.empty
 
 {- Refinement types -}
@@ -192,12 +211,14 @@ shape (ScalarT IntT _) = ScalarT IntT ()
 shape (ScalarT BoolT _) = ScalarT BoolT ()
 shape (ScalarT (TypeVarT _ a) _) = ScalarT (TypeVarT Map.empty a) ()
 shape (FunctionT x tArg tFun) = FunctionT x (shape tArg) (shape tFun)
+shape (LetT _ _ t) = shape t
 shape AnyT = AnyT
 
 -- | Conjoin refinement to a type
 addRefinement (ScalarT base fml) fml' = if isVarRefinemnt fml'
   then ScalarT base fml' -- the type of a polymorphic variable does not require any other refinements
   else ScalarT base (fml `andClean` fml')
+addRefinement (LetT x tDef tBody) fml = LetT x tDef (addRefinement tBody fml)
 addRefinement t (BoolLit True) = t
 addRefinement AnyT _ = AnyT
 addRefinement t _ = error $ "addRefinement: applied to function type"
@@ -205,6 +226,7 @@ addRefinement t _ = error $ "addRefinement: applied to function type"
 -- | Conjoin refinement to the return type
 addRefinementToLast t@(ScalarT _ _) fml = addRefinement t fml
 addRefinementToLast (FunctionT x tArg tRes) fml = FunctionT x tArg (addRefinementToLast tRes fml)
+addRefinementToLast (LetT x tDef tBody) fml = LetT x tDef (addRefinementToLast tBody fml)
 
 -- | Conjoin refinement to the return type inside a schema
 addRefinementToLastSch (Monotype t) fml = Monotype $ addRefinementToLast t fml
@@ -222,22 +244,21 @@ substituteInType isBound subst (ScalarT baseT fml) = ScalarT (substituteBase bas
           -- else TypeVarT (oldSubst `composeSubstitutions` subst) a
     substituteBase (DatatypeT name tArgs pArgs) = DatatypeT name (map (substituteInType isBound subst) tArgs) (map (substitute subst) pArgs)
     substituteBase baseT = baseT
-substituteInType isBound subst (FunctionT x tArg tRes) = FunctionT x (substituteInType isBound subst tArg) (substituteInType isBound subst tRes)
+substituteInType isBound subst (FunctionT x tArg tRes) = 
+  if Map.member x subst
+    then error $ unwords ["Attempt to substitute variable", x, "bound in a function type"]
+    else FunctionT x (substituteInType isBound subst tArg) (substituteInType isBound subst tRes)
+substituteInType isBound subst (LetT x tDef tBody) = 
+  if Map.member x subst
+    then error $ unwords ["Attempt to substitute variable", x, "bound in a contextual type"]
+    else LetT x (substituteInType isBound subst tDef) (substituteInType isBound subst tBody)
 substituteInType isBound subst AnyT = AnyT
       
 -- | 'renameVar' @old new t typ@: rename all occurrences of @old@ in @typ@ into @new@ of type @t@
 renameVar :: (Id -> Bool) -> Id -> Id -> RType -> RType -> RType
-renameVar isBound old new (ScalarT b _)   t = substituteInType isBound (Map.singleton old (Var (toSort b) new)) t
-renameVar _ _ _ _                         t = t -- function arguments cannot occur in types (and AnyT is assumed to be function)
-
--- unrenameTypeVars :: Set Id -> RType -> RType
--- unrenameTypeVars tvs (ScalarT baseT fml) = ScalarT (unrenameBase baseT) fml
-  -- where
-    -- unrenameBase (TypeVarT _ a) | a `Set.member` tvs = TypeVarT Map.empty a
-    -- unrenameBase (DatatypeT name tArgs pArgs) = DatatypeT name (map (unrenameTypeVars tvs) tArgs) pArgs
-    -- unrenameBase baseT = baseT
--- unrenameTypeVars tvs (FunctionT x tArg tRes) = FunctionT x (unrenameTypeVars tvs tArg) (unrenameTypeVars tvs tRes)
--- unrenameTypeVars tvs AnyT = AnyT
+renameVar isBound old new (ScalarT b _)     t = substituteInType isBound (Map.singleton old (Var (toSort b) new)) t
+renameVar isBound old new (LetT _ _ tBody)  t = renameVar isBound old new tBody t
+renameVar _ _ _ _                           t = t -- function arguments cannot occur in types (and AnyT is assumed to be function)
     
 -- | Intersection of two types (assuming the types were already checked for consistency)
 intersection _ t AnyT = t
@@ -253,4 +274,5 @@ typeApplySolution :: Solution -> RType -> RType
 typeApplySolution sol (ScalarT (DatatypeT name tArgs pArgs) fml) = ScalarT (DatatypeT name (map (typeApplySolution sol) tArgs) (map (applySolution sol) pArgs)) (applySolution sol fml)
 typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes) 
+typeApplySolution sol (LetT x tDef tBody) = LetT x (typeApplySolution sol tDef) (typeApplySolution sol tBody) 
 typeApplySolution _ AnyT = AnyT
