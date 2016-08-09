@@ -51,7 +51,10 @@ hasAny (ScalarT baseT _) = baseHasAny baseT
     baseHasAny (DatatypeT _ tArgs _) = any hasAny tArgs
     baseHasAny _ = False
 hasAny (FunctionT _ tArg tRes) = hasAny tArg || hasAny tRes
-hasAny (LetT _ tDef tBody) = hasAny tDef || hasAny tBody    
+hasAny (LetT _ tDef tBody) = hasAny tDef || hasAny tBody
+
+-- | Convention to indicate "any datatype" (for synthesizing match scrtuinees)
+anyDatatype = ScalarT (DatatypeT dontCare [] []) ftrue
 
 toSort BoolT = BoolS
 toSort IntT = IntS

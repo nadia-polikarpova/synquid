@@ -188,7 +188,7 @@ generateMatch env t = do
     else do
       (Program p tScr) <- local (over _1 (\params -> set eGuessDepth (view scrutineeDepth params) params))
                       $ inContext (\p -> Program (PMatch p []) t)
-                      $ generateE env AnyT -- Generate a scrutinee of an arbitrary type
+                      $ generateE env anyDatatype -- Generate a scrutinee of an arbitrary type
       let (env', tScr') = embedContext env tScr
       let pScrutinee = Program p tScr'
 
