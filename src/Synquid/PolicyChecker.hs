@@ -279,9 +279,8 @@ localizeE' env typ (PApp iFun iArg) = do
     pArg <- generateHOArg env argCtx tArg iArg
     return $ argCtx pArg
   else do -- First-order argument: generate now
-    pArg@(Program (PSymbol y) t) <- inContext argCtx $ localizeE env tArg iArg
-    let fml = fromJust $ lookupAsFormula y env
-    return $ Program (PApp pFun pArg) (substituteInType (isBound env) (Map.singleton x fml) tRes)
+    pArg <- inContext argCtx $ localizeE env tArg iArg
+    return $ Program (PApp pFun pArg) (appType env pArg x tRes)
   where
     generateHOArg env ctx tArg iArg = case content iArg of
       PSymbol f -> do
