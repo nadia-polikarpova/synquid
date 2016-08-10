@@ -392,11 +392,12 @@ processConstraint c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False lab
         if Set.null $ (predsOf l' `Set.union` predsOf r') Set.\\ (Map.keysSet $ allPredicates env)
             then case baseTL of -- Subtyping of datatypes: try splitting into individual constraints between measures
                   DatatypeT dtName _ _ -> do
-                    let measures = Map.keysSet $ allMeasuresOf dtName env                    
+                    let measures = Map.keysSet $ allMeasuresOf dtName env
+                    let isAbstract = null $ ((env ^. datatypes) Map.! dtName) ^. constructors
                     let vals = filter (\v -> varName v == valueVarName) . Set.toList . varsOf $ r'
                     let rConjuncts = conjunctsOf r'
                     doSplit <- asks _tcSolverSplitMeasures
-                    if not doSplit || null vals || (not . Set.null . unknownsOf) (l' |&| r') -- TODO: unknowns can be split if we know their potential valuations
+                    if not doSplit || isAbstract || null vals || (not . Set.null . unknownsOf) (l' |&| r') -- TODO: unknowns can be split if we know their potential valuations
                       then simpleConstraints %= (c' :) -- Constraint has unknowns (or RHS doesn't contain _v)
                       else case splitByPredicate measures (head vals) (Set.toList rConjuncts) of
                             Nothing -> simpleConstraints %= (c' :) -- RHS cannot be split, add whole thing

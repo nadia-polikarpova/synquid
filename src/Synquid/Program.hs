@@ -227,15 +227,18 @@ lookupSymbol name a env
   where
     asInt = asInteger name
     
-lookupAsFormula :: Id -> Environment -> Maybe Formula
-lookupAsFormula name env
-  | name == "True"                          = Just $ BoolLit True
-  | name == "False"                         = Just $ BoolLit False
-  | isJust asInt                            = Just $ IntLit (fromJust asInt)
-  | otherwise                               = case Map.lookup name (allSymbols env) of
-                                                Just (Monotype (ScalarT baseT _)) -> Just $ Var (toSort baseT) name
-                                                _ -> Nothing
+symbolAsFormula :: Environment -> Id -> RType -> Formula
+symbolAsFormula _ name t | arity t > 0
+                      = error $ unwords ["symbolAsFormula: not a scalar symbol", name]
+symbolAsFormula env name t
+  | name == "True"    = BoolLit True
+  | name == "False"   = BoolLit False
+  | isJust asInt      = IntLit (fromJust asInt)
+  | isConstructor     = Cons sort name []
+  | otherwise         = Var sort name
   where
+    isConstructor = isJust (lookupConstructor name env)
+    sort = toSort (baseTypeOf t)
     asInt = asInteger name
     
 unOpType Neg       = Monotype $ FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))

@@ -518,8 +518,7 @@ generateError env = do
 
 -- | 'toVar' @p env@: a variable representing @p@ (can be @p@ itself or a fresh ghost)
 toVar :: MonadHorn s => Environment -> RProgram -> Explorer s (Environment, Formula)
-toVar env p@(Program (PSymbol name) t)
-  | not $ isPolyConstructor p = return (env, fromJust $ lookupAsFormula name env)
+toVar env (Program (PSymbol name) t) = return (env, symbolAsFormula env name t)
 toVar env (Program _ t) = do
   g <- freshId "G"
   return (addLetBound g t env, (Var (toSort $ baseTypeOf t) g))
@@ -527,10 +526,7 @@ toVar env (Program _ t) = do
 -- | 'appType' @env p x tRes@: a type semantically equivalent to [p/x]tRes;
 -- if @p@ is not a variable, instead of a literal substitution use the contextual type LET x : (typeOf p) IN tRes
 appType :: Environment -> RProgram -> Id -> RType -> RType
-appType env p@(Program (PSymbol name) t) x tRes
-  | not $ isPolyConstructor p = 
-      let y = fromJust $ lookupAsFormula name env
-      in substituteInType (isBound env) (Map.singleton x y) tRes
+appType env (Program (PSymbol name) t) x tRes = substituteInType (isBound env) (Map.singleton x $ symbolAsFormula env name t) tRes
 appType env (Program _ t) x tRes = contextual x t tRes
 
 isPolyConstructor (Program (PSymbol name) t) = isTypeName name && (not . Set.null . typeVarsOf $ t)
@@ -642,7 +638,7 @@ instantiate env sch top argNames = do
 symbolType :: MonadHorn s => Environment -> Id -> RSchema -> Explorer s RType
 symbolType env x (Monotype t@(ScalarT b _))
     | isLiteral x = return t -- x is a literal of a primitive type, it's type is precise
-    | isTypeName x = return t -- x is a constructor, it's type is precise 
+    | isJust (lookupConstructor x env) = return t -- x is a constructor, it's type is precise 
     | otherwise = return $ ScalarT b (varRefinement x (toSort b)) -- x is a scalar variable or monomorphic scalar constant, use _v = x
 symbolType env _ sch = freshInstance sch
   where
