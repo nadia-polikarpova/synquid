@@ -38,73 +38,72 @@ import Text.PrettyPrint.ANSI.Leijen (fill, column)
 import Data.List.Split
 
 programName = "synquid"
-versionName = "0.3"
-releaseDate = fromGregorian 2016 3 8
+versionName = "0.4"
+releaseDate = fromGregorian 2016 8 11
 
 -- | Type-check and synthesize a program, according to command-line arguments
 main = do
-  (CommandLineArgs file
-                   libs
-                   onlyGoals
-                   appMax
-                   scrutineeMax
-                   matchMax
-                   auxMax
-                   fix
-                   genPreds
-                   explicitMatch
-                   unfoldLocals
-                   partial
-                   incremental
-                   consistency
-                   memoize
-                   symmetry
-                   lfp
-                   bfs
-                   out_file
-                   out_module
-                   outFormat
-                   resolve
-                   repair
-                   verify
-                   print_spec
-                   print_stats
-                   log_) <- cmdArgs cla
-  let explorerParams = defaultExplorerParams {
-    _eGuessDepth = appMax,
-    _scrutineeDepth = scrutineeMax,
-    _matchDepth = matchMax,
-    _auxDepth = auxMax,
-    _fixStrategy = fix,
-    _predPolyRecursion = genPreds,
-    _abduceScrutinees = not explicitMatch,
-    _unfoldLocals = unfoldLocals,
-    _partialSolution = partial,
-    _incrementalChecking = incremental,
-    _consistencyChecking = if repair then False else consistency,
-    _useMemoization = memoize,
-    _symmetryReduction = symmetry,
-    _explorerLogLevel = log_
-    }
-  let solverParams = defaultHornSolverParams {
-    isLeastFixpoint = lfp,
-    optimalValuationsStrategy = if bfs then BFSValuations else MarcoValuations,
-    solverLogLevel = log_
-    }
-  let synquidParams = defaultSynquidParams {
-    goalFilter = liftM (splitOn ",") onlyGoals,
-    outputFormat = outFormat,
-    resolveOnly = resolve,
-    repairPolicies = repair,
-    verifyOnly = verify,
-    showSpec = print_spec,
-    showStats = print_stats
-  }
-  let codegenParams = defaultCodegenParams {
-    filename = out_file,
-    module_ = out_module
-  }
-  runOnFile synquidParams explorerParams solverParams codegenParams file libs
+  res <- cmdArgsRun $ mode
+  case res of
+    (Synthesis file libs onlyGoals
+               appMax scrutineeMax matchMax auxMax fix genPreds explicitMatch unfoldLocals partial incremental consistency memoize symmetry
+               lfp bfs
+               out_file out_module outFormat resolve
+               print_spec print_stats log_) -> do
+                  let explorerParams = defaultExplorerParams {
+                    _eGuessDepth = appMax,
+                    _scrutineeDepth = scrutineeMax,
+                    _matchDepth = matchMax,
+                    _auxDepth = auxMax,
+                    _fixStrategy = fix,
+                    _predPolyRecursion = genPreds,
+                    _abduceScrutinees = not explicitMatch,
+                    _unfoldLocals = unfoldLocals,
+                    _partialSolution = partial,
+                    _incrementalChecking = incremental,
+                    _consistencyChecking = consistency,
+                    _useMemoization = memoize,
+                    _symmetryReduction = symmetry,
+                    _explorerLogLevel = log_
+                    }
+                  let solverParams = defaultHornSolverParams {
+                    isLeastFixpoint = lfp,
+                    optimalValuationsStrategy = if bfs then BFSValuations else MarcoValuations,
+                    solverLogLevel = log_
+                    }
+                  let synquidParams = defaultSynquidParams {
+                    goalFilter = liftM (splitOn ",") onlyGoals,
+                    outputFormat = outFormat,
+                    resolveOnly = resolve,
+                    showSpec = print_spec,
+                    showStats = print_stats
+                  }
+                  let codegenParams = defaultCodegenParams {
+                    filename = out_file,
+                    module_ = out_module
+                  }
+                  runOnFile synquidParams explorerParams solverParams codegenParams file libs
+    (Lifty file libs onlyGoals out_file out_module outFormat resolve verify print_spec print_stats log_) -> do
+                  let explorerParams = defaultExplorerParams {
+                    _explorerLogLevel = log_
+                    }
+                  let solverParams = defaultHornSolverParams {
+                    solverLogLevel = log_
+                    }
+                  let synquidParams = defaultSynquidParams {
+                    goalFilter = liftM (splitOn ",") onlyGoals,
+                    outputFormat = outFormat,
+                    resolveOnly = resolve,
+                    repairPolicies = True,
+                    verifyOnly = verify,
+                    showSpec = print_spec,
+                    showStats = print_stats
+                  }
+                  let codegenParams = defaultCodegenParams {
+                    filename = out_file,
+                    module_ = out_module
+                  }
+                  runOnFile synquidParams explorerParams solverParams codegenParams file libs                            
 
 {- Command line arguments -}
 
@@ -118,7 +117,7 @@ deriving instance Show FixpointStrategy
 {-# ANN module "HLint: ignore" #-}
 
 data CommandLineArgs
-    = CommandLineArgs {
+    = Synthesis {
         -- | Input
         file :: String,
         libs :: [String],
@@ -145,7 +144,20 @@ data CommandLineArgs
         out_module :: Maybe String,
         output :: OutputFormat,
         resolve :: Bool,
-        repair :: Bool,
+        print_spec :: Bool,
+        print_stats :: Bool,
+        log_ :: Int
+      } 
+      | Lifty {
+        -- | Input
+        file :: String,
+        libs :: [String],
+        only :: Maybe String,
+        -- | Output
+        out_file :: Maybe String,
+        out_module :: Maybe String,
+        output :: OutputFormat,
+        resolve :: Bool,
         verify :: Bool,
         print_spec :: Bool,
         print_stats :: Bool,
@@ -153,7 +165,7 @@ data CommandLineArgs
       }
   deriving (Data, Typeable, Show, Eq)
 
-cla = CommandLineArgs {  
+synt = Synthesis {  
   file                = ""              &= typFile &= argPos 0,
   libs                = []              &= args &= typ "FILES",
   only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
@@ -173,7 +185,21 @@ cla = CommandLineArgs {
   lfp                 = False           &= help ("Use least fixpoint solver (only works for type checking, default: False)") &= groupname "Solver parameters",
   bfs_solver          = False           &= help ("Use BFS instead of MARCO to solve second-order constraints (default: False)"),
   resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
-  repair              = False           &= help ("Policy repair mode (default: False)") &= name "r",
+  out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
+  out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
+  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
+  print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
+  print_stats         = False           &= help ("Show specification and solution size (default: False)"),
+  log_                = 0               &= help ("Logger verboseness level (default: 0)") &= name "l"
+  } &= auto &= help "Synthesize goals specified in the input file"
+    where
+      defaultFormat = outputFormat defaultSynquidParams
+      
+lifty = Lifty {  
+  file                = ""              &= typFile &= argPos 0,
+  libs                = []              &= args &= typ "FILES",
+  only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
+  resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   verify              = False           &= help ("Verification only mode (default: False)") &= name "v",
   out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
   out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
@@ -181,9 +207,14 @@ cla = CommandLineArgs {
   print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
   print_stats         = False           &= help ("Show specification and solution size (default: False)"),
   log_                = 0               &= help ("Logger verboseness level (default: 0)") &= name "l"
-  } &= help "Synthesize goals specified in the input file" &= program programName &= summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
+  } &= help "Fix information leaks in the input file"
     where
       defaultFormat = outputFormat defaultSynquidParams
+      
+mode = cmdArgsMode $ modes [synt, lifty] &=
+  help "Synquid program synthesizer" &= 
+  program programName &= 
+  summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)      
 
 -- | Parameters for template exploration
 defaultExplorerParams = ExplorerParams {
@@ -198,7 +229,7 @@ defaultExplorerParams = ExplorerParams {
   _unfoldLocals = False,
   _partialSolution = False,
   _incrementalChecking = True,
-  _consistencyChecking = True,
+  _consistencyChecking = False,
   _splitMeasures = True,
   _useMemoization = False,
   _symmetryReduction = False,
