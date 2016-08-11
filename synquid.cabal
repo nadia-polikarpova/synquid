@@ -1,5 +1,5 @@
 name:                 synquid
-version:              0.3
+version:              0.4
 synopsis:             Program Synthesis from Refinement Types
 description:          Synquid is a simple functional programming language with refinement types.
                       In Synquid the programmer must provide the type signature for each top-level function,
