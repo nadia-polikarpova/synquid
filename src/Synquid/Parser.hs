@@ -190,13 +190,28 @@ parseForall = do
   return $ ForallP sig sch
 
 parseType :: Parser RType
-parseType = withPos (choice [try (standalone parseUnrefTypeWithArgs), try (standalone parseTypeAtom), parseFunctionType] <?> "type")
+parseType = withPos (choice [try parseFunctionTypeWithArg, parseFunctionTypeMb] <?> "type")
+  
+-- | Parse top-level type that starts with an argument name, and thus must be a function type
+parseFunctionTypeWithArg = do
+  argId <- parseArgName  
+  argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
+  reservedOp "->"
+  returnType <- parseType
+  return $ FunctionT argId argType returnType
+  where
+    parseArgName = parseIdentifier <* reservedOp ":"
 
-standalone :: Parser RType -> Parser RType
-standalone p = do
-  t <- p
-  notFollowedBy (reservedOp "->" <|> reservedOp ":")
-  return t
+-- | Parse top-level type that does not start with an argument name 
+-- and thus could be a scalar or a function type depending on whether followed by ->
+parseFunctionTypeMb = do
+  argType <- parseUnrefTypeWithArgs <|> parseTypeAtom   
+  parseFunctionRest argType <|> return argType
+  where
+    parseFunctionRest argType = do
+      reservedOp "->"
+      returnType <- parseType
+      return $ FunctionT ("arg" ++ show (arity returnType)) argType returnType
 
 parseTypeAtom :: Parser RType
 parseTypeAtom = choice [
@@ -217,7 +232,7 @@ parseUnrefTypeNoArgs = do
       TypeVarT Map.empty <$> parseIdentifier]
   
 parseUnrefTypeWithArgs = do
-  name <- parseTypeName  
+  name <- parseTypeName
   typeArgs <- many (sameOrIndented >> parseTypeAtom)
   predArgs <- many (sameOrIndented >> angles parsePredArg)
   return $ ScalarT (DatatypeT name typeArgs predArgs) ftrue    
@@ -236,17 +251,6 @@ parseListType = do
   elemType <- brackets parseType
   return $ ScalarT (DatatypeT "List" [elemType] []) ftrue
   
-parseFunctionType :: Parser RType
-parseFunctionType = do
-  argIdMb <- optionMaybe (try parseArgName)
-  argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
-  reservedOp "->"
-  returnType <- parseType
-  let argId = maybe ("arg" ++ show (arity returnType)) id argIdMb
-  return $ FunctionT argId argType returnType
-  where
-    parseArgName = parseIdentifier <* reservedOp ":"
-
 parseSort :: Parser Sort
 parseSort = withPos (parseSortWithArgs <|> parseSortAtom <?> "sort")
   where
