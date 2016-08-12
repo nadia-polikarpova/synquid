@@ -1,3 +1,4 @@
+- Explore/typecheck aux goals at the end of an E-term, like the policy checker does
 - Type classes (for type variables and abstract datatypes)
 - Symmetry reduction
 
