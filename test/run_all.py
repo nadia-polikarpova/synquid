@@ -27,7 +27,7 @@ BENCHMARKS = [
     ('List-Elem',       []),
     ('List-Stutter',    []),
     ('List-Replicate',  []),
-    ('List-Append',     ['-m=1']),
+    ('List-Append',     []),
     ('List-Concat',     []),
     ('List-Take',       []),
     ('List-Drop',       []),
@@ -38,7 +38,7 @@ BENCHMARKS = [
     ('List-ToNat',      ['-m 0']),
     ('List-Product',    []),
     ('List-ExtractMin',     ['-a=2', '-m 3']),
-    ('List-Intersection',   ['-a=2', '-e']),
+    ('List-Intersection',   []),
     ('List-Fold',           []),
     ('List-Fold-Length',    ['-m=0']),
     ('List-Fold-Append',    ['-m=0']),
@@ -49,7 +49,7 @@ BENCHMARKS = [
     # Unique lists
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
-    ('List-Nub',            ['-m=1']),
+    ('List-Nub',            []),
     ('List-Compress',       []),
     # Insertion sort
     ('List-InsertSort',     []),
@@ -69,7 +69,7 @@ BENCHMARKS = [
     ('BST-Member',          []),
     ('BST-Insert',          []),
     ('BST-ExtractMin',      ['-a=2', '-m=3']),
-    ('BST-Delete',          ['-e']),
+    ('BST-Delete',          []),
     ('BST-Sort',            []),
     # Binary heap
     ('BinHeap-Member',      []),

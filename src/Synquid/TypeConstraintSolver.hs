@@ -604,8 +604,8 @@ addFixedUnknown name valuation = do
     
 -- | Set valuation of unknown @name@ to @valuation@
 -- and re-check all potentially affected constraints in all candidates 
-setUnknownRecheck :: MonadHorn s => Id -> Set Formula -> TCSolver s ()
-setUnknownRecheck name valuation = do
+setUnknownRecheck :: MonadHorn s => Id -> Set Formula -> Set Id -> TCSolver s ()
+setUnknownRecheck name valuation duals = do
   writeLog 3 $ text "Re-checking candidates after updating" <+> text name
   cands@(cand:_) <- use candidates
   let clauses = Set.filter (\fml -> name `Set.member` (Set.map unknownName (unknownsOf fml))) (validConstraints cand) -- First candidate cannot have invalid constraints
@@ -613,8 +613,13 @@ setUnknownRecheck name valuation = do
   env <- use initEnv
   cands'' <- lift . lift . lift $ checkCandidates False (Set.toList clauses) (instantiateConsAxioms env Nothing) cands'
     
-  when (null cands'') (throwError $ text "Re-checking candidates failed")
-  candidates .= cands''  
+  if null cands''
+    then throwError $ text "Re-checking candidates failed"
+    else do
+      let liveClauses = Set.filter (\fml -> duals `disjoint` (Set.map unknownName (unknownsOf fml))) (validConstraints cand)
+      candidates .= map (\c -> c { 
+                                  validConstraints = Set.intersection liveClauses (validConstraints c), 
+                                  invalidConstraints = Set.intersection liveClauses (invalidConstraints c) }) cands'' -- Remove Horn clauses produced by now eliminated code
   
 -- | 'instantiateConsAxioms' @env fml@ : If @fml@ contains constructor applications, return the set of instantiations of constructor axioms for those applications in the environment @env@ 
 instantiateConsAxioms :: Environment -> Maybe Formula -> Formula -> Set Formula  

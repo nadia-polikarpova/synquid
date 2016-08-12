@@ -134,7 +134,7 @@ generateI env t@(ScalarT _ _) = do
 
 -- | Generate a possibly conditional term type @t@, depending on whether a condition is abduced
 generateMaybeIf :: MonadHorn s => Environment -> RType -> Explorer s RProgram
-generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (generateMatch env t) -- If at least one solution without a match exists, go with it and continue with the else branch; otherwise try to match
+generateMaybeIf env t = ifte generateThen (uncurry3 $ generateElse env t) (generateMatch env t) -- If at least one solution without a match exists, go with it and continue with the else branch; otherwise try to match
   where
     -- | Guess an E-term and abduce a condition for it
     generateThen = do
@@ -142,10 +142,10 @@ generateMaybeIf env t = ifte generateThen (uncurry $ generateElse env t) (genera
       addConstraint $ WellFormedCond env cUnknown
       pThen <- cut $ generateE (addAssumption cUnknown env) t -- Do not backtrack: if we managed to find a solution for a nonempty subset of inputs, we go with it      
       cond <- conjunction <$> currentValuation cUnknown
-      return (cond, pThen)
+      return (cond, unknownName cUnknown, pThen)
 
 -- | Proceed after solution @pThen@ has been found under assumption @cond@
-generateElse env t cond pThen = if cond == ftrue
+generateElse env t cond condUnknown pThen = if cond == ftrue
   then return pThen -- @pThen@ is valid under no assumptions: return it
   else do -- @pThen@ is valid under a nontrivial assumption, proceed to look for the solution for the rest of the inputs
     pCond <- inContext (\p -> Program (PIf p uHole uHole) t) $ generateCondition env cond
@@ -153,10 +153,10 @@ generateElse env t cond pThen = if cond == ftrue
     cUnknown <- Unknown Map.empty <$> freshId "C"
     runInSolver $ addFixedUnknown (unknownName cUnknown) (Set.singleton $ fnot cond) -- Create a fixed-valuation unknown to assume @!cond@
     pElse <- optionalInPartial t $ inContext (\p -> Program (PIf pCond pThen p) t) $ generateI (addAssumption cUnknown env) t
-    ifM (tryEliminateBranching pElse (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty))
+    ifM (tryEliminateBranching pElse (runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty (Set.singleton condUnknown)))
       (return pElse)
       (return $ Program (PIf pCond pThen pElse) t)
-            
+
 tryEliminateBranching branch recheck = 
   if isHole branch
       then return False
@@ -204,10 +204,10 @@ generateMatch env t = do
           guard isGoodScrutinee
 
           (env'', x) <- toVar (addScrutinee pScrutinee env') pScrutinee
-          (pCase, cond) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)                  -- First case generated separately in an attempt to abduce a condition for the whole match
+          (pCase, cond, condUnknown) <- cut $ generateFirstCase env'' x pScrutinee t (head ctors)                  -- First case generated separately in an attempt to abduce a condition for the whole match
           pCases <- map fst <$> mapM (cut . generateCase (addAssumption cond env'') x pScrutinee t) (tail ctors)  -- Generate a case for each of the remaining constructors under the assumption
           let pThen = Program (PMatch pScrutinee (pCase : pCases)) t
-          generateElse env t cond pThen                                                               -- Generate the else branch
+          generateElse env t cond condUnknown pThen                                                               -- Generate the else branch
 
         _ -> mzero -- Type of the scrutinee is not a datatype: it cannot be used in a match
         
@@ -228,13 +228,13 @@ generateFirstCase env scrVar pScrutinee t consName = do
               err <- inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t) $ generateError (addAssumption deadUnknown caseEnv)
               deadValuation <- conjunction <$> currentValuation deadUnknown
               ifte (generateError (addAssumption deadValuation env)) (const mzero) (return ()) -- The error must be possible only in this case
-              return (err, deadValuation)) 
-            (\(err, deadCond) -> return $ (Case consName binders err, deadCond)) 
+              return (err, deadValuation, unknownName deadUnknown)) 
+            (\(err, deadCond, deadUnknown) -> return $ (Case consName binders err, deadCond, deadUnknown)) 
             (do
               pCaseExpr <- local (over (_1 . matchDepth) (-1 +)) 
                             $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                             $ generateI caseEnv t
-              return $ (Case consName binders pCaseExpr, ftrue))
+              return $ (Case consName binders pCaseExpr, ftrue, dontCare))
 
 -- | Generate the @consName@ case of a match term with scrutinee variable @scrName@ and scrutinee type @scrType@
 generateCase  :: MonadHorn s => Environment -> Formula -> RProgram -> RType -> Id -> Explorer s (Case RType, Explorer s ())
@@ -256,9 +256,9 @@ generateCase env scrVar pScrutinee t consName = do
       pCaseExpr <- optionalInPartial t $ local (over (_1 . matchDepth) (-1 +))
                                        $ inContext (\p -> Program (PMatch pScrutinee [Case consName binders p]) t)
                                        $ generateError caseEnv `mplus` generateI caseEnv t
-                                       
+            
       let recheck = if disjoint (symbolsOf pCaseExpr) (Set.fromList binders)
-                      then runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty
+                      then runInSolver $ setUnknownRecheck (unknownName cUnknown) Set.empty Set.empty -- ToDo: provide duals here
                       else mzero
                                        
       return (Case consName binders pCaseExpr, recheck)
@@ -292,14 +292,14 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
         let matchConds = map (conjunction . Set.fromList . (\var -> filter (Set.member var . varsOf) matchValuation)) matchVars -- group by vars
         d <- asks $ _matchDepth . fst -- Backtrack if too many matches, maybe we can find a solution with fewer
         guard $ length matchConds <= d
-        return (matchConds, conjunction condValuation, p0)
+        return (matchConds, conjunction condValuation, unknownName condUnknown, p0)
         
     generateEOrError env typ = generateError env `mplus` generateE env typ
 
     -- | Proceed after solution @p0@ has been found under assumption @cond@ and match-assumption @matchCond@
-    generateOtherBranches (matchConds, cond, p0) = do
+    generateOtherBranches (matchConds, cond, condUnknown, p0) = do
       pThen <- cut $ generateMatchesFor (addAssumption cond env) matchConds p0 t
-      generateElse env t cond pThen
+      generateElse env t cond condUnknown pThen
 
     generateMatchesFor env [] pBaseCase t = return pBaseCase
     generateMatchesFor env (matchCond : rest) pBaseCase t = do
@@ -319,7 +319,7 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
                 ifM (tryEliminateBranching (expr c) recheck)
                   (return $ expr c)
                   (genOtherCases (previousCases ++ [c]) rest)
-                            
+         
       genOtherCases [Case c [] pBaseCase] (delete c ctors)
 
 -- | 'generateE' @env typ@ : explore all elimination terms of type @typ@ in environment @env@
@@ -334,7 +334,7 @@ generateE env typ = do
   return pTerm'
   where
     addLambdaLets t body = do
-      newGoals <- use newAuxGoals      
+      newGoals <- use newAuxGoals
       newAuxGoals .= []
       return $ foldr (\f p -> Program (PLet f uHole p) t) body newGoals
   
