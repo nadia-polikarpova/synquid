@@ -1,5 +1,3 @@
-This is a snapshot of the code for PLDI'16 atifact evaluation.
-
 # Synquid #
 
 Synquid synthesizes programs from refinement types.
