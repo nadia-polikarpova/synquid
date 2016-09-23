@@ -579,6 +579,7 @@ fresh env (ScalarT baseT _) = do
     freshBase baseT = return baseT
 fresh env (FunctionT x tArg tFun) = do
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
+fresh env t = let (env', t') = embedContext env t in fresh env' t'
   
 freshPred env sorts = do
   p' <- freshId "P"
