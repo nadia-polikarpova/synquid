@@ -43,7 +43,7 @@ executable synquid
                     , cmdargs ==0.10.*
                     , filepath
                     , time
-                    , haskell-src-exts
+                    , haskell-src-exts == 1.17.*
                     , safe
                     , split
 
