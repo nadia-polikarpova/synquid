@@ -29,7 +29,7 @@ Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.o
 ## Try Synquid ##
 
 * **Try [in your browser](http://comcom.csail.mit.edu/comcom/#Synquid)!**
-* **Build from sources:** you will need recent versions of [GHC and Cabal](https://www.haskell.org/platform/) (we are using GHC 7.10.2 and Cabal 1.22.6.0). You will also need [z3](https://github.com/Z3Prover/z3) version 4.3.2. Clone this repository and then run ```cabal install``` from its top-level directory.
+* **Build from source:** You will need [stack](https://docs.haskellstack.org/en/stable/README/) and [z3](https://github.com/Z3Prover/z3) version 4.3.2. Clone this repository and then run ```stack setup && stack build``` from its top-level directory.  You can then run synquid using ```stack exec -- synquid [args]```.
 
 ## Testimonials ##
 
