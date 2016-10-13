@@ -1,0 +1,8 @@
+flags:
+  synquid:
+    synquid: true
+packages:
+  - '.'
+resolver: lts-6.21
+extra-deps:
+  - z3-4.1.0
