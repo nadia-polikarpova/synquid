@@ -317,13 +317,19 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
         parens parseFormula
       , parseBoolLit
       , parseIntLit
-      , parseSetLit
+      , parseSetLitOrComp
       , parseNullaryCons
       , parseVariable
       ]      
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
-    parseSetLit = SetLit AnyS <$> brackets (commaSep parseFormula)
+    parseSetLitOrComp = brackets (try parseSetComp <|> parseSetLit)
+    parseSetComp = do
+      name <- parseIdentifier
+      reservedOp "|"
+      e <- parseFormula
+      return $ SetComp (Var AnyS name) e
+    parseSetLit = SetLit AnyS <$> commaSep parseFormula    
     parseNullaryCons = flip (Cons AnyS) [] <$> parseTypeName
     parseVariable = Var AnyS <$> parseIdentifier 
     parseConsApp = do
