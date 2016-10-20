@@ -77,7 +77,7 @@ instance MonadSMT Z3State where
     boolSortAux .= Just boolAux
 
   isSat fml = do
-      res <- local $ (toAST >=> assert) fml >> check
+      res <- local $ (fmlToAST >=> assert) fml >> check
 
       case res of
         Unsat -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNSAT") $ return False
@@ -193,11 +193,16 @@ evalZ3State f = do
   evalStateT f $ initZ3Data env env'
 
 -- | Convert a first-order constraint to a Z3 AST.
+fmlToAST :: Formula -> Z3State AST
+fmlToAST = toAST . eliminateComp
+
+-- | Convert a Synquid refinement term to a Z3 AST
 toAST :: Formula -> Z3State AST
 toAST expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
   SetLit el xs -> setLiteral el xs
+  SetComp _ _ -> error $ unwords ["toAST: encountered a set comprehension", show (pretty expr)]
   IntLit i -> mkIntNum i
   Var s name -> var s name
   Unknown _ name -> error $ unwords ["toAST: encountered a second-order unknown", name]
@@ -230,11 +235,12 @@ toAST expr = case expr of
       boundApps <- mapM toApp boundVars
       body <- toAST e
       
-      let triggers = case e of
-                      Binary Implies lhs _ -> [lhs]
-                      _ -> []      
-      patterns <- mapM (toAST >=> (mkPattern . replicate 1)) triggers
-      mkForallConst patterns boundApps body
+      -- let triggers = case e of
+                      -- Binary Implies lhs _ -> [lhs]
+                      -- _ -> []      
+      -- patterns <- mapM (toAST >=> (mkPattern . replicate 1)) triggers
+      -- mkForallConst patterns boundApps body
+      mkForallConst [] boundApps body
 
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus
@@ -326,8 +332,8 @@ getAllMUSs assumption mustHave fmls = do
   (controlLits, controlLitsAux) <- unzip <$> mapM getControlLits allFmls
 
   -- traceShow (text "getAllMUSs" <+> pretty assumption <+> pretty mustHave <+> pretty fmls) $ return ()
-  toAST assumption >>= assert
-  condAssumptions <- mapM toAST allFmls >>= zipWithM mkImplies controlLits
+  fmlToAST assumption >>= assert
+  condAssumptions <- mapM fmlToAST allFmls >>= zipWithM mkImplies controlLits
   mapM_ assert $ condAssumptions
   withAuxSolver $ assert $ head controlLitsAux
 

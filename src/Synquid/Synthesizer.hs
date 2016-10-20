@@ -175,7 +175,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
     condQuals env vars = toSpace Nothing $ concat $
-      map (instantiateCondQualifier False env vars) cquals ++ map (extractCondFromType env vars) components
+      map (instantiateCondQualifier False env vars) cquals ++ map (extractCondFromType env vars) components -- (componentsIn env)
 
     -- | Qualifier generator for match scrutinees
     matchQuals :: Environment -> [Formula] -> QSpace
@@ -195,10 +195,11 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
     predQuals env params vars = toSpace Nothing $ 
       concatMap (extractPredQGenFromType True env params vars) (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
-        then concatMap (instantiateCondQualifier False env vars) cquals ++ concatMap (extractCondFromType env vars) components
+        then concatMap (instantiateCondQualifier False env vars) cquals ++ concatMap (extractCondFromType env vars) components -- (componentsIn env)
         else []
-        
-    components = map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal
+
+    components = componentsIn $ gEnvironment goal
+    componentsIn = map toMonotype . Map.elems . allSymbols
     syntGoal = toMonotype $ gSpec goal
 
 {- Qualifier Generators -}
@@ -270,13 +271,13 @@ extractQGenFromType positive env val vars t = extractQGenFromType' positive t
     
 -- | Extract conditional qualifiers from the types of Boolean functions    
 extractCondFromType :: Environment -> [Formula] -> RType -> [Formula]
-extractCondFromType env vars t@(FunctionT _ _ _) = case lastType t of
-  ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName ->
-    let 
-      sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
-      fml' = sortSubstituteFml sortInst fml 
-    in filter (not . isDataEq) $ allSubstitutions env fml' (Set.toList . varsOf $ fml') vars [] []
-  _ -> []
+extractCondFromType env vars t@(FunctionT _ tArg _) = case lastType t of
+    ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName ->
+      let 
+        sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
+        fml' = sortSubstituteFml sortInst fml 
+      in filter (not . isDataEq) $ allSubstitutions env fml' (Set.toList . varsOf $ fml') vars [] []
+    _ -> []
 extractCondFromType _ _ _ = []
 
 extractPredQGenFromQual :: Bool -> Environment -> [Formula] -> [Formula] -> Formula -> [Formula]

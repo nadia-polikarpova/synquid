@@ -202,7 +202,7 @@ processAllPredicates = do
       
 -- | Eliminate type and predicate variables, generate qualifier maps
 processAllConstraints :: MonadHorn s => TCSolver s ()
-processAllConstraints = do
+processAllConstraints = do  
   tcs <- use simpleConstraints
   simpleConstraints .= []
   mapM_ processConstraint tcs
@@ -434,7 +434,7 @@ processConstraint (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True label)
         else simpleConstraints %= (Subtype env (ScalarT baseTL l') (ScalarT baseTR r') True label :)
 processConstraint (WellFormed env t@(ScalarT baseT fml)) 
   = case fml of
-      Unknown _ u -> do      
+      Unknown _ u -> do
         qmap <- use qualifierMap
         tass <- use typeAssignment
         tq <- asks _typeQualsGen
@@ -631,6 +631,7 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
     SetLit _ elems -> Set.unions (map inst elems)
+    SetComp _ e -> inst e
     Pred _ p args -> Set.unions $ map inst args
     _ -> Set.empty  
   where
