@@ -11,7 +11,5 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 filter :: <p :: a -> Bool> . 
-  f:(x: a -> {Bool | _v == p x}) -> xs: List a -> {List a | elems _v == [x | x in elems xs && p x] }
+  f:(x: a -> {Bool | _v == p x}) -> xs: List a -> { List a | elems _v == [x | x in elems xs && p x] }
 filter = ??
-
-	

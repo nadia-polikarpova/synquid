@@ -175,7 +175,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
     condQuals env vars = toSpace Nothing $ concat $
-      map (instantiateCondQualifier False env vars) cquals ++ map (extractCondFromType env vars) components -- (componentsIn env)
+      map (instantiateCondQualifier False env vars) cquals ++ map (extractCondFromType env vars) (components ++ allArgTypes syntGoal)
 
     -- | Qualifier generator for match scrutinees
     matchQuals :: Environment -> [Formula] -> QSpace
@@ -195,7 +195,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
     predQuals env params vars = toSpace Nothing $ 
       concatMap (extractPredQGenFromType True env params vars) (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
-        then concatMap (instantiateCondQualifier False env vars) cquals ++ concatMap (extractCondFromType env vars) components -- (componentsIn env)
+        then concatMap (instantiateCondQualifier False env vars) cquals ++ concatMap (extractCondFromType env vars) (components ++ allArgTypes syntGoal)
         else []
 
     components = componentsIn $ gEnvironment goal
