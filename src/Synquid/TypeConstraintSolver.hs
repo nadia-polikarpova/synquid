@@ -626,7 +626,8 @@ setUnknownRecheck name valuation duals = do
 instantiateConsAxioms :: Environment -> Maybe Formula -> Formula -> Set Formula  
 instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal in
   case fml of
-    Cons resS@(DataS dtName _) ctor args -> Set.fromList $ map (measureAxiom resS ctor args) (Map.elems $ allMeasuresOf dtName env)
+    Cons resS@(DataS dtName _) ctor args -> Set.unions $ Set.fromList (map (measureAxiom resS ctor args) (Map.elems $ allMeasuresOf dtName env)) : 
+                                                         map (instantiateConsAxioms env Nothing) args
     Unary op e -> inst e
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
