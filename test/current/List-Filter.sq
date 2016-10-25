@@ -1,0 +1,15 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+  
+filter :: <p :: a -> Bool> . 
+  f:(x: a -> {Bool | _v == p x}) -> xs: List a -> { List a | elems _v == [x | x in elems xs && p x] }
+filter = ??

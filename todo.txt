@@ -1,4 +1,3 @@
-- Explore/typecheck aux goals at the end of an E-term, like the policy checker does
 - Type classes (for type variables and abstract datatypes)
 - Symmetry reduction
 
@@ -9,7 +8,6 @@
   - AVL trees without auxiliary functions  
 
 - Mutual recursion
-- Importing modules
 - Prove measure postconditions
 - Irrefutable type errors (like symbol not in scope)
 - Check that the first constructor is the base case

@@ -190,7 +190,8 @@ fmlDocAt n fml = condHlParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> intLiteral i
-    SetLit s elems -> withSort (SetS s) $ (hlBrackets $ commaSep $ map fmlDoc elems)
+    SetLit s elems -> withSort (SetS s) (hlBrackets $ commaSep $ map fmlDoc elems)
+    SetComp (Var s x) e -> withSort (SetS s) (hlBrackets $ text x <> operator "|" <> pretty e)
     Var s name -> withSort s $ if name == valueVarName then special name else text name
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
@@ -447,6 +448,7 @@ instance Show ErrorMessage where
 -- | 'fmlNodeCount' @fml@ : size of @fml@ (in AST nodes)
 fmlNodeCount :: Formula -> Int
 fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
+fmlNodeCount (SetComp _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Ite c l r) = 1 + fmlNodeCount c + fmlNodeCount l + fmlNodeCount r
