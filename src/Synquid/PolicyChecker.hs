@@ -34,7 +34,7 @@ import Debug.Trace
 localize :: MonadHorn s => Bool -> ExplorerParams -> TypingParams -> Goal -> s (Either ErrorMessage (RProgram, Requirements))
 localize isRecheck eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
-    runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams initTS go
+    runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do
       aImpl <- aNormalForm "T" (gImpl goal)
@@ -64,7 +64,7 @@ repair eParams tParams goal violations = do
                             _matchDepth = 0,
                             _auxDepth = 0,
                             _fixStrategy = DisableFixpoint
-                            }) tParams initTS go
+                            }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do
       writeLog 1 $ text "Found" <+> pretty (length violations) <+> text "violation(s) in function" <+> text (gName goal)
@@ -104,8 +104,8 @@ localizeTopLevel (Goal funName env (ForallP sig sch) impl depth pos) = localizeT
 localizeTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _) = do
   let typ' = renameAsImpl (isBound env) impl typ
   recCalls <- runInSolver (currentAssignment typ') >>= recursiveCalls
-  polymorphic <- asks $ _polyRecursion . fst
-  predPolymorphic <- asks $ _predPolyRecursion . fst
+  polymorphic <- asks . view $ _1 . polyRecursion
+  predPolymorphic <- asks . view $ _1 . predPolyRecursion
   let tvs = env ^. boundTypeVars
   let pvs = env ^. boundPredicates      
   let predGeneralized sch = if predPolymorphic then foldr ForallP sch pvs else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function          
@@ -119,7 +119,7 @@ localizeTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _
   where
     -- | 'recursiveCalls' @t@: name-type pairs for recursive calls to a function with type @t@ (0 or 1)
     recursiveCalls t = do
-      fixStrategy <- asks $ _fixStrategy . fst
+      fixStrategy <- asks . view $ _1 . fixStrategy
       case fixStrategy of
         AllArguments -> do recType <- fst <$> recursiveTypeTuple t ffalse; if recType == t then return [] else return [(funName, recType)]
         FirstArgument -> do recType <- recursiveTypeFirst t; if recType == t then return [] else return [(funName, recType)]
@@ -305,7 +305,7 @@ localizeE' env typ impl = do
                                           
 checkSymbol :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
-  ctx <- asks $ _context . fst
+  ctx <- asks . view $ _1 . context
   writeLog 2 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
   
   requiredTypes %= Map.insertWith (++) name [typ]
@@ -414,7 +414,7 @@ generateRepair env typ p = do
               
     genPureConjunct strippedEnv c = let targetType = ScalarT BoolT $ valBool |<=>| c in 
       ifte 
-        (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (reconstructE strippedEnv targetType))
+        (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (generateE strippedEnv targetType))
         (\pCond -> aNormalForm "TT" pCond)
         (throwErrorWithDescription $ hang 2 $ 
           text "Cannot synthesize term of type" <+> pretty targetType $+$
@@ -600,57 +600,6 @@ deANF' tmpDefs userDefs p@(Program (PSymbol name) t) =
 deANF' _ _ (Program PErr t) = Program PErr t
 deANF' _ _ (Program PHole t) = error "deANF': got a hole"
 
--- ToDo: replace this with TypeChecker functionality
-reconstructE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
-reconstructE env t = do
-  oldGoals <- use auxGoals
-  auxGoals .= []
-  p <- generateE env t
-  (Program pTerm pTyp) <- fillInAuxGoals p
-  auxGoals .= oldGoals
-  pTyp' <- runInSolver $ currentAssignment pTyp
-  return $ Program pTerm pTyp'
-
-fillInAuxGoals :: MonadHorn s => RProgram -> Explorer s RProgram
-fillInAuxGoals pMain = do
-  pAuxs <- reconstructAuxGoals
-  return $ foldl (\e2 (x, e1) -> insertAuxSolution x e1 e2) pMain pAuxs
-  where
-    reconstructAuxGoals = do
-      goals <- use auxGoals
-      writeLog 3 $ text "Auxiliary goals are:" $+$ vsep (map pretty goals)
-      case goals of
-        [] -> return []
-        (g : gs) -> do
-            auxGoals .= gs
-            -- let g' = g {
-                          -- gEnvironment = removeVariable (gName goal) (gEnvironment g)  -- remove recursive calls of the main goal
-                       -- }
-            writeLog 2 $ text "PICK AUXILIARY GOAL" <+> pretty g
-            p <- reconstructTopLevel g
-            rest <- reconstructAuxGoals
-            return $ (gName g, p) : rest
-            
--- | 'insertAuxSolution' @x pAux pMain@: insert solution @pAux@ to the auxiliary goal @x@ into @pMain@;
--- @pMain@ is assumed to contain either a "let x = ??" or "f x ..."
-insertAuxSolution :: Id -> RProgram -> RProgram -> RProgram
-insertAuxSolution x pAux (Program body t) = flip Program t $ 
-  case body of
-    PLet y def p -> if x == y 
-                    then PLet x pAux p
-                    else PLet y (ins def) (ins p) 
-    PSymbol y -> if x == y
-                    then content $ pAux
-                    else body
-    PApp p1 p2 -> PApp (ins p1) (ins p2)
-    PFun y p -> PFun y (ins p)
-    PIf c p1 p2 -> PIf (ins c) (ins p1) (ins p2)
-    PMatch s cases -> PMatch (ins s) (map (\(Case c args p) -> Case c args (ins p)) cases)
-    PFix ys p -> PFix ys (ins p)
-    _ -> body  
-  where
-    ins = insertAuxSolution x pAux
-    
 -- | Return all current valuations of @u@
 allCurrentValuations :: MonadHorn s => Formula -> Explorer s [Valuation]
 allCurrentValuations u = do

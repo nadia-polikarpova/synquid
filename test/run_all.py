@@ -46,9 +46,12 @@ BENCHMARKS = [
     ('List-ElemIndex',      []),
     ('List-Snoc',           []),
     ('List-Reverse',        []),
+    ('List-Range',          []),
+    # ('List-Filter',         ['-g=False']),
     # Unique lists
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
+    ('UniqueList-Range',    []),
     ('List-Nub',            []),
     ('List-Compress',       []),
     # Insertion sort
@@ -112,6 +115,13 @@ RBT_BENCHMARKS = [
     # Red-black trees
     ('RBT-BalanceL',        ['-a 2', '-m 1', '-z']),
     ('RBT-BalanceR',        ['-a 2', '-m 1', '-z']),
+    ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
+]
+
+RBT1_BENCHMARKS = [
+    # Red-black trees
+    ('RBT-BalanceL',        ['-a 2', '-u', '-z']),
+    ('RBT-BalanceR',        ['-a 2', '-u', '-z']),
     ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
 ]
 
@@ -213,9 +223,13 @@ if __name__ == '__main__':
             for (name, args) in SYGUS_BENCHMARKS:
                 run_benchmark(name, args, 'sygus')
             
+        # if 'rbt' in sections or 'all' in sections:
+            # for (name, args) in RBT_BENCHMARKS:
+                # run_benchmark(name, args, 'RBT')
+                
         if 'rbt' in sections or 'all' in sections:
-            for (name, args) in RBT_BENCHMARKS:
-                run_benchmark(name, args, 'RBT')
+            for (name, args) in RBT1_BENCHMARKS:
+                run_benchmark(name, args, 'RBT1')                
 
         if 'avl' in sections or 'all' in sections:
             for (name, args) in AVL_BENCHMARKS:

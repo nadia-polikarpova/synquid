@@ -335,7 +335,7 @@ resolveTypeRefinement valueSort fml = do
   return resolvedFml
 
 resolveFormula :: Formula -> Resolver Formula
-resolveFormula (Var s x) = do
+resolveFormula (Var _ x) = do
   env <- use environment
   case Map.lookup x (symbolsOfArity 0 env) of
     Just sch ->
@@ -352,6 +352,13 @@ resolveFormula (SetLit _ elems) = do
   elems' <- mapM resolveFormula elems
   zipWithM_ enforceSame (map sortOf elems') (repeat elemSort)
   return $ SetLit elemSort elems'
+  
+resolveFormula (SetComp (Var _ x) e) = do
+  elemSort <- freshSort
+  e' <- withLocalEnv $ do
+    environment %= addVariable x (fromSort elemSort)
+    resolveFormula e
+  return $ SetComp (Var elemSort x) e'
   
 resolveFormula (Unary op fml) = fmap (Unary op) $ do
   fml' <- resolveFormula fml
