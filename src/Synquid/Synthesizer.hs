@@ -64,7 +64,7 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
                             let typingParams = TypingParams { 
                               _condQualsGen = \_ _ -> emptyQSpace,
                               _matchQualsGen = \_ _ -> emptyQSpace,
-                              _typeQualsGen = \_ _ _ -> emptyQSpace,
+                              _typeQualsGen = \_ _ _ -> emptyQSpace, -- typeQuals,
                               _predQualsGen = predQuals False,
                               _tcSolverSplitMeasures = _splitMeasures explorerParams,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
@@ -85,6 +85,14 @@ policyRepair explorerParams solverParams goal cquals tquals = evalZ3State go
     varsForQuals env vars = 
       let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
       allPredApps env vars' 1
+      
+    -- -- | Qualifier generator for types
+    -- typeQuals :: Environment -> Formula -> [Formula] -> QSpace
+    -- typeQuals env val vars = toSpace Nothing $ concat $
+        -- [ extractQGenFromType False env val vars syntGoal, 
+          -- extractQGenFromType True env val vars syntGoal] -- extract from spec: both positive and negative
+        -- ++ map (instantiateTypeQualifier env val vars) tquals -- extract from given qualifiers
+        -- ++ map (extractQGenFromType False env val vars) components -- extract from components: only negative      
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
