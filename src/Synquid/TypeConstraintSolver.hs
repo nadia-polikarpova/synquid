@@ -293,6 +293,12 @@ simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) (ScalarT (Type
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (TypeVarT _ a) _)) | not (isBound env a) 
   = modify $ addTypingConstraint c
 simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstraint c
+
+-- Let types: extend environment (has to be done before trying to extend the type assignment)
+simplifyConstraint' _ _ (Subtype env (LetT x tDef tBody) t consistent label)
+  = simplifyConstraint (Subtype (addVariable x tDef env) tBody t consistent label) -- ToDo: make x unique?
+simplifyConstraint' _ _ (Subtype env t (LetT x tDef tBody) consistent label)
+  = simplifyConstraint (Subtype (addVariable x tDef env) t tBody consistent label) -- ToDo: make x unique? 
   
 -- Unknown free variable and a type: extend type assignment
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) t _ _) | not (isBound env a) 
@@ -323,10 +329,6 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
   = if isScalarType tArg1
       then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True label)
       else simplifyConstraint (Subtype env tRes1 tRes2 True label)
-simplifyConstraint' _ _ (Subtype env (LetT x tDef tBody) t consistent label)
-  = simplifyConstraint (Subtype (addVariable x tDef env) tBody t consistent label) -- ToDo: make x unique?
-simplifyConstraint' _ _ (Subtype env t (LetT x tDef tBody) consistent label)
-  = simplifyConstraint (Subtype (addVariable x tDef env) t tBody consistent label) -- ToDo: make x unique? 
 simplifyConstraint' _ _ c@(WellFormed env (ScalarT (DatatypeT name tArgs _) fml))
   = do
       mapM_ (simplifyConstraint . WellFormed env) tArgs
