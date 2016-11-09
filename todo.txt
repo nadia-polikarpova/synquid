@@ -1,5 +1,8 @@
-- Split subtyping constraints with multiple measures?
-- Vacuousness abduction with explicit match: doesn't care if the case conditions even play a role; both cases can be false (tests case: BST-DeleteMin)
+- Something wrong with AllArguments. Test case:
+replicate :: n: Nat -> x: Int -> {List {Int | _v == x} | len _v == n}
+replicate = \n. \x. if n <= 0 then Nil else Cons x (replicate (dec n) x)
+
+
 - Type classes (for type variables and abstract datatypes)
 - Symmetry reduction
 
@@ -10,7 +13,6 @@
   - AVL trees without auxiliary functions  
 
 - Mutual recursion
-- Importing modules
 - Prove measure postconditions
 - Irrefutable type errors (like symbol not in scope)
 - Check that the first constructor is the base case

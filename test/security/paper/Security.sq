@@ -95,7 +95,7 @@ mapM :: <mp :: User -> Bool> .(a -> Tagged b <mp>) -> xs: List a -> Tagged (List
 mapM = \f . \xs . sequence (map f xs)
   
 filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
-  (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0}>) -> xs: List a -> Tagged (List a) <fp>
+  (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0}>) -> xs: List a -> Tagged (List {a | fc _v}) <fp>
 filterM = \f . \xs .
   match xs with
     Nil -> return Nil

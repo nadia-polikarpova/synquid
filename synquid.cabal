@@ -1,5 +1,5 @@
 name:                 synquid
-version:              0.3
+version:              0.4
 synopsis:             Program Synthesis from Refinement Types
 description:          Synquid is a simple functional programming language with refinement types.
                       In Synquid the programmer must provide the type signature for each top-level function,
@@ -43,7 +43,7 @@ executable synquid
                     , cmdargs ==0.10.*
                     , filepath
                     , time
-                    , haskell-src-exts
+                    , haskell-src-exts == 1.17.*
                     , safe
                     , split
 
