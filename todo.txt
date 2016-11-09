@@ -1,3 +1,8 @@
+- Something wrong with AllArguments. Test case:
+replicate :: n: Nat -> x: Int -> {List {Int | _v == x} | len _v == n}
+replicate = \n. \x. if n <= 0 then Nil else Cons x (replicate (dec n) x)
+
+
 - Type classes (for type variables and abstract datatypes)
 - Symmetry reduction
 

@@ -335,11 +335,12 @@ generateE env typ = do
   putMemo Map.empty                                     -- Starting E-term enumeration in a new environment: clear memoization store
   
   d <- asks . view $ _1 . eGuessDepth  
-  (Program pTerm pTyp) <- generateEUpTo env typ d       -- Generate the E-term
-  newGoals <- uses auxGoals (map gName)                 -- Remember unsolved auxiliary goals
-  generateAuxGoals                                      -- Solve auxiliary goals
-  pTyp' <- runInSolver $ currentAssignment pTyp         -- Finalize the type of the synthesized term
-  addLambdaLets pTyp' (Program pTerm pTyp') newGoals    -- Check if some of the auxiliary goal solutions are large and have to be lifted into lambda-lets
+  (Program pTerm pTyp) <- generateEUpTo env typ d                            -- Generate the E-term
+  runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False  -- Final type checking pass that eliminates all free type variables
+  newGoals <- uses auxGoals (map gName)                                      -- Remember unsolved auxiliary goals
+  generateAuxGoals                                                           -- Solve auxiliary goals
+  pTyp' <- runInSolver $ currentAssignment pTyp                              -- Finalize the type of the synthesized term
+  addLambdaLets pTyp' (Program pTerm pTyp') newGoals                         -- Check if some of the auxiliary goal solutions are large and have to be lifted into lambda-lets
   where
     addLambdaLets t body [] = return body
     addLambdaLets t body (g:gs) = do
@@ -500,7 +501,7 @@ enumerateAt env typ d = do
           arg <- enqueueGoal env tArg (untyped PHole) (d - 1)
           return $ Program (PApp fun arg) tRes
         else do -- First-order argument: generate now
-          let mbCut = if Set.member x (varsOfType tRes) then id else cut
+          let mbCut = id -- if Set.member x (varsOfType tRes) then id else cut
           arg <- local (over (_1 . eGuessDepth) (-1 +))
                     $ inContext (\p -> Program (PApp fun p) tRes)
                     $ mbCut (genArg env tArg)

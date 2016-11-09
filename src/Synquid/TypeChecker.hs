@@ -31,9 +31,9 @@ reconstruct eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do
-      pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }                                -- Reconstruct the program
-      p <- flip insertAuxSolutions pMain <$> use solvedAuxGoals                                       -- Insert solutions for auxiliary goals stored in @solvedAuxGoals@
-      runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False >> finalizeProgram p  -- Final type checking pass that eliminates all free type variables      
+      pMain <- reconstructTopLevel goal { gDepth = _auxDepth eParams }     -- Reconstruct the program
+      p <- flip insertAuxSolutions pMain <$> use solvedAuxGoals            -- Insert solutions for auxiliary goals stored in @solvedAuxGoals@
+      runInSolver $ finalizeProgram p                                      -- Substitute all type/predicates variables and unknowns
     
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos)

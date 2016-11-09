@@ -331,7 +331,7 @@ getAllMUSs assumption mustHave fmls = do
   let allFmls = mustHave : fmls
   (controlLits, controlLitsAux) <- unzip <$> mapM getControlLits allFmls
 
-  -- traceShow (text "getAllMUSs" <+> pretty assumption <+> pretty mustHave <+> pretty fmls) $ return ()
+  -- traceShow (text "getAllMUSs" $+$ text "assumption:" <+> pretty assumption $+$ text "must have:" <+> pretty mustHave $+$ text "fmls:" <+> pretty fmls) $ return ()
   fmlToAST assumption >>= assert
   condAssumptions <- mapM fmlToAST allFmls >>= zipWithM mkImplies controlLits
   mapM_ assert $ condAssumptions
