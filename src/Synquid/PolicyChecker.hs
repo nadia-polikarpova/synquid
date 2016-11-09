@@ -62,7 +62,7 @@ repair eParams tParams goal violations = do
                             _eGuessDepth = 3,
                             _scrutineeDepth = 0,
                             _matchDepth = 0,
-                            _auxDepth = 0,
+                            _auxDepth = 1,
                             _fixStrategy = DisableFixpoint
                             }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
@@ -420,7 +420,7 @@ generateRepair env typ p = do
           text "Cannot synthesize term of type" <+> pretty targetType $+$
           text "when repairing violation" $+$ pretty p </> text "::" </> pretty typ $+$
           text "Probable cause: missing components to implement check")
-      
+    
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol _ m name _ | -- This is a default value: remove
       isDefaultValue name   = m
@@ -429,17 +429,22 @@ generateRepair env typ p = do
         t' = stripTags t 
         symbolPreds = predsOfType t'
         targetPreds = predsOf targetRefinement
-      in if t /= t' && isConstant name env && disjoint symbolPreds targetPreds
-          -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
-          then m -- This is a stripped constant whose type has no predicates in common with our target: exclude it form the environment
-          else if isConstant name env && ((baseTypeOf (lastType t') `elem` [stringType, worldType]) || hasHOArg t')
+        targetVars = Set.map varName $ varsOf targetRefinement
+      in 
+          -- if t /= t' && isConstant name env && disjoint symbolPreds targetPreds
+          -- -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
+          -- then m -- This is a stripped constant whose type has no predicates in common with our target: exclude it form the environment
+          -- else 
+          if isConstant name env && ((baseTypeOf (lastType t') `elem` [stringType, worldType]) || hasHOArg t')
             then m
-            else Map.insert name (Monotype t') m
+            else if not (isConstant name env) && not (name `elem` targetVars)
+                  then m -- It's a variable that doesn't appear in the target refinement
+                  else Map.insert name (Monotype t') m
     updateSymbol _ m name sch =
       let 
         t = toMonotype sch
         retT = lastType t
-      in if isTagged retT || (baseTypeOf retT == worldType) || (hasHOArg t)
+      in if isTagged retT || (baseTypeOf retT == worldType) -- || (hasHOArg t)
           then m -- This is a function from base tagged library: remove
           else Map.insert name sch m    
     

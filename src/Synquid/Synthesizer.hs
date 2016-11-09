@@ -190,7 +190,7 @@ instantiateTypeQualifier env actualVal actualVars qual =
 
 -- | 'instantiateCondQualifier' @qual@: qualifier generator that treats free variables of @qual@ as parameters
 instantiateCondQualifier :: Bool -> Environment -> [Formula] -> Formula -> [Formula]
-instantiateCondQualifier allowDtEq env vars qual = 
+instantiateCondQualifier allowDtEq env vars qual =
     let f = if allowDtEq then const True else not . isDataEq in -- TODO: disallowing datatype equality in conditionals, this is a bit of a hack
     filter f $ allSubstitutions env qual (Set.toList . varsOf $ qual) vars [] []
     
@@ -256,7 +256,7 @@ extractCondFromType env vars t@(FunctionT _ tArg _) = case lastType t of
 extractCondFromType _ _ _ = []
 
 extractPredQGenFromQual :: Bool -> Environment -> [Formula] -> [Formula] -> Formula -> [Formula]
-extractPredQGenFromQual useAllArgs env actualParams actualVars fml =
+extractPredQGenFromQual useAllArgs env actualParams actualVars fml = 
   if null actualParams 
     then []
     else let
@@ -264,10 +264,10 @@ extractPredQGenFromQual useAllArgs env actualParams actualVars fml =
         fmls = Set.toList $ conjunctsOf fml
         extractFromConjunct c =
           filterAllArgs $ allSubstitutions env c formalVars (init actualParams ++ actualVars) formalVals [last actualParams]
-      in concatMap extractFromConjunct fmls
+      in concatMap extractFromConjunct fmls  
   where
     filterAllArgs = if useAllArgs
-                      then filter (\q -> Set.fromList actualParams `Set.isSubsetOf` varsOf q)  -- Only take the qualifiers that use all predicate parameters
+                      then filter (\q -> Set.fromList (filter isVar actualParams) `Set.isSubsetOf` varsOf q)  -- Only take the qualifiers that use all predicate parameters
                       else id
                       
 extractPredQGenFromType :: Bool -> Environment -> [Formula] -> [Formula] -> RType -> [Formula]
