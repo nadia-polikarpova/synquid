@@ -1,0 +1,28 @@
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+qualifier {x <= y, x != y}
+
+zero :: {Int | _v == 0}
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}
+
+type Nat = {Int | _v >= 0}
+	
+range1 :: size: Nat -> lo: Int -> {List Int | elems _v == [0] + [x | lo <= x && x < lo + size]}
+range1 = ??
+
+range2 :: size: Nat -> lo: Int -> {List Int | elems _v == [x | lo <= x] * [x | x < lo + size]}
+range2 = ??
+
+range3 :: size: Nat -> lo: Int -> {List Int | [x | lo <= x && x < lo + size] <= elems _v}
+range3 = ??

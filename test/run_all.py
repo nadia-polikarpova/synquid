@@ -15,7 +15,7 @@ BENCH_PATH = '.'
 LOGFILE_NAME = 'results.log'
 ORACLE_NAME = 'oracle'
 OUTFILE_NAME = 'results.csv'
-COMMON_OPTS = []
+COMMON_OPTS = ['-z']
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
 
@@ -27,7 +27,7 @@ BENCHMARKS = [
     ('List-Elem',       []),
     ('List-Stutter',    []),
     ('List-Replicate',  []),
-    ('List-Append',     ['-m=1']),
+    ('List-Append',     []),
     ('List-Concat',     []),
     ('List-Take',       []),
     ('List-Drop',       []),
@@ -38,7 +38,7 @@ BENCHMARKS = [
     ('List-ToNat',      ['-m 0']),
     ('List-Product',    []),
     ('List-ExtractMin',     ['-a=2', '-m 3']),
-    ('List-Intersection',   ['-a=2', '-e']),
+    ('List-Intersection',   []),
     ('List-Fold',           []),
     ('List-Fold-Length',    ['-m=0']),
     ('List-Fold-Append',    ['-m=0']),
@@ -46,10 +46,13 @@ BENCHMARKS = [
     ('List-ElemIndex',      []),
     ('List-Snoc',           []),
     ('List-Reverse',        []),
+    ('List-Range',          []),
+    # ('List-Filter',         ['-g=False']),
     # Unique lists
     ('UniqueList-Insert',   []),
     ('UniqueList-Delete',   []),
-    ('List-Nub',            ['-m=1']),
+    ('UniqueList-Range',    []),
+    ('List-Nub',            []),
     ('List-Compress',       []),
     # Insertion sort
     ('List-InsertSort',     []),
@@ -69,7 +72,7 @@ BENCHMARKS = [
     ('BST-Member',          []),
     ('BST-Insert',          []),
     ('BST-ExtractMin',      ['-a=2', '-m=3']),
-    ('BST-Delete',          ['-e']),
+    ('BST-Delete',          []),
     ('BST-Sort',            []),
     # Binary heap
     ('BinHeap-Member',      []),
@@ -112,6 +115,13 @@ RBT_BENCHMARKS = [
     # Red-black trees
     ('RBT-BalanceL',        ['-a 2', '-m 1', '-z']),
     ('RBT-BalanceR',        ['-a 2', '-m 1', '-z']),
+    ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
+]
+
+RBT1_BENCHMARKS = [
+    # Red-black trees
+    ('RBT-BalanceL',        ['-a 2', '-u', '-z']),
+    ('RBT-BalanceR',        ['-a 2', '-u', '-z']),
     ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
 ]
 
@@ -213,9 +223,13 @@ if __name__ == '__main__':
             for (name, args) in SYGUS_BENCHMARKS:
                 run_benchmark(name, args, 'sygus')
             
+        # if 'rbt' in sections or 'all' in sections:
+            # for (name, args) in RBT_BENCHMARKS:
+                # run_benchmark(name, args, 'RBT')
+                
         if 'rbt' in sections or 'all' in sections:
-            for (name, args) in RBT_BENCHMARKS:
-                run_benchmark(name, args, 'RBT')
+            for (name, args) in RBT1_BENCHMARKS:
+                run_benchmark(name, args, 'RBT1')                
 
         if 'avl' in sections or 'all' in sections:
             for (name, args) in AVL_BENCHMARKS:
