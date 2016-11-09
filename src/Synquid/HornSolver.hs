@@ -211,7 +211,7 @@ hornApplySolution extractAssumptions sol (Binary Implies lhs rhs) =
 strengthen :: MonadSMT s => QMap -> ExtractAssumptions -> Formula -> Solution -> FixPointSolver s [Solution]
 strengthen qmap extractAssumptions fml@(Binary Implies lhs rhs) sol = do
     let n = maxValSize qmap sol unknowns
-    writeLog 3 (text "Instantiated axioms for" <+> pretty fml $+$ commaSep (map pretty $ Set.toList assumptions))
+    writeLog 3 (text "Instantiated axioms:" $+$ commaSep (map pretty $ Set.toList assumptions))
     let allAssumptions = usedLhsQuals `Set.union` assumptions
     lhsValuations <- optimalValuations n (lhsQuals Set.\\ usedLhsQuals) allAssumptions rhs -- all minimal valid valuations of the whole antecedent
     writeLog 3 (text "Optimal valuations:" $+$ vsep (map pretty lhsValuations))    

@@ -196,10 +196,14 @@ varsOf _ = Set.empty
 
 -- | 'unknownsOf' @fml@ : set of all predicate unknowns of @fml@
 unknownsOf :: Formula -> Set Formula
+unknownsOf (SetComp _ e) = unknownsOf e
 unknownsOf u@(Unknown _ _) = Set.singleton u
 unknownsOf (Unary Not e) = unknownsOf e
 unknownsOf (Binary _ e1 e2) = unknownsOf e1 `Set.union` unknownsOf e2
 unknownsOf (Ite e0 e1 e2) = unknownsOf e0 `Set.union` unknownsOf e1 `Set.union` unknownsOf e2
+unknownsOf (Pred _ _ es) = Set.unions $ map unknownsOf es
+unknownsOf (Cons _ _ es) = Set.unions $ map unknownsOf es
+unknownsOf (All _ e) = unknownsOf e
 unknownsOf _ = Set.empty
 
 -- | 'posNegUnknowns' @fml@: sets of positive and negative predicate unknowns in @fml@
@@ -333,7 +337,8 @@ substitutePredicate pSubst fml = case fml of
   Unary op e -> Unary op (substitutePredicate pSubst e)
   Binary op e1 e2 -> Binary op (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   Ite e0 e1 e2 -> Ite (substitutePredicate pSubst e0) (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
-  All v@(Var _ x) e -> All v (substitutePredicate pSubst e)
+  All v e -> All v (substitutePredicate pSubst e)
+  SetComp x e -> SetComp x (substitutePredicate pSubst e)
   _ -> fml
   
 -- | Negation normal form of a formula:
@@ -366,7 +371,10 @@ uDNF = dnf' . negationNF
                                 lClause <- dnf' e1
                                 rClause <- dnf' e2
                                 return $ lClause |&| rClause
-    dnf' fml = [fml]
+    dnf' fml 
+      | hasComp fml && not (Set.null $ unknownsOf fml) =
+          error "Encountered second-order unknown in set comprehension"
+      | otherwise = [fml]
     
 atomsOf fml = atomsOf' (negationNF fml)
   where
@@ -488,7 +496,8 @@ applySolution sol fml = case fml of
   Unary op e -> Unary op (applySolution sol e)
   Binary op e1 e2 -> Binary op (applySolution sol e1) (applySolution sol e2)
   Ite e0 e1 e2 -> Ite (applySolution sol e0) (applySolution sol e1) (applySolution sol e2)
-  All x fml' -> All x (applySolution sol fml')
+  All x e -> All x (applySolution sol e)
+  SetComp x e -> SetComp x (applySolution sol e)
   otherwise -> fml
       
 -- | 'merge' @sol sol'@ : element-wise conjunction of @sol@ and @sol'@

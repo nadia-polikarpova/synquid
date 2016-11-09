@@ -13,8 +13,7 @@ import Synquid.SolverMonad
 import Synquid.HornSolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
-import Synquid.Synthesizer hiding (verify)
-import qualified Synquid.Synthesizer (verify)
+import Synquid.Synthesizer
 import Synquid.HtmlOutput
 import Synquid.Codegen
 import Synquid.Stats
@@ -351,10 +350,8 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
       (mProg, stats) <- if repairPolicies synquidParams
-                        then policyRepair explorerParams solverParams goal cquals tquals
-                        else if verifyOnly synquidParams 
-                               then Synquid.Synthesizer.verify explorerParams solverParams goal cquals tquals
-                               else synthesize explorerParams solverParams goal cquals tquals
+                        then policyRepair (verifyOnly synquidParams) explorerParams solverParams goal cquals tquals
+                        else synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
