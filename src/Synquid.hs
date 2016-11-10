@@ -82,8 +82,9 @@ main = do
                     module_ = out_module
                   }
                   runOnFile synquidParams explorerParams solverParams codegenParams file libs
-    (Lifty file libs onlyGoals out_file out_module outFormat resolve verify print_spec print_stats log_) -> do
+    (Lifty file libs onlyGoals out_file out_module outFormat resolve verify symmetry print_spec print_stats log_) -> do
                   let explorerParams = defaultExplorerParams {
+                    _symmetryReduction = symmetry,
                     _explorerLogLevel = log_
                     }
                   let solverParams = defaultHornSolverParams {
@@ -158,6 +159,7 @@ data CommandLineArgs
         output :: OutputFormat,
         resolve :: Bool,
         verify :: Bool,
+        symmetry :: Bool,
         print_spec :: Bool,
         print_stats :: Bool,
         log_ :: Int
@@ -200,6 +202,7 @@ lifty = Lifty {
   only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
   resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   verify              = False           &= help ("Verification only mode (default: False)") &= name "v",
+  symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",  
   out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
   out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
   output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
