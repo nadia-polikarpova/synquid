@@ -19,6 +19,7 @@ module Synquid.TypeConstraintSolver (
   addFixedUnknown,
   setUnknownRecheck,
   solveTypeConstraints,
+  checkTypeConstraints,  
   simplifyAllConstraints,
   getViolatingLabels,  
   solveAllCandidates,
@@ -136,6 +137,28 @@ solveTypeConstraints = do
     
   hornClauses .= []
   consistencyChecks .= []
+  
+checkTypeConstraints :: MonadHorn s => TCSolver s ()
+checkTypeConstraints = do
+  simplifyAllConstraints
+  
+  scs <- use simpleConstraints
+  writeLog 3 (text "Simple Constraints" $+$ (vsep $ map pretty scs))  
+  
+  processAllPredicates
+  processAllConstraints
+  generateAllHornClauses
+  
+  clauses <- use hornClauses
+  env <- use initEnv
+  qmap <- use qualifierMap
+  cands <- lift . lift . lift $ checkCandidates False (map fst clauses) (instantiateConsAxioms env Nothing) [initialCandidate {solution = topSolution qmap}]
+    
+  hornClauses .= []
+  consistencyChecks .= []
+  
+  when (null cands) (throwError $ text "Checking failed")
+  
   
 {- Repair-specific interface -}
 
@@ -296,9 +319,13 @@ simplifyConstraint' _ _ c@(WellFormedPredicate _ _ _) = modify $ addTypingConstr
 
 -- Let types: extend environment (has to be done before trying to extend the type assignment)
 simplifyConstraint' _ _ (Subtype env (LetT x tDef tBody) t consistent label)
-  = simplifyConstraint (Subtype (addVariable x tDef env) tBody t consistent label) -- ToDo: make x unique?
+  = do
+      y <- freshVar env x      
+      simplifyConstraint (Subtype (addVariable y tDef env) (renameVar (isBound env) x y tDef tBody) t consistent label)
 simplifyConstraint' _ _ (Subtype env t (LetT x tDef tBody) consistent label)
-  = simplifyConstraint (Subtype (addVariable x tDef env) t tBody consistent label) -- ToDo: make x unique? 
+  = do
+      y <- freshVar env x      
+      simplifyConstraint (Subtype (addVariable y tDef env) t (renameVar (isBound env) x y tDef tBody) consistent label) -- ToDo: make x unique? 
   
 -- Unknown free variable and a type: extend type assignment
 simplifyConstraint' _ _ c@(Subtype env (ScalarT (TypeVarT _ a) _) t _ _) | not (isBound env a) 

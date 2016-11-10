@@ -55,7 +55,8 @@ data ExplorerParams = ExplorerParams {
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
   _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
   _splitMeasures :: Bool,                 -- ^ Split subtyping constraints between datatypes into constraints over each measure
-  _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging and symmetry reduction)
+  _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
+  _eContext :: RProgram -> RProgram,      -- ^ Same as context, but only up to the current e-term (used for symmetry reduction)
   _useMemoization :: Bool,                -- ^ Should enumerated terms be memoized?
   _symmetryReduction :: Bool,             -- ^ Should partial applications be memoized to check for redundancy?
   _sourcePos :: SourcePos,                -- ^ Source position of the current goal
@@ -70,7 +71,7 @@ type Requirements = Map Id [RType]
 data ExplorerState = ExplorerState {
   _typingState :: TypingState,                     -- ^ Type-checking state
   _auxGoals :: [Goal],                             -- ^ Subterms to be synthesized independently
-  _solvedAuxGoals :: Map Id RProgram,              -- Synthesized auxiliary goals, to be inserted into the main program
+  _solvedAuxGoals :: Map Id RProgram,              -- ^ Synthesized auxiliary goals, to be inserted into the main program
   _lambdaLets :: Map Id (Environment, UProgram),   -- ^ Local bindings to be checked upon use (in type checking mode)
   _requiredTypes :: Requirements,                  -- ^ All types that a variable is required to comply to (in repair mode)
   _symbolUseCount :: Map Id Int                    -- ^ Number of times each symbol has been used in the program so far
@@ -91,16 +92,15 @@ instance Pretty MemoKey where
 
 -- | Memoization store
 type Memo = Map MemoKey [(RProgram, ExplorerState)]
+emptyTermMemo = Map.empty
 
-data PartialKey = PartialKey {
-    pKeyContext :: RProgram
-} deriving (Eq, Ord)
+type SymmetryMemo = Map (String, Int) [RProgram]
+emptySymmetryMemo = Map.empty
 
-type PartialMemo = Map PartialKey (Map RProgram (Int, Environment))
 -- | Persistent state accross explorations
 data PersistentState = PersistentState {
   _termMemo :: Memo,
-  _partialFailures :: PartialMemo,
+  _symmetryMemo :: SymmetryMemo,
   _typeErrors :: [ErrorMessage]
 }
 
@@ -118,7 +118,8 @@ data Reconstructor s = Reconstructor (Goal -> Explorer s RProgram)
 -- | 'runExplorer' @eParams tParams initTS go@ : execute exploration @go@ with explorer parameters @eParams@, typing parameters @tParams@ in typing state @initTS@
 runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> Reconstructor s -> TypingState -> Explorer s a -> s (Either ErrorMessage a)
 runExplorer eParams tParams topLevel initTS go = do
-  (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go initExplorerState) (eParams, tParams, topLevel)) (PersistentState Map.empty Map.empty [])
+  (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go initExplorerState) (eParams, tParams, topLevel)) 
+                                          (PersistentState emptyTermMemo emptySymmetryMemo [])
   case ress of
     [] -> return $ Left $ head errs
     (res : _) -> return $ Right res
@@ -332,7 +333,9 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
 -- (bottom-up phase of bidirectional typechecking)
 generateE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 generateE env typ = do
-  putMemo Map.empty                                     -- Starting E-term enumeration in a new environment: clear memoization store
+  putMemo emptyTermMemo                                     -- Starting E-term enumeration in a new environment: clear memoization store
+  putSymmetryMemo emptySymmetryMemo
+  
   
   d <- asks . view $ _1 . eGuessDepth  
   (Program pTerm pTyp) <- generateEUpTo env typ d                            -- Generate the E-term
@@ -386,7 +389,7 @@ generateEAt env typ d = do
 
           checkE env typ p
           return p
-  where
+  where  
     applyMemoized (p, finalState) = do
       put finalState
       checkE env typ p
@@ -399,9 +402,7 @@ checkE :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkE env typ p@(Program pTerm pTyp) = do
   ctx <- asks . view $ _1 . context
   writeLog 2 $ text "Checking" <+> pretty p <+> text "::" <+> pretty typ <+> text "in" $+$ pretty (ctx (untyped PHole))
-  
-  -- ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
-  
+    
   addConstraint $ Subtype env pTyp typ False ""
   when (arity typ > 0) $
     ifM (asks . view $ _1 . consistencyChecking) (addConstraint $ Subtype env pTyp typ True "") (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
@@ -410,55 +411,57 @@ checkE env typ p@(Program pTerm pTyp) = do
   typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
   solveIncrementally
   typingState . errorContext .= (noPos, empty)
-    -- where      
-      -- unknownId :: Formula -> Maybe Id
-      -- unknownId (Unknown _ i) = Just i
-      -- unknownId _ = Nothing
-
-      -- checkSymmetry = do
-        -- ctx <- asks $ _context . fst
-        -- let fixedContext = ctx (untyped PHole)
-        -- if arity typ > 0
-          -- then do
-              -- let partialKey = PartialKey fixedContext
-              -- startPartials <- getPartials
-              -- let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
-              -- let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
-              -- let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
-
-              -- -- Turn off all qualifiers that abduction might be performed on.
-              -- -- TODO: Find a better way to turn off abduction.
-              -- solverState <- get
-              -- let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
-              -- let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
-              -- typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
-
-              -- writeLog 2 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
-              -- writeLog 2 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
-
-              -- -- Check that pTyp is not a supertype of any prior programs.
-              -- mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
-                               -- ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
-                               -- (\_ -> do
-                                    -- writeLog 2 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
-                                    -- writeLog 2 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
-                                    -- writeLog 2 $ text "Context:" <+> pretty fixedContext
-                                    -- typingState . qualifierMap .= qmap
-                                    -- mzero)
-                               -- (return ())) repeatPartials
-
-              -- let newCount = 1 + myCount
-              -- let newPartials = Map.insert p (newCount, env) pastPartials
-              -- let newPartialMap = Map.insert partialKey newPartials startPartials
-              -- putPartials newPartialMap
-
-              -- typingState . qualifierMap .= qmap
-          -- else return ()
-
-      -- combineEnv :: Environment -> Environment -> Environment
-      -- combineEnv env oldEnv =
-        -- env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
-
+  
+  ifM (asks . view $ _1 . symmetryReduction) (checkSymmetry p) (return ())    
+  where
+    -- | Check if @term@ is subsumed by any of the previously explored terms at this context;
+    --   if yes, fail; if no, save the term and continue.
+    checkSymmetry term = when (arity (typeOf term) > 0) $ 
+      do      
+        term' <- runInSolver $ finalizeProgram term
+        writeLog 3 $ text "CHECKING SYMMETRY FOR" <+> pretty term <+> text "::" <+> pretty (typeOf term) $+$ text "FINALIZED" <+> pretty (typeOf term')
+              
+        if hasFreeTVs (typeOf term') || hasFreePVs (typeOf term')
+          then writeLog 4 (text "FREE TV or PV: ignore") >> return () -- Free type or predicate variables: what to do?
+          else do
+            ctx <- asks . view $ _1 . eContext
+            let a = arity (typeOf term)
+            let key = (show . ctx . untyped $ PHole, a)
+            memo <- getSymmetryMemo        
+            savedTerms <- (++ Map.findWithDefault [] key memo) <$> getStandardTerms a
+            writeLog 3 $ text "FOUND TERMS" $+$ vsep (map (\p -> pretty p <+> text "::" <+> pretty (typeOf p)) savedTerms) $+$
+                          text "IN CONTEXT" $+$ pretty key
+            if term' `elem` savedTerms
+              then writeLog 4 (text "ALREADY SAVED: ignore") >> return () -- Same term encountered at higher depth, let through
+              else do
+                when (not $ isSymbol term') (forM_ savedTerms (checkSubsumed term'))
+                putSymmetryMemo $ Map.insertWith (++) key [term'] memo
+              
+    getStandardTerms 1 = do
+      let idSch = ForallT "a" (Monotype (FunctionT "x" (vartAll "a") (vart "a" $ valVart "a" |=| vartVar "a" "x"))) 
+      idT <- instantiate env idSch True []
+      return [Program (PSymbol "id") idT]
+    getStandardTerms a = return []
+      
+    -- | Check if @oldTerm@ subsumes @newTerm@ in @env@
+    checkSubsumed newTerm oldTerm 
+      = do          
+          let c = (Subtype env (typeOf oldTerm) (typeOf newTerm) False "")
+          writeLog 4 $ text "CHECK SUBSUMPTION" <+> pretty oldTerm $+$ pretty c
+          locally $ ifte (addConstraint c >> runInSolver checkTypeConstraints) (\_ -> writeLog 4 (text "SUBSUMED") >> mzero) (return ())
+          
+    isSymbol (Program (PSymbol _) _) = True
+    isSymbol _ = False
+    boundTVs = Set.fromList (env ^. boundTypeVars)
+    hasFreeTVs t = not $ Set.null $ typeVarsOf t Set.\\ boundTVs
+    boundPVs = Map.keysSet (allPredicates env) -- Set.fromList (map predSigName $ env ^. boundPredicates) `Set.union` Map.keysSet (env ^. globalPredicates)
+    hasFreePVs t = not $ Set.null $ predsOfType t Set.\\ boundPVs
+          
+    locally c = do
+      oldTS <- use typingState
+      res <- c
+      typingState .= oldTS
+  
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s RProgram
 enumerateAt env typ 0 = do
     let symbols = Map.toList $ symbolsOfArity (arity typ) env
@@ -490,7 +493,7 @@ enumerateAt env typ d = do
 
     generateApp genFun genArg = do
       x <- freshId "X"
-      fun <- inContext (\p -> Program (PApp p uHole) typ)
+      fun <- inEContext (\p -> Program (PApp p uHole) typ)
                 $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
       let FunctionT x tArg tRes = typeOf fun
 
@@ -503,7 +506,7 @@ enumerateAt env typ d = do
         else do -- First-order argument: generate now
           let mbCut = id -- if Set.member x (varsOfType tRes) then id else cut
           arg <- local (over (_1 . eGuessDepth) (-1 +))
-                    $ inContext (\p -> Program (PApp fun p) tRes)
+                    $ inEContext (\p -> Program (PApp fun p) tRes)
                     $ mbCut (genArg env tArg)
           writeLog 3 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           let tRes' = appType env arg x tRes
@@ -556,11 +559,11 @@ getMemo = lift . lift . lift $ use termMemo
 putMemo :: MonadHorn s => Memo -> Explorer s ()
 putMemo memo = lift . lift . lift $ termMemo .= memo
 
--- getPartials :: MonadHorn s => Explorer s PartialMemo
--- getPartials = lift . lift . lift $ use partialFailures
+getSymmetryMemo :: MonadHorn s => Explorer s SymmetryMemo
+getSymmetryMemo = lift . lift . lift $ use symmetryMemo
 
--- putPartials :: MonadHorn s => PartialMemo -> Explorer s ()
--- putPartials partials = lift . lift . lift $ partialFailures .= partials
+putSymmetryMemo :: MonadHorn s => SymmetryMemo -> Explorer s ()
+putSymmetryMemo memo = lift . lift . lift $ symmetryMemo .= memo
 
 throwErrorWithDescription :: MonadHorn s => Doc -> Explorer s a   
 throwErrorWithDescription msg = do
@@ -614,6 +617,7 @@ currentValuation u = do
       return $ val (head cands')
 
 inContext ctx f = local (over (_1 . context) (. ctx)) f
+inEContext ctx f = local (over (_1 . context) (. ctx) . over (_1 . eContext) (. ctx)) f
     
 -- | Replace all bound type and predicate variables with fresh free variables
 -- (if @top@ is @False@, instantiate with bottom refinements instead of top refinements)

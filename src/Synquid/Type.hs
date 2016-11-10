@@ -85,7 +85,7 @@ allArgs (FunctionT x (ScalarT baseT _) tRes) = (Var (toSort baseT) x) : (allArgs
 allArgs (FunctionT x _ tRes) = (allArgs tRes)
 allArgs (LetT _ _ t) = allArgs t
 
--- | Free variables of a type
+-- | Free first-order variables of a type
 varsOfType :: RType -> Set Id
 varsOfType (ScalarT baseT fml) = varsOfBase baseT `Set.union` (Set.map varName $ varsOf fml)
   where
@@ -95,7 +95,7 @@ varsOfType (FunctionT x tArg tRes) = varsOfType tArg `Set.union` (Set.delete x $
 varsOfType (LetT x tDef tBody) = varsOfType tDef `Set.union` (Set.delete x $ varsOfType tBody)
 varsOfType AnyT = Set.empty    
 
--- | Free variables of a type
+-- | Free predicate variables of a type
 predsOfType :: RType -> Set Id
 predsOfType (ScalarT baseT fml) = predsOfBase baseT `Set.union` predsOf fml
   where
@@ -180,7 +180,7 @@ typeSubstitutePred pSubst t = let tsp = typeSubstitutePred pSubst
     ScalarT (DatatypeT name tArgs pArgs) fml -> ScalarT (DatatypeT name (map tsp tArgs) (map (substitutePredicate pSubst) pArgs)) (substitutePredicate pSubst fml)
     ScalarT baseT fml -> ScalarT baseT (substitutePredicate pSubst fml)
     FunctionT x tArg tRes -> FunctionT x (tsp tArg) (tsp tRes)
-    LetT x tDef tBody -> FunctionT x (tsp tDef) (tsp tBody)
+    LetT x tDef tBody -> LetT x (tsp tDef) (tsp tBody)
     AnyT -> AnyT
   
 -- | 'typeVarsOf' @t@ : all type variables in @t@

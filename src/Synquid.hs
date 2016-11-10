@@ -233,6 +233,7 @@ defaultExplorerParams = ExplorerParams {
   _useMemoization = False,
   _symmetryReduction = False,
   _context = id,
+  _eContext = id,
   _sourcePos = noPos,
   _explorerLogLevel = 0
 }
