@@ -21,6 +21,7 @@ import Data.Either
 import Data.List
 import qualified Data.Foldable as Foldable
 import qualified Data.Traversable as Traversable
+import System.FilePath
 
 import Debug.Trace
 
@@ -480,9 +481,11 @@ solveSortConstraints = do
         _ -> throwResError $ text "Sort" <+> pretty s' <+> text "is not ordered"
     
 addNewSignature name sch = do
-  ifM (Set.member name <$> use (environment . constants)) (throwResError $ text "Duplicate declaration of function" <+> text name) (return ())
+  ifM (Set.member name <$> use (environment . constants)) (throwResError $ text "Duplicate declaration of function" <+> text name) (return ())  
   environment %= addPolyConstant name sch
   environment %= addUnresolvedConstant name sch
+  moduleName <- uses currentPosition (takeBaseName . sourceName)
+  environment %= addModuleInfo name moduleName
   
 substituteTypeSynonym name tArgs = do
   tss <- use $ environment . typeSynonyms
