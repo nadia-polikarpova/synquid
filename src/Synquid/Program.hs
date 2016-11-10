@@ -179,7 +179,8 @@ data Environment = Environment {
   _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
-  _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
+  _unresolvedConstants :: Map Id RSchema,  -- ^ Unresolved types of components (used for reporting specifications with macros)
+  _moduleInfo :: Map Id Id                 -- ^ For each constant, the name of the module (file) it came from
 }
 
 makeLenses ''Environment
@@ -205,7 +206,8 @@ emptyEnv = Environment {
   _datatypes = Map.empty,
   _measures = Map.empty,
   _typeSynonyms = Map.empty,
-  _unresolvedConstants = Map.empty
+  _unresolvedConstants = Map.empty,
+  _moduleInfo = Map.empty
 }
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
@@ -287,6 +289,9 @@ addLetBound name t = addVariable name t . (letBound %~ Set.insert name)
 
 addUnresolvedConstant :: Id -> RSchema -> Environment -> Environment
 addUnresolvedConstant name sch = unresolvedConstants %~ Map.insert name sch
+
+addModuleInfo :: Id -> Id -> Environment -> Environment
+addModuleInfo name moduleName = moduleInfo %~ Map.insert name moduleName
 
 removeVariable :: Id -> Environment -> Environment
 removeVariable name env = case Map.lookup name (allSymbols env) of

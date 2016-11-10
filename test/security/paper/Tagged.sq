@@ -1,31 +1,3 @@
-{- Primitives -}
-
-eq :: x: a -> y: a -> {Bool | _v == (x == y)}
-not :: x: Bool -> {Bool | _v == !x}
-
-leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
-
-{- Lists -}
-
-data List a where
-	Nil :: List a
-	Cons :: x: a -> xs: List a -> List a
-  
-termination measure len :: List a -> {Int | _v >= 0} where
-  Nil -> 0
-  Cons x xs -> 1 + len xs
-  
-measure elems :: List a -> Set a where
-  Nil -> []
-  Cons x xs -> [x] + elems xs
-  
-elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
-elem = \x . \xs . 
-  match xs with
-    Nil -> (0 != 0)   -- hack so I don't have to put 'false' in env
-    Cons y ys -> eq x y || elem x ys
-sameElems :: x: List a -> y: List a -> {Bool | _v == (elems x == elems y)}
-
 {- Strings -}
 
 data String
@@ -91,11 +63,11 @@ sequence = \xs .
     Nil -> return Nil
     Cons y ys -> liftM2 Cons y (sequence ys)    
     
-mapM :: <mp :: User -> Bool> .(a -> Tagged b <mp>) -> xs: List a -> Tagged (List b) <mp>
+mapM :: <mp :: User -> Bool> . (a -> Tagged b <mp>) -> xs: List a -> Tagged (List b) <mp>
 mapM = \f . \xs . sequence (map f xs)
   
 filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
-  (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0}>) -> xs: List a -> Tagged (List {a | fc _v}) <fp>
+  (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0}>) -> xs: List a -> Tagged (List a) <fp>
 filterM = \f . \xs .
   match xs with
     Nil -> return Nil

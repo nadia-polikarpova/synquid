@@ -420,35 +420,33 @@ generateRepair env typ p = do
           text "Cannot synthesize term of type" <+> pretty targetType $+$
           text "when repairing violation" $+$ pretty p </> text "::" </> pretty typ $+$
           text "Probable cause: missing components to implement check")
-    
+
+    -- | Strip tagged database accessors of their tags; remove symbol from the environment if it:
+    --    - comes from the Tagged module
+    --    - is a default value
+    --    - is a variable that does not appear in the target refinement
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol _ m name _ | -- This is a default value: remove
       isDefaultValue name   = m
     updateSymbol targetRefinement m name (Monotype t) = 
       let 
         t' = stripTags t 
-        symbolPreds = predsOfType t'
-        targetPreds = predsOf targetRefinement
         targetVars = Set.map varName $ varsOf targetRefinement
       in 
-          -- if t /= t' && isConstant name env && disjoint symbolPreds targetPreds
-          -- -- trace (unwords ["updateSymbol: ignoring", name, "with symbol preds", show symbolPreds, "and target preds", show targetPreds]) $
-          -- then m -- This is a stripped constant whose type has no predicates in common with our target: exclude it form the environment
-          -- else 
-          if isConstant name env && ((baseTypeOf (lastType t') `elem` [stringType, worldType]) || hasHOArg t')
-            then m
+          if isFromTaggedLibrary name
+            then m -- This is a function from base tagged library: remove
             else if not (isConstant name env) && not (name `elem` targetVars)
-                  then m -- It's a variable that doesn't appear in the target refinement
-                  else Map.insert name (Monotype t') m
+                  then m -- It's a variable that doesn't appear in the target refinement: remove
+                  else Map.insert name (Monotype t') m -- Strip
     updateSymbol _ m name sch =
       let 
         t = toMonotype sch
         retT = lastType t
-      in if isTagged retT || (baseTypeOf retT == worldType) -- || (hasHOArg t)
+      in if isFromTaggedLibrary name
           then m -- This is a function from base tagged library: remove
           else Map.insert name sch m    
     
-    hasHOArg t = any (\t -> arity t > 0) (allArgTypes t)
+    isFromTaggedLibrary name = isConstant name env && ((env ^. moduleInfo) Map.! name == "Tagged")
     
     removeContent (Pred s name args) = if name == "content"
                                           then let [Var (DataS _ [varS]) v] = args
