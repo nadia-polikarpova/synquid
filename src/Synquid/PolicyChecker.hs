@@ -330,13 +330,13 @@ replaceViolations env (Program (PMatch scr cases) t) = do
     replaceInCase (Case consName args body) = do
       let scrT = typeOf scr
       let consSch = allSymbols env Map.! consName
-      consT <- instantiate env consSch True []    
+      consT <- instantiate env consSch True [] 
       runInSolver $ matchConsType (lastType consT) scrT
       consT' <- runInSolver $ currentAssignment consT
       (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) (symbolName scr)) args consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
       body' <- replaceViolations caseEnv body
-      return $ Case consName args body'
+      return $ Case consName (map fst syms) body'
 replaceViolations env (Program (PFix xs body) t) = do
   body' <- replaceViolations env body
   return body'

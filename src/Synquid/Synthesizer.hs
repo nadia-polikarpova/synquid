@@ -292,7 +292,9 @@ extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQG
               fmls = Set.toList $ conjunctsOf fml'
               extractFromConjunct c =
                 filterAllArgs $ allSubstitutions env c formalVars (init actualParams ++ actualVars) formalVals [last actualParams]
-            in concatMap extractFromConjunct fmls
+            in if null formalVals 
+                  then [] 
+                  else concatMap extractFromConjunct fmls
     
     extractPredQGenFromType' :: RType -> [Formula]
     extractPredQGenFromType' (ScalarT (DatatypeT dtName tArgs pArgs) fml) =
@@ -327,7 +329,7 @@ allPredApps env actuals n =
 allRawSubstitutions :: Environment -> Formula -> [Formula] -> [Formula] -> [Formula] -> [Formula] -> [Formula]
 allRawSubstitutions _ (BoolLit True) _ _ _ _ = []
 allRawSubstitutions env qual formals actuals fixedFormals fixedActuals = do
-  let tvs = Set.fromList (env ^. boundTypeVars)  
+  let tvs = Set.fromList (env ^. boundTypeVars)    
   case unifySorts tvs (map sortOf fixedFormals) (map sortOf fixedActuals) of
     Left _ -> []
     Right fixedSortSubst -> do
