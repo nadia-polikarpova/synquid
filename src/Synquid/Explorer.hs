@@ -272,11 +272,13 @@ generateCase env scrVar pScrutinee t consName = do
 
 -- | 'caseSymbols' @scrutinee binders consT@: a pair that contains (1) a list of bindings of @binders@ to argument types of @consT@
 -- and (2) a formula that is the return type of @consT@ applied to @scrutinee@
+caseSymbols :: MonadHorn s => Environment -> Formula -> [Id] -> RType -> Explorer s ([(Id, RType)], Formula)
 caseSymbols env x [] (ScalarT _ fml) = let subst = substitute (Map.singleton valueVarName x) in
   return ([], subst fml)
 caseSymbols env x (name : names) (FunctionT y tArg tRes) = do
-  (syms, ass) <- caseSymbols env x names (renameVar (isBound env) y name tArg tRes)
-  return ((name, tArg) : syms, ass)  
+  name' <- if name == dontCare then freshVar env "b" else return name
+  (syms, ass) <- caseSymbols env x names (renameVar (isBound env) y name' tArg tRes)
+  return ((name', tArg) : syms, ass)  
 
 -- | Generate a possibly conditional possibly match term, depending on which conditions are abduced
 generateMaybeMatchIf :: MonadHorn s => Environment -> RType -> Explorer s RProgram
@@ -644,7 +646,7 @@ instantiate env sch top argNames = do
     go subst pSubst argNames (FunctionT x tArg tRes) = do
       x' <- case argNames of
               [] -> freshVar env "x"
-              (argName : _) -> return argName
+              (argName : _) -> if argName == dontCare then freshVar env "x" else return argName
       liftM2 (FunctionT x') (go subst pSubst [] tArg) (go subst pSubst (drop 1 argNames) (renameVar (isBoundTV subst) x x' tArg tRes))
     go subst pSubst _ t = return $ typeSubstitutePred pSubst . typeSubstitute subst $ t
     isBoundTV subst a = (a `Map.member` subst) || (a `elem` (env ^. boundTypeVars))
