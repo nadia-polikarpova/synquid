@@ -1,0 +1,116 @@
+{- Strings -}
+
+data String
+emptyString :: String
+show :: a -> String
+strcat :: String -> String -> String  
+  
+{- Tagged -}
+
+data User
+
+data World 
+
+-- | Value tagged with a policy  
+data Tagged a <visibleTo :: World -> User -> Bool>!
+measure content :: Tagged a -> a
+
+return :: <rp :: World -> User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
+
+bind :: <bp :: World -> User -> Bool> . <bf :: a -> b -> Bool> .
+  x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
+  
+-- Unfortunately this strengthened bind only works for Booleans
+-- The general case would be: in `bind x f`, violation of the additional policy on x compels x to be a particular value,
+-- but that is not expressible  
+bindBool :: <bp :: World -> User -> Bool> . <bf :: Bool -> b -> Bool> . <bc :: Bool> .
+  x: Tagged {Bool | _v ==> bc} <{bp _0 _1 && bc}> -> (u: {Bool | _v ==> bc} -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>  
+
+ifM :: <ip :: World -> User -> Bool> . <ic :: Bool> .
+  cond: Tagged {Bool | _v ==> ic} <{ic && ip _0 _1}> 
+    -> thn: Tagged a <{ic && ip _0 _1}> 
+    -> els: Tagged a <ip> 
+    -> Tagged a <ip>
+ifM = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)    
+
+liftM :: <l1p :: World -> User -> Bool> . <l1f :: a -> b -> Bool> . 
+  f: (u: a -> {b | l1f u _v}) ->
+  x: Tagged a <l1p> ->
+  Tagged {b | l1f (content x) _v} <l1p>
+liftM = \f . \x . bind x (\x' . return (f x'))    
+
+liftM2 :: <l2p :: World -> User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
+  f: (u: a -> v: b -> {c | l2f u v _v}) ->
+  x: Tagged a <l2p> ->
+  y: Tagged b <l2p> ->
+  Tagged {c | l2f (content x) (content y) _v} <l2p>
+liftM2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))  
+  
+andM :: <ap :: World -> User -> Bool> . 
+  x: Tagged Bool <ap> ->
+  y: Tagged Bool <ap> ->
+  Tagged {Bool | _v == (content x && content y)} <ap>
+andM = \x . \y . liftM2 (\u . \v . u && v) x y
+  
+map :: <mp :: World -> User -> Bool> .
+  (a -> Tagged b <mp>) -> xs: List a -> List (Tagged b <mp>)
+map = \f . \xs .
+  match xs with 
+    Nil -> Nil
+    Cons y ys -> Cons (f y) (map f ys)
+    
+sequence :: <seqp :: World -> User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
+sequence = \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> liftM2 Cons y (sequence ys)    
+    
+mapM :: <mp :: World -> User -> Bool> . (a -> Tagged b <mp>) -> xs: List a -> Tagged (List b) <mp>
+mapM = \f . \xs . sequence (map f xs)
+  
+filterM :: <fp :: World -> User -> Bool> . <fc :: a -> Bool> .
+  (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0 _1}>) -> xs: List a -> Tagged (List a) <fp>
+filterM = \f . \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> ifM (f y) 
+                    (liftM2 Cons (return y) (filterM f ys)) 
+                    (filterM f ys) 
+    
+foldM :: <fp :: World -> User -> Bool> . 
+  (a -> b -> Tagged a <fp>) -> a: a -> xs: List b -> Tagged a <fp>
+foldM = \f . \a . \xs .
+    match xs with 
+      Nil -> return a
+      Cons y ys -> bind (f a y) (\fay . foldM f fay ys)
+
+{- auxiliary function for sortByM (below) -}
+insertM :: <inp :: World -> User -> Bool> . 
+  (a -> a -> Tagged Bool <inp>) -> x: a -> xs: List a -> 
+            Tagged {List a | elems _v == elems xs + [x]} <inp>
+insertM = \leq . \x . \xs .
+  match xs with
+    Nil -> return (Cons x Nil)
+    Cons y ys -> bind (leq x y) (\c . 
+      if c
+        then return (Cons x xs)
+        else bind (insertM leq x ys) (\rec . return (Cons y rec))
+    )
+    
+sortByM :: <sop :: World -> User -> Bool> .
+  (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
+sortByM = \leq . \xs .  
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> bind (sortByM leq ys) (\rec . insertM leq y rec) 
+
+{- Output -}      
+
+print :: <pp :: World -> User -> Bool> . w: World -> viewer: Tagged {User | pp w _v} <pp> -> x: Tagged a <pp> -> World
+printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {User | pp w _v}) <pp> -> x: Tagged a <pp> -> World
+
+{- Qualifiers -}
+
+qualifier {x == y, x in y, !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y), _v == (x && y)}
+  
