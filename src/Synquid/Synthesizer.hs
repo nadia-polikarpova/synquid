@@ -115,12 +115,16 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
       let 
         vars' = varsForQuals env vars 
         params' = if null params then params else allPredApps env (init params) 1 ++ [last params]
+        filterSomeArgs = if null params
+                          then id                          
+                          else filter (\q -> not $ Set.fromList params `disjoint` varsOf q)  -- Only take the qualifiers that use some predicate parameters
       in toSpace Nothing $
         concatMap (extractPredQGenFromQual useAllArgs env params' vars') tquals ++ -- extract from given qualifiers
         concatMap (extractPredQGenFromType useAllArgs env params' vars') (syntGoal : components) ++
-        if null params  -- Parameter-less predicate: also include conditional qualifiers
-          then concatMap (instantiateCondQualifier True env vars') cquals ++ concatMap (extractCondFromType env vars') components
-          else []
+        filterSomeArgs (concatMap (instantiateCondQualifier True env (params' ++ vars')) cquals ++ concatMap (extractCondFromType env (params' ++ vars')) components)
+        -- if null params  -- Parameter-less predicate: also include conditional qualifiers
+          -- then concatMap (instantiateCondQualifier True env vars') cquals ++ concatMap (extractCondFromType env vars') components
+          -- else []
         
     components = map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal
     syntGoal = toMonotype $ gSpec goal
