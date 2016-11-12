@@ -33,12 +33,12 @@ getAllPaperIds :: w: World -> Tagged (List PaperId) <{True}>
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 -- | Paper conflicts (public)
-predicate paperConflicts :: World -> PaperId -> Set User
+predicate paperConflicts :: World -> Map PaperId (Set User)
 getPaperConflicts :: w: World -> pid: PaperId 
-                        -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{True}>
+                        -> Tagged {List {User | _v in (paperConflicts w)[[pid]]} | elems _v == (paperConflicts w)[[pid]]} <{True}>
 
 -- | Paper score
-getPaperScore :: w: World -> pid: PaperId -> Tagged Int <{!(_1 in paperConflicts _0 pid)}>
+getPaperScore :: w: World -> pid: PaperId -> Tagged Int <{!(_1 in (paperConflicts _0)[[pid]])}>
 defaultPaperScore :: Tagged Int <{True}>
 
 {- Client code -}

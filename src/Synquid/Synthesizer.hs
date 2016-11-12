@@ -318,8 +318,11 @@ extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQG
 allPredApps :: Environment -> [Formula] -> Int -> [Formula]
 allPredApps _ actuals 0 = actuals
 allPredApps env actuals n = 
-  let smallerApps = allPredApps env actuals (n - 1)
-  in smallerApps ++ predAppsOneStep smallerApps
+  let 
+    smallerApps = allPredApps env actuals (n - 1)
+    appsThisLevel = predAppsOneStep smallerApps
+    mapSelsThisLevel = mapSels appsThisLevel smallerApps
+  in smallerApps ++ appsThisLevel ++ mapSelsThisLevel
   where
     predAppsOneStep actuals = do
       (pName, sorts) <- Map.toList (env ^. globalPredicates)
@@ -327,6 +330,12 @@ allPredApps env actuals n =
       let formals = zipWith Var argSorts deBrujns
       let app = Pred resSort pName formals
       allRawSubstitutions env app formals actuals [] []
+      
+    mapSels maybeMaps args = do
+      mapTerm <- filter (isMapS . sortOf) maybeMaps
+      let formal = Var (keySort $ sortOf mapTerm) (head deBrujns)
+      let sel = MapSel mapTerm formal
+      allRawSubstitutions env sel [formal] actuals [] []
 
 -- | 'allSubstitutions' @env qual nonsubstActuals formals actuals@: 
 -- all well-typed substitutions of @actuals@ for @formals@ in a qualifier @qual@

@@ -1,0 +1,15 @@
+Found 1 violation(s) in function copyStatus
+copyStatus :: w:World -> pid1:PaperId -> pid2:PaperId -> World
+copyStatus = \w . \pid1 .
+    \pid2 . 
+      let status1 = ifM (return (eq
+                                   pid1 pid2)) (getPaperStatus w
+                                                  pid1) defaultPaperStatus in
+      setPaperStatus w pid2 status1
+
+(Goals: 1)
+(Measures: 3)
+(Policy size: fromList [("8-ProtectWrite.sq",89),("Prelude.sq",37),("Tagged.sq",127)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+copyStatus            &        16  &        28  &             0.00s  &      0.24s  &      0.78s  &        1.03s  \\
+Totals                &        16  &        28  &             0.00s  &      0.24s  &      0.78s  &        1.03s  \\

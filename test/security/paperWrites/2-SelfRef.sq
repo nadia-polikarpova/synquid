@@ -20,9 +20,9 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 -- | Paper authors (visible to themselves and the chair)
-predicate paperAuthors :: World -> PaperId -> Set User
+predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId -> 
-  Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_1 in paperAuthors _0 pid || _1 == chair _0}>
+  Tagged {List {User | _v in (paperAuthors w)[[pid]]} | elems _v == (paperAuthors w)[[pid]]} <{_1 in (paperAuthors _0)[[pid]] || _1 == chair _0}>
 defaultPaperAuthors :: Tagged (List User) <{True}>  
 
 {- Client code -}
