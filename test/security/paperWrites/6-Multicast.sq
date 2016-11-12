@@ -23,15 +23,15 @@ predicate currentPhase :: World -> Int
 getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 
 -- | Paper authors (visible to themselves)
-predicate paperAuthors :: World -> PaperId -> Set User
+predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId -> 
-  Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} 
-         <{_1 in paperAuthors _0 pid}>
+  Tagged {List {User | _v in (paperAuthors w)[[pid]]} | elems _v == (paperAuthors w)[[pid]]} 
+         <{_1 in (paperAuthors _0)[[pid]]}>
 defaultPaperAuthors :: Tagged (List User) <{True}>  
 
 -- | Paper status (secret until done)
 getPaperStatus :: w: World -> pid: PaperId -> 
-  Tagged Status <{_1 in paperAuthors _0 pid && currentPhase _0 == done}>
+  Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}>
 defaultPaperStatus :: Tagged Status <{True}>
 
 {- Client code -}

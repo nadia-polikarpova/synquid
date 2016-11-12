@@ -1,0 +1,56 @@
+
+{- Datatypes -}
+
+data PaperId
+
+type Phase = {Int | 0 <= _v && _v < 4}
+submission :: {Phase | _v == 0}
+review :: {Phase | _v == 1}
+rebuttal :: {Phase | _v == 2}
+done :: {Phase | _v == 3}
+
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+
+{- Sensitive data and policies -}   
+   
+-- | Current phase (public)
+predicate currentPhase :: World -> Int
+getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
+setCurrentPhase :: w: World -> phase: Tagged Int <{True}> -> 
+  {World | 
+    currentPhase _v == content phase 
+    && paperAuthors _v == paperAuthors w
+  }
+
+-- | Paper authors (visible to themselves)
+predicate paperAuthors :: World -> Map PaperId (Set User)
+getPaperAuthors :: w: World -> pid: PaperId -> 
+  Tagged {List {User | _v in (paperAuthors w)[[pid]]} | elems _v == (paperAuthors w)[[pid]]}  <{_1 in (paperAuthors _0)[[pid]]}>
+defaultPaperAuthors :: Tagged (List User) <{True}>  
+
+-- | Paper status (secret until done)
+predicate paperStatus :: World -> Map PaperId Status
+getPaperStatus :: w: World -> pid: PaperId -> 
+  Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}>
+defaultPaperStatus :: Tagged Status <{True}>
+setPaperStatus :: w: World -> pid: PaperId -> 
+  st: Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}> ->
+  {World | 
+    currentPhase _v == currentPhase w 
+    && paperAuthors _v == paperAuthors w
+    && paperStatus _v == (paperStatus w) [[pid := content st]]
+  }
+
+{- Client code -}
+
+-- | Copy status of one paper into another.
+-- | Repair: check that it's the same paper (note: just checking same authors is unsound, cause authors could change!)
+copyStatus :: w: World -> pid1: PaperId -> pid2: PaperId -> World
+copyStatus = \w . \pid1 . \pid2 .
+  let status1 = getPaperStatus w pid1 in
+  setPaperStatus w pid2 status1
+
+
