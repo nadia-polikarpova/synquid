@@ -140,6 +140,7 @@ instance Pretty Sort where
   pretty IntS = text "Int"
   pretty BoolS = text "Bool"
   pretty (SetS el) = text "Set" <+> pretty el
+  pretty (MapS k v) = text "Map" <+> pretty k <+> pretty v
   pretty (VarS name) = text name
   pretty (DataS name args) = text name <+> hsep (map (hlParens . pretty) args)
   pretty AnyS = operator "?"
@@ -164,8 +165,10 @@ instance Show BinOp where
 
 -- | Binding power of a formula
 power :: Formula -> Int
-power (Pred _ _ []) = 10
-power (Cons _ _ []) = 10
+power (Pred _ _ []) = 11
+power (Cons _ _ []) = 11
+power MapSel {} = 10
+power MapUpd {} = 10
 power Pred {} = 9
 power Cons {} = 9
 power Unary {} = 8
@@ -178,7 +181,7 @@ power (Binary op _ _)
   | op `elem` [Iff] = 2
 power All {} = 1
 power Ite {} = 1
-power _ = 10
+power _ = 11
 
 -- | Pretty-printed formula
 fmlDoc :: Formula -> Doc
@@ -192,6 +195,8 @@ fmlDocAt n fml = condHlParens (n' <= n) (
     IntLit i -> intLiteral i
     SetLit s elems -> withSort (SetS s) (hlBrackets $ commaSep $ map fmlDoc elems)
     SetComp (Var s x) e -> withSort (SetS s) (hlBrackets $ text x <> operator "|" <> pretty e)
+    MapSel m k -> fmlDocAt n' m <> hlBrackets (hlBrackets (fmlDoc k))
+    MapUpd m k v -> fmlDocAt n' m <> hlBrackets (hlBrackets (fmlDoc k <+> operator ":=" <+> fmlDoc v))
     Var s name -> withSort s $ if name == valueVarName then special name else text name
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
@@ -449,6 +454,8 @@ instance Show ErrorMessage where
 fmlNodeCount :: Formula -> Int
 fmlNodeCount (SetLit _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (SetComp _ e) = 1 + fmlNodeCount e
+fmlNodeCount (MapSel m k) = 1 + fmlNodeCount m + fmlNodeCount k
+fmlNodeCount (MapUpd m k v) = 1 + fmlNodeCount m + fmlNodeCount k + fmlNodeCount v
 fmlNodeCount (Unary _ e) = 1 + fmlNodeCount e
 fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Ite c l r) = 1 + fmlNodeCount c + fmlNodeCount l + fmlNodeCount r

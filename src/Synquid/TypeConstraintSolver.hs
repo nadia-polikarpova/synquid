@@ -662,6 +662,8 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
     SetLit _ elems -> Set.unions (map inst elems)
     SetComp _ e -> inst e
+    MapSel m k -> inst m `Set.union` inst k
+    MapUpd m k v -> inst m `Set.union` inst k `Set.union` inst v
     Pred _ p args -> Set.unions $ map inst args
     _ -> Set.empty  
   where

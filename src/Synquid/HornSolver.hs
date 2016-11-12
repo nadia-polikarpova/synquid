@@ -381,9 +381,10 @@ pruneValuations assumption vals =
       strictlyImplies ls rs = do
         let l = conjunction ls
         let r = conjunction rs
-        res1 <- isValidFml $ (assumption |&| l) |=>| r
-        res2 <- isValidFml $ (assumption |&| r) |=>| l
-        return $ (res1 && (not res2 || (Set.size ls > Set.size rs)))
+        isValidFml $ (assumption |&| l) |=>| r
+        -- res1 <- isValidFml $ (assumption |&| l) |=>| r
+        -- res2 <- isValidFml $ (assumption |&| r) |=>| l
+        -- return $ (res1 && (not res2 || (Set.size ls > Set.size rs)))
       isSubsumed val vals = anyM (\v -> strictlyImplies val v) vals
   in prune isSubsumed vals
   
