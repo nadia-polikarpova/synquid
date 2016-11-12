@@ -157,6 +157,10 @@ toZ3Sort s = do
         -- DataS name args -> mkStringSymbol name >>= mkUninterpretedSort
         DataS name args -> mkIntSort
         SetS el -> toZ3Sort el >>= mkSetSort
+        MapS k v -> do
+                      k' <- toZ3Sort k
+                      v' <- toZ3Sort v
+                      mkArraySort k' v'
         --AnyS -> mkIntSort
       sorts %= Map.insert s z3s
       return z3s
@@ -203,6 +207,15 @@ toAST expr = case expr of
   BoolLit False -> mkFalse
   SetLit el xs -> setLiteral el xs
   SetComp _ _ -> error $ unwords ["toAST: encountered a set comprehension", show (pretty expr)]
+  MapSel m k -> do
+    m' <- toAST m
+    k' <- toAST k
+    mkSelect m' k'
+  MapUpd m k v -> do
+    m' <- toAST m
+    k' <- toAST k
+    v' <- toAST v
+    mkStore m' k' v'
   IntLit i -> mkIntNum i
   Var s name -> var s name
   Unknown _ name -> error $ unwords ["toAST: encountered a second-order unknown", name]

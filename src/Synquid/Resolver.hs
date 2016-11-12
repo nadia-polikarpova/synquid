@@ -299,6 +299,7 @@ resolveType AnyT = return AnyT
 -- | Check that sort has no unknown datatypes
 resolveSort :: Sort -> Resolver ()
 resolveSort (SetS elSort) = resolveSort elSort
+resolveSort (MapS k v) = resolveSort k >> resolveSort v
 resolveSort s@(DataS name sArgs) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
@@ -360,6 +361,20 @@ resolveFormula (SetComp (Var _ x) e) = do
     environment %= addVariable x (fromSort elemSort)
     resolveFormula e
   return $ SetComp (Var elemSort x) e'
+  
+resolveFormula (MapSel m k) = do
+  m' <- resolveFormula m
+  k' <- resolveFormula k
+  valSort <- freshSort
+  enforceSame (sortOf m') (MapS (sortOf k') valSort)
+  return $ MapSel m' k'
+  
+resolveFormula (MapUpd m k v) = do
+  m' <- resolveFormula m
+  k' <- resolveFormula k
+  v' <- resolveFormula v
+  enforceSame (sortOf m') (MapS (sortOf k') (sortOf v'))
+  return $ MapUpd m' k' v'  
   
 resolveFormula (Unary op fml) = fmap (Unary op) $ do
   fml' <- resolveFormula fml

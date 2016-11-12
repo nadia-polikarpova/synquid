@@ -18,12 +18,17 @@ import Control.Monad
 {- Sorts -}
 
 -- | Sorts
-data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | AnyS
+data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | MapS Sort Sort | AnyS
   deriving (Eq, Ord)
   
 isSetS (SetS _) = True
 isSetS _ = False
 elemSort (SetS s) = s
+
+isMapS (MapS _ _) = True
+isMapS _ = False
+keySort (MapS s _) = s
+valueSort (MapS _ s) = s
 isData (DataS _ _) = True
 isData _ = False
 sortArgsOf (DataS _ sArgs) = sArgs
@@ -34,6 +39,7 @@ typeVarsOfSort :: Sort -> Set Id
 typeVarsOfSort (VarS name) = Set.singleton name  
 typeVarsOfSort (DataS _ sArgs) = Set.unions (map typeVarsOfSort sArgs)
 typeVarsOfSort (SetS s) = typeVarsOfSort s
+typeVarsOfSort (MapS k v) = typeVarsOfSort k `Set.union` typeVarsOfSort v
 typeVarsOfSort _ = Set.empty
 
 -- Mapping from type variables to sorts
@@ -45,6 +51,7 @@ sortSubstitute subst s@(VarS a) = case Map.lookup a subst of
   Nothing -> s
 sortSubstitute subst (DataS name args) = DataS name (map (sortSubstitute subst) args)
 sortSubstitute subst (SetS el) = SetS (sortSubstitute subst el)
+sortSubstitute subst (MapS k v) = MapS (sortSubstitute subst k) (sortSubstitute subst v)
 sortSubstitute _ s = s
 
 distinctTypeVars = map (\i -> "A" ++ show i) [0..] 
@@ -63,6 +70,8 @@ unifySorts boundTvs = unifySorts' Map.empty
       = unifySorts' subst xs ys
     unifySorts' subst (SetS x : xs) (SetS y : ys)           
       = unifySorts' subst (x:xs) (y:ys)
+    unifySorts' subst (MapS k v : xs) (MapS k' v' : ys)           
+      = unifySorts' subst (k:v:xs) (k':v':ys)      
     unifySorts' subst (DataS name args : xs) (DataS name' args' :ys) 
       = if name == name' 
           then unifySorts' subst (args ++ xs) (args' ++ ys) 
@@ -118,6 +127,8 @@ data Formula =
   IntLit Integer |                    -- ^ Integer literal
   SetLit Sort [Formula] |             -- ^ Set literal ([1, 2, 3])
   SetComp Formula Formula |           -- ^ Set comprehension ([x | x > 3])
+  MapSel Formula Formula |            -- ^ Map select
+  MapUpd Formula Formula Formula |    -- ^ Map update
   Var Sort Id |                       -- ^ Input variable (universally quantified first-order variable)
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression  
@@ -185,10 +196,12 @@ infix 4 |<=>|
 varsOf :: Formula -> Set Formula
 varsOf (SetLit _ elems) = Set.unions $ map varsOf elems
 varsOf (SetComp x e) = Set.delete x (varsOf e)
+varsOf (MapSel m k) = Set.unions $ map varsOf [m, k]
+varsOf (MapUpd m k v) = Set.unions $ map varsOf [m, k, v]
 varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
-varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
-varsOf (Ite e0 e1 e2) = varsOf e0 `Set.union` varsOf e1 `Set.union` varsOf e2
+varsOf (Binary _ e1 e2) = Set.unions $ map varsOf [e1, e2]
+varsOf (Ite e0 e1 e2) = Set.unions $ map varsOf [e0, e1, e2]
 varsOf (Pred _ _ es) = Set.unions $ map varsOf es
 varsOf (Cons _ _ es) = Set.unions $ map varsOf es
 varsOf (All x e) = Set.delete x (varsOf e)
@@ -199,8 +212,8 @@ unknownsOf :: Formula -> Set Formula
 unknownsOf (SetComp _ e) = unknownsOf e
 unknownsOf u@(Unknown _ _) = Set.singleton u
 unknownsOf (Unary Not e) = unknownsOf e
-unknownsOf (Binary _ e1 e2) = unknownsOf e1 `Set.union` unknownsOf e2
-unknownsOf (Ite e0 e1 e2) = unknownsOf e0 `Set.union` unknownsOf e1 `Set.union` unknownsOf e2
+unknownsOf (Binary _ e1 e2) = Set.unions $ map unknownsOf [e1, e2]
+unknownsOf (Ite e0 e1 e2) = Set.unions $ map unknownsOf [e0, e1, e2]
 unknownsOf (Pred _ _ es) = Set.unions $ map unknownsOf es
 unknownsOf (Cons _ _ es) = Set.unions $ map unknownsOf es
 unknownsOf (All _ e) = unknownsOf e
@@ -235,9 +248,11 @@ predsOf :: Formula -> Set Id
 predsOf (Pred _ p es) = Set.insert p (Set.unions $ map predsOf es)
 predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
 predsOf (SetComp _ e) = predsOf e
+predsOf (MapSel m k) = Set.unions $ map predsOf [m, k]
+predsOf (MapUpd m k v) = Set.unions $ map predsOf [m, k, v]
 predsOf (Unary _ e) = predsOf e
-predsOf (Binary _ e1 e2) = predsOf e1 `Set.union` predsOf e2
-predsOf (Ite e0 e1 e2) = predsOf e0 `Set.union` predsOf e1 `Set.union` predsOf e2
+predsOf (Binary _ e1 e2) = Set.unions $ map predsOf [e1, e2]
+predsOf (Ite e0 e1 e2) = Set.unions $ map predsOf [e0, e1, e2]
 predsOf (All x e) = predsOf e
 predsOf _ = Set.empty
 
@@ -255,6 +270,8 @@ sortOf (BoolLit _)                               = BoolS
 sortOf (IntLit _)                                = IntS
 sortOf (SetLit s _)                              = SetS s
 sortOf (SetComp (Var s _) _)                     = SetS s
+sortOf (MapSel m _)                              = valueSort (sortOf m)
+sortOf (MapUpd m _ _)                            = sortOf m
 sortOf (Var s _ )                                = s
 sortOf (Unknown _ _)                             = BoolS
 sortOf (Unary op _)
@@ -272,6 +289,8 @@ sortOf (All _ _)                                 = BoolS
 isExecutable :: Formula -> Bool
 isExecutable (SetLit _ _) = False
 isExecutable (SetComp _ _) = False
+isExecutable (MapSel _ _) = False
+isExecutable (MapUpd _ _ _) = False
 isExecutable (Unary _ e) = isExecutable e
 isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
 isExecutable (Ite e0 e1 e2) = False
@@ -285,7 +304,9 @@ substitute subst fml = case fml of
   SetLit b elems -> SetLit b $ map (substitute subst) elems
   SetComp v@(Var _ x) e -> if x `Map.member` subst
                             then error $ unwords ["Scoped variable of the set comprehension clashes with substitution variable", x]
-                            else SetComp v (substitute subst e) 
+                            else SetComp v (substitute subst e)
+  MapSel m k -> MapSel (substitute subst m) (substitute subst k)
+  MapUpd m k v -> MapUpd (substitute subst m) (substitute subst k) (substitute subst v)
   Var s name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
@@ -314,6 +335,8 @@ sortSubstituteFml :: SortSubstitution -> Formula -> Formula
 sortSubstituteFml subst fml = case fml of 
   SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
   SetComp x e -> SetComp (sortSubstituteFml subst x) (sortSubstituteFml subst e)
+  MapSel m k -> MapSel (sortSubstituteFml subst m) (sortSubstituteFml subst k)
+  MapUpd m k v -> MapUpd (sortSubstituteFml subst m) (sortSubstituteFml subst k) (sortSubstituteFml subst v)  
   Var s name -> Var (sortSubstitute subst s) name
   Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
   Unary op e -> Unary op (sortSubstituteFml subst e)
@@ -339,6 +362,8 @@ substitutePredicate pSubst fml = case fml of
   Ite e0 e1 e2 -> Ite (substitutePredicate pSubst e0) (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   All v e -> All v (substitutePredicate pSubst e)
   SetComp x e -> SetComp x (substitutePredicate pSubst e)
+  MapSel m k -> MapSel (substitutePredicate pSubst m) (substitutePredicate pSubst k)
+  MapUpd m k v -> Ite (substitutePredicate pSubst m) (substitutePredicate pSubst k) (substitutePredicate pSubst v)  
   _ -> fml
   
 -- | Negation normal form of a formula:
@@ -394,6 +419,8 @@ splitByPredicate preds arg fmls = foldM (\m fml -> checkFml fml m fml) Map.empty
           else foldM (checkFml whole) m args
       SetLit _ args -> foldM (checkFml whole) m args
       SetComp _ f -> checkFml whole m f
+      MapSel m' k -> foldM (checkFml whole) m [m', k]
+      MapUpd m' k v -> foldM (checkFml whole) m [m', k, v]
       Unary _ f -> checkFml whole m f
       Binary _ l r -> foldM (checkFml whole) m [l, r]
       Ite c t e -> foldM (checkFml whole) m [c, t, e]

@@ -372,6 +372,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                    in Just $ substitute (Map.singleton valueVarName measureApp) fml
     contentProperties (mName, MeasureDef {}) = Nothing
         
+    -- TODO: same for maps
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 

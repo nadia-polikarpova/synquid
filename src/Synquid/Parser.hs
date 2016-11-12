@@ -263,11 +263,16 @@ parseSort = withPos (parseSortWithArgs <|> parseSortAtom <?> "sort")
       ]
       
     parseSortWithArgs = choice [
-      SetS <$> (reserved "Set" >> sameOrIndented >> parseSortAtom),
-      do
-        typeName <- parseTypeName        
-        typeParams <- many (sameOrIndented >> parseSortAtom)
-        return $ DataS typeName typeParams
+      SetS <$> (reserved "Set" >> sameOrIndented >> parseSortAtom)
+      , do
+          reserved "Map"
+          keyS <- sameOrIndented >> parseSortAtom
+          valS <- sameOrIndented >> parseSortAtom
+          return $ MapS keyS valS      
+      , do
+          typeName <- parseTypeName        
+          typeParams <- many (sameOrIndented >> parseSortAtom)
+          return $ DataS typeName typeParams
       ]
       
 parseRefinedSort :: Parser (Sort, Formula)
@@ -302,7 +307,7 @@ parseFormula :: Parser Formula
 parseFormula = withPos $ (buildExpressionParser (exprTable Unary Binary True) parseTerm <?> "refinement term")
 
 parseTerm :: Parser Formula
-parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
+parseTerm = parseIte <|> try parseAppTerm <|> parseMapOrAtom -- <|> parseAtomTerm
   where
     parseIte = do
       reserved "if"
@@ -313,6 +318,9 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
       e2 <- parseFormula
       return $ Ite e0 e1 e2
     parseAppTerm = parseConsApp <|> parsePredApp
+    parseMapOrAtom = do
+      head <- parseAtomTerm
+      option head (parseMapAccess head)
     parseAtomTerm = choice [
         parens parseFormula
       , parseBoolLit
@@ -339,7 +347,10 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
     parsePredApp = do
       name <- parseIdentifier
       args <- many1 (sameOrIndented >> parseAtomTerm)
-      return $ Pred AnyS name args
+      return $ Pred AnyS name args    
+    parseMapAccess m = brackets $ brackets $ do      
+      key <- parseTerm
+      option (MapSel m key) (do reservedOp ":="; val <- parseTerm; return $ MapUpd m key val)
       
 {- Implementations -}
 
