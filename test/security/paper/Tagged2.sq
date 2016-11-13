@@ -42,19 +42,12 @@ bind = \x . \g .
           match g xr with 
             Tagged2 _ yr _ -> Tagged2 yl yr 
                                 (\z . join (xp z) (yp z)) -- z holds the fact that p ctx holds, from there xp z gives us xl == xr, so f xl == f xr
-  
-bindBool :: <p :: User -> Bool> . <c :: Bool> .
-  x: Tagged2 {Bool | _v ==> c} <{p _0 && c}> -> 
-  (u: {Bool | _v ==> c} -> {Tagged2 b <p> | _v == f u}) -> 
-    {Tagged2 b <p> | (left _v == left (f (left x))) && (right _v == right (f (right x)))}
-bindBool = \x . \g . 
+                                
+downgradeBool :: <bp :: User -> Bool> . <bc :: Bool> .
+  x: Tagged2 {Bool | _v ==> bc} <{bp _0 && bc}> -> Tagged2 {Bool | _v ==> bc} <bp>
+downgradeBool = \x.
   match x with
-    Tagged2 xl xr xp -> 
-      match g xl with
-        Tagged2 yl _ yp ->
-          match g xr with 
-            Tagged2 _ yr _ -> Tagged2 yl yr 
-                                (\z . if xl || xr then join (xp z) (yp z) else yp z) -- if xl || xr, then c must hold, so we can invoke xp; otherwise xl == xr == false
+    Tagged2 xl xr xp -> Tagged2 xl xr (\z . if xl || xr then xp z else PTrue) -- if xl || xr, then c must hold, so we can invoke xp; otherwise xl == xr == false
 
 {- Output -}
       

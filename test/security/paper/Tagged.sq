@@ -18,18 +18,15 @@ return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
   
--- Unfortunately this strengthened bind only works for Booleans
--- The general case would be: in `bind x f`, violation of the additional policy on x compels x to be a particular value,
--- but that is not expressible  
-bindBool :: <bp :: User -> Bool> . <bf :: Bool -> b -> Bool> . <bc :: Bool> .
-  x: Tagged {Bool | _v ==> bc} <{bp _0 && bc}> -> (u: {Bool | _v ==> bc} -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>  
+downgradeBool :: <bp :: User -> Bool> . <bc :: Bool> .
+  x: Tagged {Bool | _v ==> bc} <{bp _0 && bc}> -> Tagged {Bool | _v ==> bc} <bp>
 
 ifM :: <ip :: User -> Bool> . <ic :: Bool> .
   cond: Tagged {Bool | _v ==> ic} <{ic && ip _0}> 
     -> thn: Tagged a <{ic && ip _0}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
-ifM = \cond . \thn . \els . bindBool cond (\c . if c then thn else els)    
+ifM = \cond . \thn . \els . bind (downgradeBool cond) (\c . if c then thn else els)
 
 liftM :: <l1p :: User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->

@@ -124,9 +124,8 @@ bind (Tagged a) f = f a
 return :: (Eq a, Ord a) => a -> Tagged a
 return = Tagged
 
-bindBool ::
-      (Eq b, Ord b) => Tagged Bool -> (Bool -> Tagged b) -> Tagged b
-bindBool = bind
+downgardeBool :: Tagged Bool -> Tagged Bool
+downgardeBool = id
 
 if_ ::
     (Eq a, Ord a) => Tagged Bool -> Tagged a -> Tagged a -> Tagged a

@@ -30,8 +30,7 @@ bind ::
      (Eq a, Ord a, Eq b, Ord b) =>
        Tagged a -> (a -> Tagged b) -> Tagged b
 
-bindBool ::
-     (Eq b, Ord b) => Tagged Bool -> (Bool -> Tagged b) -> Tagged b
+downgardeBool :: Tagged Bool -> Tagged Bool
 
 return :: (Eq a, Ord a) => a -> Tagged a
 
