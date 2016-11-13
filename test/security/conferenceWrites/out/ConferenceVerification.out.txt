@@ -1,0 +1,297 @@
+test1 :: arg1:World -> arg0:PaperId -> World
+test1 = \w . \pid . 
+    let title = getPaperTitle w pid
+      in
+    
+    let authors = getPaperAuthors w
+                    pid in
+    
+    let st = ifM (liftM2 eq
+                    (getCurrentPhase w) (return
+                                           Done)) (getPaperStatus w pid)
+               (return NoDecision) in
+    
+    let out = foldl1 (liftM2 strcat)
+                (Cons title (Cons (return
+                                     s_colon) (Cons (liftM show st)
+                                                 Nil))) in
+    printAll w authors out
+
+test2 :: arg1:World -> arg0:PaperId -> World
+test2 = \w . \pid . 
+    let ch = getChair w in
+    
+    let st = getPaperStatus w pid in
+    print w ch (liftM2 strcat
+                  (return s_paperNo) (liftM2
+                                        strcat (return (show pid))
+                                        (liftM2 strcat (return s_colon)
+                                           (liftM show st))))
+
+test3 :: arg1:World -> arg0:PaperId -> World
+test3 = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let authors = getPaperAuthors w
+                    pid in
+    
+    let authors' = ifM (liftM2 elem
+                          u authors) authors (return Nil)
+      in
+    
+    let out = liftM2 strcat (return
+                               s_paperNo) (liftM2 strcat
+                                             (return (show pid)) (liftM2
+                                                                    strcat
+                                                                    (return
+                                                                       s_comma)
+                                                                    (liftM2
+                                                                       strcat
+                                                                       (return
+                                                                          s_authors)
+                                                                       (liftM
+                                                                          show
+                                                                          authors'))))
+      in
+    print w u out
+
+test4 :: arg1:World -> arg0:PaperId -> World
+test4 = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let st = ifM (liftM2 eq
+                    (getChair w) u) (getPaperStatus
+                                       w pid) (ifM (andM (liftM2 eq
+                                                            (getCurrentPhase w)
+                                                            (return Done))
+                                                      (liftM2 elem u
+                                                         (getPaperAuthors w
+                                                            pid)))
+                                                 (getPaperStatus w pid) (return
+                                                                           NoDecision))
+      in
+    print w u (liftM show st)
+
+test5 :: arg1:World -> arg0:PaperId -> World
+test5 = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let conflicts =
+      getPaperConflicts w pid in
+    
+    let st = ifM (andM (liftM2 eq
+                          (getCurrentPhase w) (return
+                                                 Done)) (liftM2 elem u
+                                                           (getPaperAuthors w
+                                                              pid)))
+               (getPaperStatus w pid) (return
+                                         NoDecision) in
+    
+    let ses = bind st (\s . 
+                  if s == Accepted
+                    then getPaperSession w pid
+                    else return emptyString) in
+    
+    let out = liftM2 strcat (liftM
+                               show st) ses in
+    print w u out
+
+test6 :: arg1:World -> arg0:PaperId -> World
+test6 = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let conflicts =
+      getPaperConflicts w pid in
+    
+    let noConflict = liftM not
+                       (liftM2 elem u conflicts) in
+    
+    let title = ifM noConflict
+                  (getPaperTitle w pid) (return
+                                           emptyString) in
+    
+    let conflicts' = ifM noConflict
+                       conflicts (return Nil) in
+    
+    let out = liftM2 strcat title
+                (liftM show conflicts') in
+    print w u out
+
+selectFrom :: <sp :: User -> Bool> . arg2:World -> u:Tagged {User|sp _v} <sp> -> pids:List PaperId -> List Tagged String <_0 == content u>
+selectFrom = \w . \u . \pids .
+      map (\pid . 
+          let conflicts =
+            getPaperConflicts w pid in
+          
+          let title = ifM (liftM not
+                             (liftM2 elem u conflicts))
+                        (getPaperTitle w pid) (return
+                                                 s_qmark) in
+          
+          let authors = getPaperAuthors w
+                          pid in
+          
+          let authors' = ifM (liftM2 elem
+                                u authors) authors (return Nil)
+            in
+          foldl1 (liftM2 strcat) (Cons
+                                    title (Cons (return s_comma)
+                                             (Cons (return s_authors) (Cons
+                                                                         (liftM
+                                                                            show
+                                                                            authors')
+                                                                         Nil)))))
+        pids
+
+test7 :: arg1:World -> arg0:List PaperId -> World
+test7 = \w . \allPids . 
+    let u = getSessionUser w in
+    foldl (\w . \s . print w u s) w
+      (selectFrom w u allPids)
+
+test8 :: arg0:World -> World
+test8 = \w . 
+  let u = getSessionUser w in
+  
+  let allPids = getAllPapers w in
+  foldl (\w . \s . print w u s) w
+    (selectFrom w u allPids)
+
+test9 :: arg1:World -> arg0:Maybe Status -> World
+test9 = \w . \q . 
+    let u = getSessionUser w in
+    
+    let ownPids = filterM (\pid .
+                      ifM (bind u (\c . bind
+                                          (getPaperAuthors w pid) (\cs .
+                                            return (elem c cs)))) (ifJust q
+                                                                     (\st . bind
+                                                                              (ifM
+                                                                                 (bind
+                                                                                    (getCurrentPhase
+                                                                                       w)
+                                                                                    (\ph .
+                                                                                      return
+                                                                                        (ph
+                                                                                           ==
+                                                                                           Done)))
+                                                                                 (getPaperStatus
+                                                                                    w
+                                                                                    pid)
+                                                                                 (return
+                                                                                    NoDecision))
+                                                                              (\st' .
+                                                                                return
+                                                                                  (st
+                                                                                     ==
+                                                                                     st'))))
+                        (return (1 == 0))) (getAllPapers
+                                              w) in
+    forM_ w (liftM (\l . selectFrom
+                           w u l) ownPids) (\w . \s . print
+                                                        w u s)
+
+test10 :: arg0:World -> World
+test10 = \w . 
+  let u = getSessionUser w in
+  
+  let allPids = getAllPapers w in
+  
+  let isSafeUnconflicted = \pid .
+      bind u (\c . bind (ifM (bind u
+                                (\x . bind (getPaperConflicts w
+                                              pid) (\cs . return (not (elem x
+                                                                         cs)))))
+                           (liftM Just (getPaperConflicts w
+                                          pid)) (return Nothing)) (\cs .
+                       return (not (elemMaybe c cs))))
+    in
+  
+  let out = filterM
+              isSafeUnconflicted allPids in
+  print w u (liftM show out)
+
+test11 :: arg1:World -> arg0:PaperId -> World
+test11 = \w . \pid . 
+    let u = getSessionUser w in
+    
+    let pc = getPC w in
+    
+    let conflicts =
+      getPaperConflicts w pid in
+    
+    let tok = ifM (andM (liftM2 elem
+                           u pc) (liftM not (liftM2 elem u
+                                               conflicts))) (getPaperBidToken w
+                                                               pid) (return
+                                                                       Nothing)
+      in
+    
+    let out = Cons (return
+                      s_paperNo) (Cons (return (show
+                                                  pid)) (Cons (return s_colon)
+                                                           (Cons (liftM show
+                                                                    tok) Nil)))
+      in
+    print w u (foldl1 (liftM2
+                         strcat) out)
+
+test12 :: arg0:World -> World
+test12 = \w . 
+  let pids = getAllPapers w in
+  
+  let fmtMsg = \st . 
+      if st == Accepted
+        then Just s_delighted
+        else 
+          if st == Rejected
+            then Just s_regret
+            else Nothing in
+  foldl (\w . \pid . 
+        let title = getPaperTitle w pid
+          in
+        
+        let authors = getPaperAuthors w
+                        pid in
+        
+        let st' = ifM (bind
+                         (getCurrentPhase w) (\phase .
+                           return (phase == Done)))
+                    (getPaperStatus w pid) (return
+                                              NoDecision) in
+        
+        let msg = liftM fmtMsg st' in
+        
+        let out = bind msg (\mmsg . 
+                      match mmsg with
+                        Just msg' -> liftM Just (foldl1
+                                                   (liftM2 strcat) (Cons title
+                                                                      (Cons
+                                                                         (return
+                                                                            s_colon)
+                                                                         (Cons
+                                                                            (return
+                                                                               msg')
+                                                                            Nil))))
+                        Nothing -> return Nothing) in
+        printManyMaybe w authors out) w
+    pids
+
+(Goals: 13)
+(Measures: 3)
+(Policy size: fromList [("../paper/Security.sq",148),("Conference.sq",105),("ConferenceVerification.sq",16)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+test1                 &        71  &        71  &             2.04s  &      0.00s  &      0.00s  &        2.04s  \\
+test2                 &        49  &        49  &             0.36s  &      0.00s  &      0.00s  &        0.36s  \\
+test3                 &        75  &        75  &             2.50s  &      0.00s  &      0.00s  &        2.50s  \\
+test4                 &        73  &        73  &             5.06s  &      0.00s  &      0.00s  &        5.06s  \\
+test5                 &        89  &        89  &             3.44s  &      0.00s  &      0.00s  &        3.44s  \\
+test6                 &        67  &        67  &             3.52s  &      0.00s  &      0.00s  &        3.52s  \\
+selectFrom            &        91  &        91  &             7.78s  &      0.00s  &      0.00s  &        7.78s  \\
+test7                 &        27  &        27  &             0.07s  &      0.00s  &      0.00s  &        0.07s  \\
+test8                 &        30  &        30  &             0.06s  &      0.00s  &      0.00s  &        0.06s  \\
+test9                 &       114  &       114  &             6.28s  &      0.00s  &      0.00s  &        6.28s  \\
+test10                &        85  &        85  &             6.19s  &      0.00s  &      0.00s  &        6.19s  \\
+test11                &        93  &        93  &             4.73s  &      0.00s  &      0.00s  &        4.73s  \\
+test12                &       124  &       124  &             2.42s  &      0.00s  &      0.00s  &        2.42s  \\
+Totals                &       988  &       988  &            44.50s  &      0.00s  &      0.00s  &       44.50s  \\

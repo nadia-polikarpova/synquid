@@ -1,0 +1,91 @@
+-- Conference management
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Done :: Phase
+
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+
+data Token
+
+data Maybe a where
+  Nothing :: Maybe a
+  Just :: a -> Maybe a
+
+predicate users :: World -> Set User
+getUsers :: w: World -> Tagged {List {User | _v in users w} | elems _v == users w} <{_1 == chair _0}>
+
+predicate passwords :: World -> Map User String
+getPassword :: w: World -> u: User -> Tagged {String | _v == (passwords w)[[u]]} <{_1 == u}>
+setPassword :: w: World -> u: User -> pw: Tagged String <{_1 == u}> -> 
+  {World | users _v == users w &&
+           passwords _v == (passwords w) [[u := content pw]]}
+
+addUser :: w: World -> u: User -> pw: String -> 
+  {World | users _v == users w + [u] && 
+           passwords _v == (passwords w) [[u := pw]]}
+
+predicate sessionUser :: World -> User
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+predicate chair :: World -> User
+getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+
+predicate pc :: World -> Set User
+getPC :: w: World -> Tagged {List {User | _v in pc w} | elems _v == pc w} <{True}>
+
+predicate currentPhase :: World -> Phase
+getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
+
+predicate paperConflicts :: World -> PaperId -> Set User
+getPaperConflicts :: w: World -> pid: PaperId
+                        -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_1 in paperConflicts _0 pid)}>
+
+getPaperTitle :: w: World -> pid: PaperId 
+   -> Tagged String <{ !(_1 in paperConflicts _0 pid) }>
+
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId 
+   -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} 
+             <{_1 in paperAuthors _0 pid}>
+
+predicate paperStatus :: World -> PaperId -> Status
+getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_1 == chair w || (currentPhase _0 == Done && _1 in paperAuthors _0 pid)}>
+
+getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
+
+getAllPapers :: w: World -> [PaperId]
+
+getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in paperAuthors _0 pid) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
+
+qualifier {x == w, x in y, !(x in y)}
+qualifier {_v == (x in y), _v == !(x in y)}
+
+{- Some Strings -}
+
+s_delighted :: String
+s_regret :: String
+
+{- Extra combinators -}
+
+foldl :: (a -> b -> a) -> a -> (List b) -> a
+foldl1 :: f: (a -> a -> a) -> l: List a -> a
+
+--forM_ :: <ap :: User -> Bool> .
+--   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
+
+ifJust :: (Maybe a) -> (a -> b) -> b
+
+-- TODO currently there has to be something here, otherwise nothing gets emitted
+
+elemMaybe :: x: a -> xs: Maybe [a] -> Bool
+elemMaybe = \x. \xs.
+  match xs with
+    Just l -> elem x l
+    Nothing -> 0 == 0
