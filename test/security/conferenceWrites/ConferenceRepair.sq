@@ -28,8 +28,16 @@ usersView = \w .
   let users = getUsers w in
   print w u (liftM show users)
 
+-- Submit paper
+submitForm :: w: World -> title: String -> World
+submitForm = \w . \title .
+  let pid = getFreshPaperId w in
+  let w1 = addPaper w pid in
+  let w2 = setPaperTitle w1 pid (return title) in
+  w2
+
 -- Print paper status to an author
-test0 :: w: World -> pid: {PaperId | sessionUser w in paperAuthors w _v} -> World
+test0 :: w: World -> pid: {PaperId | sessionUser w in (paperAuthors w) [[ _v ]]} -> World
 test0 = \w . \pid .
   let u = getSessionUser w in  
   let out = liftM show (getPaperStatus w pid) in

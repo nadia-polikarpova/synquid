@@ -49,20 +49,28 @@ getPaperConflicts :: w: World -> pid: PaperId
 
 getPaperTitle :: w: World -> pid: PaperId 
    -> Tagged String <{ !(_1 in paperConflicts _0 pid) }>
+setPaperTitle :: w: World -> pid: PaperId
+   -> Tagged String <{ !(_1 in paperConflicts _0 pid) }>
+   -> {World | users _v == users w && passwords _v == passwords w}
 
-predicate paperAuthors :: World -> PaperId -> Set User
+predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId 
-   -> Tagged {List {User | (_v in paperAuthors w pid) && !(_v in paperConflicts w pid)} | elems _v == paperAuthors w pid} 
-             <{_1 in paperAuthors _0 pid}>
+   -> Tagged {List {User | (_v in (paperAuthors w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperAuthors w)[[pid]]} 
+             <{_1 in (paperAuthors _0)[[pid]] }>
 
 predicate paperStatus :: World -> PaperId -> Status
-getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_1 == chair w || (currentPhase _0 == Done && _1 in paperAuthors _0 pid)}>
+getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_1 == chair w || (currentPhase _0 == Done && _1 in (paperAuthors _0)[[pid]] )}>
 
 getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 getAllPapers :: w: World -> [PaperId]
 
-getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in paperAuthors _0 pid) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
+getFreshPaperId :: w: World -> PaperId
+addPaper :: w: World -> newId: PaperId ->
+  {World | users _v == users w &&  -- is it important that the new Id has been added to world? nahh...
+           passwords _v == passwords w}
+
+getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
 
 qualifier {x == w, x in y, !(x in y)}
 qualifier {_v == (x in y), _v == !(x in y)}
