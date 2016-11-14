@@ -93,8 +93,12 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                                in repair explorerParams typingParams (goal {gImpl = p}) violations
                                
     varsForQuals env vars = 
-      let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
+      -- let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
+      let vars' = filter isUsefulVar vars in
       allPredApps env vars' 1
+      
+    isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
+    isUsefulVar _ = True      
       
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
@@ -106,19 +110,19 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
-    condQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing $ concat $
+    condQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing $ filter (not . isSetMapEq) $ concat $
       map (instantiateCondQualifier True env vars') cquals ++ map (extractCondFromType env vars') components                  
       
     -- | Qualifier generator for bound predicates
     predQuals :: Bool -> Environment -> [Formula] -> [Formula] -> QSpace
     predQuals useAllArgs env params vars = 
-      let 
-        vars' = varsForQuals env vars 
+      let
+        vars' = varsForQuals env vars
         params' = if null params then params else allPredApps env (init params) 1 ++ [last params]
         filterSomeArgs = if null params
                           then id                          
                           else filter (\q -> not $ Set.fromList params `disjoint` varsOf q)  -- Only take the qualifiers that use some predicate parameters
-      in toSpace Nothing $
+      in toSpace Nothing $ filter (not . isSetMapEq) $
         concatMap (extractPredQGenFromQual useAllArgs env params' vars') tquals ++ -- extract from given qualifiers
         concatMap (extractPredQGenFromType useAllArgs env params' vars') (syntGoal : components) ++
         filterSomeArgs (concatMap (instantiateCondQualifier True env (params' ++ vars')) cquals ++ concatMap (extractCondFromType env (params' ++ vars')) components)
@@ -127,7 +131,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
           -- else []
         
     components = map toMonotype $ Map.elems $ allSymbols $ gEnvironment goal
-    syntGoal = toMonotype $ gSpec goal
+    syntGoal = toMonotype $ gSpec goal    
     
 -- | 'synthesize' @templGenParam consGenParams solverParams env typ templ cq tq@ : synthesize a program that has a type @typ@
 -- in the typing environment @env@ and follows template @templ@,
@@ -202,6 +206,11 @@ isDataEq (Binary op e1 _)
   | op == Eq || op == Neq = isData (sortOf e1)
   | otherwise = False
 isDataEq _ = False
+
+isSetMapEq (Binary op e1 _)
+  | op == Eq || op == Neq = isSetS (sortOf e1) || isMapS (sortOf e1)
+  | otherwise = False
+isSetMapEq _ = False
 
 -- | 'extractMatchQGen' @(dtName, dtDef)@: qualifier generator that generates qualifiers of the form x == ctor, for all scalar constructors ctor of datatype @dtName@
 extractMatchQGen :: Environment -> [Formula] -> (Id, DatatypeDef) -> [Formula]    

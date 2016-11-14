@@ -1,6 +1,6 @@
 {- Primitives -}
 
-true :: {Bool | _v}
+-- true :: {Bool | _v}
 -- false :: {Bool | !_v}
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 not :: x: Bool -> {Bool | _v == !x}
@@ -27,8 +27,8 @@ elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
     -- Nil -> False
     -- Cons y ys -> eq x y || elem x ys
     
-sameElems :: x: List a -> y: List a -> {Bool | _v == (elems x == elems y)}
-disjoint :: xs: List a -> ys: List a -> {Bool | _v <==> (elems xs * elems ys == [])}
+-- sameElems :: x: List a -> y: List a -> {Bool | _v == (elems x == elems y)}
+-- disjoint :: xs: List a -> ys: List a -> {Bool | _v <==> (elems xs * elems ys == [])}
 
 -- foldr :: <p :: List a -> b -> Bool> .
 		-- f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->

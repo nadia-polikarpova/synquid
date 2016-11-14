@@ -52,7 +52,7 @@ searchForm = \w . \byAuthor . \byReviewer .
   let u = getSessionUser w in
   print w u pids
 
-userFilter :: w: World -> s: String -> users: [User] -> bool
+userFilter :: w: World -> s: String -> users: [User] -> Bool
 
 -- Print paper status to an author
 test0 :: w: World -> pid: {PaperId | sessionUser w in (paperAuthors w) [[ _v ]]} -> World

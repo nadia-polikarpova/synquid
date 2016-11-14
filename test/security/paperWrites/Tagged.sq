@@ -106,6 +106,12 @@ sortByM = \leq . \xs .
 print :: <pp :: World -> User -> Bool> . w: World -> viewer: Tagged {User | pp w _v} <pp> -> x: Tagged a <pp> -> World
 printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {User | pp w _v}) <pp> -> x: Tagged a <pp> -> World
 
+-- New flexible printAll:
+-- printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {User | pp w _v}) <pp> -> (u: {User | pp w _v} -> Tagged a <{_0 == w && _1 == u}>) -> World
+
+-- print :: <pp :: World -> User -> Bool> . w: World -> viewer: Tagged {User | pp w _v} <pp> -> x: Tagged a <pp> -> World
+-- print = \w . \viewer . \x. printAll w (bind viewer (\v . return (Cons v Nil))) (\y . x)
+
 {- Qualifiers -}
 
 qualifier {x == y, x in y, !(x in y)}
