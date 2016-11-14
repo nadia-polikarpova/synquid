@@ -45,7 +45,10 @@ getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
 
 predicate paperConflicts :: World -> PaperId -> Set User
 getPaperConflicts :: w: World -> pid: PaperId
-                        -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_1 in paperConflicts _0 pid)}>
+   -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_1 in paperConflicts _0 pid)}>
+setPaperConflicts ::  w: World -> pid: PaperId
+   -> Tagged [User] <{!(_1 in paperConflicts _0 pid)}>
+   -> {World | users _v == users w && passwords _v == passwords w}
 
 getPaperTitle :: w: World -> pid: PaperId 
    -> Tagged String <{ !(_1 in paperConflicts _0 pid) }>
@@ -57,6 +60,10 @@ predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId 
    -> Tagged {List {User | (_v in (paperAuthors w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperAuthors w)[[pid]]} 
              <{_1 in (paperAuthors _0)[[pid]] }>
+setPaperAuthors :: w: World ->  pid: PaperId 
+   -> Tagged [User] <{_1 in (paperAuthors _0)[[pid]] }>
+   -> {World | users _v == users w && passwords _v == passwords w}
+
 
 predicate paperStatus :: World -> PaperId -> Status
 getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_1 == chair w || (currentPhase _0 == Done && _1 in (paperAuthors _0)[[pid]] )}>
@@ -69,6 +76,15 @@ getFreshPaperId :: w: World -> PaperId
 addPaper :: w: World -> newId: PaperId ->
   {World | users _v == users w &&  -- is it important that the new Id has been added to world? nahh...
            passwords _v == passwords w}
+
+predicate paperReviewers :: World -> Map PaperId (Set User)
+getPaperReviewers :: w: World -> pid: PaperId 
+   -> Tagged {List {User | (_v in (paperReviewers w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperReviewers w)[[pid]]} 
+             <{_1 in pc _0 && !(_1 in (paperConflicts _0 pid)) }>
+setPaperReviewers :: w: World ->  pid: PaperId 
+   -> Tagged [User] <{_1 in pc _0 && !(_1 in (paperConflicts _0 pid))}>
+   -> {World | users _v == users w && passwords _v == passwords w}
+
 
 getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
 

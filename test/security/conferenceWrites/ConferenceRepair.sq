@@ -9,12 +9,13 @@ s_qmark :: String
 
 -- Default values yay!!
 
-defaultUsers         :: Tagged (List User) <{True}>
-defaultPaperTitle    :: Tagged String <{True}>
-defaultPaperAuthors  :: Tagged (List User) <{True}>
+defaultUsers          :: Tagged (List User) <{True}>
+defaultPaperTitle     :: Tagged String <{True}>
+defaultPaperAuthors   :: Tagged (List User) <{True}>
 defaultPaperConflicts :: Tagged (List User) <{True}>
-defaultPaperStatus   :: Tagged Status <{True}>
-defaultPaperBidToken :: Tagged (Maybe Token) <{True}>
+defaultPaperReviewers :: Tagged (List User) <{True}>
+defaultPaperStatus    :: Tagged Status <{True}>
+defaultPaperBidToken  :: Tagged (Maybe Token) <{True}>
 
 
 -- Create a user (open to all)
@@ -29,12 +30,29 @@ usersView = \w .
   print w u (liftM show users)
 
 -- Submit paper
-submitForm :: w: World -> title: String -> World
-submitForm = \w . \title .
+submitForm :: w: World -> title: String -> [User] -> [User] -> World
+submitForm = \w . \title . \authors . \conflicts .
   let pid = getFreshPaperId w in
   let w1 = addPaper w pid in
   let w2 = setPaperTitle w1 pid (return title) in
-  w2
+  let w3 = setPaperAuthors w2 pid (return authors) in
+  let w4 = setPaperConflicts w3 pid (return conflicts) in
+  w4
+
+-- Search papers
+searchForm :: w: World -> byAuthor: Maybe String -> byReviewer: Maybe String -> World
+searchForm = \w . \byAuthor . \byReviewer .
+  let allPids = getAllPapers w in
+  let pids = 
+    filterM (\pid .
+     andM 
+       (ifJust byAuthor (\author . bind (getPaperAuthors w pid) (\cs. return (userFilter w author cs))))
+       (ifJust byReviewer (\revr . bind (getPaperReviewers w pid) (\cs. return (userFilter w revr cs))))
+     ) allPids in
+  let u = getSessionUser w in
+  print w u pids
+
+userFilter :: w: World -> s: String -> users: [User] -> bool
 
 -- Print paper status to an author
 test0 :: w: World -> pid: {PaperId | sessionUser w in (paperAuthors w) [[ _v ]]} -> World
