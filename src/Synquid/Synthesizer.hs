@@ -122,7 +122,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
         filterSomeArgs = if null params
                           then id                          
                           else filter (\q -> not $ Set.fromList params `disjoint` varsOf q)  -- Only take the qualifiers that use some predicate parameters
-      in toSpace Nothing $ filter (not . isSetMapEq) $
+      in toSpace Nothing $
         concatMap (extractPredQGenFromQual useAllArgs env params' vars') tquals ++ -- extract from given qualifiers
         concatMap (extractPredQGenFromType useAllArgs env params' vars') (syntGoal : components) ++
         filterSomeArgs (concatMap (instantiateCondQualifier True env (params' ++ vars')) cquals ++ concatMap (extractCondFromType env (params' ++ vars')) components)
