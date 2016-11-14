@@ -14,6 +14,7 @@ import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.Tokens
 
+import Data.Char
 import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
@@ -81,6 +82,10 @@ repair eParams tParams goal violations = do
 defaultPrefix = "default"
 isDefaultValue name = take (length defaultPrefix) name == defaultPrefix
 defaultValueOf name = defaultPrefix ++ drop 3 name
+
+getPrefix = "get"
+isDBGetter name = take (length getPrefix) name == getPrefix
+getterOf field = getPrefix ++ (toUpper (head field) : tail field)
 
 mkTagged a policy = DatatypeT "Tagged" [a] [policy]
 
@@ -421,32 +426,41 @@ generateRepair env typ p = do
           text "when repairing violation" $+$ pretty p </> text "::" </> pretty typ $+$
           text "Probable cause: missing components to implement check")
 
-    -- | Strip tagged database accessors of their tags; remove symbol from the environment if it:
-    --    - comes from the Tagged module
-    --    - is a default value
-    --    - is a variable that does not appear in the target refinement
+    -- | Strip tagged database accessors of their tags; only leave a symbol in the environment if it:
+    --    - comes from Prelude
+    --    - is a DB getter
+    --    - is a variable that appears in target refinement
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
-    updateSymbol _ m name _ | -- This is a default value: remove
-      isDefaultValue name   = m
+    -- updateSymbol _ m name _ | -- This is a default value: remove
+      -- isDefaultValue name   = m
     updateSymbol targetRefinement m name (Monotype t) = 
       let 
         t' = stripTags t 
         targetVars = Set.map varName $ varsOf targetRefinement
-      in 
-          if isFromTaggedLibrary name
-            then m -- This is a function from base tagged library: remove
-            else if not (isConstant name env) && not (name `elem` targetVars)
-                  then m -- It's a variable that doesn't appear in the target refinement: remove
-                  else Map.insert name (Monotype t') m -- Strip
+        targetPreds = predsOf targetRefinement
+        getterPreds = predsOfType $ lastType t'
+      in
+          if isConstant name env 
+            then if isFromPrelude name || 
+                    isGoodType t || 
+                    (isDBGetter name && not (disjoint targetPreds getterPreds)) 
+                    -- any (\pred -> name == getterOf pred) targetPreds
+                   then Map.insert name (Monotype t') m -- Strip
+                   else m                  
+            else if name `elem` targetVars
+                  then Map.insert name (Monotype t') m -- Strip
+                  else m -- It's a variable that doesn't appear in the target refinement: remove
     updateSymbol _ m name sch =
-      let 
-        t = toMonotype sch
-        retT = lastType t
-      in if isFromTaggedLibrary name
-          then m -- This is a function from base tagged library: remove
-          else Map.insert name sch m    
+      if isFromPrelude name
+          then Map.insert name sch m
+          else m
+          
+    isGoodType (ScalarT (DatatypeT "String" _ _) _) = False
+    isGoodType (ScalarT (DatatypeT "Tagged" _ _) _) = False
+    isGoodType (ScalarT _ _) = True
+    isGoodType _ = False
     
-    isFromTaggedLibrary name = isConstant name env && ((env ^. moduleInfo) Map.! name == "Tagged")
+    isFromPrelude name = (env ^. moduleInfo) Map.! name == "Prelude"    
     
     removeContent (Pred s name args) = if name == "content"
                                           then let [Var (DataS _ [varS]) v] = args

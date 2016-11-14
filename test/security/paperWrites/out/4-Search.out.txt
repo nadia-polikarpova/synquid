@@ -36,7 +36,7 @@ searchByAuthor = \w . \a .
 
 (Goals: 1)
 (Measures: 3)
-(Policy size: fromList [("4-Search.sq",33),("Prelude.sq",37),("Tagged.sq",127)])
+(Policy size: fromList [("4-Search.sq",33),("Prelude.sq",20),("Tagged.sq",119)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-searchByAuthor        &        81  &       128  &             4.28s  &      1.78s  &      8.67s  &       14.74s  \\
-Totals                &        81  &       128  &             4.28s  &      1.78s  &      8.67s  &       14.74s  \\
+searchByAuthor        &        81  &       128  &             4.27s  &      0.95s  &      8.21s  &       13.44s  \\
+Totals                &        81  &       128  &             4.27s  &      0.95s  &      8.21s  &       13.44s  \\
