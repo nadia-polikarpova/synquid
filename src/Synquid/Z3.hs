@@ -331,6 +331,7 @@ toAST expr = case expr of
       VarS _ -> IntS
       DataS _ (_:_) -> IntS
       SetS el -> SetS (asZ3Sort el)
+      MapS k v -> MapS (asZ3Sort k) (asZ3Sort v)
       _ -> s
           
 
