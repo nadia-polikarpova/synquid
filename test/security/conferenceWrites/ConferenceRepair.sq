@@ -10,6 +10,7 @@ s_qmark :: String
 -- Default values yay!!
 
 defaultUsers          :: Tagged (List User) <{True}>
+defaultUserProfile    :: Tagged UserProfile <{True}>
 defaultPaperTitle     :: Tagged String <{True}>
 defaultPaperAuthors   :: Tagged (List User) <{True}>
 defaultPaperConflicts :: Tagged (List User) <{True}>
@@ -71,18 +72,46 @@ reviewsView = \w. \pid.
   let allRids = getAllReviews w in
   let rids =
     filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
-  print w u (liftM show rids)
+  forM w rids (\w . \rid .
+    print w u (liftM show (bind rid (\rid'. return (getReview w rid'))))
+    )
 
 -- View/change profile
-profileViewGet :: World -> User -> World
-profileViewGet = \w . \uid . 
+profileViewGet :: World -> World
+profileViewGet = \w .
   let u = getSessionUser w in
-  let profile = getUserProfile w uid in
+  let profile = getUserProfile w u in
   let profile_str = 
     bind profile (
-      \profile . match profile with
-                   UserProfileRecord nam aff acm email -> return nam) in
+      \profile' . match profile' with
+                   UserProfileRecord nam aff acm email -> return (foldl1 strcat [nam, s_comma, aff, s_comma, acm, s_comma, email])) in
   print w u profile_str
+
+profileViewPost :: World -> UserProfile -> World
+profileViewPost = \w . \u . \profile .
+  let u = getSessionUser w in
+  setUserProfile w u profile
+
+-- Submit a review
+submitReviewViewPost :: World -> PaperId -> Review -> World
+submitReviewViewPost = \w . \pid . \rev .
+  let u = getSessionUser w in
+  let rid = getFreshReviewId w in
+  let w1 = setReviewAuthor w rid u in
+  let w2 = setReviewPaper w1 rid (return pid) in
+  let w3 = setReview w2 rid (return rev) in
+  w3
+
+-- Assigns papers to a reviewer
+assignReviewersView :: World -> User -> [PaperId] -> World
+assignReviewersView = \w . \reviewer . \pids .
+  let allPids = getAllPapers w in
+  foldl (\w' . \pid . setPaperReviewers w' pid (bind (getPaperReviewers w' pid) (\l.
+    return (insertIf (elem pid pids) reviewer (remove reviewer l))))) w allPids
+
+remove :: a -> List a -> List a
+
+insertIf :: Bool -> a -> List a -> List a
 
 -- Print paper status to an author
 test0 :: w: World -> pid: {PaperId | sessionUser w in (paperAuthors w) [[ _v ]]} -> World
