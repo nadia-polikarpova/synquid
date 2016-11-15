@@ -32,9 +32,6 @@ data Maybe a where
 predicate users :: World -> Set User
 getUsers :: w: World -> Tagged {List {User | _v in users w} | elems _v == users w} <{_1 == chair _0}>
 
-predicate userProfiles :: World -> Map User UserProfile
-getUserProfile :: w: World -> u: User -> Tagged {UserProfile | _v == (userProfiles w)[[u]]} <{_1 == u }>
-
 predicate passwords :: World -> Map User String
 getPassword :: w: World -> u: User -> Tagged {String | _v == (passwords w)[[u]]} <{_1 == u}>
 setPassword :: w: World -> u: User -> pw: Tagged String <{_1 == u}> -> 
@@ -44,6 +41,11 @@ setPassword :: w: World -> u: User -> pw: Tagged String <{_1 == u}> ->
 addUser :: w: World -> u: User -> pw: String -> 
   {World | users _v == users w + [u] && 
            passwords _v == (passwords w) [[u := pw]]}
+
+predicate userProfiles :: World -> Map User UserProfile
+getUserProfile :: w: World -> u: User -> Tagged {UserProfile | _v == (userProfiles w)[[u]]} <{_1 == u || _1 == chair _0}>
+setUserProfile :: w: World -> u: User -> Tagged UserProfile <{_1 == u || _1 == chair _0}> -> World
+
 
 predicate sessionUser :: World -> User
 getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
@@ -102,13 +104,19 @@ setPaperReviewers :: w: World ->  pid: PaperId
 
 predicate reviewAuthor :: World -> Map ReviewId User
 getReviewAuthor :: w: World -> rid: ReviewId -> Tagged {User | _v == (reviewAuthor w)[[rid]]} <{_1 == chair _0}>
+setReviewAuthor :: w: World -> rid: ReviewId -> Tagged User <{_1 == chair _0}> -> World
+
 predicate reviewPaper :: World -> Map ReviewId PaperId
 getReviewPaper :: w: World -> rid: ReviewId -> Tagged {PaperId | _v == (reviewPaper w)[[rid]]} <{True}>
+setReviewPaper :: w: World -> rid: ReviewId -> pid: Tagged PaperId <{True}> -> World
 
 predicate reviews :: World -> Map ReviewId Review
 getReview :: w: World -> rid: ReviewId -> Tagged {Review | _v == (reviews w)[[rid]]} <{_1 in (paperAuthors _0)[[ (reviewPaper _0)[[rid]] ]]}>
+setReview :: w: World -> rid: ReviewId -> Tagged Review <{_1 in (paperAuthors _0)[[ (reviewPaper _0)[[rid]] ]]}> -> World
 
 getAllReviews :: w: World -> [ReviewId]
+
+getFreshReviewId :: w: World -> ReviewId
 
 getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
 
@@ -125,8 +133,11 @@ s_regret :: String
 foldl :: (a -> b -> a) -> a -> (List b) -> a
 foldl1 :: f: (a -> a -> a) -> l: List a -> a
 
---forM_ :: <ap :: User -> Bool> .
---   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
+forM :: <ap :: World -> User -> Bool> .
+   w: World -> l: Tagged (List a) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
+   
+forM_ :: <ap :: World -> User -> Bool> .
+   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
 
 ifJust :: (Maybe a) -> (a -> b) -> b
 
