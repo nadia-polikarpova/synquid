@@ -54,6 +54,36 @@ searchForm = \w . \byAuthor . \byReviewer .
 
 userFilter :: w: World -> s: String -> users: [User] -> Bool
 
+-- Show paper record
+paperView :: World -> PaperId -> World
+paperView = \w. \pid .
+  let u = getSessionUser w in
+  let title = getPaperTitle w pid in
+  let authors = getPaperAuthors w pid in
+  let conflicts = getPaperConflicts w pid in
+  let out = liftM2 strcat title (liftM2 strcat (liftM show authors) (liftM show conflicts)) in
+  print w u out
+
+-- Show reviews for paper
+reviewsView :: World -> PaperId -> World
+reviewsView = \w. \pid.
+  let u = getSessionUser w in
+  let allRids = getAllReviews w in
+  let rids =
+    filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
+  print w u (liftM show rids)
+
+-- View/change profile
+profileViewGet :: World -> User -> World
+profileViewGet = \w . \uid . 
+  let u = getSessionUser w in
+  let profile = getUserProfile w uid in
+  let profile_str = 
+    bind profile (
+      \profile . match profile with
+                   UserProfileRecord nam aff acm email -> return nam) in
+  print w u profile_str
+
 -- Print paper status to an author
 test0 :: w: World -> pid: {PaperId | sessionUser w in (paperAuthors w) [[ _v ]]} -> World
 test0 = \w . \pid .

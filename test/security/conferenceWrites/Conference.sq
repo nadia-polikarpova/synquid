@@ -12,6 +12,17 @@ data Status where
   Accepted :: Status
   Rejected :: Status
 
+data ReviewId
+
+data ReviewScores where
+  ReviewScoresEntry :: novelty: Int -> presentation: Int -> technical: Int -> confidence: Int -> ReviewScores
+
+data Review where
+  ReviewEntry :: time: String -> contents: String -> scores: ReviewScores -> Review
+
+data UserProfile where
+  UserProfileRecord :: name: String -> affiliation: String -> acm_number: String -> email: String -> UserProfile
+
 data Token
 
 data Maybe a where
@@ -20,6 +31,9 @@ data Maybe a where
 
 predicate users :: World -> Set User
 getUsers :: w: World -> Tagged {List {User | _v in users w} | elems _v == users w} <{_1 == chair _0}>
+
+predicate userProfiles :: World -> Map User UserProfile
+getUserProfile :: w: World -> u: User -> Tagged {UserProfile | _v == (userProfiles w)[[u]]} <{_1 == u }>
 
 predicate passwords :: World -> Map User String
 getPassword :: w: World -> u: User -> Tagged {String | _v == (passwords w)[[u]]} <{_1 == u}>
@@ -85,6 +99,16 @@ setPaperReviewers :: w: World ->  pid: PaperId
    -> Tagged [User] <{_1 in pc _0 && !(_1 in (paperConflicts _0 pid))}>
    -> {World | users _v == users w && passwords _v == passwords w}
 
+
+predicate reviewAuthor :: World -> Map ReviewId User
+getReviewAuthor :: w: World -> rid: ReviewId -> Tagged {User | _v == (reviewAuthor w)[[rid]]} <{_1 == chair _0}>
+predicate reviewPaper :: World -> Map ReviewId PaperId
+getReviewPaper :: w: World -> rid: ReviewId -> Tagged {PaperId | _v == (reviewPaper w)[[rid]]} <{True}>
+
+predicate reviews :: World -> Map ReviewId Review
+getReview :: w: World -> rid: ReviewId -> Tagged {Review | _v == (reviews w)[[rid]]} <{_1 in (paperAuthors _0)[[ (reviewPaper _0)[[rid]] ]]}>
+
+getAllReviews :: w: World -> [ReviewId]
 
 getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
 
