@@ -1,19 +1,16 @@
 
 CONF_METAPROGRAM = {
   'columns':         ["braces(key)", "$1", "#2'-#1", "#2-#1", "$3'", "$3", "$4", "$5", "$6"],
-  'rows': ["test1",
-           "test2",
-           "test3",
-           "test4",
-           "test5",
-           "test6",
-           "selectFrom",
-           "test7",
-           "test8",
-           "test9",
-           "test10",
-           "test11",
-           "test12",
+  'rows': ["registerUser",
+           "usersView",
+           "submitForm",
+           "searchForm",
+           "paperView",
+           "reviewsView",
+           "profileViewGet",
+           "profileViewPost",
+           "submitReviewViewPost",
+           "assignReviewersView",
            "Totals"],
   'fmt': ["\\d%-20s", "%s", "%8s", "%8s", "%s", "%s", "%s", "%s", "%s"],
   'helpers': {
@@ -35,8 +32,8 @@ MICRO_METAPROGRAM = {
   }
 }
 
-CONF_TABLES = ["conference/out/ConferenceRepair.out.txt", 
-               "conference/out/ConferenceVerification.out.txt"]
+CONF_TABLES = ["conferenceWrites/out/ConferenceRepair.out.txt", 
+               "conferenceWrites/out/ConferenceVerification.out.txt"]
 MICRO_TABLES = ["paper/out/1-Basic.out.txt", 
                 "paper/out/2-SelfRef.out.txt", 
                 "paper/out/3-Implicit.out.txt", 
