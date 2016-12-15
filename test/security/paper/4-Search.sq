@@ -1,6 +1,5 @@
 {-
-  In this example we assume that all users are either PC members or chair,
-  and only chair can see paper authors
+  This example demonstrates repair inside auxiliary functions
 -}
 
 {- Datatypes -}
@@ -48,3 +47,19 @@ searchByAuthor = \w . \a .
   let titles = bind aPids (\pids . mapM (\pid . getPaperTitle w pid) pids) in -- a's paper titles
   let out = bind titles (\xs . foldM (\x . \y . return (strcat x y)) emptyString xs) in -- concatenate them together
   print w u out
+  
+-- | Repaired version:  
+-- searchByAuthor = \w . \a .
+  -- let u = getSessionUser w in
+    -- let isAuthor = \pid . bind (ifM
+                                  -- (liftM2 eq u (getChair w))
+                                  -- (getPaperAuthors w pid) 
+                                  -- (ifM (bind (getCurrentPhase w) (\x9 . return (leq rebuttal x9)))
+                                       -- (getPaperAuthors w pid)
+                                       -- defaultPaperAuthors))
+                            -- (\auths . return (elem a auths)) in
+  -- let aPids = bind (getAllPaperIds w) (\pids . filterM isAuthor pids) in -- a's paper IDs
+  -- let titles = bind aPids (\pids . mapM (\pid . getPaperTitle w pid) pids) in -- a's paper titles
+  -- let out = bind titles (\xs . foldM (\x . \y . return (strcat x y)) emptyString xs) in -- concatenate them together
+  -- print w u out
+  
