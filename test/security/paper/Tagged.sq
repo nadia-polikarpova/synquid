@@ -10,14 +10,19 @@ strcat :: String -> String -> String
 data User 
 
 -- | Value tagged with a policy  
+-- (bang denotes contravariant parameter)
 data Tagged a <visibleTo :: User -> Bool>!
 measure content :: Tagged a -> a
 
+-- | Tag a pure value: any policy is fine
 return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
 
+-- | Combine two tagged computations: the result is at least as secret as either of them
 bind :: <bp :: User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>
   
+-- | A tagged Boolean can be safely downgraded as long as 
+-- this value is always the same (False) in every computation in which the policies differ
 downgradeBool :: <bp :: User -> Bool> . <bc :: Bool> .
   x: Tagged {Bool | _v ==> bc} <{bp _0 && bc}> -> Tagged {Bool | _v ==> bc} <bp>
 
@@ -103,7 +108,11 @@ sortByM = \leq . \xs .
       
 data World  
 
+-- | Output a value to a specified viewer:
+-- both the value and the viewer can be tagged, as long as the policy holds of the viewer
 print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged a <pp> -> World
+
+-- | Output to multiple viewers.
 printAll :: <pp :: User -> Bool> . w: World -> viewers: Tagged (List {User | pp _v}) <pp> -> x: Tagged a <pp> -> World
 
 {- Qualifiers -}

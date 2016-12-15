@@ -35,3 +35,13 @@ showPaper = \w . \pid .
   let authors = liftM show (getPaperAuthors w pid) in
   let out = liftM2 strcat title authors in
   print w u out
+  
+-- | Repaired version:
+-- showPaper = \w . \pid .
+  -- let u = getSessionUser w in
+  -- let title = getPaperTitle w pid in
+  -- let authors = liftM show (ifM (liftM2 eq (getChair w) u)
+                                -- (getPaperAuthors w pid)
+                                -- defaultPaperAuthors) in
+  -- let out = liftM2 strcat title authors in
+  -- print w u out
