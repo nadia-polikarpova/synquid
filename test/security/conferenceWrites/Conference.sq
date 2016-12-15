@@ -122,6 +122,7 @@ getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 
 
 qualifier {x == w, x in y, !(x in y)}
 qualifier {_v == (x in y), _v == !(x in y)}
+qualifier {_v == sessionUser w}
 
 {- Some Strings -}
 
