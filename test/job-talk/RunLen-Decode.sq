@@ -1,0 +1,51 @@
+type Nat = {Int | _v >= 0}
+type Pos = {Int | _v > 0}
+
+-- Standard set of primitive components on integers:
+zero :: {Int | _v == 0}
+one :: {Int | _v == 1}
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}
+qualifier {x <= y, x != y}
+
+-- Regular list
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+-- Length of a list
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+  
+-- Set of elements of a list
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs
+
+-- Compressed list
+data CompList a where
+  CNil :: CompList a
+  CCons :: n: Pos ->                              -- Number of repetitions
+           x: a ->                                -- List element
+           xs: {CompList a | !(x in heads _v)} -> -- Tail cannot start with x
+           CompList a
+  
+-- Total number of elements in a compressed list (including repetitions)
+termination measure size :: CompList a -> {Int | _v >= 0} where
+  CNil -> 0
+  CCons n x xs -> n + size xs
+  
+-- Set of heads of a compressed list  
+measure heads :: CompList a -> Set a where
+  CNil -> []
+  CCons n x xs -> [x]  
+  
+-- Set of elements of a compressed list  
+measure cElems :: CompList a -> Set a where
+  CNil -> []
+  CCons n x xs -> [x] + cElems xs
+  
+-- Transform a compressed list into a regular list with the same length and elements  
+decode :: xs: CompList a -> {List a | len _v == size xs && elems _v == cElems xs}
+decode = ??

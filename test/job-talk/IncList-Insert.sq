@@ -1,0 +1,19 @@
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}  
+
+data IList a where
+	INil :: IList a
+	ICons :: x: a -> xs: IList {a | x <= _v} -> IList a
+  
+termination measure ilen :: IList a -> {Int | _v >= 0} where
+  INil -> 0
+  ICons x xs -> 1 + ilen xs  
+
+measure ielems :: IList a -> Set a where
+  INil -> []
+  ICons x xs -> [x] + ielems xs
+	
+insert :: x: a -> xs: IList a -> {IList a | ielems _v == ielems xs + [x]}
+insert = ??
+
+	

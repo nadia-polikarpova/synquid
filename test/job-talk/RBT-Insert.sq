@@ -1,0 +1,75 @@
+qualifier {x <= y, x != y}
+
+red   :: {Bool | _v}
+black :: {Bool | !_v}
+
+data RBT a where
+    Empty :: RBT a
+    Node  :: x: a ->
+              isR: Bool ->
+              left:  { RBT {a | _v < x} | isOk _v && (isRed _v ==> !isR) } ->
+              right: { RBT {a | x < _v} | isOk _v && (isRed _v ==> !isR) && (bHeight _v == bHeight left)} ->
+              RBT a
+    Bad :: x: a ->
+              leftIsR:  Bool ->
+              left:  { RBT {a | _v < x} | isOk _v && (isRed _v == leftIsR)} ->
+              right: { RBT {a | x < _v } | isOk _v && (isRed _v != leftIsR) && (bHeight _v == bHeight left)} ->
+              RBT a             
+                      
+termination measure size :: RBT a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x isR l r -> 1 + size l + size r
+  Bad x leftIsR l r -> 1 + size l + size r
+  
+measure isRed :: RBT a -> Bool where
+  Empty -> False
+  Node x isR l r -> isR
+  Bad x leftIsR l r -> True
+  
+measure elems :: RBT a -> Set a where
+  Empty -> []
+  Node x isR l r -> [x] + elems l + elems r
+  Bad x leftIsR l r -> [x] + elems l + elems r
+  
+inline bHt isR = if isR then 0 else 1
+
+measure bHeight :: RBT a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x isR l r -> bHt isR + bHeight l
+  Bad x leftIsR l r -> bHeight l
+  
+measure isOk :: RBT a -> Bool where
+  Empty -> True
+  Node x isR left right -> True
+  Bad x leftIsR left right -> False
+  
+balanceL :: y: a ->
+              isR: Bool ->
+              l: {RBT {a | _v < y} | (size _v > 0) && (isR ==> isOk _v)} ->
+              r: {RBT {a | _v > y} | isOk _v && (isRed _v ==> !isR) && (bHeight _v == bHeight l)} ->
+              {RBT a | elems _v == [y] + elems l + elems r && 
+                       bHeight _v == bHeight r + bHt isR && 
+                       size _v == 1 + size l + size r &&
+                       (isR || isOk _v)}
+
+balanceR :: x: a ->
+              isR: Bool ->
+              l: {RBT {a | _v < x} | isOk _v && (isRed _v ==> !isR)} ->
+              r: {RBT {a | _v > x} | (size _v > 0) && (isR ==> isOk _v) && bHeight _v == bHeight l} ->
+              {RBT a | elems _v == [x] + elems l + elems r && 
+                            bHeight _v == bHeight l + bHt isR && 
+                            size _v == 1 + size l + size r &&
+                            (isR || isOk _v)}
+  
+ins :: x: a -> t: {RBT a | isOk _v} -> {RBT a | 
+                                          elems _v == [x] + elems t &&
+                                          bHeight _v == bHeight t &&
+                                          size _v > 0 && size t <= size _v && size _v <= size t + 1 &&
+                                          (isOk _v || isRed t)}
+ins = ??                                          
+
+mkBlack :: t: RBT a -> {RBT a | isOk _v && elems _v == elems t}
+mkBlack = ??
+
+insert :: x: a -> t: {RBT a | isOk _v} -> {RBT a | isOk _v && elems _v == elems t + [x]}
+insert = ??

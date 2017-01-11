@@ -1,0 +1,62 @@
+data Type where
+  TypeInt :: Type
+  TypeBool :: Type
+
+data Expr where
+  IntLiteral :: v: Int -> Expr
+  BoolLiteral :: b: Bool -> Expr
+  Plus :: lhs: {Expr | typeOf _v == TypeInt} -> rhs: {Expr | typeOf _v == TypeInt} -> Expr
+  And :: lhs: {Expr | typeOf _v == TypeBool} -> rhs: {Expr | typeOf _v == TypeBool} -> Expr
+  Or :: lhs: {Expr | typeOf _v == TypeBool} -> rhs: {Expr | typeOf _v == TypeBool} -> Expr
+  Not :: e : {Expr | typeOf _v == TypeBool} -> Expr
+  
+measure typeOf :: Expr -> Type where
+  IntLiteral v -> TypeInt
+  BoolLiteral b -> TypeBool
+  Plus lhs rhs -> TypeInt
+  And lhs rhs -> TypeBool
+  Or lhs rhs -> TypeBool
+  Not e -> TypeBool
+  
+termination measure size :: Expr -> {Int | _v >= 0} where
+  IntLiteral v -> 1
+  BoolLiteral b -> 1
+  Plus lhs rhs -> 1 + size lhs + size rhs
+  And lhs rhs -> 1 + size lhs + size rhs
+  Or lhs rhs -> 1 + size lhs + size rhs
+  Not e -> 1 + size e
+
+measure semI :: Expr -> Int where
+  BoolLiteral b -> 0
+  IntLiteral i -> i
+  And lhs rhs -> 0
+  Or lhs rhs -> 0
+  Plus lhs rhs -> semI lhs + semI rhs
+  Not e -> 0
+  
+measure semB :: Expr -> Bool where
+  BoolLiteral b -> b
+  IntLiteral i -> False
+  And lhs rhs -> semB lhs && semB rhs
+  Or lhs rhs -> semB lhs || semB rhs
+  Plus lhs rhs -> False
+  Not e -> !(semB e)
+  
+inline iIsb i b = (i >= 0) && (b <==> i > 0)
+  
+data SimpleE where
+  SPlus :: lhs : SimpleE -> rhs : SimpleE -> SimpleE
+  STimes :: lhs : SimpleE -> rhs : SimpleE -> SimpleE
+  SLiteral :: i : Int -> SimpleE
+
+measure ssem :: SimpleE -> Int where
+  SPlus lhs rhs -> ssem lhs + ssem rhs
+  STimes lhs rhs -> ssem lhs * ssem rhs
+  SLiteral i -> i
+  
+zero :: {Int | _v == 0}
+one :: {Int | _v == 1}
+qualifier {x}
+  
+desugar :: e: Expr -> {SimpleE | if typeOf e == TypeInt then ssem _v == semI e else iIsb (ssem _v) (semB e)} 
+desugar = ??
