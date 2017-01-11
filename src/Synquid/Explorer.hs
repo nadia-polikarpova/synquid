@@ -402,13 +402,15 @@ checkE env typ p@(Program pTerm pTyp) = do
   
   -- ifM (asks $ _symmetryReduction . fst) checkSymmetry (return ())
   
-  addConstraint $ Subtype env pTyp typ False ""
-  when (arity typ > 0) $
-    ifM (asks . view $ _1 . consistencyChecking) (addConstraint $ Subtype env pTyp typ True "") (return ()) -- add constraint that t and tFun be consistent (i.e. not provably disjoint)
+  incremental <- asks . view $ _1 . incrementalChecking -- Is incremental type checking of E-terms enabled?
+  consistency <- asks . view $ _1 . consistencyChecking -- Is consistency checking enabled?
+  
+  when (incremental || arity typ == 0) (addConstraint $ Subtype env pTyp typ False "") -- Add subtyping check, unless it's a function type and incremental checking is diasbled
+  when (consistency && arity typ > 0) (addConstraint $ Subtype env pTyp typ True "") -- Add consistency constraint for function types
   fTyp <- runInSolver $ finalizeType typ
   pos <- asks . view $ _1 . sourcePos
   typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
-  solveIncrementally
+  runInSolver solveTypeConstraints
   typingState . errorContext .= (noPos, empty)
     -- where      
       -- unknownId :: Formula -> Maybe Id
@@ -588,9 +590,6 @@ runInSolver f = do
     Right (res, st) -> do
       typingState .= st
       return res
-      
-solveIncrementally :: MonadHorn s => Explorer s ()        
-solveIncrementally = ifM (asks . view $ _1 . incrementalChecking) (runInSolver solveTypeConstraints) (return ())
 
 freshId :: MonadHorn s => String -> Explorer s String
 freshId = runInSolver . TCSolver.freshId

@@ -1,0 +1,16 @@
+data List a <p :: a -> a -> Bool> where
+	Nil :: List a <p>
+	Cons :: x: a -> xs: List {a | p x _v} <p> -> List a <p>
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+  
+measure elems :: List a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs  
+	
+snoc :: <p :: a -> a -> Bool> . x: a -> xs: List {a | p _v x} <p> -> {List a <p> | len _v == len xs + 1 && elems _v == elems xs + [x]}
+
+reverse :: <p :: a -> a -> Bool> . xs: List a <p> -> {List a <{p _1 _0}> | len _v == len xs && elems _v == elems xs}
+reverse = ??

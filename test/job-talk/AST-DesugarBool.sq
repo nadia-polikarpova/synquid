@@ -1,0 +1,34 @@
+data Expr where
+  BoolLiteral :: b: Bool -> Expr
+  And :: lhs: Expr -> rhs: Expr -> Expr
+  Or :: lhs: Expr -> rhs: Expr -> Expr
+  Not :: e : Expr -> Expr
+  
+termination measure size :: Expr -> {Int | _v >= 0} where
+  BoolLiteral b -> 1
+  And lhs rhs -> 1 + size lhs + size rhs
+  Or lhs rhs -> 1 + size lhs + size rhs
+  Not e -> 1 + size e
+
+measure sem :: Expr -> Bool where
+  BoolLiteral b -> b
+  And lhs rhs -> sem lhs && sem rhs
+  Or lhs rhs -> sem lhs || sem rhs
+  Not e -> !(sem e)  
+  
+data SimpleE where
+  SPlus :: lhs : SimpleE -> rhs : SimpleE -> SimpleE
+  STimes :: lhs : SimpleE -> rhs : SimpleE -> SimpleE
+  SLiteral :: i : Int -> SimpleE
+
+measure ssem :: SimpleE -> Int where
+  SPlus lhs rhs -> ssem lhs + ssem rhs
+  STimes lhs rhs -> ssem lhs * ssem rhs
+  SLiteral i -> i
+  
+zero :: {Int | _v == 0}
+one :: {Int | _v == 1}
+qualifier {x}
+  
+desugar :: e: Expr -> {SimpleE | if sem e then ssem _v > 0 else ssem _v == 0} 
+desugar = ??
