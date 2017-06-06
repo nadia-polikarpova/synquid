@@ -6,3 +6,7 @@ packages:
 resolver: lts-6.21
 extra-deps:
   - z3-4.1.0
+extra-include-dirs:
+  - H:/Work/z3_source/src/api
+extra-lib-dirs:
+  - H:/Work/z3_source/build
