@@ -1,0 +1,42 @@
+data BDD <p :: Int -> Bool> where
+  Leaf :: v: Bool -> BDD <p>
+  Node :: var: {Int | p _v} -> f: BDD <{p _0 && var < _0}> -> t: BDD <{p _0 && var < _0}> -> BDD <p>
+  
+termination measure size :: BDD -> {Int | _v > 0} where
+  Leaf v -> 1
+  Node var f t -> 1 + size f + size t
+  
+predicate store :: Int -> Bool  
+
+measure eval :: BDD -> Bool where
+  Leaf v -> v
+  Node var f t -> if store var then eval t else eval f
+  
+qualifier {x, x < y}  
+  
+and :: <p :: Int -> Bool> . lhs: BDD <p> -> rhs: BDD <p> -> {BDD <p> | eval _v <==> eval lhs && eval rhs}  
+and = ??
+-- \lhs. \rhs.
+  -- match lhs with 
+    -- Leaf l -> if l then rhs else lhs
+    -- Node x lf lt -> 
+      -- match rhs with
+        -- Leaf r -> if r then lhs else rhs
+        -- Node y rf rt ->
+          -- if x < y
+            -- then Node x (and lf (Node y rf rt)) (and lt (Node y rf rt))
+            -- else if y < x
+                  -- then Node y (and (Node x lf lt) rf) (and (Node x lf lt) rt)
+                  -- else Node x (and lf rf) (and lt rt)
+                    
+    
+    
+-- or :: lhs: BDD -> rhs: BDD -> {BDD | eval _v <==> eval lhs || eval rhs}  
+-- or = ??
+
+-- not :: <p :: Int -> Bool> . d: BDD <p> -> {BDD <p> | eval _v <==> !(eval d)}
+-- not = ??
+    
+    
+    
+  
