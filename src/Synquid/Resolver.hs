@@ -106,18 +106,16 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
     else throwResError (text "Type variable(s)" <+> hsep (map text $ Set.toList extraTypeVars) <+> 
               text "in the definition of type synonym" <+> text typeName <+> text "are undefined")
 resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
-resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
+resolveDeclaration (DataDecl dtName tParams pParams ctors) = do
   let
-    (pParams, pVariances) = unzip pVarParams
     datatype = DatatypeDef {
       _typeParams = tParams,
       _predParams = pParams,
-      _predVariances = pVariances,
       _constructors = map constructorName ctors,
       _wfMetric = Nothing
     }
   environment %= addDatatype dtName datatype  
-  let addPreds typ = foldl (flip ForallP) (Monotype typ) pParams
+  let addPreds typ = foldl (flip ForallP) (Monotype typ) (map fst pParams)
   mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) ctors
 resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
   -- Resolve measure signature:
@@ -256,7 +254,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       t' <- substituteTypeSynonym name tArgs >>= resolveType      
       fml' <- resolveTypeRefinement (toSort $ baseTypeOf t') fml
       return $ addRefinement t' fml'
-    Just (DatatypeDef tParams pParams _ _ _) -> do
+    Just (DatatypeDef tParams pParams _ _) -> do
       when (length tArgs /= length tParams) $ 
         throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length tParams) <+> text "type arguments and got" <+> pretty (length tArgs)
       when (length pArgs /= length pParams) $ 
@@ -271,8 +269,8 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       fml' <- resolveTypeRefinement (toSort baseT') fml
       return $ ScalarT baseT' fml'
   where    
-    resolvePredArg :: (Sort -> Sort) -> PredSig -> Formula -> Resolver Formula
-    resolvePredArg subst (PredSig _ argSorts BoolS) fml = withLocalEnv $ do
+    resolvePredArg :: (Sort -> Sort) -> (PredSig, Variance) -> Formula -> Resolver Formula
+    resolvePredArg subst (PredSig _ argSorts BoolS, _) fml = withLocalEnv $ do
       let argSorts' = map subst argSorts
       let vars = zipWith Var argSorts' deBrujns
       environment %= addAllVariables vars
@@ -304,7 +302,7 @@ resolveSort s@(DataS name sArgs) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
     Nothing -> throwResError $ text "Datatype" <+> text name <+> text "is undefined in sort" <+> pretty s
-    Just (DatatypeDef tParams _ _ _ _) -> do
+    Just (DatatypeDef tParams _ _ _) -> do
       let n = length tParams
       when (length sArgs /= n) $ throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty n <+> text "type arguments and got" <+> pretty (length sArgs)
       mapM_ resolveSort sArgs

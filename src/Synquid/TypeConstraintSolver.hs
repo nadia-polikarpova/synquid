@@ -340,11 +340,14 @@ simplifyConstraint' _ _ (Subtype env (ScalarT (DatatypeT name (tArg:tArgs) pArgs
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name tArgs pArgs) fml) (ScalarT (DatatypeT name' tArgs' pArgs') fml') consistent label)
 simplifyConstraint' _ _ (Subtype env (ScalarT (DatatypeT name [] (pArg:pArgs)) fml) (ScalarT (DatatypeT name' [] (pArg':pArgs')) fml') consistent label)
   = do
-      let variances = _predVariances ((env ^. datatypes) Map.! name)
-      let isContra = variances !! (length variances - length pArgs - 1) -- Is pArg contravariant?
-      if isContra
-        then simplifyConstraint (Subtype env (int $ pArg') (int $ pArg) consistent label)
-        else simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent label)
+      let predParams = _predParams ((env ^. datatypes) Map.! name)
+      let variance = snd $ predParams !! (length predParams - length pArgs - 1)
+      case variance of
+        Co -> simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent label)
+        Contra -> simplifyConstraint (Subtype env (int $ pArg') (int $ pArg) consistent label)
+        Inv -> do
+                simplifyConstraint (Subtype env (int $ pArg) (int $ pArg') consistent label)
+                simplifyConstraint (Subtype env (int $ pArg') (int $ pArg) consistent label)
       simplifyConstraint (Subtype env (ScalarT (DatatypeT name [] pArgs) fml) (ScalarT (DatatypeT name' [] pArgs') fml') consistent label)      
 simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg2 tRes2) False label)
   = do
@@ -602,8 +605,8 @@ fresh env (ScalarT baseT _) = do
       -- Replace type arguments with fresh types:
       tArgs' <- mapM (fresh env) tArgs
       -- Replace predicate arguments with fresh predicate variables:
-      let (DatatypeDef tParams pParams _ _ _) = (env ^. datatypes) Map.! name
-      pArgs' <- mapM (\sig -> freshPred env . map (noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')) . predSigArgSorts $ sig) pParams  
+      let (DatatypeDef tParams pParams _ _) = (env ^. datatypes) Map.! name
+      pArgs' <- mapM (\sig -> freshPred env . map (noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')) . predSigArgSorts . fst $ sig) pParams  
       return $ DatatypeT name tArgs' pArgs'
     freshBase baseT = return baseT
 fresh env (FunctionT x tArg tFun) = do

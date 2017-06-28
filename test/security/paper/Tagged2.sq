@@ -18,7 +18,7 @@ data User
 ctx :: User
 
 -- | Two values in two different executions
-data Tagged2 a <visibleTo :: User -> Bool>! where
+data Tagged2 a <visibleTo :: User -> Bool>- where
   Tagged2 :: l: a -> r: a -> proof: ({Prop | visibleTo ctx} -> {Prop | l == r}) -> Tagged2 a <visibleTo>
   
 measure left :: Tagged2 a -> a where

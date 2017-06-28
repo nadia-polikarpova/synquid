@@ -7,6 +7,9 @@ not :: x: Bool -> {Bool | _v == !x}
 
 leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
 
+data Unit where
+  Unit :: Unit
+
 {- Lists -}
 
 data List a where

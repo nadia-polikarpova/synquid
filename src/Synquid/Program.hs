@@ -135,13 +135,15 @@ renameAsImpl isBound = renameAsImpl' Map.empty
     
 {- Top-level definitions -}
 
+data Variance = Co | Contra | Inv
+  deriving (Eq, Ord)
+
 -- | User-defined datatype representation
 data DatatypeDef = DatatypeDef {
-  _typeParams :: [Id],              -- ^ Type parameters
-  _predParams :: [PredSig],         -- ^ Signatures of predicate parameters
-  _predVariances :: [Bool],         -- ^ For each predicate parameter, whether it is contravariant
-  _constructors :: [Id],            -- ^ Constructor names
-  _wfMetric :: Maybe Id             -- ^ Name of the measure that serves as well founded termination metric
+  _typeParams :: [Id],                    -- ^ Type parameters
+  _predParams :: [(PredSig, Variance)],   -- ^ Signatures of predicate parameters
+  _constructors :: [Id],                  -- ^ Constructor names
+  _wfMetric :: Maybe Id                   -- ^ Name of the measure that serves as well founded termination metric
 } deriving (Eq, Ord)
 
 makeLenses ''DatatypeDef
@@ -390,11 +392,14 @@ allMeasurePostconditions _ _ _ = []
 typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
 typeSubstituteEnv tass = over symbols (Map.map (Map.map (schemaSubstitute tass)))
 
+topPred Contra = False
+topPred _ = True
+
 -- | Insert weakest refinement
 refineTop :: Environment -> SType -> RType
 refineTop env (ScalarT (DatatypeT name tArgs pArgs) _) = 
-  let variances = env ^. (datatypes . to (Map.! name) . predVariances) in
-  ScalarT (DatatypeT name (map (refineTop env) tArgs) (map (BoolLit . not) variances)) ftrue
+  let ps = env ^. (datatypes . to (Map.! name) . predParams) in
+  ScalarT (DatatypeT name (map (refineTop env) tArgs) (map (BoolLit . topPred . snd) ps)) ftrue
 refineTop _ (ScalarT IntT _) = ScalarT IntT ftrue
 refineTop _ (ScalarT BoolT _) = ScalarT BoolT ftrue
 refineTop _ (ScalarT (TypeVarT vSubst a) _) = ScalarT (TypeVarT vSubst a) ftrue
@@ -403,8 +408,8 @@ refineTop env (FunctionT x tArg tFun) = FunctionT x (refineBot env tArg) (refine
 -- | Insert strongest refinement
 refineBot :: Environment -> SType -> RType
 refineBot env (ScalarT (DatatypeT name tArgs pArgs) _) = 
-  let variances = env ^. (datatypes . to (Map.! name) . predVariances) in
-  ScalarT (DatatypeT name (map (refineBot env) tArgs) (map BoolLit variances)) ffalse
+  let ps = env ^. (datatypes . to (Map.! name) . predParams) in
+  ScalarT (DatatypeT name (map (refineBot env) tArgs) (map (BoolLit . not . topPred . snd) ps)) ffalse
 refineBot _ (ScalarT IntT _) = ScalarT IntT ffalse
 refineBot _ (ScalarT BoolT _) = ScalarT BoolT ffalse
 refineBot _ (ScalarT (TypeVarT vSubst a) _) = ScalarT (TypeVarT vSubst a) ffalse
@@ -421,7 +426,7 @@ constructorName (ConstructorSig name _) = name
 data BareDeclaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature
-  DataDecl Id [Id] [(PredSig, Bool)] [ConstructorSig] |     -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
+  DataDecl Id [Id] [(PredSig, Variance)] [ConstructorSig] | -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
   MeasureDecl Id Sort Sort Formula [MeasureCase] Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
   PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
