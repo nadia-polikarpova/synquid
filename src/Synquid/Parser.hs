@@ -117,8 +117,10 @@ parseDataDecl = do
   where
     parsePredParam = do
       p <- angles parsePredSig
-      var <- option False (reservedOp (unOpTokens Map.! Not) >> return True)
+      var <- parseVariance
       return (p, var)
+    parseVariance = option Co $ (reservedOp (unOpTokens Map.! Neg) >> return Contra) <|>
+                                (reservedOp (unOpTokens Map.! Not) >> return Inv)
 
 parseConstructorSig :: Parser ConstructorSig
 parseConstructorSig = do

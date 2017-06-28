@@ -12,7 +12,7 @@ data User
 
 -- | Value tagged with a policy  
 -- (bang denotes contravariant parameter)
-data Tagged a <visibleTo :: User -> Bool>!
+data Tagged a <visibleTo :: User -> Bool>-
 measure content :: Tagged a -> a
 
 -- | Tag a pure value: any policy is fine

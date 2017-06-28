@@ -15,7 +15,7 @@ measure elems :: List a -> Set a where
   
 data User 
   
-data Tagged a <visibleTo :: User -> Bool>!
+data Tagged a <visibleTo :: User -> Bool>-
 measure content :: Tagged a -> a
 
 return :: x: a -> Tagged {a | _v == x} <{True}>

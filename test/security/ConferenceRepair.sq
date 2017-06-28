@@ -22,7 +22,7 @@ elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}
 
 data User 
   
-data Tagged a <visibleTo :: User -> Bool>!
+data Tagged a <visibleTo :: User -> Bool>-
 measure content :: Tagged a -> a
 
 return :: <rp :: User -> Bool> . x: a -> Tagged {a | _v == x} <rp>

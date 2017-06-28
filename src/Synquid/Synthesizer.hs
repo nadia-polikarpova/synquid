@@ -214,7 +214,7 @@ isSetMapEq _ = False
 
 -- | 'extractMatchQGen' @(dtName, dtDef)@: qualifier generator that generates qualifiers of the form x == ctor, for all scalar constructors ctor of datatype @dtName@
 extractMatchQGen :: Environment -> [Formula] -> (Id, DatatypeDef) -> [Formula]    
-extractMatchQGen env vars (dtName, (DatatypeDef tParams _ _ ctors _)) = concatMap extractForCtor ctors
+extractMatchQGen env vars (dtName, (DatatypeDef tParams _ ctors _)) = concatMap extractForCtor ctors
   where
     -- Extract formulas x == @ctor@ for each x in @vars@
     extractForCtor ctor = case toMonotype $ allSymbols env Map.! ctor of
@@ -237,8 +237,8 @@ extractQGenFromType positive env val vars t = extractQGenFromType' positive t
       let
         -- Datatype: extract from tArgs and pArgs
         extractFromBase (DatatypeT dtName tArgs pArgs) =
-          let (DatatypeDef _ pParams _ _ _) = (env ^. datatypes) Map.! dtName
-          in concatMap (extractQGenFromType' True) tArgs ++ concat (zipWith extractQGenFromPred pParams pArgs)
+          let (DatatypeDef _ pParams _ _) = (env ^. datatypes) Map.! dtName
+          in concatMap (extractQGenFromType' True) tArgs ++ concat (zipWith extractQGenFromPred (map fst pParams) pArgs)
         -- Otherwise: no formulas
         extractFromBase _ = []
         fmls = Set.toList $ conjunctsOf (sortSubstituteFml sortInst fml)        

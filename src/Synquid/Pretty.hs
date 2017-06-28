@@ -411,7 +411,12 @@ prettySolution (Goal name _ _ _ _ _) prog = text name <+> operator "=" </> prett
 instance Pretty ConstructorSig where
   pretty (ConstructorSig name t) = text name <+> text "::" <+> pretty t
   
-prettyVarianceParam (predSig, contra) = pretty predSig <> (if contra then pretty Not else empty)  
+instance Pretty Variance where
+  pretty Co = empty
+  pretty Contra = pretty Neg
+  pretty Inv = pretty Not
+  
+prettyVarianceParam (predSig, v) = pretty predSig <> pretty v
 
 instance Pretty BareDeclaration where
   pretty (TypeDecl name tvs t) = keyword "type" <+> text name <+> hsep (map text tvs) <+> operator "=" <+> pretty t
