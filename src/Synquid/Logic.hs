@@ -244,17 +244,21 @@ posNegPreds _ = (Set.empty, Set.empty)
 posPreds = fst . posNegPreds
 negPreds = snd . posNegPreds
 
+predSigsOf :: Formula -> Set PredSig
+predSigsOf (Pred r p es) = Set.insert (PredSig p (map sortOf es) r) (Set.unions $ map predSigsOf es)
+predSigsOf (SetLit _ elems) = Set.unions $ map predSigsOf elems
+predSigsOf (SetComp _ e) = predSigsOf e
+predSigsOf (MapSel m k) = Set.unions $ map predSigsOf [m, k]
+predSigsOf (MapUpd m k v) = Set.unions $ map predSigsOf [m, k, v]
+predSigsOf (Unary _ e) = predSigsOf e
+predSigsOf (Binary _ e1 e2) = Set.unions $ map predSigsOf [e1, e2]
+predSigsOf (Ite e0 e1 e2) = Set.unions $ map predSigsOf [e0, e1, e2]
+predSigsOf (All x e) = predSigsOf e
+predSigsOf _ = Set.empty
+
+
 predsOf :: Formula -> Set Id
-predsOf (Pred _ p es) = Set.insert p (Set.unions $ map predsOf es)
-predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
-predsOf (SetComp _ e) = predsOf e
-predsOf (MapSel m k) = Set.unions $ map predsOf [m, k]
-predsOf (MapUpd m k v) = Set.unions $ map predsOf [m, k, v]
-predsOf (Unary _ e) = predsOf e
-predsOf (Binary _ e1 e2) = Set.unions $ map predsOf [e1, e2]
-predsOf (Ite e0 e1 e2) = Set.unions $ map predsOf [e0, e1, e2]
-predsOf (All x e) = predsOf e
-predsOf _ = Set.empty
+predsOf fml = Set.map predSigName $ predSigsOf fml
 
 -- | 'leftHandSide' @fml@ : left-hand side of a binary expression
 leftHandSide (Binary _ l _) = l

@@ -126,7 +126,7 @@ parseConstructorSig :: Parser ConstructorSig
 parseConstructorSig = do
   ctorName <- parseTypeName
   reservedOp "::"
-  ctorType <- parseType  
+  ctorType <- parseSchema  
   return $ ConstructorSig ctorName ctorType
 
 parseMeasureDecl :: Parser BareDeclaration

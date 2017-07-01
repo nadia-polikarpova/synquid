@@ -95,15 +95,19 @@ varsOfType (FunctionT x tArg tRes) = varsOfType tArg `Set.union` (Set.delete x $
 varsOfType (LetT x tDef tBody) = varsOfType tDef `Set.union` (Set.delete x $ varsOfType tBody)
 varsOfType AnyT = Set.empty    
 
+-- | Signatures of free predicate variables of a type
+predSigsOfType :: RType -> Set PredSig
+predSigsOfType (ScalarT baseT fml) = predsOfBase baseT `Set.union` predSigsOf fml
+  where
+    predsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map predSigsOfType tArgs) `Set.union` (Set.unions (map predSigsOf pArgs))
+    predsOfBase _ = Set.empty
+predSigsOfType (FunctionT x tArg tRes) = predSigsOfType tArg `Set.union` predSigsOfType tRes
+predSigsOfType (LetT x tDef tBody) = predSigsOfType tDef `Set.union` predSigsOfType tBody
+predSigsOfType AnyT = Set.empty    
+
 -- | Free predicate variables of a type
 predsOfType :: RType -> Set Id
-predsOfType (ScalarT baseT fml) = predsOfBase baseT `Set.union` predsOf fml
-  where
-    predsOfBase (DatatypeT name tArgs pArgs) = Set.unions (map predsOfType tArgs) `Set.union` (Set.unions (map predsOf pArgs))
-    predsOfBase _ = Set.empty
-predsOfType (FunctionT x tArg tRes) = predsOfType tArg `Set.union` predsOfType tRes
-predsOfType (LetT x tDef tBody) = predsOfType tDef `Set.union` predsOfType tBody
-predsOfType AnyT = Set.empty    
+predsOfType t = Set.map predSigName $ predSigsOfType t
   
 varRefinement x s = Var s valueVarName |=| Var s x
 isVarRefinemnt (Binary Eq (Var _ v) (Var _ _)) = v == valueVarName

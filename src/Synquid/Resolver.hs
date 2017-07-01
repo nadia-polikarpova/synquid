@@ -115,8 +115,8 @@ resolveDeclaration (DataDecl dtName tParams pParams ctors) = do
       _wfMetric = Nothing
     }
   environment %= addDatatype dtName datatype  
-  let addPreds typ = foldl (flip ForallP) (Monotype typ) (map fst pParams)
-  mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) ctors
+  let addPreds sch = foldl (flip ForallP) sch (map fst pParams)
+  mapM_ (\(ConstructorSig name sch) -> addNewSignature name $ addPreds sch) ctors
 resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
   -- Resolve measure signature:
   resolveSort inSort
