@@ -418,7 +418,7 @@ refineBot env (FunctionT x tArg tFun) = FunctionT x (refineTop env tArg) (refine
 {- Input language declarations -}
 
 -- | Constructor signature: name and type
-data ConstructorSig = ConstructorSig Id RType
+data ConstructorSig = ConstructorSig Id RSchema
   deriving (Eq)
   
 constructorName (ConstructorSig name _) = name  

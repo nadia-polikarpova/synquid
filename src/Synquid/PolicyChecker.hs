@@ -226,7 +226,7 @@ localizeI' env t@(ScalarT _ _) impl = case impl of
     checkCases mName (Case consName args _ : cs) = case Map.lookup consName (allSymbols env) of
       Nothing -> throwErrorWithDescription $ text "Not in scope: data constructor" </> squotes (text consName)
       Just consSch -> do
-                        consT <- instantiate env consSch True args -- Set argument names in constructor type to user-provided binders
+                        let consT = toMonotype consSch
                         case lastType consT of
                           (ScalarT (DatatypeT dtName _ _) _) -> do
                             case mName of
@@ -236,18 +236,35 @@ localizeI' env t@(ScalarT _ _) impl = case impl of
                                              else throwErrorWithDescription $ text "Expected constructor of datatype" </> squotes (text name) </> 
                                                                text "and got constructor" </> squotes (text consName) </> 
                                                                text "of datatype" </> squotes (text dtName)
-                            if arity (toMonotype consSch) /= length args 
+                            if arity consT /= length args 
                               then throwErrorWithDescription $ text "Constructor" </> squotes (text consName)
-                                            </> text "expected" </> pretty (arity (toMonotype consSch)) </> text "binder(s) and got" <+> pretty (length args)
-                              else ((consName, consT) :) <$> checkCases (Just dtName) cs
+                                            </> text "expected" </> pretty (arity consT) </> text "binder(s) and got" <+> pretty (length args)
+                              else do
+                                    let DatatypeDef ts ps _ _ = (env ^. datatypes) Map.! dtName
+                                    let consSch' = stripHiddenParams ts ps consSch -- Remove type and pred parameters that are not present in the data type to avoid instantiation
+                                    consT' <- instantiate env consSch' True args -- Set argument names in constructor type to user-provided binders
+                                    rest <- checkCases (Just dtName) cs
+                                    return $ (consName, consT') : rest
                           _ -> throwErrorWithDescription $ text "Not in scope: data constructor" </> squotes (text consName)
+
     checkCases _ [] = return []
+    
+    stripHiddenParams (_:ts) ps (ForallT a sch) = ForallT a (stripHiddenParams ts ps sch)
+    stripHiddenParams [] ps (ForallT _ sch) = stripHiddenParams [] ps sch
+    stripHiddenParams [] (_:ps) (ForallP p sch) = ForallP p (stripHiddenParams [] ps sch)
+    stripHiddenParams [] [] (ForallP p sch) = stripHiddenParams [] [] sch
+    stripHiddenParams [] [] sch = sch
   
 localizeCase env pScrutinee@(Program (PSymbol x) scrT) t (Case consName args iBody) consT = cut $ do  
-  runInSolver $ matchConsType (lastType consT) (typeOf pScrutinee)
+  runInSolver $ matchConsType (lastType consT) scrT
   consT' <- runInSolver $ currentAssignment consT
+  let hiddenTypeVars = Set.toList $ typeVarsOf consT' Set.\\ typeVarsOf scrT
+  let hiddenPredVars = Set.toList $ predSigsOfType consT' Set.\\ predSigsOfType scrT
   (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) x) args consT'
-  let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
+  let caseEnv = flip (foldr addTypeVar) hiddenTypeVars . 
+                flip (foldr addBoundPredicate) hiddenPredVars . 
+                flip (foldr (uncurry addVariable)) syms $ 
+                addAssumption ass env
   pCaseExpr <- inContext (\p -> Program (PMatch pScrutinee [Case consName args p]) t) $ 
                localizeI caseEnv t iBody
   return $ Case consName args pCaseExpr  

@@ -693,7 +693,8 @@ matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> prett
 currentAssignment :: Monad s => RType -> TCSolver s RType
 currentAssignment t = do
   tass <- use typeAssignment
-  return $ typeSubstitute tass t
+  pass <- use predAssignment
+  return $ (typeSubstitutePred pass . typeSubstitute tass) t
     
 -- | Substitute type variables, predicate variables, and predicate unknowns in @t@
 -- using current type assignment, predicate assignment, and liquid assignment
