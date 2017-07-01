@@ -93,12 +93,12 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                                in repair explorerParams typingParams (goal {gImpl = p}) violations
                                
     varsForQuals env vars = 
-      -- let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
-      let vars' = filter isUsefulVar vars in
+      let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
+      -- let vars' = filter isUsefulVar vars in
       allPredApps env vars' 1
       
-    isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
-    isUsefulVar _ = True      
+    -- isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
+    -- isUsefulVar _ = True      
       
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
@@ -284,7 +284,7 @@ extractPredQGenFromQual useAllArgs env actualParams actualVars fml =
                       else id
                       
 extractPredQGenFromType :: Bool -> Environment -> [Formula] -> [Formula] -> RType -> [Formula]
-extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQGenFromType' t
+extractPredQGenFromType useAllArgs env actualParams actualVars t = extractPredQGenFromType' t  
   where
     sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
     
