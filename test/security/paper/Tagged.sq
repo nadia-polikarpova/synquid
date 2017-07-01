@@ -74,9 +74,10 @@ filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
 filterM = \f . \xs .
   match xs with
     Nil -> return Nil
-    Cons y ys -> ifM (f y) 
-                    (liftM2 Cons (return y) (filterM f ys)) 
-                    (filterM f ys) 
+    Cons y ys -> bind (downgradeBool (f y))
+                  (\c . if c
+                          then (liftM2 Cons (return y) (filterM f ys))
+                          else (filterM f ys))
     
 foldM :: <fp :: User -> Bool> . 
   (a -> b -> Tagged a <fp>) -> a: a -> xs: List b -> Tagged a <fp>
