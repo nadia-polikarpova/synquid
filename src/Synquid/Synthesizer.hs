@@ -95,6 +95,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
     varsForQuals env vars = 
       let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
       -- let vars' = filter isUsefulVar vars in
+      -- let vars' = vars in
       allPredApps env vars' 1
       
     -- isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
@@ -102,11 +103,12 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
       
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
-    typeQuals env val vars = toSpace Nothing $ concat $
-        [ extractQGenFromType False env val vars syntGoal, 
-          extractQGenFromType True env val vars syntGoal] -- extract from spec: both positive and negative
-        ++ map (instantiateTypeQualifier env val vars) tquals -- extract from given qualifiers
-        ++ map (extractQGenFromType False env val vars) components -- extract from components: only negative      
+    typeQuals env val vars = let vars' = varsForQuals env vars in 
+        toSpace Nothing $ concat $
+        [ extractQGenFromType False env val vars' syntGoal, 
+          extractQGenFromType True env val vars' syntGoal] -- extract from spec: both positive and negative
+        ++ map (instantiateTypeQualifier env val vars') tquals -- extract from given qualifiers
+        ++ map (extractQGenFromType False env val vars') components -- extract from components: only negative      
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
