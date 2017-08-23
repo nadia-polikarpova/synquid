@@ -1,0 +1,24 @@
+inline bit b = if b then 1 else 0 
+
+data BitVec where
+  Bit :: x: Bool -> BitVec
+  Cons :: x: Bool -> xs: BitVec -> BitVec
+  
+termination measure len :: BitVec -> {Int | _v > 0} where
+  Bit x -> 1
+  Cons x xs -> 1 + len xs   
+  
+measure value :: BitVec -> {Int | _v >= 0} where
+  Bit x -> bit x
+  Cons x xs -> bit x + 2 * (value xs)
+    
+true :: {Bool | _v}
+false :: {Bool | !_v}
+  
+plus' :: x: BitVec -> y: {BitVec | len _v == len x} -> carry: Bool -> {BitVec | value _v == value x + value y + bit carry}
+plus' = ??
+
+plus :: x: BitVec -> y: {BitVec | len _v == len x} -> {BitVec | value _v == value x + value y}
+plus = ??
+  
+qualifier {x}
