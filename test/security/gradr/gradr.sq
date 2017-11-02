@@ -1,0 +1,88 @@
+-- See Model.sq for definitions
+
+{- Database API -}
+-- | TODO: Fix me to add security
+-- loadValue :: World ->  -> a
+-- | TODO: Fix me, does this function even make sense?
+-- storeValue :: World -> a -> Key a
+-- Current environment (TODO: needed?)
+
+-- predicate sessionUser :: World -> Maybe UserId
+-- getSessionUser ::
+--   w: World ->
+--   Tagged {Maybe UserId | _v == sessionUser w} <{_0 == sessionUser w}>
+
+-- type TagPred = World -> User -> Bool
+
+-- renderMs :: <pp :: TagPred> . x:(List (Tagged a <pp>)) -> Tagged {List a |}
+defaultPage :: String
+-- defaultPage = render "Page could not be found or you are not authorized to see it"
+
+-- display
+--   :: <pp :: User -> Bool>
+--   .  w:      World
+--   -> viewer: Tagged {User | pp _v} <pp>
+--   -> x:      Tagged Page <pp>
+--   ->         World
+
+-- public homepage
+homePageString :: Tagged String <{True}>
+
+homePage :: World -> World
+homePage = \w .
+  let u = getSessionUser w in
+  print w u homePageString
+
+-- test if user is in class
+-- testIfStdInClass :: w: World -> u:User -> c: Class -> Tagged Bool <{_0== u}>
+-- testIfStdInClass = \w . \u . \c .
+--   elem u (getClassStudents w c)
+
+-- isUser :: u: User -> u2:Tagged User <{_0 }>
+
+-- get list of classes the user is a student in
+getClassesStdByUser
+  :: w: World
+  -> u: User
+  -> Tagged (List {Class | u in (classStudents w)[[_v]]}) <{_0 == u}>
+getClassesStdByUser = \w . \u . filterM (isStudentInClass w u) (getClasses w)
+
+-- get list of classes the user is an instructor/teacher for
+getClassesInsByUser
+  :: w: World
+  -> u: User
+  -> Tagged (List {Class | u in (classTeachers w)[[_v]] || u == (classInstructor w)[[_v]]}) <{True}>
+getClassesInsByUser = \w . \u . filterM (teachesClass w u) (getClasses w)
+
+profileClassInfo :: World -> u:User -> Tagged String <{_0 == u}>
+profileClassInfo = \w . \u .
+  let teachingClasses = getClassesInsByUser w u in
+  let takingClasses = getClassesStdByUser w u in
+    liftM2 strcat
+      (liftM show teachingClasses)
+      (liftM show takingClasses)
+
+-- defaultProfileClassInfo :: Tagged String <{True}> -- "not authorized"
+
+-- View Student user profile
+profileView :: World -> World
+profileView = \w .
+  let u = getSessionUser w in
+  let content = liftM (profileClassInfo w) u in
+  print w u content
+
+arbitraryUser :: w:World -> Tagged {User | !(_v == sessionUser w)} <{True}>
+
+unauthProfileView :: World -> World
+unauthProfileView = \w .
+  let u = getSessionUser w in
+  let content = liftM (profileClassInfo w) u in
+  print w (arbitraryUser w) content
+
+-- View class: Instructor view
+-- classInstructor :: World -> World
+-- classInstructor = \w .
+--   let u = getSessionUser w in
+
+
+
