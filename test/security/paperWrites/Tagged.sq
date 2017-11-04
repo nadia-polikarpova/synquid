@@ -12,7 +12,7 @@ data User
 data World 
 
 -- | Value tagged with a policy  
-data Tagged a <visibleTo :: World -> User -> Bool>!
+data Tagged a <visibleTo :: World -> User -> Bool>-
 measure content :: Tagged a -> a
 
 return :: <rp :: World -> User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
