@@ -112,10 +112,10 @@ data World
 
 -- | Output a value to a specified viewer:
 -- both the value and the viewer can be tagged, as long as the policy holds of the viewer
-print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged a <pp> -> World
+print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -> x: Tagged String <pp> -> World
 
 -- | Output to multiple viewers.
-printAll :: <pp :: User -> Bool> . w: World -> viewers: Tagged (List {User | pp _v}) <pp> -> x: Tagged a <pp> -> World
+printAll :: <pp :: User -> Bool> . w: World -> viewers: Tagged (List {User | pp _v}) <pp> -> x: Tagged String <pp> -> World
 
 {- Qualifiers -}
 

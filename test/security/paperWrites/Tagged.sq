@@ -105,8 +105,8 @@ sortByM = \leq . \xs .
 
 {- Output -}      
 
-print :: <pp :: World -> User -> Bool> . w: World -> viewer: Tagged {User | pp w _v} <pp> -> x: Tagged a <pp> -> World
-printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {User | pp w _v}) <pp> -> x: Tagged a <pp> -> World
+print :: <pp :: World -> User -> Bool> . w: World -> viewer: Tagged {User | pp w _v} <pp> -> x: Tagged String <pp> -> World
+printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {User | pp w _v}) <pp> -> x: Tagged String <pp> -> World
 
 -- New flexible printAll:
 -- printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {User | pp w _v}) <pp> -> (u: {User | pp w _v} -> Tagged a <{_0 == w && _1 == u}>) -> World
