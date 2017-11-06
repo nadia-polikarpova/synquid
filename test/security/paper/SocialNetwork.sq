@@ -1,0 +1,45 @@
+{- Datatypes -}
+
+data FriendPair
+
+{- Sensitive data and policies -}
+
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+predicate friend1 :: FriendPair -> User
+predicate friend2 :: FriendPair -> User
+getFriend1 :: p:FriendPair -> Tagged {User | _v == friend1 p} <{ friend1 p == _0 || friend2 p == _0 }>
+getFriend2 :: p:FriendPair -> Tagged {User | _v == friend2 p} <{ friend1 p == _0 || friend2 p == _0 }>
+
+getAllFriendPairs :: w: World -> List FriendPair
+
+defaultFriend1 :: Tagged User <{True}>
+defaultFriend2 :: Tagged User <{True}>
+
+{- Client code -}
+
+ifte :: Bool -> a -> a -> a
+ifte = \b . \a . \c . (if b then a else c)
+
+getFriends :: w:World -> World
+--getFriends = \w . \u . mapM (\p . if getFriend1 p == u then getFriend2 p else getFriend1 p) (
+--  filter (\p . getFriend1 p == u || getFriend2 p == u) (getAllFriendPairs w))
+getFriends = \w .
+  let um = getSessionUser w in
+  let friends =
+        bind um (\u .
+          bind
+           (
+              (filterM (\p . (
+                bind (getFriend1 p) (\f1 . bind (getFriend2 p) (\f2 . return (u == f1 || u == f2)))
+                  )))
+                    (getAllFriendPairs w)
+                      )
+                        (mapM (\p . (
+                          bind (getFriend1 p) (\f1 . bind (getFriend2 p) (\f2 . return (
+                           --if (u == f1) then f2 else f1
+                           ifte (u == f1) f2 f1
+                            )))
+                              )))) in
+  print w um (friends)
