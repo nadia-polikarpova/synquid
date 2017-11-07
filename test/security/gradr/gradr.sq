@@ -54,13 +54,15 @@ getClassesInsByUser
   -> Tagged (List {Class | u in (classTeachers w)[[_v]] || u == (classInstructor w)[[_v]]}) <{True}>
 getClassesInsByUser = \w . \u . filterM (teachesClass w u) (getClasses w)
 
-profileClassInfo :: World -> u:User -> Tagged String <{_0 == u}>
-profileClassInfo = \w . \u .
+getProfileClassInfo :: World -> u:User -> Tagged String <{_0 == u}>
+getProfileClassInfo = \w . \u .
   let teachingClasses = getClassesInsByUser w u in
   let takingClasses = getClassesStdByUser w u in
     liftM2 strcat
       (liftM show teachingClasses)
       (liftM show takingClasses)
+
+defaultProfileClassInfo :: Tagged String <{True}>
 
 -- defaultProfileClassInfo :: Tagged String <{True}> -- "not authorized"
 
@@ -68,15 +70,20 @@ profileClassInfo = \w . \u .
 profileView :: World -> World
 profileView = \w .
   let u = getSessionUser w in
-  let content = liftM (profileClassInfo w) u in
+  let content = liftM (getProfileClassInfo w) u in
   print w u content
 
-arbitraryUser :: w:World -> Tagged {User | !(_v == sessionUser w)} <{True}>
+predicate arbUser :: World -> User
+
+--arbitraryUser :: w:World -> Tagged {User | !(_v == sessionUser w)} <{True}>
+arbitraryUser :: w:World -> Tagged {User | _v == arbUser w} <{True}>
+
+qualifier {(_0 == arbUser w)}
 
 unauthProfileView :: World -> World
 unauthProfileView = \w .
   let u = getSessionUser w in
-  let content = liftM (profileClassInfo w) u in
+  let content = bind u (\user . getProfileClassInfo w user) in
   print w (arbitraryUser w) content
 
 -- View class: Instructor view
