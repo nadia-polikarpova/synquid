@@ -202,7 +202,7 @@ if __name__ == '__main__':
 
     if a.synquid:
         synquid_path = a.synquid
-    if platform.system() in ['Linux', 'Darwin']:
+    elif platform.system() in ['Linux', 'Darwin']:
         synquid_path = SYNQUID_PATH_LINUX
     else:
         synquid_path = SYNQUID_PATH_WINDOWS
