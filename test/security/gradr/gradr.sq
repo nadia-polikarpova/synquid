@@ -76,7 +76,7 @@ profileView = \w .
 predicate arbUser :: World -> User
 
 --arbitraryUser :: w:World -> Tagged {User | !(_v == sessionUser w)} <{True}>
-arbitraryUser :: w:World -> Tagged {User | _v == arbUser w} <{True}>
+getArbitraryUser :: w:World -> {User | _v == arbUser w}
 
 qualifier {(_0 == arbUser w)}
 
@@ -84,7 +84,7 @@ unauthProfileView :: World -> World
 unauthProfileView = \w .
   let u = getSessionUser w in
   let content = bind u (\user . getProfileClassInfo w user) in
-  print w (arbitraryUser w) content
+  print w (return (getArbitraryUser w)) content
 
 -- View class: Instructor view
 -- classInstructor :: World -> World
