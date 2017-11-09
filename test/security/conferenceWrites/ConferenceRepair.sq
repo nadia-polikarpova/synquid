@@ -51,7 +51,7 @@ searchForm = \w . \byAuthor . \byReviewer .
        (ifJust byReviewer (\revr . bind (getPaperReviewers w pid) (\cs. return (userFilter w revr cs))))
      ) allPids in
   let u = getSessionUser w in
-  print w u pids
+  print w u (liftM show pids)
 
 userFilter :: w: World -> s: String -> users: [User] -> Bool
 
