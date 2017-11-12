@@ -172,8 +172,9 @@ getViolatingLabels = do
   generateAllHornClauses
 
   clauses <- use hornClauses
+  clauses' <- stripTrivial clauses
   -- TODO: this should probably be moved to Horn solver
-  let (nontermClauses, termClauses) = partition isNonTerminal clauses
+  let (nontermClauses, termClauses) = partition isNonTerminal clauses'
   qmap <- use qualifierMap
   cands <- use candidates
   env <- use initEnv
@@ -190,6 +191,24 @@ getViolatingLabels = do
   where
     isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
     isNonTerminal _ = False
+    
+    -- Remove clauses with head U, which does not occur anywhere
+    stripTrivial clauses = do
+      let allNegUnknowns = Set.unions $ map (negUnknowns . fst) clauses
+      let isTrivial c = let heads = posUnknowns (fst c) in not (Set.null heads) && heads `disjoint` allNegUnknowns
+      
+      let strip triv nontriv = 
+            let (triv', nontriv') = partition isTrivial nontriv in
+            if null triv'
+              then (triv, nontriv) -- Fixpoint reached
+              else strip (triv ++ triv') nontriv'
+      
+      let (trivial, nontrivial) = strip [] clauses
+      let trivialUnknowns = map (Set.findMax . posUnknowns . fst) trivial
+      let trivialSol = Map.fromList (zip trivialUnknowns (repeat Set.empty))
+      cand <- fmap head $ use candidates
+      candidates .= [cand {solution = trivialSol `Map.union` solution cand}]
+      return nontrivial
 
     isInvalid cand extractAssumptions (fml,_) = do
       cands' <- lift . lift . lift $ checkCandidates False [fml] extractAssumptions [cand]
