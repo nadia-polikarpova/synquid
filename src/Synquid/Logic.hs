@@ -466,18 +466,19 @@ setToPredicate x s = Binary Member x s
 
 -- | Search space for valuations of a single unknown
 data QSpace = QSpace {
+    _variables :: Set Formula,        -- ^ Variables is scope
     _qualifiers :: [Formula],         -- ^ Qualifiers
     _maxCount :: Int                  -- ^ Maximum number of qualifiers in a valuation
   } deriving (Eq, Ord)
 
 makeLenses ''QSpace  
 
-emptyQSpace = QSpace [] 0
+emptyQSpace = QSpace Set.empty [] 0
 
-toSpace mbN quals = let quals' = nub quals in 
+toSpace mbN vars quals = let quals' = nub quals in 
   case mbN of
-    Nothing -> QSpace quals' (length quals')
-    Just n -> QSpace quals' n
+    Nothing -> QSpace vars quals' (length quals')
+    Just n -> QSpace vars quals' n
   
 -- | Mapping from unknowns to their search spaces
 type QMap = Map Id QSpace
@@ -510,7 +511,7 @@ topSolution qmap = constMap (Map.keysSet qmap) Set.empty
 
 -- | 'botSolution' @qmap@ : bottom of the solution lattice (maps every unknown in the domain of @qmap@ to all its qualifiers)
 botSolution :: QMap -> Solution
-botSolution qmap = Map.map (\(QSpace quals _) -> Set.fromList quals) qmap
+botSolution qmap = Map.map (\(QSpace _ quals _) -> Set.fromList quals) qmap
 
 -- | 'valuation' @sol u@ : valuation of @u@ in @sol@
 valuation :: Solution -> Formula -> Valuation
