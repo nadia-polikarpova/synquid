@@ -104,7 +104,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
     typeQuals env val vars = let vars' = varsForQuals env vars in 
-        toSpace Nothing $ concat $
+        toSpace Nothing (Set.fromList $ val : vars) $ concat $
         [ extractQGenFromType False env val vars' syntGoal, 
           extractQGenFromType True env val vars' syntGoal] -- extract from spec: both positive and negative
         ++ map (instantiateTypeQualifier env val vars') tquals -- extract from given qualifiers
@@ -112,7 +112,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
-    condQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing $ filter (not . isSetMapEq) $ concat $
+    condQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing (Set.fromList vars) $ filter (not . isSetMapEq) $ concat $
       map (instantiateCondQualifier True env vars') cquals ++ map (extractCondFromType env vars') components                  
       
     -- | Qualifier generator for bound predicates
@@ -124,7 +124,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
         filterSomeArgs = if null params
                           then id                          
                           else filter (\q -> not $ Set.fromList params `disjoint` varsOf q)  -- Only take the qualifiers that use some predicate parameters
-      in toSpace Nothing $
+      in toSpace Nothing (Set.fromList $ params ++ vars) $
         concatMap (extractPredQGenFromQual useAllArgs env params' vars') tquals ++ -- extract from given qualifiers
         concatMap (extractPredQGenFromType useAllArgs env params' vars') (syntGoal : components) ++
         filterSomeArgs (concatMap (instantiateCondQualifier True env (params' ++ vars')) cquals ++ concatMap (extractCondFromType env (params' ++ vars')) components)
@@ -159,16 +159,16 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
       
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
-    condQuals env vars = toSpace Nothing $ concat $
+    condQuals env vars = toSpace Nothing (Set.fromList vars) $ concat $
       map (instantiateCondQualifier False env vars) cquals ++ map (extractCondFromType env vars) (components ++ allArgTypes syntGoal)
 
     -- | Qualifier generator for match scrutinees
     matchQuals :: Environment -> [Formula] -> QSpace
-    matchQuals env vars = toSpace (Just 1) $ concatMap (extractMatchQGen env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
+    matchQuals env vars = toSpace (Just 1) (Set.fromList vars) $ concatMap (extractMatchQGen env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
 
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
-    typeQuals env val vars = toSpace Nothing $ concat $
+    typeQuals env val vars = toSpace Nothing (Set.fromList $ val : vars) $ concat $
         [ extractQGenFromType False env val vars syntGoal, 
           extractQGenFromType True env val vars syntGoal] -- extract from spec: both positive and negative
         ++ map (instantiateTypeQualifier env val vars) tquals -- extract from given qualifiers
@@ -177,7 +177,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
         
     -- | Qualifier generator for bound predicates
     predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
-    predQuals env params vars = toSpace Nothing $ 
+    predQuals env params vars = toSpace Nothing (Set.fromList $ params ++ vars) $ 
       concatMap (extractPredQGenFromType True env params vars) (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
         then concatMap (instantiateCondQualifier False env vars) cquals ++ concatMap (extractCondFromType env vars) (components ++ allArgTypes syntGoal)

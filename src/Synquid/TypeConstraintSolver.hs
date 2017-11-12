@@ -170,10 +170,16 @@ getViolatingLabels = do
   processAllPredicates  
   processAllConstraints
   generateAllHornClauses
-
+  
   clauses <- use hornClauses
-  clauses' <- stripTrivial clauses
-  -- TODO: this should probably be moved to Horn solver
+  writeLog 2 (nest 2 $ text "All Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) clauses))        
+  
+  
+  -- First try to solve as many clauses as possible syntactically via unfolding:
+  stripTrivialClauses -- Remove clauses with head U, which does not occur in any bodies
+  -- unfoldClauses      -- Prolog-style unfolding
+
+  clauses' <- use hornClauses
   let (nontermClauses, termClauses) = partition isNonTerminal clauses'
   qmap <- use qualifierMap
   cands <- use candidates
@@ -192,27 +198,35 @@ getViolatingLabels = do
     isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
     isNonTerminal _ = False
     
-    -- Remove clauses with head U, which does not occur anywhere
-    stripTrivial clauses = do
-      let allNegUnknowns = Set.unions $ map (negUnknowns . fst) clauses
-      let isTrivial c = let heads = posUnknowns (fst c) in not (Set.null heads) && heads `disjoint` allNegUnknowns
-      
-      let strip triv nontriv = 
-            let (triv', nontriv') = partition isTrivial nontriv in
-            if null triv'
-              then (triv, nontriv) -- Fixpoint reached
-              else strip (triv ++ triv') nontriv'
-      
-      let (trivial, nontrivial) = strip [] clauses
-      let trivialUnknowns = map (Set.findMax . posUnknowns . fst) trivial
-      let trivialSol = Map.fromList (zip trivialUnknowns (repeat Set.empty))
-      cand <- fmap head $ use candidates
-      candidates .= [cand {solution = trivialSol `Map.union` solution cand}]
-      return nontrivial
-
     isInvalid cand extractAssumptions (fml,_) = do
       cands' <- lift . lift . lift $ checkCandidates False [fml] extractAssumptions [cand]
       return $ null cands'
+      
+-- | Remove clauses with head U, which does not occur in any bodies
+stripTrivialClauses :: MonadHorn s => TCSolver s ()
+stripTrivialClauses = do
+  clauses <- use hornClauses
+  let (trivial, nontrivial) = strip [] clauses
+  hornClauses .= nontrivial
+  writeLog 2 (nest 2 $ text "Stripped trivial clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) trivial))        
+  
+  let trivialUnknowns = map (Set.findMax . posUnknowns . fst) trivial
+  let trivialSol = Map.fromList (zip trivialUnknowns (repeat Set.empty))
+  cand <- fmap head $ use candidates
+  candidates .= [cand {solution = trivialSol `Map.union` solution cand}]  
+  where
+    isTrivial cs c = 
+      let 
+        heads = posUnknowns (fst c) 
+        allNegUnknowns = Set.unions $ map (negUnknowns . fst) cs
+      in not (Set.null heads) && heads `disjoint` allNegUnknowns
+    strip triv nontriv = 
+      let (triv', nontriv') = partition (isTrivial nontriv) nontriv in
+      if null triv'
+        then (triv, nontriv) -- Fixpoint reached
+        else strip (triv ++ triv') nontriv'  
+
+unfoldClauses = undefined      
       
 {- Implementation -}      
       
@@ -649,7 +663,8 @@ addQuals name quals = do
 -- | Add unknown @name@ with valuation @valuation@ to solutions of all candidates  
 addFixedUnknown :: MonadHorn s => Id -> Set Formula -> TCSolver s ()  
 addFixedUnknown name valuation = do
-    addQuals name (toSpace Nothing (Set.toList valuation))
+    let quals = Set.toList valuation
+    addQuals name (toSpace Nothing (Set.unions $ map varsOf quals) quals)
     candidates %= map update
   where
     update cand = cand { solution = Map.insert name valuation (solution cand) }
