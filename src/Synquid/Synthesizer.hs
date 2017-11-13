@@ -78,6 +78,8 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                               _matchQualsGen = \_ _ -> emptyQSpace,
                               _typeQualsGen = if isRecheck then typeVarsOnlySpace else typeQuals (\_ vars -> vars),
                               _predQualsGen = if isRecheck then predVarsOnlySpace else predQuals (\_ vars -> vars) False,
+                              -- _typeQualsGen = typeQuals withPredApps,
+                              -- _predQualsGen = predQuals withPredApps False,
                               _tcSolverSplitMeasures = _splitMeasures explorerParams,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
                             }
