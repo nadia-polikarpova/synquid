@@ -258,8 +258,10 @@ unfoldClauses = do
       
       let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs
       let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars) lhsConjuncts
-      let existential = foldr (Quant Exists) (conjunction existentialConjuncts) (Set.toList elimVars) -- Existentially quantify them away
-            
+      let elimVarList = Set.toList elimVars
+      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars)
+      let existential = foldr (Quant Exists) (substitute freshElimVars $ conjunction existentialConjuncts) (Map.elems freshElimVars) -- Existentially quantify them away
+      
       -- Add equalities implied by the substitution:
       let varPairs = [(v, v') | v <- Set.toList uVars, varName v `Map.member` subst, v' <- [subst Map.! varName v], v' `Set.member` uVars]
       let val = (if Set.null existentialConjuncts then id else Set.insert existential)
