@@ -76,10 +76,13 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                             let typingParams = TypingParams { 
                               _condQualsGen = \_ _ -> emptyQSpace,
                               _matchQualsGen = \_ _ -> emptyQSpace,
-                              _typeQualsGen = if isRecheck then typeVarsOnlySpace else typeQuals (\_ vars -> vars),
-                              _predQualsGen = if isRecheck then predVarsOnlySpace else predQuals (\_ vars -> vars) False,
+                              -- _typeQualsGen = if isRecheck then typeVarsOnlySpace else typeQuals (\_ vars -> vars),
+                              -- _predQualsGen = if isRecheck then predVarsOnlySpace else predQuals (\_ vars -> vars) False,
                               -- _typeQualsGen = typeQuals withPredApps,
                               -- _predQualsGen = predQuals withPredApps False,
+                              _typeQualsGen = if _unfolding explorerParams then typeVarsOnlySpace else typeQuals withPredApps,
+                              _predQualsGen = if _unfolding explorerParams then predVarsOnlySpace else predQuals withPredApps False,                              
+                              _tcSolverUnfolding = _unfolding explorerParams,
                               _tcSolverSplitMeasures = _splitMeasures explorerParams,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
                             }
@@ -91,6 +94,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                                       _matchQualsGen = \_ _ -> emptyQSpace,
                                       _typeQualsGen = \_ _ _ -> emptyQSpace,
                                       _predQualsGen = predQuals withPredApps True, -- \_ _ _ -> emptyQSpace, -- predQuals True,
+                                      _tcSolverUnfolding = _unfolding explorerParams,
                                       _tcSolverSplitMeasures = _splitMeasures explorerParams,
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
@@ -158,6 +162,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _matchQualsGen = matchQuals,
                         _typeQualsGen = typeQuals,
                         _predQualsGen = predQuals,
+                        _tcSolverUnfolding = _unfolding explorerParams,
                         _tcSolverSplitMeasures = _splitMeasures explorerParams,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }

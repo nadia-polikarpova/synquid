@@ -54,6 +54,7 @@ data ExplorerParams = ExplorerParams {
   _partialSolution :: Bool,               -- ^ Should implementations that only cover part of the input space be accepted?
   _incrementalChecking :: Bool,           -- ^ Solve subtyping constraints during the bottom-up phase
   _consistencyChecking :: Bool,           -- ^ Check consistency of function's type with the goal before exploring arguments?
+  _unfolding :: Bool,                     -- ^ Use unfolding instead of predicate abstraction
   _splitMeasures :: Bool,                 -- ^ Split subtyping constraints between datatypes into constraints over each measure
   _context :: RProgram -> RProgram,       -- ^ Context in which subterm is currently being generated (used only for logging)
   _eContext :: RProgram -> RProgram,      -- ^ Same as context, but only up to the current e-term (used for symmetry reduction)
