@@ -250,7 +250,9 @@ unfoldClauses = do
     
     unfoldGroup cs = do
       disjuncts <- mapM (unfold . fst) cs
-      return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
+      if length disjuncts == 1
+        then return $ head disjuncts
+        else return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
     
     unfold (Binary Implies lhs rhs@(Unknown subst u)) = do
       quals <- use qualifierMap
@@ -648,16 +650,16 @@ embedding env vars includeQuantified = do
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
                 Just sch -> addBindings env tass pass qmap fmls rest -- TODO: why did this work before?
     allSymbols env = symbolsOfArity 0 env
-    
-bottomValuation :: QMap -> Formula -> Formula
-bottomValuation qmap fml = applySolution bottomSolution fml
+
+-- -- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
+potentialVars :: QMap -> Formula -> Set Id
+-- potentialVars qmap fml = Set.map varName $ varsOf $ bottomValuation qmap fml
+potentialVars qmap fml = Set.map varName $ setConcatMap varsOf $
+                            bottomValuation qmap fml `Set.insert` Set.unions (map (lookupVarsSubst qmap) unknowns)
   where
     unknowns = Set.toList $ unknownsOf fml
+    bottomValuation qmap fml = applySolution bottomSolution fml
     bottomSolution = Map.fromList $ zip (map unknownName unknowns) (map (Set.fromList . lookupQualsSubst qmap) unknowns)
-
--- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
-potentialVars :: QMap -> Formula -> Set Id
-potentialVars qmap fml = Set.map varName $ varsOf $ bottomValuation qmap fml
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> TCSolver s String

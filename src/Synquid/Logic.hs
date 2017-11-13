@@ -502,6 +502,9 @@ lookupQualsSubst qmap u@(Unknown s _) = concatMap go $ map (substitute s) (looku
     go u@(Unknown _ _) = lookupQualsSubst qmap u
     go fml = [fml]
     
+lookupVarsSubst :: QMap -> Formula -> Set Formula
+lookupVarsSubst qmap u@(Unknown s _) = Set.map (substitute s) (lookupQuals qmap variables u)    
+    
 type ExtractAssumptions = Formula -> Set Formula
   
 {- Solutions -}  
