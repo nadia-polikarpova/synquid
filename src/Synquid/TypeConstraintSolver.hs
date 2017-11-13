@@ -170,10 +170,17 @@ getViolatingLabels = do
   processAllPredicates  
   processAllConstraints
   generateAllHornClauses
-
+  
   clauses <- use hornClauses
-  -- TODO: this should probably be moved to Horn solver
-  let (nontermClauses, termClauses) = partition isNonTerminal clauses
+  writeLog 2 (nest 2 $ text "All Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) clauses))        
+  
+  
+  -- First try to solve as many clauses as possible syntactically via unfolding:
+  stripTrivialClauses -- Remove clauses with head U, which does not occur in any bodies
+  unfoldClauses       -- Prolog-style unfolding
+
+  clauses' <- use hornClauses
+  let (nontermClauses, termClauses) = partition isNonTerminal clauses'
   qmap <- use qualifierMap
   cands <- use candidates
   env <- use initEnv
@@ -190,10 +197,87 @@ getViolatingLabels = do
   where
     isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
     isNonTerminal _ = False
-
+    
     isInvalid cand extractAssumptions (fml,_) = do
       cands' <- lift . lift . lift $ checkCandidates False [fml] extractAssumptions [cand]
       return $ null cands'
+      
+-- | Remove clauses with head U, which does not occur in any bodies
+stripTrivialClauses :: MonadHorn s => TCSolver s ()
+stripTrivialClauses = do
+  clauses <- use hornClauses
+  let (trivial, nontrivial) = strip [] clauses
+  hornClauses .= nontrivial
+  writeLog 2 (nest 2 $ text "Stripped trivial clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) trivial))        
+  
+  let trivialUnknowns = map (Set.findMax . posUnknowns . fst) trivial
+  setSolution $ Map.fromList (zip trivialUnknowns (repeat Set.empty))
+  where
+    isTrivial cs c = 
+      let 
+        heads = posUnknowns (fst c) 
+        allNegUnknowns = Set.unions $ map (negUnknowns . fst) cs
+      in not (Set.null heads) && heads `disjoint` allNegUnknowns
+    strip triv nontriv = 
+      let (triv', nontriv') = partition (isTrivial nontriv) nontriv in
+      if null triv'
+        then (triv, nontriv) -- Fixpoint reached
+        else strip (triv ++ triv') nontriv'  
+
+unfoldClauses :: MonadHorn s => TCSolver s ()
+unfoldClauses = do
+  clauses <- use hornClauses  
+  let clauseGroups = groupBy (\c1 c2 -> posUnknowns (rightHandSide $ fst c1) == posUnknowns (rightHandSide $ fst c2)) clauses
+  -- TODO: take care of the case where the head appears in multiple clauses
+  let (toUnfold, rest) = partition canUnfold clauseGroups
+  case toUnfold of
+    [] -> return () -- No clauses to unfold anymore
+    groups -> do -- Found clauses to unfold      
+      sol <- Map.fromList <$> mapM unfoldGroup groups
+      
+      writeLog 2 (nest 2 $ vsep [
+        text "Unfolded clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) (concat groups)),
+        text "Solution" $+$ pretty sol])              
+      
+      let clauses' = over (mapped._1) (applySolution sol) (concat rest) -- Substitute unfolded unknowns
+      hornClauses .= clauses'
+      setSolution sol           -- Set solution to unfolded unknowns
+      unfoldClauses
+  where 
+    -- | Can a clause group be unfolded? Yes, if it's non-terminal and all LHS are fixed
+    canUnfold cs@((Binary Implies _ (Unknown _ _), _):_) = all (\lhs -> Set.null $ posUnknowns lhs) (map (leftHandSide . fst) cs)
+    canUnfold _ = False
+    
+    unfoldGroup cs = do
+      disjuncts <- mapM (unfold . fst) cs
+      return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
+    
+    unfold (Binary Implies lhs rhs@(Unknown subst u)) = do
+      quals <- use qualifierMap
+      let uVars = (quals Map.! u) ^. variables -- Scope variables of `u`
+      let rhsVars = Set.map (substitute subst) uVars -- Variables of the RHS, i.e. variables of `u` renamed according to `subst`
+      let elimVars = varsOf lhs Set.\\ rhsVars -- Variables that have to be eliminated from LHS
+      -- writeLog 2 (text "UVARS" <+> pretty uVars)
+      let reverseSubst = Set.fold (\uvar rsub -> maybe rsub (\(Var _ name) -> Map.insert name uvar rsub) (Map.lookup (varName uvar) subst)) Map.empty uVars
+      
+      let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs
+      let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars) lhsConjuncts
+      let elimVarList = Set.toList elimVars
+      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars)
+      let existential = foldr (Quant Exists) (substitute freshElimVars $ conjunction existentialConjuncts) (Map.elems freshElimVars) -- Existentially quantify them away
+      
+      -- Add equalities implied by the substitution:
+      let varPairs = [(v, v') | v <- Set.toList uVars, varName v `Map.member` subst, v' <- [subst Map.! varName v], v' `Set.member` uVars]
+      let val = (if Set.null existentialConjuncts then id else Set.insert existential)
+                  plainConjuncts `Set.union` (Set.fromList $ map (uncurry (|=|)) varPairs)
+      
+      return (u, val)
+      
+-- | Reset the solution for a subset of unknowns to `sol' in the current (sole) candidate      
+setSolution :: MonadHorn s => Solution -> TCSolver s ()
+setSolution sol = do
+  cand <- head <$> use candidates
+  candidates .= [cand {solution = sol `Map.union` solution cand}]  
       
 {- Implementation -}      
       
@@ -630,7 +714,8 @@ addQuals name quals = do
 -- | Add unknown @name@ with valuation @valuation@ to solutions of all candidates  
 addFixedUnknown :: MonadHorn s => Id -> Set Formula -> TCSolver s ()  
 addFixedUnknown name valuation = do
-    addQuals name (toSpace Nothing (Set.toList valuation))
+    let quals = Set.toList valuation
+    addQuals name (toSpace Nothing (Set.unions $ map varsOf quals) quals)
     candidates %= map update
   where
     update cand = cand { solution = Map.insert name valuation (solution cand) }
