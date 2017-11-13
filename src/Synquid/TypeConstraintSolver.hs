@@ -250,7 +250,9 @@ unfoldClauses = do
     
     unfoldGroup cs = do
       disjuncts <- mapM (unfold . fst) cs
-      return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
+      if length disjuncts == 1
+        then return $ head disjuncts
+        else return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
     
     unfold (Binary Implies lhs rhs@(Unknown subst u)) = do
       quals <- use qualifierMap
@@ -260,10 +262,11 @@ unfoldClauses = do
       -- writeLog 2 (text "UVARS" <+> pretty uVars)
       let reverseSubst = Set.fold (\uvar rsub -> maybe rsub (\(Var _ name) -> Map.insert name uvar rsub) (Map.lookup (varName uvar) subst)) Map.empty uVars
       
-      let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs
-      let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars) lhsConjuncts
-      let elimVarList = Set.toList elimVars
-      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars)
+      let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs      
+      let (lhsConjuncts', elimVars') = Set.fold eliminate (lhsConjuncts, elimVars) elimVars -- Try to eliminate the existentials
+      
+      let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars') lhsConjuncts'
+      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars')
       let existential = foldr (Quant Exists) (substitute freshElimVars $ conjunction existentialConjuncts) (Map.elems freshElimVars) -- Existentially quantify them away
       
       -- Add equalities implied by the substitution:
@@ -272,6 +275,20 @@ unfoldClauses = do
                   plainConjuncts `Set.union` (Set.fromList $ map (uncurry (|=|)) varPairs)
       
       return (u, val)
+      
+    eliminate :: Formula -> (Set Formula, Set Formula) -> (Set Formula, Set Formula)
+    eliminate var (conjuncts, vars) = 
+      case findDef var (map negationNF $ Set.toList conjuncts) of
+        Nothing -> (conjuncts, vars)
+        Just (c, def) -> (Set.map (substitute $ Map.singleton (varName var) def) (Set.delete c conjuncts), Set.delete var vars)
+        
+    findDef :: Formula -> [Formula] -> Maybe (Formula, Formula)
+    findDef _ [] = Nothing
+    findDef var (c@(Binary Eq var' fml) : cs) | var == var' = Just (c, fml)
+    findDef var (c@(Binary Eq fml var') : cs) | var == var' = Just (c, fml)
+    findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue)
+    findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse)
+    findDef var (c : cs) = findDef var cs
       
 -- | Reset the solution for a subset of unknowns to `sol' in the current (sole) candidate      
 setSolution :: MonadHorn s => Solution -> TCSolver s ()
@@ -648,16 +665,16 @@ embedding env vars includeQuantified = do
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
                 Just sch -> addBindings env tass pass qmap fmls rest -- TODO: why did this work before?
     allSymbols env = symbolsOfArity 0 env
-    
-bottomValuation :: QMap -> Formula -> Formula
-bottomValuation qmap fml = applySolution bottomSolution fml
+
+-- -- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
+potentialVars :: QMap -> Formula -> Set Id
+-- potentialVars qmap fml = Set.map varName $ varsOf $ bottomValuation qmap fml
+potentialVars qmap fml = Set.map varName $ setConcatMap varsOf $
+                            bottomValuation qmap fml `Set.insert` Set.unions (map (lookupVarsSubst qmap) unknowns)
   where
     unknowns = Set.toList $ unknownsOf fml
+    bottomValuation qmap fml = applySolution bottomSolution fml
     bottomSolution = Map.fromList $ zip (map unknownName unknowns) (map (Set.fromList . lookupQualsSubst qmap) unknowns)
-
--- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
-potentialVars :: QMap -> Formula -> Set Id
-potentialVars qmap fml = Set.map varName $ varsOf $ bottomValuation qmap fml
 
 -- | 'freshId' @prefix@ : fresh identifier starting with @prefix@
 freshId :: Monad s => String -> TCSolver s String
