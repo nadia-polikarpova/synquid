@@ -262,10 +262,11 @@ unfoldClauses = do
       -- writeLog 2 (text "UVARS" <+> pretty uVars)
       let reverseSubst = Set.fold (\uvar rsub -> maybe rsub (\(Var _ name) -> Map.insert name uvar rsub) (Map.lookup (varName uvar) subst)) Map.empty uVars
       
-      let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs
-      let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars) lhsConjuncts
-      let elimVarList = Set.toList elimVars
-      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars)
+      let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs      
+      let (lhsConjuncts', elimVars') = Set.fold eliminate (lhsConjuncts, elimVars) elimVars -- Try to eliminate the existentials
+      
+      let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars') lhsConjuncts'
+      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars')
       let existential = foldr (Quant Exists) (substitute freshElimVars $ conjunction existentialConjuncts) (Map.elems freshElimVars) -- Existentially quantify them away
       
       -- Add equalities implied by the substitution:
@@ -274,6 +275,20 @@ unfoldClauses = do
                   plainConjuncts `Set.union` (Set.fromList $ map (uncurry (|=|)) varPairs)
       
       return (u, val)
+      
+    eliminate :: Formula -> (Set Formula, Set Formula) -> (Set Formula, Set Formula)
+    eliminate var (conjuncts, vars) = 
+      case findDef var (map negationNF $ Set.toList conjuncts) of
+        Nothing -> (conjuncts, vars)
+        Just (c, def) -> (Set.map (substitute $ Map.singleton (varName var) def) (Set.delete c conjuncts), Set.delete var vars)
+        
+    findDef :: Formula -> [Formula] -> Maybe (Formula, Formula)
+    findDef _ [] = Nothing
+    findDef var (c@(Binary Eq var' fml) : cs) | var == var' = Just (c, fml)
+    findDef var (c@(Binary Eq fml var') : cs) | var == var' = Just (c, fml)
+    findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue)
+    findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse)
+    findDef var (c : cs) = findDef var cs
       
 -- | Reset the solution for a subset of unknowns to `sol' in the current (sole) candidate      
 setSolution :: MonadHorn s => Solution -> TCSolver s ()
