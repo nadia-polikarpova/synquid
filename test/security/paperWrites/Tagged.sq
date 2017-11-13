@@ -117,5 +117,5 @@ printAll :: <pp :: World -> User -> Bool> . w: World -> viewers: Tagged (List {U
 {- Qualifiers -}
 
 qualifier {x == y, x in y, !(x in y)}
-qualifier {_v == (x in y), _v == !(x in y), _v == (x && y)}
+-- qualifier {_v == (x in y), _v == !(x in y), _v == (x && y)}
   

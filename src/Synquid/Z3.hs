@@ -234,16 +234,16 @@ toAST expr = case expr of
     let tArgs = map sortOf args
     decl <- constructor s name tArgs
     mapM toAST args >>= mkApp decl
-  All v e -> accumAll [v] e
+  Quant q v e -> accumQuant q [v] e
   where
     setLiteral el xs = do
       emp <- toZ3Sort el >>= mkEmptySet
       elems <- mapM toAST xs
       foldM mkSetAdd emp elems
 
-    accumAll :: [Formula] -> Formula -> Z3State AST
-    accumAll xs (All y e) = accumAll (xs ++ [y]) e
-    accumAll xs e = do
+    accumQuant :: Quantifier -> [Formula] -> Formula -> Z3State AST
+    accumQuant q xs (Quant q' y e) | q == q' = accumQuant q (xs ++ [y]) e
+    accumQuant q xs e = do
       boundVars <- mapM toAST xs
       boundApps <- mapM toApp boundVars
       body <- toAST e
@@ -253,7 +253,9 @@ toAST expr = case expr of
                       -- _ -> []      
       -- patterns <- mapM (toAST >=> (mkPattern . replicate 1)) triggers
       -- mkForallConst patterns boundApps body
-      mkForallConst [] boundApps body
+      case q of
+        Forall -> mkForallConst [] boundApps body
+        Exists -> mkExistsConst [] boundApps body
 
     unOp :: UnOp -> AST -> Z3State AST
     unOp Neg = mkUnaryMinus

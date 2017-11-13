@@ -35,6 +35,8 @@ import Debug.Trace
 
 type HornSolver = FixPointSolver Z3State
 
+type VarsForQuals = Environment -> [Formula] -> [Formula]
+
 policyRepair :: Bool -> ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram, TimeStats)
 policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3State (if verifyOnly then goVerify else goAll)
   where
@@ -74,8 +76,8 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                             let typingParams = TypingParams { 
                               _condQualsGen = \_ _ -> emptyQSpace,
                               _matchQualsGen = \_ _ -> emptyQSpace,
-                              _typeQualsGen = typeQuals, -- \_ _ -> emptyQSpace,
-                              _predQualsGen = predQuals False,
+                              _typeQualsGen = if isRecheck then typeVarsOnlySpace else typeQuals (\_ vars -> vars),
+                              _predQualsGen = if isRecheck then predVarsOnlySpace else predQuals (\_ vars -> vars) False,
                               _tcSolverSplitMeasures = _splitMeasures explorerParams,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
                             }
@@ -83,48 +85,52 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
       
     repairPhase :: RProgram -> Requirements -> HornSolver (Either ErrorMessage RProgram)
     repairPhase p violations = let  typingParams = TypingParams { 
-                                      _condQualsGen = condQuals,
+                                      _condQualsGen = condQuals withPredApps,
                                       _matchQualsGen = \_ _ -> emptyQSpace,
                                       _typeQualsGen = \_ _ _ -> emptyQSpace,
-                                      _predQualsGen = predQuals True, -- \_ _ _ -> emptyQSpace, -- predQuals True,
+                                      _predQualsGen = predQuals withPredApps True, -- \_ _ _ -> emptyQSpace, -- predQuals True,
                                       _tcSolverSplitMeasures = _splitMeasures explorerParams,
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
                                in repair explorerParams typingParams (goal {gImpl = p}) violations
                                
-    varsForQuals env vars = 
+    withPredApps env vars = 
       let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
-      -- let vars' = filter isUsefulVar vars in
-      -- let vars' = vars in
       allPredApps env vars' 1
       
     -- isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
-    -- isUsefulVar _ = True      
+    -- isUsefulVar _ = True
+
+    typeVarsOnlySpace :: Environment -> Formula -> [Formula] -> QSpace
+    typeVarsOnlySpace _ val vars = toSpace Nothing (Set.fromList $ val : vars) []
+    
+    predVarsOnlySpace :: Environment -> [Formula] -> [Formula] -> QSpace
+    predVarsOnlySpace _ params vars = toSpace Nothing (Set.fromList $ params ++ vars) []
       
     -- | Qualifier generator for types
-    typeQuals :: Environment -> Formula -> [Formula] -> QSpace
-    typeQuals env val vars = let vars' = varsForQuals env vars in 
-        toSpace Nothing $ concat $
+    typeQuals :: VarsForQuals -> Environment -> Formula -> [Formula] -> QSpace
+    typeQuals varsForQuals env val vars = let vars' = varsForQuals env vars in 
+        toSpace Nothing (Set.fromList $ val : vars) $ concat $
         [ extractQGenFromType False env val vars' syntGoal, 
           extractQGenFromType True env val vars' syntGoal] -- extract from spec: both positive and negative
         ++ map (instantiateTypeQualifier env val vars') tquals -- extract from given qualifiers
         ++ map (extractQGenFromType False env val vars') components -- extract from components: only negative      
 
     -- | Qualifier generator for conditionals
-    condQuals :: Environment -> [Formula] -> QSpace
-    condQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing $ filter (not . isSetMapEq) $ concat $
+    condQuals :: VarsForQuals -> Environment -> [Formula] -> QSpace
+    condQuals varsForQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing (Set.fromList vars) $ filter (not . isSetMapEq) $ concat $
       map (instantiateCondQualifier True env vars') cquals ++ map (extractCondFromType env vars') components                  
       
     -- | Qualifier generator for bound predicates
-    predQuals :: Bool -> Environment -> [Formula] -> [Formula] -> QSpace
-    predQuals useAllArgs env params vars = 
+    predQuals :: VarsForQuals -> Bool -> Environment -> [Formula] -> [Formula] -> QSpace
+    predQuals varsForQuals useAllArgs env params vars = 
       let
         vars' = varsForQuals env vars
         params' = if null params then params else allPredApps env (init params) 1 ++ [last params]
         filterSomeArgs = if null params
                           then id                          
                           else filter (\q -> not $ Set.fromList params `disjoint` varsOf q)  -- Only take the qualifiers that use some predicate parameters
-      in toSpace Nothing $
+      in toSpace Nothing (Set.fromList $ params ++ vars) $
         concatMap (extractPredQGenFromQual useAllArgs env params' vars') tquals ++ -- extract from given qualifiers
         concatMap (extractPredQGenFromType useAllArgs env params' vars') (syntGoal : components) ++
         filterSomeArgs (concatMap (instantiateCondQualifier True env (params' ++ vars')) cquals ++ concatMap (extractCondFromType env (params' ++ vars')) components)
@@ -159,16 +165,16 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
       
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
-    condQuals env vars = toSpace Nothing $ concat $
+    condQuals env vars = toSpace Nothing (Set.fromList vars) $ concat $
       map (instantiateCondQualifier False env vars) cquals ++ map (extractCondFromType env vars) (components ++ allArgTypes syntGoal)
 
     -- | Qualifier generator for match scrutinees
     matchQuals :: Environment -> [Formula] -> QSpace
-    matchQuals env vars = toSpace (Just 1) $ concatMap (extractMatchQGen env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
+    matchQuals env vars = toSpace (Just 1) (Set.fromList vars) $ concatMap (extractMatchQGen env vars) (Map.toList $ (gEnvironment goal) ^. datatypes)
 
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
-    typeQuals env val vars = toSpace Nothing $ concat $
+    typeQuals env val vars = toSpace Nothing (Set.fromList $ val : vars) $ concat $
         [ extractQGenFromType False env val vars syntGoal, 
           extractQGenFromType True env val vars syntGoal] -- extract from spec: both positive and negative
         ++ map (instantiateTypeQualifier env val vars) tquals -- extract from given qualifiers
@@ -177,7 +183,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
         
     -- | Qualifier generator for bound predicates
     predQuals :: Environment -> [Formula] -> [Formula] -> QSpace
-    predQuals env params vars = toSpace Nothing $ 
+    predQuals env params vars = toSpace Nothing (Set.fromList $ params ++ vars) $ 
       concatMap (extractPredQGenFromType True env params vars) (syntGoal : components) ++
       if null params  -- Parameter-less predicate: also include conditional qualifiers
         then concatMap (instantiateCondQualifier False env vars) cquals ++ concatMap (extractCondFromType env vars) (components ++ allArgTypes syntGoal)
