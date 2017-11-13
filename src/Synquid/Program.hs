@@ -384,7 +384,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                             elemSort = toSort elemT
                             scopedVar = Var elemSort "_x"
                             setVal = Pred (SetS elemSort) mName [Var (toSort baseT) valueVarName]
-                          in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
+                          in Just $ Quant Forall scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
     elemProperties (mName, MeasureDef {}) = Nothing
     
 allMeasurePostconditions _ _ _ = []

@@ -121,6 +121,10 @@ data BinOp =
 -- | Variable substitution  
 type Substitution = Map Id Formula
 
+-- | Quantifier
+data Quantifier = Forall | Exists
+  deriving (Eq, Ord)
+
 -- | Formulas of the refinement logic
 data Formula =
   BoolLit Bool |                      -- ^ Boolean literal  
@@ -136,7 +140,7 @@ data Formula =
   Ite Formula Formula Formula |       -- ^ If-then-else expression
   Pred Sort Id [Formula] |            -- ^ Logic function application
   Cons Sort Id [Formula] |            -- ^ Constructor application
-  All Formula Formula                 -- ^ Universal quantification
+  Quant Quantifier Formula Formula    -- ^ Quantification
   deriving (Eq, Ord)
   
 dontCare = "_"  
@@ -204,7 +208,7 @@ varsOf (Binary _ e1 e2) = Set.unions $ map varsOf [e1, e2]
 varsOf (Ite e0 e1 e2) = Set.unions $ map varsOf [e0, e1, e2]
 varsOf (Pred _ _ es) = Set.unions $ map varsOf es
 varsOf (Cons _ _ es) = Set.unions $ map varsOf es
-varsOf (All x e) = Set.delete x (varsOf e)
+varsOf (Quant _ x e) = Set.delete x (varsOf e)
 varsOf _ = Set.empty
 
 -- | 'unknownsOf' @fml@ : set of all predicate unknowns of @fml@
@@ -216,7 +220,7 @@ unknownsOf (Binary _ e1 e2) = Set.unions $ map unknownsOf [e1, e2]
 unknownsOf (Ite e0 e1 e2) = Set.unions $ map unknownsOf [e0, e1, e2]
 unknownsOf (Pred _ _ es) = Set.unions $ map unknownsOf es
 unknownsOf (Cons _ _ es) = Set.unions $ map unknownsOf es
-unknownsOf (All _ e) = unknownsOf e
+unknownsOf (Quant _ _ e) = unknownsOf e
 unknownsOf _ = Set.empty
 
 -- | 'posNegUnknowns' @fml@: sets of positive and negative predicate unknowns in @fml@
@@ -253,7 +257,7 @@ predSigsOf (MapUpd m k v) = Set.unions $ map predSigsOf [m, k, v]
 predSigsOf (Unary _ e) = predSigsOf e
 predSigsOf (Binary _ e1 e2) = Set.unions $ map predSigsOf [e1, e2]
 predSigsOf (Ite e0 e1 e2) = Set.unions $ map predSigsOf [e0, e1, e2]
-predSigsOf (All x e) = predSigsOf e
+predSigsOf (Quant _ _ e) = predSigsOf e
 predSigsOf _ = Set.empty
 
 
@@ -288,7 +292,7 @@ sortOf (Binary op e1 _)
 sortOf (Ite _ e1 _)                              = sortOf e1
 sortOf (Pred s _ _)                              = s
 sortOf (Cons s _ _)                              = s
-sortOf (All _ _)                                 = BoolS
+sortOf (Quant _ _ _)                             = BoolS
 
 isExecutable :: Formula -> Bool
 isExecutable (SetLit _ _) = False
@@ -299,7 +303,7 @@ isExecutable (Unary _ e) = isExecutable e
 isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
 isExecutable (Ite e0 e1 e2) = False
 isExecutable (Pred _ _ _) = False
-isExecutable (All _ _) = False
+isExecutable (Quant _ _ _) = False
 isExecutable _ = True
   
 -- | 'substitute' @subst fml@: Replace first-order variables in @fml@ according to @subst@
@@ -320,9 +324,9 @@ substitute subst fml = case fml of
   Ite e0 e1 e2 -> Ite (substitute subst e0) (substitute subst e1) (substitute subst e2)
   Pred b name args -> Pred b name $ map (substitute subst) args
   Cons b name args -> Cons b name $ map (substitute subst) args  
-  All v@(Var _ x) e -> if x `Map.member` subst
+  Quant q v@(Var _ x) e -> if x `Map.member` subst
                             then error $ unwords ["Scoped variable clashes with substitution variable", x]
-                            else All v (substitute subst e)
+                            else Quant q v (substitute subst e)
   otherwise -> fml
 
 -- | Compose substitutions
@@ -348,7 +352,7 @@ sortSubstituteFml subst fml = case fml of
   Ite c l r -> Ite (sortSubstituteFml subst c) (sortSubstituteFml subst l) (sortSubstituteFml subst r)
   Pred s name es -> Pred (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)
   Cons s name es -> Cons (sortSubstitute subst s) name (map (sortSubstituteFml subst) es)  
-  All x e -> All (sortSubstituteFml subst x) (sortSubstituteFml subst e)
+  Quant q x e -> Quant q (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   _ -> fml
   
 noncaptureSortSubstFml :: [Id] -> [Sort] -> Formula -> Formula  
@@ -364,7 +368,7 @@ substitutePredicate pSubst fml = case fml of
   Unary op e -> Unary op (substitutePredicate pSubst e)
   Binary op e1 e2 -> Binary op (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   Ite e0 e1 e2 -> Ite (substitutePredicate pSubst e0) (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
-  All v e -> All v (substitutePredicate pSubst e)
+  Quant q v e -> Quant q v (substitutePredicate pSubst e)
   SetComp x e -> SetComp x (substitutePredicate pSubst e)
   MapSel m k -> MapSel (substitutePredicate pSubst m) (substitutePredicate pSubst k)
   MapUpd m k v -> Ite (substitutePredicate pSubst m) (substitutePredicate pSubst k) (substitutePredicate pSubst v)  
@@ -436,10 +440,10 @@ eliminateComp :: Formula -> Formula
 eliminateComp (Binary Member x s) = setToPredicate x s
 eliminateComp (Binary Subset l r)
   | hasComp l || hasComp r        = let scopedVar = Var (elemSort $ sortOf l) "_comp" in
-                                    All scopedVar (Binary Implies (setToPredicate scopedVar l) (setToPredicate scopedVar r))
+                                    Quant Forall scopedVar (Binary Implies (setToPredicate scopedVar l) (setToPredicate scopedVar r))
 eliminateComp (Binary Eq l r) | 
   isSetS (sortOf l) && (hasComp l || hasComp r) = let scopedVar = Var (elemSort $ sortOf l) "_comp" in
-                                                  All scopedVar (Binary Iff (setToPredicate scopedVar l) (setToPredicate scopedVar r))
+                                                  Quant Forall scopedVar (Binary Iff (setToPredicate scopedVar l) (setToPredicate scopedVar r))
 eliminateComp (Binary Neq l r) | 
   isSetS (sortOf l) && (hasComp l || hasComp r) = error "Inequality on set comprehensions is not supported"
 eliminateComp (Binary op l r) |
@@ -475,10 +479,13 @@ makeLenses ''QSpace
 
 emptyQSpace = QSpace Set.empty [] 0
 
-toSpace mbN vars quals = let quals' = nub quals in 
-  case mbN of
-    Nothing -> QSpace vars quals' (length quals')
-    Just n -> QSpace vars quals' n
+toSpace mbN vars quals = 
+  let 
+    quals' = nub quals
+    vars' = Set.filter isVar vars
+  in case mbN of
+    Nothing -> QSpace vars' quals' (length quals')
+    Just n -> QSpace vars' quals' n
   
 -- | Mapping from unknowns to their search spaces
 type QMap = Map Id QSpace
@@ -528,7 +535,7 @@ applySolution sol fml = case fml of
   Unary op e -> Unary op (applySolution sol e)
   Binary op e1 e2 -> Binary op (applySolution sol e1) (applySolution sol e2)
   Ite e0 e1 e2 -> Ite (applySolution sol e0) (applySolution sol e1) (applySolution sol e2)
-  All x e -> All x (applySolution sol e)
+  Quant q x e -> Quant q x (applySolution sol e)
   SetComp x e -> SetComp x (applySolution sol e)
   otherwise -> fml
       

@@ -179,7 +179,7 @@ power (Binary op _ _)
   | op `elem` [And, Or] = 4
   | op `elem` [Implies] = 3
   | op `elem` [Iff] = 2
-power All {} = 1
+power Quant {} = 1
 power Ite {} = 1
 power _ = 11
 
@@ -204,11 +204,13 @@ fmlDocAt n fml = condHlParens (n' <= n) (
     Ite e0 e1 e2 -> keyword "if" <+> fmlDoc e0 <+> keyword "then" <+> fmlDoc e1 <+> keyword "else" <+> fmlDoc e2
     Pred b name args -> withSort b $ text name <+> hsep (map (fmlDocAt n') args)
     Cons b name args -> withSort b $ hlParens (text name <+> hsep (map (fmlDocAt n') args))
-    All x e -> keyword "forall" <+> pretty x <+> operator "." <+> fmlDoc e
+    Quant q x e -> keyword (showQuant q) <+> pretty x <+> operator "." <+> fmlDoc e
   )
   where
     n' = power fml
     withSort s doc = doc -- <> text ":" <> pretty s
+    showQuant Forall = "forall"
+    showQuant Exists = "exists"
 
 instance Pretty Formula where pretty e = fmlDoc e
 
@@ -467,7 +469,7 @@ fmlNodeCount (Binary _ l r) = 1 + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Ite c l r) = 1 + fmlNodeCount c + fmlNodeCount l + fmlNodeCount r
 fmlNodeCount (Pred _ _ args) = 1 + sum (map fmlNodeCount args)
 fmlNodeCount (Cons _ _ args) = 1 + sum (map fmlNodeCount args)
-fmlNodeCount (All _ e) = 1 + fmlNodeCount e
+fmlNodeCount (Quant _ _ e) = 1 + fmlNodeCount e
 fmlNodeCount _ = 1
 
 fmlNodeCount' :: Formula -> Int

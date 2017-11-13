@@ -74,8 +74,10 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                             let typingParams = TypingParams { 
                               _condQualsGen = \_ _ -> emptyQSpace,
                               _matchQualsGen = \_ _ -> emptyQSpace,
-                              _typeQualsGen = typeQuals, -- \_ _ -> emptyQSpace,
-                              _predQualsGen = predQuals False,
+                              -- _typeQualsGen = typeQuals, -- \_ _ -> emptyQSpace,
+                              -- _predQualsGen = predQuals False,
+                              _typeQualsGen = typeVarsOnlySpace,
+                              _predQualsGen = predVarsOnlySpace,
                               _tcSolverSplitMeasures = _splitMeasures explorerParams,
                               _tcSolverLogLevel = _explorerLogLevel explorerParams
                             }
@@ -99,7 +101,13 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
       allPredApps env vars' 1
       
     -- isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
-    -- isUsefulVar _ = True      
+    -- isUsefulVar _ = True
+
+    typeVarsOnlySpace :: Environment -> Formula -> [Formula] -> QSpace
+    typeVarsOnlySpace _ val vars = toSpace Nothing (Set.fromList $ val : vars) []
+    
+    predVarsOnlySpace :: Environment -> [Formula] -> [Formula] -> QSpace
+    predVarsOnlySpace _ params vars = toSpace Nothing (Set.fromList $ params ++ vars) []
       
     -- | Qualifier generator for types
     typeQuals :: Environment -> Formula -> [Formula] -> QSpace
