@@ -44,6 +44,8 @@ import Synquid.SolverMonad
 import Synquid.Util
 import Synquid.Resolver (addAllVariables)
 
+import Data.Function (on)
+import Data.Ord (comparing)
 import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
@@ -253,9 +255,8 @@ stripTrivialClauses = do
 unfoldClauses :: MonadHorn s => TCSolver s ()
 unfoldClauses = do
   clauses <- use hornClauses  
-  let clauseGroups = groupBy (\c1 c2 -> posUnknowns (rightHandSide $ fst c1) == posUnknowns (rightHandSide $ fst c2)) clauses
-  -- TODO: take care of the case where the head appears in multiple clauses
-  let (toUnfold, rest) = partition canUnfold clauseGroups
+  
+  let (toUnfold, rest) = partition canUnfold (groupHeads clauses)
   case toUnfold of
     [] -> return () -- No clauses to unfold anymore
     groups -> do -- Found clauses to unfold      
@@ -265,11 +266,15 @@ unfoldClauses = do
         text "Unfolded clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) (concat groups)),
         text "Solution" $+$ pretty sol])              
       
-      let clauses' = over (mapped._1) (applySolution sol) (concat rest) -- Substitute unfolded unknowns
+      let clauses' = over (mapped._1) (applyToClause sol) (concat rest) -- Substitute unfolded unknowns
       hornClauses .= clauses'
       setSolution sol           -- Set solution to unfolded unknowns
       unfoldClauses
-  where 
+  where
+    groupHeads cs =
+      let heads c = posUnknowns $ rightHandSide $ fst c in
+      groupBy ((==) `on` heads) $ sortBy (comparing heads) cs
+  
     -- | Can a clause group be unfolded? Yes, if it's non-terminal and all LHS are fixed
     canUnfold cs@((Binary Implies _ (Unknown _ _), _):_) = all (\lhs -> Set.null $ posUnknowns lhs) (map (leftHandSide . fst) cs)
     canUnfold _ = False
@@ -278,7 +283,9 @@ unfoldClauses = do
       disjuncts <- mapM (unfold . fst) cs
       if length disjuncts == 1
         then return $ head disjuncts
-        else return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
+        else 
+          let (common, disjucts') = extractCommonConjuncts (map snd disjuncts)
+          in return (fst (head disjuncts), Set.insert (disjunction $ Set.fromList (map conjunction disjucts')) common)
     
     unfold (Binary Implies lhs rhs@(Unknown subst u)) = do
       quals <- use qualifierMap
@@ -315,6 +322,15 @@ unfoldClauses = do
     findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue)
     findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse)
     findDef var (c : cs) = findDef var cs
+    
+    extractCommonConjuncts :: [Set Formula] -> (Set Formula, [Set Formula])
+    extractCommonConjuncts disjuncts = 
+      let d = head disjuncts in
+      Set.fold (\c (cs, ds) -> if all (Set.member c) ds then (Set.insert c cs, map (Set.delete c) ds) else (cs, ds)) (Set.empty, disjuncts) d
+      
+    applyToClause sol (Binary Implies lhs rhs) =
+      let lhs' = conjunction $ conjunctsOf $ applySolution sol lhs -- nub conjuncts
+      in Binary Implies lhs' rhs
       
 -- | Reset the solution for a subset of unknowns to `sol' in the current (sole) candidate      
 setSolution :: MonadHorn s => Solution -> TCSolver s ()
@@ -796,6 +812,7 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     MapSel m k -> inst m `Set.union` inst k
     MapUpd m k v -> inst m `Set.union` inst k `Set.union` inst v
     Pred _ p args -> Set.unions $ map inst args
+    Quant Exists v e -> Set.singleton (Quant Exists v (conjunction (Set.insert e $ inst e)))
     _ -> Set.empty  
   where
     measureAxiom resS ctor args (MeasureDef inSort _ defs _) = 
