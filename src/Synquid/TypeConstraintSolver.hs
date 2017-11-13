@@ -65,6 +65,7 @@ data TypingParams = TypingParams {
   _matchQualsGen :: Environment -> [Formula] -> QSpace,             -- ^ Qualifier generator for match scrutinees
   _typeQualsGen :: Environment -> Formula -> [Formula] -> QSpace,   -- ^ Qualifier generator for types
   _predQualsGen :: Environment -> [Formula] -> [Formula] -> QSpace, -- ^ Qualifier generator for bound predicates
+  _tcSolverUnfolding :: Bool, -- ^ Enable Prolog-style unfolding instead of predicate abstraction
   _tcSolverSplitMeasures :: Bool,
   _tcSolverLogLevel :: Int    -- ^ How verbose logging is  
 }
@@ -174,10 +175,13 @@ getViolatingLabels = do
   clauses <- use hornClauses
   writeLog 2 (nest 2 $ text "All Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) clauses))        
   
-  
-  -- First try to solve as many clauses as possible syntactically via unfolding:
-  stripTrivialClauses -- Remove clauses with head U, which does not occur in any bodies
-  unfoldClauses       -- Prolog-style unfolding
+  unfoldingEnabled <- asks _tcSolverUnfolding
+  if unfoldingEnabled
+    then do
+      -- First try to solve as many clauses as possible syntactically via unfolding:
+      stripTrivialClauses -- Remove clauses with head U, which does not occur in any bodies
+      unfoldClauses       -- Prolog-style unfolding
+    else return ()
 
   clauses' <- use hornClauses
   let (nontermClauses, termClauses) = partition isNonTerminal clauses'
@@ -191,8 +195,15 @@ getViolatingLabels = do
     nest 2 $ text "QMap" $+$ pretty qmap])        
   
   (newCand:[]) <- lift . lift . lift $ refineCandidates (map fst nontermClauses) qmap (instantiateConsAxioms env Nothing) cands    
-  candidates .= [newCand]  
+  candidates .= [newCand]
+    
   invalidTerminals <- filterM (isInvalid newCand (instantiateConsAxioms env Nothing)) termClauses
+  writeLog 2 (vsep [
+    nest 2 $ text "Checking TERMINALS" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) termClauses), 
+    nest 2 $ text "against solution" $+$ pretty newCand,
+    nest 2 $ text "Invalid TERMINALS" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) invalidTerminals)
+    ])
+  
   return $ Set.fromList $ map snd invalidTerminals
   where
     isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
