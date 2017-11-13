@@ -203,26 +203,41 @@ getViolatingLabels = do
       return $ null cands'
       
 -- | Remove clauses with head U, which does not occur in any bodies
+-- | or clauses where U occurs in the body but does not occur in any heads
 stripTrivialClauses :: MonadHorn s => TCSolver s ()
 stripTrivialClauses = do
   clauses <- use hornClauses
-  let (trivial, nontrivial) = strip [] clauses
+  
+  -- Strip clauses with trivial heads
+  let (trivialHeads, nontrivialHeads) = strip isTrivialHead [] clauses
+  let topUnknowns = map (Set.findMax . posUnknowns . fst) trivialHeads
+  setSolution $ Map.fromList (zip topUnknowns (repeat Set.empty))  
+  
+  -- Strip clauses with trivial bodies
+  let (trivialBodies, nontrivial) = strip isTrivialBody [] nontrivialHeads
+  let botUnknowns = Set.toList $ Set.unions $ map (negUnknowns . fst) trivialBodies
+  setSolution $ Map.fromList (zip botUnknowns (repeat $ Set.singleton ffalse))  
+  
+  let trivial = trivialHeads ++ trivialBodies
   hornClauses .= nontrivial
   writeLog 2 (nest 2 $ text "Stripped trivial clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) trivial))        
   
-  let trivialUnknowns = map (Set.findMax . posUnknowns . fst) trivial
-  setSolution $ Map.fromList (zip trivialUnknowns (repeat Set.empty))
   where
-    isTrivial cs c = 
+    isTrivialHead cs c = 
       let 
         heads = posUnknowns (fst c) 
         allNegUnknowns = Set.unions $ map (negUnknowns . fst) cs
       in not (Set.null heads) && heads `disjoint` allNegUnknowns
-    strip triv nontriv = 
+    isTrivialBody cs c =
+      let
+        body = negUnknowns (fst c)
+        allPosUnknowns = Set.unions $ map (posUnknowns . fst) cs
+      in not (Set.null body) && body `disjoint` allPosUnknowns
+    strip isTrivial triv nontriv = 
       let (triv', nontriv') = partition (isTrivial nontriv) nontriv in
       if null triv'
         then (triv, nontriv) -- Fixpoint reached
-        else strip (triv ++ triv') nontriv'  
+        else strip isTrivial (triv ++ triv') nontriv'  
 
 unfoldClauses :: MonadHorn s => TCSolver s ()
 unfoldClauses = do
