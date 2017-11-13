@@ -96,7 +96,7 @@ searchForm = \w . \byAuthor .
                    allPids in
       
       let u = getSessionUser w in
-      print w u pids
+      print w u (liftM show pids)
 
 paperView :: arg1:World -> arg0:PaperId -> World
 paperView = \w . \pid . 
@@ -222,13 +222,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        44  &             2.72s  &      0.43s  &      9.21s  &       12.37s  \\
-submitForm            &        45  &        45  &             5.45s  &      0.00s  &      0.00s  &        5.45s  \\
-searchForm            &        73  &       155  &            23.17s  &     16.68s  &     72.10s  &      111.96s  \\
-paperView             &        53  &       135  &            13.08s  &     19.24s  &     62.13s  &       94.45s  \\
-reviewsView           &        57  &       102  &            23.11s  &     99.16s  &     63.29s  &      185.57s  \\
-profileViewGet        &        66  &        66  &             5.84s  &      0.00s  &      0.00s  &        5.84s  \\
-profileViewPost       &        17  &        17  &             1.24s  &      0.00s  &      0.00s  &        1.24s  \\
-submitReviewViewPost  &        40  &        40  &             4.88s  &      0.00s  &      0.00s  &        4.88s  \\
-assignReviewersView   &        47  &        47  &            17.67s  &      0.00s  &      0.00s  &       17.67s  \\
-Totals                &       428  &       661  &            97.19s  &    135.52s  &    206.74s  &      439.46s  \\
+usersView             &        20  &        44  &             0.54s  &      0.53s  &      0.03s  &        1.12s  \\
+submitForm            &        45  &        45  &             0.86s  &      0.00s  &      0.00s  &        0.86s  \\
+searchForm            &        77  &       159  &             4.35s  &      6.78s  &      0.92s  &       12.07s  \\
+paperView             &        53  &       135  &             2.33s  &      8.01s  &      0.63s  &       10.98s  \\
+reviewsView           &        57  &       102  &             3.14s  &      0.56s  &      0.31s  &        4.02s  \\
+profileViewGet        &        66  &        66  &           468.85s  &      0.00s  &      0.00s  &      468.85s  \\
+profileViewPost       &        17  &        17  &             4.51s  &      0.00s  &      0.00s  &        4.51s  \\
+submitReviewViewPost  &        40  &        40  &             0.65s  &      0.00s  &      0.00s  &        0.65s  \\
+assignReviewersView   &        47  &        47  &             1.68s  &      0.00s  &      0.00s  &        1.68s  \\
+Totals                &       432  &       665  &           486.95s  &     15.90s  &      1.91s  &      504.77s  \\
