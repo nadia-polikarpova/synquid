@@ -46,6 +46,6 @@ notifyAuthors = \w . \pid .
   let authors = getPaperAuthors w pid in
   let p = getCurrentPhase w in
   let w' = setCurrentPhase w (liftM (\x . x + 1) p) in  
-  printAll w' authors status
+  printAll w' authors (liftM show status)
   
 qualifier {x == y + 1}

@@ -226,34 +226,38 @@ stripTrivialClauses = do
 
 unfoldClauses :: MonadHorn s => TCSolver s ()
 unfoldClauses = do
-  clauses <- use hornClauses
+  clauses <- use hornClauses  
+  let clauseGroups = groupBy (\c1 c2 -> posUnknowns (rightHandSide $ fst c1) == posUnknowns (rightHandSide $ fst c2)) clauses
   -- TODO: take care of the case where the head appears in multiple clauses
-  let (toUnfold, rest) = partition canUnfold clauses
+  let (toUnfold, rest) = partition canUnfold clauseGroups
   case toUnfold of
     [] -> return () -- No clauses to unfold anymore
-    cs -> do -- Found clauses to unfold      
-      sol <- Map.fromList <$> mapM (unfold . fst) cs
+    groups -> do -- Found clauses to unfold      
+      sol <- Map.fromList <$> mapM unfoldGroup groups
       
       writeLog 2 (nest 2 $ vsep [
-        text "Unfolded clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) cs),
+        text "Unfolded clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) (concat groups)),
         text "Solution" $+$ pretty sol])              
       
-      let clauses' = over (mapped._1) (applySolution sol) rest -- Substitute unfolded unknowns
+      let clauses' = over (mapped._1) (applySolution sol) (concat rest) -- Substitute unfolded unknowns
       hornClauses .= clauses'
       setSolution sol           -- Set solution to unfolded unknowns
       unfoldClauses
   where 
-    -- | Can a clause be unfolded? Yes, if it's non-terminal with a fixed LHS
-    canUnfold (Binary Implies lhs (Unknown _ _), _) = Set.null $ posUnknowns lhs
+    -- | Can a clause group be unfolded? Yes, if it's non-terminal and all LHS are fixed
+    canUnfold cs@((Binary Implies _ (Unknown _ _), _):_) = all (\lhs -> Set.null $ posUnknowns lhs) (map (leftHandSide . fst) cs)
     canUnfold _ = False
     
-    -- unfold :: Formula -> (Id, Valuation)
+    unfoldGroup cs = do
+      disjuncts <- mapM (unfold . fst) cs
+      return (fst (head disjuncts), Set.singleton (disjunction (Set.fromList $ map (conjunction . snd) disjuncts)))
+    
     unfold (Binary Implies lhs rhs@(Unknown subst u)) = do
       quals <- use qualifierMap
       let uVars = (quals Map.! u) ^. variables -- Scope variables of `u`
       let rhsVars = Set.map (substitute subst) uVars -- Variables of the RHS, i.e. variables of `u` renamed according to `subst`
       let elimVars = varsOf lhs Set.\\ rhsVars -- Variables that have to be eliminated from LHS
-      writeLog 2 (text "UVARS" <+> pretty uVars)
+      -- writeLog 2 (text "UVARS" <+> pretty uVars)
       let reverseSubst = Set.fold (\uvar rsub -> maybe rsub (\(Var _ name) -> Map.insert name uvar rsub) (Map.lookup (varName uvar) subst)) Map.empty uVars
       
       let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs
