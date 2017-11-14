@@ -135,20 +135,21 @@ addClass
   -> teachers: List {User | _v != instr}
   -> World
 
-data Assignment
 
 
--- {- Class Data -}
--- type ClassName = String
--- type ClassTerm = String
--- type ClassInstructor = User
+{- Class Data -}
+--type ClassName = String
+--type ClassTerm = String
+--type ClassInstructor = User
 
--- data Class where
---   Class :: Tagged ClassName <{True}>
---     -> Tagged ClassTerm <{True}>
---     -> Tagged ClassInstructor <{True}>
---     -> Class
--- type ClassId = Key Class
+--data Class where
+--  Class :: Tagged ClassName <{True}>
+--    -> Tagged ClassTerm <{True}>
+--    -> Tagged ClassInstructor <{True}>
+--    -> Class
+--data ClassId
+
+--predicate classInstructor :: Class -> ClassInstructor
 
 {- Teachers -}
 -- type TeacherName = Key User
@@ -164,21 +165,35 @@ data Assignment
 --   Student :: StudentName -> StudentClass -> Student
 -- type StudentId = Key Student
 
--- {- Assignments -}
--- type AssignmentName = String
--- type AssignmentPoints = Int
--- type AssignmentClass = ClassId
--- data Assignment where
---   Assignment :: AssignmentName -> AssignmentPoints -> AssignmentClass -> Assignment
--- type AssignmentId = Key Assignment
+{- Assignments -}
+type AssignmentName = String
+type AssignmentPoints = Int
+data Assignment where
+  Assignment :: AssignmentName -> AssignmentPoints -> Class -> Assignment
+data AssignmentId
 
--- {- Scores -}
--- type ScoreStudent = StudentId
--- type ScoreAssignment = AssignmentId
--- type ScorePoints = Int
--- data Score where
---   Score :: ScoreStudent -> ScoreAssignment -> ScorePoints
--- type ScoreId = Key Score
+predicate assignmentClass :: Assignment -> Class
+
+{- Scores -}
+type ScoreStudent = User
+type ScoreAssignment = Assignment
+type ScorePoints = Int
+data Score where
+  Score :: ScoreStudent -> ScoreAssignment -> ScorePoints -> Score
+data ScoreId
+
+getScore :: w:World -> student:ScoreStudent -> assn:ScoreAssignment -> Tagged Score <{ _0 == student || _0 == (classInstructor w)[[assignmentClass assn]] }>
+
+defaultScore :: Tagged Score <{True}>
+
+getStudentsWhoDidAssignment :: w:World -> assn:ScoreAssignment -> List User
+
+getAssignmentsForStudent :: w:World -> student:User -> List Assignment
+
+scorePoints :: Score -> ScorePoints
+
+compareScores :: Score -> Score -> Bool
+compareScores = \s1 . \s2 . (scorePoints s1) > (scorePoints s2)
 
 -- {- Instructors -}
 -- type InstructorName = UserId

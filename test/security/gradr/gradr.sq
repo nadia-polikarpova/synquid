@@ -91,5 +91,26 @@ unauthProfileView = \w .
 -- classInstructor = \w .
 --   let u = getSessionUser w in
 
+-- For an assignment, see all the scores for that assignment
+scoresForAssignmentView :: World -> Assignment -> World
+scoresForAssignmentView = \w . \assn .
+  let u = getSessionUser w in
+  let students = getStudentsWhoDidAssignment w assn in
+  let scores = mapM (\student . getScore w student assn) students in
+  print w u (liftM show scores)
 
+-- For a student, see all of their scores
+scoresForStudentView :: World -> User -> World
+scoresForStudentView = \w . \student .
+  let u = getSessionUser w in
+  let assns = getAssignmentsForStudent w student in
+  let scores = mapM (\assn . getScore w student assn) assns in
+  print w u (liftM show scores)
 
+--getTopScoreForAssignmentView :: World -> Assignment -> World
+--getTopScoreForAssignmentView = \w . \assn .
+--  let u = getSessionUser w in
+--  let students = getStudentsWhoDidAssignment w assn in
+--  let scores = mapM (\student . getScore w student assn) students in
+--  let topScore = bind scores (\s . bind defaultScore (\def . foldM (\score1 . \score2 . ifM (return compareScores) (return score1) (return score2)) def s)) in
+--  print w u (liftM show topScore)
