@@ -1,4 +1,4 @@
 for fn in Conference{Verification,Repair}.sq ; do
   echo $fn
-  ../../../dist/build/synquid/synquid lifty --print-stats $fn ../paper/Security.sq Conference.sq -l 1 > out/${fn%.sq}.out.txt 2>&1
+  ../../../synquid lifty --print-stats --file=$fn --libs=../paperWrites/Prelude.sq --libs=../paperWrites/Tagged.sq --libs=Conference.sq > out/${fn%.sq}.out.txt 2>&1
 done

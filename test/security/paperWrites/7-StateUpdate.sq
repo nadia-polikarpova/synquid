@@ -39,13 +39,14 @@ defaultPaperStatus :: Tagged Status <{True}>
 {- Client code -}
 
 -- | Send status notification to authors after changing the phase.
--- | No repair is needed, since the phase has been changed.
+-- | The code should be repaired with guard "getCurrentPhase w == rebuttal".
+-- | This is because the phase is incremented by 1 in w'.
 notifyAuthors :: w: World -> pid: PaperId -> World
 notifyAuthors = \w . \pid .
   let status = getPaperStatus w pid in
   let authors = getPaperAuthors w pid in
   let p = getCurrentPhase w in
   let w' = setCurrentPhase w (liftM (\x . x + 1) p) in  
-  printAll w' authors status
+  printAll w' authors (liftM show status)
   
 qualifier {x == y + 1}

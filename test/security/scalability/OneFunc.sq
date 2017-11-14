@@ -1,0 +1,282 @@
+
+
+data Value
+
+predicate yourPrivilege :: World -> User -> Bool
+getYourPrivilege :: w:World -> u:User -> Tagged {Bool | _v == yourPrivilege w u} <{True}>
+
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+getPrivateValue :: w:World -> Tagged Value <{yourPrivilege _0 _1}>
+defaultPrivateValue :: Tagged Value <{True}>
+
+qualifier {yourPrivilege x y}
+
+----  AUTOGEN  ----
+
+oneFunc1 :: World -> World
+oneFunc1 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v = bind v0 (\b0. return [b0])
+  in
+     print w u (liftM show v)
+
+oneFunc2 :: World -> World
+oneFunc2 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v = bind v1 (\b1. bind v0 (\b0. return [b0, b1]))
+  in
+     print w u (liftM show v)
+
+oneFunc3 :: World -> World
+oneFunc3 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v = bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2])))
+  in
+     print w u (liftM show v)
+
+oneFunc4 :: World -> World
+oneFunc4 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v = bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3]))))
+  in
+     print w u (liftM show v)
+
+oneFunc5 :: World -> World
+oneFunc5 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v = bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4])))))
+  in
+     print w u (liftM show v)
+
+oneFunc6 :: World -> World
+oneFunc6 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v = bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5]))))))
+  in
+     print w u (liftM show v)
+
+oneFunc7 :: World -> World
+oneFunc7 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v = bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6])))))))
+  in
+     print w u (liftM show v)
+
+oneFunc8 :: World -> World
+oneFunc8 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v = bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7]))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc9 :: World -> World
+oneFunc9 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v = bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8])))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc10 :: World -> World
+oneFunc10 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v = bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9]))))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc11 :: World -> World
+oneFunc11 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v10 = getPrivateValue w in
+  let v = bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10])))))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc12 :: World -> World
+oneFunc12 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v10 = getPrivateValue w in
+  let v11 = getPrivateValue w in
+  let v = bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11]))))))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc13 :: World -> World
+oneFunc13 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v10 = getPrivateValue w in
+  let v11 = getPrivateValue w in
+  let v12 = getPrivateValue w in
+  let v = bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12])))))))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc14 :: World -> World
+oneFunc14 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v10 = getPrivateValue w in
+  let v11 = getPrivateValue w in
+  let v12 = getPrivateValue w in
+  let v13 = getPrivateValue w in
+  let v = bind v13 (\b13. bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13]))))))))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc15 :: World -> World
+oneFunc15 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v10 = getPrivateValue w in
+  let v11 = getPrivateValue w in
+  let v12 = getPrivateValue w in
+  let v13 = getPrivateValue w in
+  let v14 = getPrivateValue w in
+  let v = bind v14 (\b14. bind v13 (\b13. bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14])))))))))))))))
+  in
+     print w u (liftM show v)
+
+oneFunc16 :: World -> World
+oneFunc16 = \w.
+  let u = getSessionUser w in
+  
+  let v0 = getPrivateValue w in
+  let v1 = getPrivateValue w in
+  let v2 = getPrivateValue w in
+  let v3 = getPrivateValue w in
+  let v4 = getPrivateValue w in
+  let v5 = getPrivateValue w in
+  let v6 = getPrivateValue w in
+  let v7 = getPrivateValue w in
+  let v8 = getPrivateValue w in
+  let v9 = getPrivateValue w in
+  let v10 = getPrivateValue w in
+  let v11 = getPrivateValue w in
+  let v12 = getPrivateValue w in
+  let v13 = getPrivateValue w in
+  let v14 = getPrivateValue w in
+  let v15 = getPrivateValue w in
+  let v = bind v15 (\b15. bind v14 (\b14. bind v13 (\b13. bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15]))))))))))))))))
+  in
+     print w u (liftM show v)
+
+----
