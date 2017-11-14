@@ -105,10 +105,22 @@ scoresForStudentView = \w . \student .
   let scores = mapM (\assn . getScore w student assn) assns in
   print w u (liftM show scores)
 
---getTopScoreForAssignmentView :: World -> Assignment -> World
---getTopScoreForAssignmentView = \w . \assn .
---  let u = getSessionUser w in
---  let students = getStudentsWhoDidAssignment w assn in
---  let scores = mapM (\student . getScore w student assn) students in
---  let topScore = bind scores (\s . bind defaultScore (\def . foldM (\score1 . \score2 . ifM (return compareScores) (return score1) (return score2)) def s)) in
---  print w u (liftM show topScore)
+data UserAndScore where
+  UserAndScore :: User -> Int -> UserAndScore
+
+userFromUserAndScore :: UserAndScore -> User
+userFromUserAndScore = \x .
+  match x with
+    UserAndScore u i -> u
+
+maxScore :: List UserAndScore -> UserAndScore
+
+getTopScoreForAssignmentView :: World -> Assignment -> World
+getTopScoreForAssignmentView = \w . \assn .
+  let u = getSessionUser w in
+  let students = getStudentsWhoDidAssignment w assn in
+  --let scores = mapM (\student . getScore w student assn) students in
+  --let scores2 = bind scores (\s . mapM (\score . return (UserAndScore (scoreStudent score) (scorePoints score))) s) in
+  let scores = mapM (\student . bind (getScore w student assn) (\sc . return (UserAndScore student (scorePoints sc)))) students in
+  let topScoreUser = bind scores (\s . return (userFromUserAndScore (maxScore s))) in
+  print w u (liftM show scores)

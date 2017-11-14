@@ -191,9 +191,10 @@ getStudentsWhoDidAssignment :: w:World -> assn:ScoreAssignment -> List User
 getAssignmentsForStudent :: w:World -> student:User -> List Assignment
 
 scorePoints :: Score -> ScorePoints
+scoreStudent :: Score -> User
 
-compareScores :: Score -> Score -> Bool
-compareScores = \s1 . \s2 . (scorePoints s1) > (scorePoints s2)
+--compareScores :: Score -> Score -> Bool
+--compareScores = \s1 . \s2 . (scorePoints s1) > (scorePoints s2)
 
 -- {- Instructors -}
 -- type InstructorName = UserId
