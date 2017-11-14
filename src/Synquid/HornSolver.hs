@@ -105,6 +105,7 @@ preprocess fml = error $ unwords ["preprocess: encountered ill-formed constraint
 -- use @extractAssumptions@ to extract axiom instantiations from formulas;
 -- if there is no solution, produce an empty list of candidates; otherwise the first candidate in the list is a complete solution
 refine :: MonadSMT s => [Formula] -> QMap -> ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
+refine [] _ _ cands = return cands
 refine constraints quals extractAssumptions cands = do
     writeLog 3 (vsep [nest 2 $ text "Constraints" $+$ vsep (map pretty constraints), nest 2 $ text "QMap" $+$ pretty quals])
     let constraints' = filter isNew constraints

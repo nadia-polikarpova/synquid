@@ -1,0 +1,35 @@
+WARNING: cannot abduce a condition for violation
+  getProfileClassInfo w ::
+  x8:{User|_v == sessionUser w} -> {Tagged String <True>|True && True}
+  Probable cause: missing condition qualifiers
+homePage :: arg0:World -> World
+homePage = \w . 
+  let u = getSessionUser w in
+  print w u homePageString
+
+getClassesStdByUser :: w:World -> u:User -> Tagged List {Class|u in (classStudents w)[[_v]]} <_0 == u>
+getClassesStdByUser = \w . \u .
+    filterM (isStudentInClass w u)
+      (getClasses w)
+
+getClassesInsByUser :: w:World -> u:User -> Tagged List {Class|u in (classTeachers w)[[_v]] || u == (classInstructor w)[[_v]]} <True>
+getClassesInsByUser = \w . \u .
+    filterM (teachesClass w u)
+      (getClasses w)
+
+getProfileClassInfo :: arg1:World -> u:User -> Tagged String <_0 == u>
+getProfileClassInfo = \w . \u . 
+    let teachingClasses =
+      getClassesInsByUser w u in
+    
+    let takingClasses =
+      getClassesStdByUser w u in
+    liftM2 strcat (liftM show
+                     teachingClasses) (liftM show
+                                         takingClasses)
+
+profileView :: arg0:World -> World
+<no file name>:1: Error:
+  Cannot match shape 'Tagged (String) <()>'
+  with shape '(A1 -> A0)'
+

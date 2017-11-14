@@ -1,4 +1,3 @@
-Found 1 violation(s) in function showPaper
 showPaper :: w:World -> pid:PaperId -> World
 showPaper = \w . \pid . 
     let u = getSessionUser w in
@@ -31,7 +30,7 @@ showPaper = \w . \pid .
 
 (Goals: 1)
 (Measures: 3)
-(Policy size: fromList [("2-SelfRef.sq",32),("Prelude.sq",20),("Tagged.sq",119)])
+(Policy size: fromList [("2-SelfRef.sq",32),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showPaper             &        37  &        91  &             0.32s  &      0.25s  &      2.11s  &        2.69s  \\
-Totals                &        37  &        91  &             0.32s  &      0.25s  &      2.11s  &        2.69s  \\
+showPaper             &        37  &        91  &             0.01s  &      0.14s  &      0.07s  &        0.23s  \\
+Totals                &        37  &        91  &             0.01s  &      0.14s  &      0.07s  &        0.23s  \\

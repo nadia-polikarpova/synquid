@@ -1,6 +1,6 @@
 
 CONF_METAPROGRAM = {
-  'columns':         ["braces(key)", "$1", "#2'-#1", "#2-#1", "$3'", "$3", "$4", "$5", "$6"],
+  'columns':         ["braces(key)", "$1", "nonneg(#2'-#1)", "nonneg(#2-#1)", "$3'", "$3", "$4", "$5", "$6"],
   'rows': ["registerUser",
            "usersView",
            "submitForm",
@@ -14,6 +14,7 @@ CONF_METAPROGRAM = {
            "Totals"],
   'fmt': ["\\d%-20s", "%s", "%8s", "%8s", "%s", "%s", "%s", "%s", "%s"],
   'helpers': {
+    'nonneg': (lambda n: max(0, n)),
     'braces': (lambda txt: "{%s}" % txt)
   }
 }
@@ -25,7 +26,9 @@ MICRO_METAPROGRAM = {
            "3-Implicit.out:showSession",
            "4-Search.out:searchByAuthor",
            "5-Sort.out:sortPapersByScore",
-           "6-Multicast.out:notifyAuthors"],
+           "6-Multicast.out:notifyAuthors",
+           "7-StatusUpdate.out:notifyAuthors",
+           "8-ProtectWrite.out:copyStatus"],
   'fmt': ["\\d%-20s", "%s", "%s", "%s", "%s"],
   'helpers': {
     'micro': (lambda txt: "{micro%s}" % txt.split('-')[0])
@@ -34,12 +37,14 @@ MICRO_METAPROGRAM = {
 
 CONF_TABLES = ["conferenceWrites/out/ConferenceRepair.out.txt", 
                "conferenceWrites/out/ConferenceVerification.out.txt"]
-MICRO_TABLES = ["paper/out/1-Basic.out.txt", 
-                "paper/out/2-SelfRef.out.txt", 
-                "paper/out/3-Implicit.out.txt", 
-                "paper/out/4-Search.out.txt", 
-                "paper/out/5-Sort.out.txt", 
-                "paper/out/6-Multicast.out.txt"]
+MICRO_TABLES = ["paperWrites/out/1-Basic.out.txt", 
+                "paperWrites/out/2-SelfRef.out.txt", 
+                "paperWrites/out/3-Implicit.out.txt", 
+                "paperWrites/out/4-Search.out.txt", 
+                "paperWrites/out/5-Sort.out.txt", 
+                "paperWrites/out/6-Multicast.out.txt",
+                "paperWrites/out/7-StateUpdate.out.txt",
+                "paperWrites/out/8-ProtectWrite.out.txt"]
 
 import re
 import os.path
@@ -48,7 +53,6 @@ def dictadd(*a):
     d = {}
     for x in a: d.update(x)
     return d
-
 
 def parse_table(fn):
     txt = open(fn).read()
@@ -72,7 +76,10 @@ def eval_expr(expr, value, key=None, helpers={}):
     expr = re.sub(r'\$(\d+)',   lambda m: "_[0][%s]" % m.group(1), expr)
     expr = re.sub(r'#(\d+)\'',  lambda m: "int(_[1][%s])" % m.group(1), expr)
     expr = re.sub(r'#(\d+)',    lambda m: "int(_[0][%s])" % m.group(1), expr)
-    return eval(expr, dictadd({'_': value, 'key': key}, helpers))
+    try:
+        return eval(expr, dictadd({'_': value, 'key': key}, helpers))
+    except:
+        return "??"
 
 
 class Program(object):
@@ -83,7 +90,7 @@ class Program(object):
     def eval_meta(self, tables):
         out = []
         for rowh in self.metaprogram['rows']:
-            row = [table[rowh] for table in tables]
+            row = [table.get(rowh, []) for table in tables]
             out.append([eval_expr(e, row, rowh, self.metaprogram['helpers']) for e in self.metaprogram['columns']])
             
         return out

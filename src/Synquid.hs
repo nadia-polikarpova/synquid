@@ -82,8 +82,9 @@ main = do
                     module_ = out_module
                   }
                   runOnFile synquidParams explorerParams solverParams codegenParams file libs
-    (Lifty file libs onlyGoals out_file out_module outFormat resolve verify symmetry print_spec print_stats log_) -> do
+    (Lifty file libs onlyGoals out_file out_module outFormat resolve verify unfold symmetry print_spec print_stats log_) -> do
                   let explorerParams = defaultExplorerParams {
+                    _unfolding = unfold,
                     _symmetryReduction = symmetry,
                     _explorerLogLevel = log_
                     }
@@ -159,6 +160,7 @@ data CommandLineArgs
         output :: OutputFormat,
         resolve :: Bool,
         verify :: Bool,
+        unfold :: Bool,
         symmetry :: Bool,
         print_spec :: Bool,
         print_stats :: Bool,
@@ -202,6 +204,7 @@ lifty = Lifty {
   only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
   resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
   verify              = False           &= help ("Verification only mode (default: False)") &= name "v",
+  unfold              = True            &= help ("Use Prolog-style unfolding (default: True)") &= name "u",
   symmetry            = False           &= help ("Use symmetry reductions (default: False)") &= name "s",  
   out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
   out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
@@ -232,6 +235,7 @@ defaultExplorerParams = ExplorerParams {
   _partialSolution = False,
   _incrementalChecking = True,
   _consistencyChecking = False,
+  _unfolding = False,
   _splitMeasures = True,
   _useMemoization = False,
   _symmetryReduction = False,

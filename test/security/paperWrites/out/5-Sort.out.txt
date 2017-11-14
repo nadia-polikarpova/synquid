@@ -1,4 +1,3 @@
-Found 2 violation(s) in function sortPapersByScore
 sortPapersByScore :: w:World -> World
 sortPapersByScore = \w . 
   let u = getSessionUser w in
@@ -34,7 +33,7 @@ sortPapersByScore = \w .
 
 (Goals: 1)
 (Measures: 3)
-(Policy size: fromList [("5-Sort.sq",28),("Prelude.sq",20),("Tagged.sq",119)])
+(Policy size: fromList [("5-Sort.sq",28),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-sortPapersByScore     &        59  &       115  &             0.94s  &      1.48s  &      4.48s  &        6.91s  \\
-Totals                &        59  &       115  &             0.94s  &      1.48s  &      4.48s  &        6.91s  \\
+sortPapersByScore     &        59  &       115  &             0.03s  &      0.84s  &      0.18s  &        1.06s  \\
+Totals                &        59  &       115  &             0.03s  &      0.84s  &      0.18s  &        1.06s  \\

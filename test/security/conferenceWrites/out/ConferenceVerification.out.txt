@@ -88,22 +88,9 @@ searchForm = \w . \byAuthor .
                                                                                        (peel
                                                                                           u)
                                                                                        pc)))))
-                                                                    (bind (ifM
-                                                                             (bind
-                                                                                u
-                                                                                (\x5 .
-                                                                                  bind
-                                                                                    (getPC
-                                                                                       w)
-                                                                                    (\x4 .
-                                                                                      return
-                                                                                        (elem
-                                                                                           x5
-                                                                                           x4))))
-                                                                             (getPaperReviewers
-                                                                                w
-                                                                                pid)
-                                                                             defaultPaperReviewers)
+                                                                    (bind
+                                                                       (getPaperReviewers
+                                                                          w pid)
                                                                        (\cs .
                                                                          return
                                                                            (userFilter
@@ -115,7 +102,7 @@ searchForm = \w . \byAuthor .
                                                                  (return
                                                                     True))))
                    allPids in
-      print w u pids
+      print w u (liftM show pids)
 
 paperView :: arg1:World -> arg0:PaperId -> World
 paperView = \w . \pid . 
@@ -163,7 +150,11 @@ reviewsView = \w . \pid .
                                                                 return (pid ==
                                                                           x)))
                                                            (bind u (\u0 . bind
-                                                                            (getReviewPaper
+                                                           WARNING: cannot abduce a condition for violation
+  getPaperReviewers w' pid ::
+  Tagged List User <True>
+  Probable cause: missing condition qualifiers
+                 (getReviewPaper
                                                                                w
                                                                                rid)
                                                                             (\pid0 .
@@ -234,7 +225,7 @@ assignReviewersView = \w .
       let allPids = getAllPapers w in
       foldl (\w' . \pid .
             setPaperReviewers w' pid (bind
-                                        (getPaperReviewers w' pid) (\l .
+                                        defaultPaperReviewers (\l .
                                           return (insertIf (elem pid pids)
                                                     reviewer (remove reviewer
                                                                 l))))) w allPids
@@ -244,13 +235,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceVerification.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        29  &        29  &             4.01s  &      0.00s  &      0.00s  &        4.01s  \\
-submitForm            &        45  &        45  &             5.15s  &      0.00s  &      0.00s  &        5.15s  \\
-searchForm            &       169  &       193  &            62.34s  &      2.02s  &     79.21s  &      143.58s  \\
-paperView             &        99  &        99  &            39.18s  &      0.00s  &      0.00s  &       39.18s  \\
-reviewsView           &       111  &       111  &            68.04s  &      0.00s  &      0.00s  &       68.04s  \\
-profileViewGet        &        66  &        66  &             5.03s  &      0.00s  &      0.00s  &        5.03s  \\
-profileViewPost       &        17  &        17  &             1.14s  &      0.00s  &      0.00s  &        1.14s  \\
-submitReviewViewPost  &        40  &        40  &             4.55s  &      0.00s  &      0.00s  &        4.55s  \\
-assignReviewersView   &        47  &        47  &            16.22s  &      0.00s  &      0.00s  &       16.22s  \\
-Totals                &       633  &       657  &           205.70s  &      2.02s  &     79.21s  &      286.94s  \\
+usersView             &        29  &        29  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
+submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+searchForm            &       173  &       173  &             0.91s  &      0.00s  &      0.00s  &        0.91s  \\
+paperView             &        99  &        99  &             0.33s  &      0.00s  &      0.00s  &        0.33s  \\
+reviewsView           &       111  &       111  &             0.40s  &      0.00s  &      0.00s  &        0.40s  \\
+profileViewGet        &        66  &        66  &             0.04s  &      0.00s  &      0.00s  &        0.04s  \\
+profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+assignReviewersView   &        47  &        43  &             0.01s  &      2.34s  &      0.01s  &        2.37s  \\
+Totals                &       637  &       633  &             1.74s  &      2.34s  &      0.01s  &        4.09s  \\

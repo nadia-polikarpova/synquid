@@ -96,7 +96,7 @@ searchForm = \w . \byAuthor .
                    allPids in
       
       let u = getSessionUser w in
-      print w u pids
+      print w u (liftM show pids)
 
 paperView :: arg1:World -> arg0:PaperId -> World
 paperView = \w . \pid . 
@@ -142,7 +142,11 @@ reviewsView = \w . \pid .
                              (\rids' . mapM (\rid . ifM (andM
                                                            (bind (getReviewPaper
                                                                     w rid)
-                                                              (\x9 . return (eq
+                                      WARNING: cannot abduce a condition for violation
+  getPaperReviewers w' pid ::
+  Tagged List User <True>
+  Probable cause: missing condition qualifiers
+                        (\x9 . return (eq
                                                                                pid
                                                                                x9)))
                                                            (bind u (\x11 . bind
@@ -212,7 +216,7 @@ assignReviewersView = \w .
       let allPids = getAllPapers w in
       foldl (\w' . \pid .
             setPaperReviewers w' pid (bind
-                                        (getPaperReviewers w' pid) (\l .
+                                        defaultPaperReviewers (\l .
                                           return (insertIf (elem pid pids)
                                                     reviewer (remove reviewer
                                                                 l))))) w allPids
@@ -222,13 +226,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        44  &             2.72s  &      0.43s  &      9.21s  &       12.37s  \\
-submitForm            &        45  &        45  &             5.45s  &      0.00s  &      0.00s  &        5.45s  \\
-searchForm            &        73  &       155  &            23.17s  &     16.68s  &     72.10s  &      111.96s  \\
-paperView             &        53  &       135  &            13.08s  &     19.24s  &     62.13s  &       94.45s  \\
-reviewsView           &        57  &       102  &            23.11s  &     99.16s  &     63.29s  &      185.57s  \\
-profileViewGet        &        66  &        66  &             5.84s  &      0.00s  &      0.00s  &        5.84s  \\
-profileViewPost       &        17  &        17  &             1.24s  &      0.00s  &      0.00s  &        1.24s  \\
-submitReviewViewPost  &        40  &        40  &             4.88s  &      0.00s  &      0.00s  &        4.88s  \\
-assignReviewersView   &        47  &        47  &            17.67s  &      0.00s  &      0.00s  &       17.67s  \\
-Totals                &       428  &       661  &            97.19s  &    135.52s  &    206.74s  &      439.46s  \\
+usersView             &        20  &        44  &             0.01s  &      0.60s  &      0.04s  &        0.65s  \\
+submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+searchForm            &        77  &       159  &             0.08s  &      7.03s  &      0.97s  &        8.09s  \\
+paperView             &        53  &       135  &             0.04s  &      8.06s  &      0.71s  &        8.82s  \\
+reviewsView           &        57  &       102  &             0.05s  &      0.56s  &      0.32s  &        0.95s  \\
+profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
+profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+assignReviewersView   &        47  &        43  &             0.01s  &      2.25s  &      0.01s  &        2.28s  \\
+Totals                &       432  &       661  &             0.26s  &     18.52s  &      2.07s  &       20.86s  \\

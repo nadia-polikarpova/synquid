@@ -42,4 +42,4 @@ notifyAuthors :: w: World -> pid: PaperId -> World
 notifyAuthors = \w . \pid .
   let status = getPaperStatus w pid in
   let authors = getPaperAuthors w pid in
-  printAll w authors status
+  printAll w authors (liftM show status)
