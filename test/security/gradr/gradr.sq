@@ -70,21 +70,19 @@ defaultProfileClassInfo :: Tagged String <{True}>
 profileView :: World -> World
 profileView = \w .
   let u = getSessionUser w in
-  let content = liftM (getProfileClassInfo w) u in
+  let content = bind u (\user . getProfileClassInfo w user) in
   print w u content
 
 predicate arbUser :: World -> User
+getArbitraryUser :: w:World -> Tagged {User | _v == arbUser w} <{True}>
 
---arbitraryUser :: w:World -> Tagged {User | !(_v == sessionUser w)} <{True}>
-getArbitraryUser :: w:World -> {User | _v == arbUser w}
-
-qualifier {(_0 == arbUser w)}
+-- qualifier {(_0 == arbUser w)}
 
 unauthProfileView :: World -> World
 unauthProfileView = \w .
   let u = getSessionUser w in
   let content = bind u (\user . getProfileClassInfo w user) in
-  print w (return (getArbitraryUser w)) content
+  print w ( (getArbitraryUser w)) content
 
 -- View class: Instructor view
 -- classInstructor :: World -> World
