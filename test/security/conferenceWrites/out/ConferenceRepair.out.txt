@@ -142,7 +142,11 @@ reviewsView = \w . \pid .
                              (\rids' . mapM (\rid . ifM (andM
                                                            (bind (getReviewPaper
                                                                     w rid)
-                                                              (\x9 . return (eq
+                                      WARNING: cannot abduce a condition for violation
+  getPaperReviewers w' pid ::
+  Tagged List User <True>
+  Probable cause: missing condition qualifiers
+                        (\x9 . return (eq
                                                                                pid
                                                                                x9)))
                                                            (bind u (\x11 . bind
@@ -212,7 +216,7 @@ assignReviewersView = \w .
       let allPids = getAllPapers w in
       foldl (\w' . \pid .
             setPaperReviewers w' pid (bind
-                                        (getPaperReviewers w' pid) (\l .
+                                        defaultPaperReviewers (\l .
                                           return (insertIf (elem pid pids)
                                                     reviewer (remove reviewer
                                                                 l))))) w allPids
@@ -222,13 +226,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        44  &             0.54s  &      0.53s  &      0.03s  &        1.12s  \\
-submitForm            &        45  &        45  &             0.86s  &      0.00s  &      0.00s  &        0.86s  \\
-searchForm            &        77  &       159  &             4.35s  &      6.78s  &      0.92s  &       12.07s  \\
-paperView             &        53  &       135  &             2.33s  &      8.01s  &      0.63s  &       10.98s  \\
-reviewsView           &        57  &       102  &             3.14s  &      0.56s  &      0.31s  &        4.02s  \\
-profileViewGet        &        66  &        66  &           468.85s  &      0.00s  &      0.00s  &      468.85s  \\
-profileViewPost       &        17  &        17  &             4.51s  &      0.00s  &      0.00s  &        4.51s  \\
-submitReviewViewPost  &        40  &        40  &             0.65s  &      0.00s  &      0.00s  &        0.65s  \\
-assignReviewersView   &        47  &        47  &             1.68s  &      0.00s  &      0.00s  &        1.68s  \\
-Totals                &       432  &       665  &           486.95s  &     15.90s  &      1.91s  &      504.77s  \\
+usersView             &        20  &        44  &             0.01s  &      0.60s  &      0.04s  &        0.65s  \\
+submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+searchForm            &        77  &       159  &             0.08s  &      7.03s  &      0.97s  &        8.09s  \\
+paperView             &        53  &       135  &             0.04s  &      8.06s  &      0.71s  &        8.82s  \\
+reviewsView           &        57  &       102  &             0.05s  &      0.56s  &      0.32s  &        0.95s  \\
+profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
+profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+assignReviewersView   &        47  &        43  &             0.01s  &      2.25s  &      0.01s  &        2.28s  \\
+Totals                &       432  &       661  &             0.26s  &     18.52s  &      2.07s  &       20.86s  \\

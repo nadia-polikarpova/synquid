@@ -47,7 +47,7 @@ searchForm = \w . \byAuthor . \byReviewer .
        (ifJust byAuthor (\author . ifM (bind (getPaperAuthors w pid) (\cs. return (elem (peel u) cs))) (bind (getPaperAuthors w pid) (\cs. return (userFilter w author cs))) (return True)))
        (ifJust byReviewer (\revr . ifM (bind (getPaperConflicts w pid) (\cs. return (not (elem (peel u) cs)))) (ifM (bind (getPaperConflicts w pid) (\cs. bind (getPC w) (\pc. return ((not (elem (peel u) cs)) && (elem (peel u) pc))))) (bind (getPaperReviewers w pid) (\cs. return (userFilter w revr cs))) (return True)) (return True)))
      ) allPids in
-  print w u pids
+  print w u (liftM show pids)
 
 userFilter :: w: World -> s: String -> users: [User] -> Bool
 
