@@ -1,4 +1,20 @@
 
+MICRO_METAPROGRAM = {
+  'columns':         ["micro(key)", "$3", "$4", "$5", "$6"],
+  'rows': ["1-Basic.out:showPaper",
+           "2-SelfRef.out:showPaper",
+           "3-Implicit.out:showSession",
+           "4-Search.out:searchByAuthor",
+           "5-Sort.out:sortPapersByScore",
+           "6-Multicast.out:notifyAuthors",
+           "7-StateUpdate.out:notifyAuthors",
+           "8-ProtectWrite.out:copyStatus"],
+  'fmt': ["\\d%-20s", "%s", "%s", "%s", "%s"],
+  'helpers': {
+    'micro': (lambda txt: "{micro%s}" % txt.split('-')[0])
+  }
+}
+
 CONF_METAPROGRAM = {
   'columns':         ["braces(key)", "$1", "nonneg(#2'-#1)", "nonneg(#2-#1)", "$3'", "$3", "$4", "$5", "$6"],
   'rows': ["registerUser",
@@ -12,31 +28,32 @@ CONF_METAPROGRAM = {
            "submitReviewViewPost",
            "assignReviewersView",
            "Totals"],
-  'fmt': ["\\d%-20s", "%s", "%8s", "%8s", "%s", "%s", "%s", "%s", "%s"],
+  'fmt': ["%-30s", "%s", "%8s", "%8s", "%s", "%s", "%s", "%s", "%s"],
   'helpers': {
     'nonneg': (lambda n: max(0, n)),
-    'braces': (lambda txt: "{%s}" % txt)
+    'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
   }
 }
 
-MICRO_METAPROGRAM = {
-  'columns':         ["micro(key)", "$3", "$4", "$5", "$6"],
-  'rows': ["1-Basic.out:showPaper",
-           "2-SelfRef.out:showPaper",
-           "3-Implicit.out:showSession",
-           "4-Search.out:searchByAuthor",
-           "5-Sort.out:sortPapersByScore",
-           "6-Multicast.out:notifyAuthors",
-           "7-StatusUpdate.out:notifyAuthors",
-           "8-ProtectWrite.out:copyStatus"],
-  'fmt': ["\\d%-20s", "%s", "%s", "%s", "%s"],
+GRADR_METAPROGRAM = {
+  'columns':         ["braces(key)", "$1", "nonneg(#2-#1)", "$3", "$4", "$5", "$6"],
+  'rows': ["homePage",
+           "getClassesStdByUser",
+           "getClassesInsByUser",
+           "getProfileClassInfo",
+           "profileView",
+           "unauthProfileView",
+           "scoresForAssignmentView",
+           "scoresForStudentView",
+           "getTopScoreForAssignmentView",
+           "Totals"],
+  'fmt': ["%-40s", "%s", "%8s", "%s", "%s", "%s", "%s"],
   'helpers': {
-    'micro': (lambda txt: "{micro%s}" % txt.split('-')[0])
+    'nonneg': (lambda n: max(0, n)),
+    'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
   }
 }
 
-CONF_TABLES = ["conferenceWrites/out/ConferenceRepair.out.txt", 
-               "conferenceWrites/out/ConferenceVerification.out.txt"]
 MICRO_TABLES = ["paperWrites/out/1-Basic.out.txt", 
                 "paperWrites/out/2-SelfRef.out.txt", 
                 "paperWrites/out/3-Implicit.out.txt", 
@@ -45,6 +62,12 @@ MICRO_TABLES = ["paperWrites/out/1-Basic.out.txt",
                 "paperWrites/out/6-Multicast.out.txt",
                 "paperWrites/out/7-StateUpdate.out.txt",
                 "paperWrites/out/8-ProtectWrite.out.txt"]
+
+CONF_TABLES = ["conferenceWrites/out/ConferenceRepair.out.txt", 
+               "conferenceWrites/out/ConferenceVerification.out.txt"]
+
+GRADR_TABLES = ["gradr/out/gradr.out.txt"]
+
 
 import re
 import os.path
@@ -113,9 +136,20 @@ def cmdline():
 
 
 if __name__ == '__main__':
-    ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
-    mp = Program(CONF_METAPROGRAM)
-    mp.fmt_output( mp.eval_meta(ctx) )
+    # Micro benchmarks
+    print "% Micro benchmarks"
     ctx = [concat_tables(parse_table(fn) for fn in MICRO_TABLES)]  # "in sequence"
     mp = Program(MICRO_METAPROGRAM)
     mp.fmt_output( mp.eval_meta(ctx) )
+    # Conference Management
+    print "% Conference Management"
+    ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
+    mp = Program(CONF_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+    # Gradr
+    print "% Gradr"
+    ctx = [parse_table(fn) for fn in GRADR_TABLES]
+    mp = Program(GRADR_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+
+    # Health Web
