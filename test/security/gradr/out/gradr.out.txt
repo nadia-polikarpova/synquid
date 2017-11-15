@@ -1,7 +1,3 @@
-WARNING: cannot abduce a condition for violation
-  getProfileClassInfo w ::
-  x8:{User|_v == sessionUser w} -> {Tagged String <True>|True && True}
-  Probable cause: missing condition qualifiers
 homePage :: arg0:World -> World
 homePage = \w . 
   let u = getSessionUser w in
@@ -29,7 +25,99 @@ getProfileClassInfo = \w . \u .
                                          takingClasses)
 
 profileView :: arg0:World -> World
-<no file name>:1: Error:
-  Cannot match shape 'Tagged (String) <()>'
-  with shape '(A1 -> A0)'
+profileView = \w . 
+  let u = getSessionUser w in
+  
+  let content = bind u (\user .
+                    getProfileClassInfo w user) in
+  print w u content
 
+unauthProfileView :: arg0:World -> World
+unauthProfileView = \w . 
+  let u = getSessionUser w in
+  
+  let content = bind u (\user .
+                    ifM (bind (getArbitraryUser w)
+                           (\x3 . return (eq user x3)))
+                      (getProfileClassInfo w user)
+                      defaultProfileClassInfo) in
+  print w (getArbitraryUser w)
+    content
+
+scoresForAssignmentView :: arg1:World -> arg0:Assignment -> World
+scoresForAssignmentView = \w .
+  \assn . 
+    let u = getSessionUser w in
+    
+    let students =
+      getStudentsWhoDidAssignment w
+        assn in
+    
+    let scores = mapM (\student .
+                     ifM (bind u (\x3 . return (eq
+                                                  student x3))) (getScore w
+                                                                   student assn)
+                       defaultScore) students in
+    print w u (liftM show scores)
+
+scoresForStudentView :: arg1:World -> arg0:User -> World
+scoresForStudentView = \w .
+  \student . 
+    let u = getSessionUser w in
+    
+    let assns =
+      getAssignmentsForStudent w
+        student in
+    
+    let scores = mapM (\assn . ifM
+                                 (bind u (\x3 . return (eq
+                                                          student x3)))
+                                 (getScore w student assn)
+                                 defaultScore) assns in
+    print w u (liftM show scores)
+
+userFromUserAndScore :: arg0:UserAndScore -> User
+userFromUserAndScore = \x . 
+  match x with
+    UserAndScore u i -> u
+
+getTopScoreForAssignmentView :: arg1:World -> arg0:Assignment -> World
+getTopScoreForAssignmentView =
+\w . \assn . 
+    let u = getSessionUser w in
+    
+    let students =
+      getStudentsWhoDidAssignment w
+        assn in
+    
+    let scores = mapM (\student .
+                     bind (ifM (bind u (\x3 . return
+                                                (eq student x3))) (getScore w
+                                                                     student
+                                                                     assn)
+                             defaultScore) (\sc . return
+                                                    (UserAndScore student
+                                                       (scorePoints sc))))
+                   students in
+    
+    let topScoreUser = bind scores
+                         (\s . return
+                                 (userFromUserAndScore (maxScore
+                                                          s))) in
+    print w u (liftM show scores)
+
+(Goals: 10)
+(Measures: 3)
+(Policy size: fromList [("Prelude.sq",20),("Tagged.sq",111),("gradr.sq",29),("models.sq.preprocessed",112)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+homePage              &        12  &        12  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getClassesStdByUser   &        13  &        13  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
+getClassesInsByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getProfileClassInfo   &        29  &        29  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
+profileView           &        23  &        23  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
+unauthProfileView     &        25  &        44  &             0.00s  &      0.04s  &      0.01s  &        0.07s  \\
+scoresForAssignmentView  &        36  &        53  &             0.00s  &      0.03s  &      0.02s  &        0.06s  \\
+scoresForStudentView  &        36  &        53  &             0.00s  &      0.03s  &      0.02s  &        0.06s  \\
+userFromUserAndScore  &         4  &         4  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getTopScoreForAssignmentView  &        62  &        79  &             0.02s  &      0.03s  &      0.05s  &        0.11s  \\
+Totals                &       253  &       323  &             0.12s  &      0.15s  &      0.11s  &        0.39s  \\
