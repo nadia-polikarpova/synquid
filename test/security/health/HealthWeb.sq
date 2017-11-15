@@ -51,10 +51,10 @@ qualifier { _v == isPsychiatricRecord x }
 predicate record :: World -> RecordId -> Record
 
 getRecord :: w:World -> rid:RecordId -> Tagged {Record | _v == record w rid} <{
-  _1 == author (record w rid) ||
-  (isPatient w _1 && _1 == patient (record w rid) && !(shouldWithhold _1 (record w rid))) ||
-  (isDoctor w _1 && !(shouldWithhold _1 (record w rid))) ||
-  (isPsychiatrist w _1 && isTreating _1 (patient (record w rid)) && isPsychiatricRecord (record w rid) && !(shouldWithhold _1 (record w rid)))
+  _1 == author (record _0 rid) ||
+  (isPatient _0 _1 && _1 == patient (record _0 rid) && !(shouldWithhold _1 (record _0 rid))) ||
+  (isDoctor _0 _1 && !(shouldWithhold _1 (record _0 rid))) ||
+  (isPsychiatrist _0 _1 && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
 }>
 
 defaultRecord :: Tagged Record <{True}>
@@ -62,6 +62,13 @@ defaultRecord :: Tagged Record <{True}>
 getAllRecordIds :: World -> List RecordId
 
 getAuthoredRecordIds :: w:World -> u:User -> List {RecordId | u == author (record w _v)}
+
+setRecord :: w:World -> rid:RecordId -> Tagged Record <{
+  _1 == author (record _0 rid) ||
+  (isPatient _0 _1 && _1 == patient (record _0 rid) && !(shouldWithhold _1 (record _0 rid))) ||
+  (isDoctor _0 _1 && !(shouldWithhold _1 (record _0 rid))) ||
+  (isPsychiatrist _0 _1 && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
+}> -> {World | sessionUser _v == sessionUser w}
 
 showRecord :: w:World -> rid:RecordId -> World
 showRecord = \w . \rid .
@@ -85,3 +92,10 @@ showAuthoredRecordsView = \w .
 	let recordIds = bind sessionUser (\user . return (getAuthoredRecordIds w user)) in
 	let records = bind recordIds (\rids . (mapM (\rid . getRecord w rid) rids)) in
 	print w sessionUser (liftM show records)
+
+updateRecordForm :: w:World -> rid:RecordId -> record:Record -> World
+updateRecordForm = \w . \rid . \record .
+  let w' = setRecord w rid (return record) in
+  let newRecord = getRecord w' rid in
+	let u = getSessionUser w' in
+  print w' u (liftM show newRecord)
