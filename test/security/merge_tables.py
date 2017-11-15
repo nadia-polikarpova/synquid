@@ -54,6 +54,13 @@ GRADR_METAPROGRAM = {
   }
 }
 
+HEALTH_METAPROGRAM = GRADR_METAPROGRAM.copy()
+HEALTH_METAPROGRAM.update({
+    'rows': ["showRecord",
+             "showRecordForPatient",
+             "Totals"]
+})
+
 MICRO_TABLES = ["paperWrites/out/1-Basic.out.txt", 
                 "paperWrites/out/2-SelfRef.out.txt", 
                 "paperWrites/out/3-Implicit.out.txt", 
@@ -67,6 +74,8 @@ CONF_TABLES = ["conferenceWrites/out/ConferenceRepair.out.txt",
                "conferenceWrites/out/ConferenceVerification.out.txt"]
 
 GRADR_TABLES = ["gradr/out/gradr.out.txt"]
+
+HEALTH_TABLES = ["health/out/HealthWeb.out.txt"]
 
 
 import re
@@ -141,6 +150,7 @@ if __name__ == '__main__':
     ctx = [concat_tables(parse_table(fn) for fn in MICRO_TABLES)]  # "in sequence"
     mp = Program(MICRO_METAPROGRAM)
     mp.fmt_output( mp.eval_meta(ctx) )
+
     # Conference Management
     print "% Conference Management"
     ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
@@ -151,5 +161,9 @@ if __name__ == '__main__':
     ctx = [parse_table(fn) for fn in GRADR_TABLES]
     mp = Program(GRADR_METAPROGRAM)
     mp.fmt_output( mp.eval_meta(ctx) )
+    # HealthWeb
+    print "% HealthWeb"
+    ctx = [parse_table(fn) for fn in HEALTH_TABLES]
+    mp = Program(HEALTH_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
 
-    # Health Web
