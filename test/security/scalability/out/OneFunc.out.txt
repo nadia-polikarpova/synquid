@@ -1,0 +1,1423 @@
+oneFunc1 :: arg0:World -> World
+oneFunc1 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v0 (\b0 . return
+                           (Cons b0 Nil)) in
+  print w u (liftM show v)
+
+oneFunc2 :: arg0:World -> World
+oneFunc2 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v1 (\b1 . bind v0
+                           (\b0 . return (Cons b0 (Cons b1
+                                                     Nil)))) in
+  print w u (liftM show v)
+
+oneFunc3 :: arg0:World -> World
+oneFunc3 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v2 (\b2 . bind v1
+                           (\b1 . bind v0 (\b0 . return
+                                                   (Cons b0 (Cons b1 (Cons b2
+                                                                        Nil))))))
+    in
+  print w u (liftM show v)
+
+oneFunc4 :: arg0:World -> World
+oneFunc4 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v3 (\b3 . bind v2
+                           (\b2 . bind v1 (\b1 . bind v0
+                                                   (\b0 . return (Cons b0 (Cons
+                                                                             b1
+                                                                             (Cons
+                                                                                b2
+                                                                                (Cons
+                                                                                   b3
+                                                                                   Nil))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc5 :: arg0:World -> World
+oneFunc5 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v4 (\b4 . bind v3
+                           (\b3 . bind v2 (\b2 . bind v1
+                                                   (\b1 . bind v0 (\b0 . return
+                                                                           (Cons
+                                                                              b0
+                                                                              (Cons
+                                                                                 b1
+                                                                                 (Cons
+                                                                                    b2
+                                                                                    (Cons
+                                                                                       b3
+                                                                                       (Cons
+                                                                                          b4
+                                                                                          Nil))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc6 :: arg0:World -> World
+oneFunc6 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v5 (\b5 . bind v4
+                           (\b4 . bind v3 (\b3 . bind v2
+                                                   (\b2 . bind v1 (\b1 . bind v0
+                                                                           (\b0 .
+                                                                             return
+                                                                               (Cons
+                                                                                  b0
+                                                                                  (Cons
+                                                                                     b1
+                                                                                     (Cons
+                                                                                        b2
+                                                                                        (Cons
+                                                                                           b3
+                                                                                           (Cons
+                                                                                              b4
+                                                                                              (Cons
+                                                                                                 b5
+                                                                                                 Nil))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc7 :: arg0:World -> World
+oneFunc7 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v6 (\b6 . bind v5
+                           (\b5 . bind v4 (\b4 . bind v3
+                                                   (\b3 . bind v2 (\b2 . bind v1
+                                                                           (\b1 .
+                                                                             bind
+                                                                               v0
+                                                                               (\b0 .
+                                                                                 return
+                                                                                   (Cons
+                                                                                      b0
+                                                                                      (Cons
+                                                                                         b1
+                                                                                         (Cons
+                                                                                            b2
+                                                                                            (Cons
+                                                                                               b3
+                                                                                               (Cons
+                                                                                                  b4
+                                                                                                  (Cons
+                                                                                                     b5
+                                                                                                     (Cons
+                                                                                                        b6
+                                                                                                        Nil))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc8 :: arg0:World -> World
+oneFunc8 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v7 (\b7 . bind v6
+                           (\b6 . bind v5 (\b5 . bind v4
+                                                   (\b4 . bind v3 (\b3 . bind v2
+                                                                           (\b2 .
+                                                                             bind
+                                                                               v1
+                                                                               (\b1 .
+                                                                                 bind
+                                                                                   v0
+                                                                                   (\b0 .
+                                                                                     return
+                                                                                       (Cons
+                                                                                          b0
+                                                                                          (Cons
+                                                                                             b1
+                                                                                             (Cons
+                                                                                                b2
+                                                                                                (Cons
+                                                                                                   b3
+                                                                                                   (Cons
+                                                                                                      b4
+                                                                                                      (Cons
+                                                                                                         b5
+                                                                                                         (Cons
+                                                                                                            b6
+                                                                                                            (Cons
+                                                                                                               b7
+                                                                                                               Nil))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc9 :: arg0:World -> World
+oneFunc9 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v8 (\b8 . bind v7
+                           (\b7 . bind v6 (\b6 . bind v5
+                                                   (\b5 . bind v4 (\b4 . bind v3
+                                                                           (\b3 .
+                                                                             bind
+                                                                               v2
+                                                                               (\b2 .
+                                                                                 bind
+                                                                                   v1
+                                                                                   (\b1 .
+                                                                                     bind
+                                                                                       v0
+                                                                                       (\b0 .
+                                                                                         return
+                                                                                           (Cons
+                                                                                              b0
+                                                                                              (Cons
+                                                                                                 b1
+                                                                                                 (Cons
+                                                                                                    b2
+                                                                                                    (Cons
+                                                                                                       b3
+                                                                                                       (Cons
+                                                                                                          b4
+                                                                                                          (Cons
+                                                                                                             b5
+                                                                                                             (Cons
+                                                                                                                b6
+                                                                                                                (Cons
+                                                                                                                   b7
+                                                                                                                   (Cons
+                                                                                                                      b8
+                                                                                                                      Nil))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc10 :: arg0:World -> World
+oneFunc10 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v = bind v9 (\b9 . bind v8
+                           (\b8 . bind v7 (\b7 . bind v6
+                                                   (\b6 . bind v5 (\b5 . bind v4
+                                                                           (\b4 .
+                                                                             bind
+                                                                               v3
+                                                                               (\b3 .
+                                                                                 bind
+                                                                                   v2
+                                                                                   (\b2 .
+                                                                                     bind
+                                                                                       v1
+                                                                                       (\b1 .
+                                                                                         bind
+                                                                                           v0
+                                                                                           (\b0 .
+                                                                                             return
+                                                                                               (Cons
+                                                                                                  b0
+                                                                                                  (Cons
+                                                                                                     b1
+                                                                                                     (Cons
+                                                                                                        b2
+                                                                                                        (Cons
+                                                                                                           b3
+                                                                                                           (Cons
+                                                                                                              b4
+                                                                                                              (Cons
+                                                                                                                 b5
+                                                                                                                 (Cons
+                                                                                                                    b6
+                                                                                                                    (Cons
+                                                                                                                       b7
+                                                                                                                       (Cons
+                                                                                                                          b8
+                                                                                                                          (Cons
+                                                                                                                             b9
+                                                                                                                             Nil))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc11 :: arg0:World -> World
+oneFunc11 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v10 = ifM (bind u (\x54 .
+                     bind (getYourPrivilege w x54)
+                       (\x53 . return x53)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v = bind v10 (\b10 . bind v9
+                             (\b9 . bind v8 (\b8 . bind v7
+                                                     (\b7 . bind v6 (\b6 . bind
+                                                                             v5
+                                                                             (\b5 .
+                                                                               bind
+                                                                                 v4
+                                                                                 (\b4 .
+                                                                                   bind
+                                                                                     v3
+                                                                                     (\b3 .
+                                                                                       bind
+                                                                                         v2
+                                                                                         (\b2 .
+                                                                                           bind
+                                                                                             v1
+                                                                                             (\b1 .
+                                                                                               bind
+                                                                                                 v0
+                                                                                                 (\b0 .
+                                                                                                   return
+                                                                                                     (Cons
+                                                                                                        b0
+                                                                                                        (Cons
+                                                                                                           b1
+                                                                                                           (Cons
+                                                                                                              b2
+                                                                                                              (Cons
+                                                                                                                 b3
+                                                                                                                 (Cons
+                                                                                                                    b4
+                                                                                                                    (Cons
+                                                                                                                       b5
+                                                                                                                       (Cons
+                                                                                                                          b6
+                                                                                                                          (Cons
+                                                                                                                             b7
+                                                                                                                             (Cons
+                                                                                                                                b8
+                                                                                                                                (Cons
+                                                                                                                                   b9
+                                                                                                                                   (Cons
+                                                                                                                                      b10
+                                                                                                                                      Nil))))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc12 :: arg0:World -> World
+oneFunc12 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v10 = ifM (bind u (\x54 .
+                     bind (getYourPrivilege w x54)
+                       (\x53 . return x53)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v11 = ifM (bind u (\x59 .
+                     bind (getYourPrivilege w x59)
+                       (\x58 . return x58)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v = bind v11 (\b11 . bind
+                             v10 (\b10 . bind v9 (\b9 . bind
+                                                          v8 (\b8 . bind v7
+                                                                      (\b7 .
+                                                                        bind v6
+                                                                          (\b6 .
+                                                                            bind
+                                                                              v5
+                                                                              (\b5 .
+                                                                                bind
+                                                                                  v4
+                                                                                  (\b4 .
+                                                                                    bind
+                                                                                      v3
+                                                                                      (\b3 .
+                                                                                        bind
+                                                                                          v2
+                                                                                          (\b2 .
+                                                                                            bind
+                                                                                              v1
+                                                                                              (\b1 .
+                                                                                                bind
+                                                                                                  v0
+                                                                                                  (\b0 .
+                                                                                                    return
+                                                                                                      (Cons
+                                                                                                         b0
+                                                                                                         (Cons
+                                                                                                            b1
+                                                                                                            (Cons
+                                                                                                               b2
+                                                                                                               (Cons
+                                                                                                                  b3
+                                                                                                                  (Cons
+                                                                                                                     b4
+                                                                                                                     (Cons
+                                                                                                                        b5
+                                                                                                                        (Cons
+                                                                                                                           b6
+                                                                                                                           (Cons
+                                                                                                                              b7
+                                                                                                                              (Cons
+                                                                                                                                 b8
+                                                                                                                                 (Cons
+                                                                                                                                    b9
+                                                                                                                                    (Cons
+                                                                                                                                       b10
+                                                                                                                                       (Cons
+                                                                                                                                          b11
+                                                                                                                                          Nil))))))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc13 :: arg0:World -> World
+oneFunc13 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v10 = ifM (bind u (\x54 .
+                     bind (getYourPrivilege w x54)
+                       (\x53 . return x53)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v11 = ifM (bind u (\x59 .
+                     bind (getYourPrivilege w x59)
+                       (\x58 . return x58)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v12 = ifM (bind u (\x64 .
+                     bind (getYourPrivilege w x64)
+                       (\x63 . return x63)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v = bind v12 (\b12 . bind
+                             v11 (\b11 . bind v10 (\b10 .
+                                             bind v9 (\b9 . bind v8 (\b8 .
+                                                                bind v7 (\b7 .
+                                                                    bind v6
+                                                                      (\b6 .
+                                                                        bind v5
+                                                                          (\b5 .
+                                                                            bind
+                                                                              v4
+                                                                              (\b4 .
+                                                                                bind
+                                                                                  v3
+                                                                                  (\b3 .
+                                                                                    bind
+                                                                                      v2
+                                                                                      (\b2 .
+                                                                                        bind
+                                                                                          v1
+                                                                                          (\b1 .
+                                                                                            bind
+                                                                                              v0
+                                                                                              (\b0 .
+                                                                                                return
+                                                                                                  (Cons
+                                                                                                     b0
+                                                                                                     (Cons
+                                                                                                        b1
+                                                                                                        (Cons
+                                                                                                           b2
+                                                                                                           (Cons
+                                                                                                              b3
+                                                                                                              (Cons
+                                                                                                                 b4
+                                                                                                                 (Cons
+                                                                                                                    b5
+                                                                                                                    (Cons
+                                                                                                                       b6
+                                                                                                                       (Cons
+                                                                                                                          b7
+                                                                                                                          (Cons
+                                                                                                                             b8
+                                                                                                                             (Cons
+                                                                                                                                b9
+                                                                                                                                (Cons
+                                                                                                                                   b10
+                                                                                                                                   (Cons
+                                                                                                                                      b11
+                                                                                                                                      (Cons
+                                                                                                                                         b12
+                                                                                                                                         Nil))))))))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc14 :: arg0:World -> World
+oneFunc14 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v10 = ifM (bind u (\x54 .
+                     bind (getYourPrivilege w x54)
+                       (\x53 . return x53)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v11 = ifM (bind u (\x59 .
+                     bind (getYourPrivilege w x59)
+                       (\x58 . return x58)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v12 = ifM (bind u (\x64 .
+                     bind (getYourPrivilege w x64)
+                       (\x63 . return x63)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v13 = ifM (bind u (\x69 .
+                     bind (getYourPrivilege w x69)
+                       (\x68 . return x68)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v = bind v13 (\b13 . bind
+                             v12 (\b12 . bind v11 (\b11 .
+                                             bind v10 (\b10 . bind v9 (\b9 .
+                                                                  bind v8 (\b8 .
+                                                                      bind v7
+                                                                        (\b7 .
+                                                                          bind
+                                                                            v6
+                                                                            (\b6 .
+                                                                              bind
+                                                                                v5
+                                                                                (\b5 .
+                                                                                  bind
+                                                                                    v4
+                                                                                    (\b4 .
+                                                                                      bind
+                                                                                        v3
+                                                                                        (\b3 .
+                                                                                          bind
+                                                                                            v2
+                                                                                            (\b2 .
+                                                                                              bind
+                                                                                                v1
+                                                                                                (\b1 .
+                                                                                                  bind
+                                                                                                    v0
+                                                                                                    (\b0 .
+                                                                                                      return
+                                                                                                        (Cons
+                                                                                                           b0
+                                                                                                           (Cons
+                                                                                                              b1
+                                                                                                              (Cons
+                                                                                                                 b2
+                                                                                                                 (Cons
+                                                                                                                    b3
+                                                                                                                    (Cons
+                                                                                                                       b4
+                                                                                                                       (Cons
+                                                                                                                          b5
+                                                                                                                          (Cons
+                                                                                                                             b6
+                                                                                                                             (Cons
+                                                                                                                                b7
+                                                                                                                                (Cons
+                                                                                                                                   b8
+                                                                                                                                   (Cons
+                                                                                                                                      b9
+                                                                                                                                      (Cons
+                                                                                                                                         b10
+                                                                                                                                         (Cons
+                                                                                                                                            b11
+                                                                                                                                            (Cons
+                                                                                                                                               b12
+                                                                                                                                               (Cons
+                                                                                                                                                  b13
+                                                                                                                                                  Nil))))))))))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc15 :: arg0:World -> World
+oneFunc15 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v10 = ifM (bind u (\x54 .
+                     bind (getYourPrivilege w x54)
+                       (\x53 . return x53)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v11 = ifM (bind u (\x59 .
+                     bind (getYourPrivilege w x59)
+                       (\x58 . return x58)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v12 = ifM (bind u (\x64 .
+                     bind (getYourPrivilege w x64)
+                       (\x63 . return x63)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v13 = ifM (bind u (\x69 .
+                     bind (getYourPrivilege w x69)
+                       (\x68 . return x68)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v14 = ifM (bind u (\x74 .
+                     bind (getYourPrivilege w x74)
+                       (\x73 . return x73)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v = bind v14 (\b14 . bind
+                             v13 (\b13 . bind v12 (\b12 .
+                                             bind v11 (\b11 . bind v10
+                                                                (\b10 . bind v9
+                                                                          (\b9 .
+                                                                            bind
+                                                                              v8
+                                                                              (\b8 .
+                                                                                bind
+                                                                                  v7
+                                                                                  (\b7 .
+                                                                                    bind
+                                                                                      v6
+                                                                                      (\b6 .
+                                                                                        bind
+                                                                                          v5
+                                                                                          (\b5 .
+                                                                                            bind
+                                                                                              v4
+                                                                                              (\b4 .
+                                                                                                bind
+                                                                                                  v3
+                                                                                                  (\b3 .
+                                                                                                    bind
+                                                                                                      v2
+                                                                                                      (\b2 .
+                                                                                                        bind
+                                                                                                          v1
+                                                                                                          (\b1 .
+                                                                                                            bind
+                                                                                                              v0
+                                                                                                              (\b0 .
+                                                                                                                return
+                                                                                                                  (Cons
+                                                                                                                     b0
+                                                                                                                     (Cons
+                                                                                                                        b1
+                                                                                                                        (Cons
+                                                                                                                           b2
+                                                                                                                           (Cons
+                                                                                                                              b3
+                                                                                                                              (Cons
+                                                                                                                                 b4
+                                                                                                                                 (Cons
+                                                                                                                                    b5
+                                                                                                                                    (Cons
+                                                                                                                                       b6
+                                                                                                                                       (Cons
+                                                                                                                                          b7
+                                                                                                                                          (Cons
+                                                                                                                                             b8
+                                                                                                                                             (Cons
+                                                                                                                                                b9
+                                                                                                                                                (Cons
+                                                                                                                                                   b10
+                                                                                                                                                   (Cons
+                                                                                                                                                      b11
+                                                                                                                                                      (Cons
+                                                                                                                                                         b12
+                                                                                                                                                         (Cons
+                                                                                                                                                            b13
+                                                                                                                                                            (Cons
+                                                                                                                                                               b14
+                                                                                                                                                               Nil))))))))))))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+oneFunc16 :: arg0:World -> World
+oneFunc16 = \w . 
+  let u = getSessionUser w in
+  
+  let v0 = ifM (bind u (\x4 . bind
+                                (getYourPrivilege w x4) (\x3 .
+                                  return x3))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v1 = ifM (bind u (\x9 . bind
+                                (getYourPrivilege w x9) (\x8 .
+                                  return x8))) (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v2 = ifM (bind u (\x14 .
+                    bind (getYourPrivilege w x14)
+                      (\x13 . return x13)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v3 = ifM (bind u (\x19 .
+                    bind (getYourPrivilege w x19)
+                      (\x18 . return x18)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v4 = ifM (bind u (\x24 .
+                    bind (getYourPrivilege w x24)
+                      (\x23 . return x23)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v5 = ifM (bind u (\x29 .
+                    bind (getYourPrivilege w x29)
+                      (\x28 . return x28)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v6 = ifM (bind u (\x34 .
+                    bind (getYourPrivilege w x34)
+                      (\x33 . return x33)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v7 = ifM (bind u (\x39 .
+                    bind (getYourPrivilege w x39)
+                      (\x38 . return x38)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v8 = ifM (bind u (\x44 .
+                    bind (getYourPrivilege w x44)
+                      (\x43 . return x43)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v9 = ifM (bind u (\x49 .
+                    bind (getYourPrivilege w x49)
+                      (\x48 . return x48)))
+             (getPrivateValue w)
+             defaultPrivateValue in
+  
+  let v10 = ifM (bind u (\x54 .
+                     bind (getYourPrivilege w x54)
+                       (\x53 . return x53)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v11 = ifM (bind u (\x59 .
+                     bind (getYourPrivilege w x59)
+                       (\x58 . return x58)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v12 = ifM (bind u (\x64 .
+                     bind (getYourPrivilege w x64)
+                       (\x63 . return x63)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v13 = ifM (bind u (\x69 .
+                     bind (getYourPrivilege w x69)
+                       (\x68 . return x68)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v14 = ifM (bind u (\x74 .
+                     bind (getYourPrivilege w x74)
+                       (\x73 . return x73)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v15 = ifM (bind u (\x79 .
+                     bind (getYourPrivilege w x79)
+                       (\x78 . return x78)))
+              (getPrivateValue w)
+              defaultPrivateValue in
+  
+  let v = bind v15 (\b15 . bind
+                             v14 (\b14 . bind v13 (\b13 .
+                                             bind v12 (\b12 . bind v11
+                                                                (\b11 . bind v10
+                                                                          (\b10 .
+                                                                            bind
+                                                                              v9
+                                                                              (\b9 .
+                                                                                bind
+                                                                                  v8
+                                                                                  (\b8 .
+                                                                                    bind
+                                                                                      v7
+                                                                                      (\b7 .
+                                                                                        bind
+                                                                                          v6
+                                                                                          (\b6 .
+                                                                                            bind
+                                                                                              v5
+                                                                                              (\b5 .
+                                                                                                bind
+                                                                                                  v4
+                                                                                                  (\b4 .
+                                                                                                    bind
+                                                                                                      v3
+                                                                                                      (\b3 .
+                                                                                                        bind
+                                                                                                          v2
+                                                                                                          (\b2 .
+                                                                                                            bind
+                                                                                                              v1
+                                                                                                              (\b1 .
+                                                                                                                bind
+                                                                                                                  v0
+                                                                                                                  (\b0 .
+                                                                                                                    return
+                                                                                                                      (Cons
+                                                                                                                         b0
+                                                                                                                         (Cons
+                                                                                                                            b1
+                                                                                                                            (Cons
+                                                                                                                               b2
+                                                                                                                               (Cons
+                                                                                                                                  b3
+                                                                                                                                  (Cons
+                                                                                                                                     b4
+                                                                                                                                     (Cons
+                                                                                                                                        b5
+                                                                                                                                        (Cons
+                                                                                                                                           b6
+                                                                                                                                           (Cons
+                                                                                                                                              b7
+                                                                                                                                              (Cons
+                                                                                                                                                 b8
+                                                                                                                                                 (Cons
+                                                                                                                                                    b9
+                                                                                                                                                    (Cons
+                                                                                                                                                       b10
+                                                                                                                                                       (Cons
+                                                                                                                                                          b11
+                                                                                                                                                          (Cons
+                                                                                                                                                             b12
+                                                                                                                                                             (Cons
+                                                                                                                                                                b13
+                                                                                                                                                                (Cons
+                                                                                                                                                                   b14
+                                                                                                                                                                   (Cons
+                                                                                                                                                                      b15
+                                                                                                                                                                      Nil))))))))))))))))))))))))))))))))
+    in
+  print w u (liftM show v)
+
+(Goals: 16)
+(Measures: 3)
+(Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("OneFunc.sq",12)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+oneFunc1              &        33  &        55  &             0.01s  &      0.03s  &      0.02s  &        0.07s  \\
+oneFunc2              &        46  &        90  &             0.01s  &      0.07s  &      0.10s  &        0.19s  \\
+oneFunc3              &        59  &       125  &             0.02s  &      0.09s  &      0.30s  &        0.42s  \\
+oneFunc4              &        72  &       160  &             0.04s  &      0.13s  &      0.69s  &        0.87s  \\
+oneFunc5              &        85  &       195  &             0.07s  &      0.17s  &      1.32s  &        1.57s  \\
+oneFunc6              &        98  &       230  &             0.12s  &      0.20s  &      2.27s  &        2.60s  \\
+oneFunc7              &       111  &       265  &             0.19s  &      0.22s  &      3.63s  &        4.05s  \\
+oneFunc8              &       124  &       300  &             0.30s  &      0.25s  &      5.52s  &        6.08s  \\
+oneFunc9              &       137  &       335  &             0.39s  &      0.28s  &      8.04s  &        8.72s  \\
+oneFunc10             &       150  &       370  &             0.56s  &      0.31s  &     11.27s  &       12.15s  \\
+oneFunc11             &       163  &       405  &             0.77s  &      0.37s  &     15.64s  &       16.79s  \\
+oneFunc12             &       176  &       440  &             1.01s  &      0.39s  &     20.72s  &       22.14s  \\
+oneFunc13             &       189  &       475  &             1.35s  &      0.42s  &     27.99s  &       29.77s  \\
+oneFunc14             &       202  &       510  &             1.69s  &      0.43s  &     35.23s  &       37.36s  \\
+oneFunc15             &       215  &       545  &             2.12s  &      0.50s  &     44.93s  &       47.56s  \\
+oneFunc16             &       228  &       580  &             2.55s  &      0.52s  &     55.70s  &       58.79s  \\
+Totals                &      2088  &      5080  &            11.27s  &      4.47s  &    233.47s  &      249.21s  \\

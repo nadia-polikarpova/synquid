@@ -65,7 +65,7 @@ showRecord :: w:World -> rid:RecordId -> World
 showRecord = \w . \rid .
 	let u = getSessionUser w in
   let record = getRecord w rid in
-  print w u record
+  print w u (liftM show record)
 
 showRecordForPatient :: w:World -> p:User -> World
 showRecordForPatient = \w . \patientToSearchFor .
@@ -73,4 +73,4 @@ showRecordForPatient = \w . \patientToSearchFor .
   let recordIds = getAllRecordIds w in
   let records = sequence (map (\rid . getRecord w rid) recordIds) in
   let recordsForPatient = bind records (filterM (\record . (bind (getPatient record) (\x . return (x == patientToSearchFor))))) in
-  print w sessionUser recordsForPatient
+  print w sessionUser (liftM show recordsForPatient)
