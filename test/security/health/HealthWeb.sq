@@ -61,6 +61,8 @@ defaultRecord :: Tagged Record <{True}>
 
 getAllRecordIds :: World -> List RecordId
 
+getAuthoredRecordIds :: w:World -> u:User -> List {RecordId | u == author (record w _v)}
+
 showRecord :: w:World -> rid:RecordId -> World
 showRecord = \w . \rid .
 	let u = getSessionUser w in
@@ -74,3 +76,12 @@ showRecordForPatient = \w . \patientToSearchFor .
   let records = sequence (map (\rid . getRecord w rid) recordIds) in
   let recordsForPatient = bind records (filterM (\record . (bind (getPatient record) (\x . return (x == patientToSearchFor))))) in
   print w sessionUser (liftM show recordsForPatient)
+
+-- no repair is needed here, because from getAuthoredRecordIds's type
+-- you can tell that they are already ok
+showAuthoredRecordsView :: w:World -> World
+showAuthoredRecordsView = \w .
+	let sessionUser = getSessionUser w in
+	let recordIds = bind sessionUser (\user . return (getAuthoredRecordIds w user)) in
+	let records = bind recordIds (\rids . (mapM (\rid . getRecord w rid) rids)) in
+	print w sessionUser (liftM show records)
