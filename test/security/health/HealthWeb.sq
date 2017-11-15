@@ -23,7 +23,7 @@ predicate patient :: Record -> User
 getPatient :: r:Record -> Tagged {User | _v == patient r} <{True}>
 
 predicate isTreating :: User -> User -> Bool
-getIsTreating :: u:User -> w:User -> Tagged {Bool | _v == isTreating u w} <{True}>
+getIsTreating :: u:User -> w:User -> Tagged {Bool | _v == isTreating u w} <{isPsychiatrist _0 _1 && _1 == u}>
 
 predicate isPsychiatricRecord :: Record -> Bool
 getIsPsychiatricRecord :: r:Record -> Tagged {Bool | _v == isPsychiatricRecord r} <{True}>
@@ -70,6 +70,15 @@ setRecord :: w:World -> rid:RecordId -> Tagged Record <{
   (isPsychiatrist _0 _1 && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
 }> -> {World | sessionUser _v == sessionUser w}
 
+getPsychiatristPatients :: u:User -> Tagged (List User) <{isPsychiatrist _0 _1 && _1 == u}>
+getDoctorPatients :: u:User -> Tagged (List User) <{isDoctor _0 _1 && _1 == u}>
+
+defaultPsychiatristPatients :: Tagged (List User) <{True}>
+defaultPsychiatristPatients = return Nil
+
+defaultDoctorPatients :: Tagged (List User) <{True}>
+defaultDoctorPatients = return Nil
+
 showRecord :: w:World -> rid:RecordId -> World
 showRecord = \w . \rid .
 	let u = getSessionUser w in
@@ -99,3 +108,14 @@ updateRecordForm = \w . \rid . \record .
   let newRecord = getRecord w' rid in
 	let u = getSessionUser w' in
   print w' u (liftM show newRecord)
+
+concat :: List User -> List User -> List User
+
+-- get the list of patients for a doctor or psychiatrist
+listOfPatients :: w:World -> World
+listOfPatients = \w .
+	let sessionUser = getSessionUser w in
+	let patients1 = bind sessionUser (\u . getPsychiatristPatients u) in
+	let patients2 = bind sessionUser (\u . getDoctorPatients u) in
+	let patients = bind patients1 (\p1 . bind patients2 (\p2 . return (concat p1 p2))) in
+	print w sessionUser (liftM show patients)
