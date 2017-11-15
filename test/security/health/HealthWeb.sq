@@ -28,13 +28,13 @@ getIsTreating :: u:User -> w:User -> Tagged {Bool | _v == isTreating u w} <{True
 predicate isPsychiatricRecord :: Record -> Bool
 getIsPsychiatricRecord :: r:Record -> Tagged {Bool | _v == isPsychiatricRecord r} <{True}>
 
-qualifier { _0 == author (record x y) }
+qualifier { _1 == author (record x y) }
 qualifier { isPatient x y }
-qualifier { _0 == patient (record x y) }
-qualifier { !(shouldWithhold _0 (record x y)) }
+qualifier { _1 == patient (record x y) }
+qualifier { !(shouldWithhold _1 (record x y)) }
 qualifier { isDoctor x y }
 qualifier { isPsychiatrist x y }
-qualifier { isTreating _0 (patient (record x y)) }
+qualifier { isTreating _1 (patient (record x y)) }
 qualifier { isPsychiatricRecord (record x y) }
 
 qualifier { _v == (x == author (record y z)) }
@@ -51,10 +51,10 @@ qualifier { _v == isPsychiatricRecord x }
 predicate record :: World -> RecordId -> Record
 
 getRecord :: w:World -> rid:RecordId -> Tagged {Record | _v == record w rid} <{
-  _0 == author (record w rid) ||
-  (isPatient w _0 && _0 == patient (record w rid) && !(shouldWithhold _0 (record w rid))) ||
-  (isDoctor w _0 && !(shouldWithhold _0 (record w rid))) ||
-  (isPsychiatrist w _0 && isTreating _0 (patient (record w rid)) && isPsychiatricRecord (record w rid) && !(shouldWithhold _0 (record w rid)))
+  _1 == author (record w rid) ||
+  (isPatient w _1 && _1 == patient (record w rid) && !(shouldWithhold _1 (record w rid))) ||
+  (isDoctor w _1 && !(shouldWithhold _1 (record w rid))) ||
+  (isPsychiatrist w _1 && isTreating _1 (patient (record w rid)) && isPsychiatricRecord (record w rid) && !(shouldWithhold _1 (record w rid)))
 }>
 
 defaultRecord :: Tagged Record <{True}>
