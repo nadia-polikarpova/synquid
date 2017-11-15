@@ -79,14 +79,14 @@ defaultPsychiatristPatients = return Nil
 defaultDoctorPatients :: Tagged (List User) <{True}>
 defaultDoctorPatients = return Nil
 
-showRecord :: w:World -> rid:RecordId -> World
-showRecord = \w . \rid .
+showRecordByIdView :: w:World -> rid:RecordId -> World
+showRecordByIdView = \w . \rid .
 	let u = getSessionUser w in
   let record = getRecord w rid in
   print w u (liftM show record)
 
-showRecordForPatient :: w:World -> p:User -> World
-showRecordForPatient = \w . \patientToSearchFor .
+showRecordsForPatientView :: w:World -> p:User -> World
+showRecordsForPatientView = \w . \patientToSearchFor .
 	let sessionUser = getSessionUser w in
   let recordIds = getAllRecordIds w in
   let records = sequence (map (\rid . getRecord w rid) recordIds) in
@@ -112,8 +112,8 @@ updateRecordForm = \w . \rid . \record .
 concat :: List User -> List User -> List User
 
 -- get the list of patients for a doctor or psychiatrist
-listOfPatients :: w:World -> World
-listOfPatients = \w .
+listOfPatientsView :: w:World -> World
+listOfPatientsView = \w .
 	let sessionUser = getSessionUser w in
 	let patients1 = bind sessionUser (\u . getPsychiatristPatients u) in
 	let patients2 = bind sessionUser (\u . getDoctorPatients u) in
