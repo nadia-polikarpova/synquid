@@ -43,7 +43,7 @@ localize isRecheck eParams tParams goal = do
       
       p <- localizeTopLevel goal { gImpl = aImpl }
       labels <- runInSolver getViolatingLabels
-      reqs <- uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType)))
+      reqs <- Map.map (map stripRefinements) <$> (uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType))))
       finalP <- runInSolver $ finalizeProgram p
       if isRecheck
         then if Map.null reqs
@@ -76,6 +76,17 @@ repair eParams tParams goal violations = do
     addBoundVars (ForallT a sch) env = addTypeVar a $ addBoundVars sch env
     addBoundVars (ForallP sig sch) env = addBoundPredicate sig $ addBoundVars sch env
     addBoundVars (Monotype _) env = env
+    
+-- | Remove all non-policy refinements  
+stripRefinements :: RType -> RType
+stripRefinements (ScalarT (DatatypeT name tArgs pArgs) _) = ScalarT (DatatypeT name (map stripRefinements tArgs) pArgs) ftrue
+stripRefinements (ScalarT IntT _) = ScalarT IntT ftrue
+stripRefinements (ScalarT BoolT _) = ScalarT BoolT ftrue
+stripRefinements (ScalarT tv@(TypeVarT _ a) _) = ScalarT tv ftrue
+stripRefinements (FunctionT x tArg tFun) = FunctionT x (stripRefinements tArg) (stripRefinements tFun)
+stripRefinements (LetT _ _ t) = stripRefinements t
+stripRefinements AnyT = AnyT
+    
     
 recheck :: MonadHorn s => ExplorerParams -> TypingParams -> RProgram -> [Goal] -> s (Either ErrorMessage RProgram)
 recheck eParams tParams p [] = return (Right (deANF p))
@@ -302,7 +313,7 @@ localizeETopLevel env t impl = do
   return $ Program pTerm pTyp'
 
 localizeE :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
-localizeE env t (Program p AnyT) = localizeE' env t p
+localizeE env t (Program p _) = localizeE' env t p
 
 localizeE' env typ PHole = error "Holes not supported when checking policies"
 localizeE' env typ (PSymbol name) = case lookupSymbol name (arity typ) env of
