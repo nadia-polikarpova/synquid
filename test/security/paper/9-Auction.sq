@@ -27,10 +27,13 @@ predicate phase :: World -> Phase
 getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
 
 predicate userBid :: World -> User -> Set Int
-getUserBid :: w: World -> u: User -> Tagged { Maybe (Tagged {Int | _v in userBid w u} <{ _0 == u }>) | just _v == (userBid w u != []) } <{ _0 == u || userBid w _0 != [] }>
+getUserBid :: w: World -> u: User -> 
+  -- Tagged { Maybe (Tagged {Int | _v in userBid w u} <{ _0 == u }>) | just _v == (userBid w u != []) } <{ _0 == u || userBid w _0 != [] }>
+  Tagged { Maybe (Tagged Int <{ phase w == Done }>) | just _v == (userBid w u != []) } <{ phase w == Done || userBid w _0 != [] }>
 defaultUserBid :: Tagged (Maybe (Tagged Int <{True}>)) <{True}>
 
 -- qualifier {_v == sessionUser w}
+-- qualifier {_v == (phase w == Done)}
 -- qualifier {_v == (x == sessionUser w)}
 -- qualifier {_v == (userBid x y != [])}
 
@@ -43,13 +46,14 @@ maybe :: b -> (a -> b) -> Maybe a -> b
 showBids :: World -> User -> World
 showBids = \w . \who .
   let u = getSessionUser w in
-  let isMyBid = bind u (\tu . return (eq who tu)) in
+  -- let isMyBid = bind u (\tu . return (eq who tu)) in
+  let isDone = bind (getPhase w) (\p . return (eq p Done)) in
   let haveBid = bind u (\tu . liftM isJust (getUserBid w tu)) in
   let uBid = getUserBid w who in
-  let getBid = bind isMyBid (\c1 .
+  let getBid = bind isDone (\c1 .
                     if c1
                       then uBid
-                      else bind haveBid (\c2 . 
+                      else bind (downgradeBool haveBid) (\c2 . 
                         if c2 
                           then bind uBid (\b . return (mapJust (\c . return 0) b))
                           else defaultUserBid)) in

@@ -315,15 +315,26 @@ unfoldClauses = do
     eliminate var (conjuncts, vars) = 
       case findDef var (map negationNF $ Set.toList conjuncts) of
         Nothing -> (conjuncts, vars)
-        Just (c, def) -> (Set.map (substitute $ Map.singleton (varName var) def) (Set.delete c conjuncts), Set.delete var vars)
+        Just (c, def, Var _ _) -> (Set.map (substitute $ Map.singleton (varName var) def) (Set.delete c conjuncts), Set.delete var vars)
+        Just (c, def, pred) -> (Set.map (substitutePredApp pred def) (Set.delete c conjuncts), Set.delete var vars)
         
-    findDef :: Formula -> [Formula] -> Maybe (Formula, Formula)
+    findDef :: Formula -> [Formula] -> Maybe (Formula, Formula, Formula)
     findDef _ [] = Nothing
-    findDef var (c@(Binary Eq var' fml) : cs) | var == var' = Just (c, fml)
-    findDef var (c@(Binary Eq fml var') : cs) | var == var' = Just (c, fml)
-    findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue)
-    findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse)
+    -- findDef var (c@(Binary Eq var' fml) : cs) | var == var' = Just (c, fml, var)
+    -- findDef var (c@(Binary Eq fml var') : cs) | var == var' = Just (c, fml, var)
+    findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue, var)
+    findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse, var)
+    
+    findDef var (c@(Binary Eq p fml) : cs) | isNestedPredApp var p  = Just (c, fml, p)
+    findDef var (c@(Binary Eq fml p) : cs) | isNestedPredApp var p = Just (c, fml, p)
+    
     findDef var (c : cs) = findDef var cs
+    
+    isNestedPredApp var var'@(Var _ _)      = var' == var
+    isNestedPredApp var (Pred _ name [arg]) = isOnlyPred name && isNestedPredApp var arg
+    isNestedPredApp _ _                   = False
+    isOnlyPred name = name == "content" || name == "just"
+    
     
     extractCommonConjuncts :: [Set Formula] -> (Set Formula, [Set Formula])
     extractCommonConjuncts disjuncts = 
@@ -333,6 +344,21 @@ unfoldClauses = do
     applyToClause sol (Binary Implies lhs rhs) =
       let lhs' = conjunction $ conjunctsOf $ applySolution sol lhs -- nub conjuncts
       in Binary Implies lhs' rhs
+      
+    substitutePredApp from to fml = case fml of
+      SetLit b elems -> SetLit b $ map (substitutePredApp from to) elems
+      MapSel m k -> MapSel (substitutePredApp from to m) (substitutePredApp from to k)
+      MapUpd m k v -> MapUpd (substitutePredApp from to m) (substitutePredApp from to k) (substitutePredApp from to v)
+      Unary op e -> Unary op (substitutePredApp from to e)
+      Binary op e1 e2 -> Binary op (substitutePredApp from to e1) (substitutePredApp from to e2)
+      Ite e0 e1 e2 -> Ite (substitutePredApp from to e0) (substitutePredApp from to e1) (substitutePredApp from to e2)
+      Pred b name args -> if fml == from then to else Pred b name $ map (substitutePredApp from to) args
+      Cons b name args -> Cons b name $ map (substitutePredApp from to) args  
+      Quant q v@(Var _ x) e -> if v `Set.member` varsOf from
+                                then error $ unwords ["Scoped variable clashes with substitution variable", x]
+                                else Quant q v (substitutePredApp from to e)
+      otherwise -> fml
+      
       
 -- | Reset the solution for a subset of unknowns to `sol' in the current (sole) candidate      
 setSolution :: MonadHorn s => Solution -> TCSolver s ()
