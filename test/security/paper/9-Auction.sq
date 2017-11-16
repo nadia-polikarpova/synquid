@@ -1,0 +1,63 @@
+data User
+
+data Maybe a where
+  Nothing :: Maybe a
+  Just :: a -> Maybe a
+  
+measure just :: Maybe a -> Bool where
+  Nothing -> False
+  Just x -> True
+  
+isJust :: x:Maybe a -> {Bool | _v == just x}  
+
+mapJust :: (a -> b) -> Maybe a -> Maybe b
+-- mapJust = \f . \mb . 
+  -- match mb with
+    -- Nothing -> Nothing
+    -- Just x -> Just (f x)
+
+data Phase where
+  Bidding :: Phase
+  Done :: Phase
+  
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>  
+  
+predicate phase :: World -> Phase
+getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
+
+predicate userBid :: World -> User -> Set Int
+getUserBid :: w: World -> u: User -> Tagged { Maybe (Tagged {Int | _v in userBid w u} <{ _0 == u }>) | just _v == (userBid w u != []) } <{ _0 == u || userBid w _0 != [] }>
+defaultUserBid :: Tagged (Maybe (Tagged Int <{True}>)) <{True}>
+
+-- qualifier {_v == sessionUser w}
+-- qualifier {_v == (x == sessionUser w)}
+-- qualifier {_v == (userBid x y != [])}
+
+maybe :: b -> (a -> b) -> Maybe a -> b
+-- maybe = \v . \f . \mX .
+  -- match mX with
+    -- Nothing -> v
+    -- Just x -> f x    
+  
+showBids :: World -> User -> World
+showBids = \w . \who .
+  let u = getSessionUser w in
+  let isMyBid = bind u (\tu . return (eq who tu)) in
+  let haveBid = bind u (\tu . liftM isJust (getUserBid w tu)) in
+  let uBid = getUserBid w who in
+  let getBid = bind isMyBid (\c1 .
+                    if c1
+                      then uBid
+                      else bind haveBid (\c2 . 
+                        if c2 
+                          then bind uBid (\b . return (mapJust (\c . return 0) b))
+                          else defaultUserBid)) in
+                      
+  let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
+  -- let out = bind getUser (\mB . match mB with
+                                  -- Nothing -> return emptyString
+                                  -- Just b -> liftM show b) in
+  print w u out
+  
+  
