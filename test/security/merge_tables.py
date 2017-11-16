@@ -56,8 +56,13 @@ GRADR_METAPROGRAM = {
 
 HEALTH_METAPROGRAM = GRADR_METAPROGRAM.copy()
 HEALTH_METAPROGRAM.update({
-    'rows': ["showRecord",
-             "showRecordForPatient",
+    'rows': ["defaultPsychiatristPatients",
+             "defaultDoctorPatients",
+             "showRecordByIdView",
+             "showRecordsForPatientView",
+             "showAuthoredRecordsView",
+             "updateRecordForm",
+             "listOfPatientsView",
              "Totals"]
 })
 
