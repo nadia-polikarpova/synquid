@@ -226,13 +226,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        44  &             0.01s  &      0.60s  &      0.04s  &        0.65s  \\
+usersView             &        20  &        44  &             0.01s  &      0.56s  &      0.02s  &        0.59s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &        77  &       159  &             0.08s  &      7.03s  &      0.97s  &        8.09s  \\
-paperView             &        53  &       135  &             0.04s  &      8.06s  &      0.71s  &        8.82s  \\
-reviewsView           &        57  &       102  &             0.05s  &      0.56s  &      0.32s  &        0.95s  \\
+searchForm            &        77  &       159  &             0.08s  &      6.92s  &      0.11s  &        7.11s  \\
+paperView             &        53  &       135  &             0.04s  &      7.81s  &      0.08s  &        7.94s  \\
+reviewsView           &        57  &       102  &             0.07s  &      0.54s  &      0.04s  &        0.66s  \\
 profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-assignReviewersView   &        47  &        43  &             0.01s  &      2.25s  &      0.01s  &        2.28s  \\
-Totals                &       432  &       661  &             0.26s  &     18.52s  &      2.07s  &       20.86s  \\
+assignReviewersView   &        47  &        43  &             0.01s  &      2.25s  &      0.00s  &        2.26s  \\
+Totals                &       432  &       661  &             0.27s  &     18.09s  &      0.27s  &       18.64s  \\
