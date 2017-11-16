@@ -54,12 +54,12 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
        {--} cp2 <- lift $ sample cp1 Repair
             case repairRes of
               Left err -> return (Left err, snd cp2) -- No repair
-              Right p' -> do
-                recheckRes <- evalFixPointSolver (localizationPhase True goal { gImpl = eraseTypes p' }) (solverParams { isLeastFixpoint = True })
+              Right (p', goals) -> do
+                recheckRes <- evalFixPointSolver (recheckPhase p' goals) (solverParams { isLeastFixpoint = True })
            {--} cp3 <- lift $ sample cp2 Recheck
                 case recheckRes of
                   Left err -> return (Left err, snd cp3)
-                  Right (p, _) -> return (Right p, snd cp3)
+                  Right p'' -> return (Right p'', snd cp3)
                   
     goVerify :: Z3State (Either ErrorMessage RProgram, TimeStats)
     goVerify = do
@@ -88,7 +88,7 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                             }
                         in localize isRecheck explorerParams typingParams goal
       
-    repairPhase :: RProgram -> Requirements -> HornSolver (Either ErrorMessage RProgram)
+    repairPhase :: RProgram -> Requirements -> HornSolver (Either ErrorMessage (RProgram, [Goal]))
     repairPhase p violations = let  typingParams = TypingParams { 
                                       _condQualsGen = condQuals withPredApps,
                                       _matchQualsGen = \_ _ -> emptyQSpace,
@@ -99,6 +99,20 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                                       _tcSolverLogLevel = _explorerLogLevel explorerParams
                                     }
                                in repair explorerParams typingParams (goal {gImpl = p}) violations
+                               
+    recheckPhase :: RProgram -> [Goal] -> HornSolver (Either ErrorMessage RProgram)
+    recheckPhase p goals = 
+                            let typingParams = TypingParams { 
+                              _condQualsGen = \_ _ -> emptyQSpace,
+                              _matchQualsGen = \_ _ -> emptyQSpace,
+                              _typeQualsGen = if _unfolding explorerParams then typeVarsOnlySpace else typeQuals withPredApps,
+                              _predQualsGen = if _unfolding explorerParams then predVarsOnlySpace else predQuals withPredApps False,                              
+                              _tcSolverUnfolding = _unfolding explorerParams,
+                              _tcSolverSplitMeasures = _splitMeasures explorerParams,
+                              _tcSolverLogLevel = _explorerLogLevel explorerParams
+                            }
+                        in recheck explorerParams typingParams p goals
+                               
                                
     withPredApps env vars = 
       let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in

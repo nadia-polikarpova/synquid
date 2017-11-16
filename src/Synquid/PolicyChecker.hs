@@ -1,5 +1,5 @@
 -- | Type-checker for programs without holes that collects errors
-module Synquid.PolicyChecker (localize, repair, isDefaultValue) where
+module Synquid.PolicyChecker (localize, repair, recheck, isDefaultValue) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -54,9 +54,9 @@ localize isRecheck eParams tParams goal = do
                     ) $+$ text "when checking" $+$ pretty p
         else if Map.null reqs
               then return (deANF finalP, Map.empty)
-              else return (finalP, reqs)        
+              else return (finalP, reqs)
       
-repair :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> Requirements -> s (Either ErrorMessage RProgram)
+repair :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> Requirements -> s (Either ErrorMessage (RProgram, [Goal]))
 repair eParams tParams goal violations = do
     initTS <- initTypingState $ gEnvironment goal
     runExplorer (eParams {  _sourcePos = gSourcePos goal, 
@@ -76,6 +76,30 @@ repair eParams tParams goal violations = do
     addBoundVars (ForallT a sch) env = addTypeVar a $ addBoundVars sch env
     addBoundVars (ForallP sig sch) env = addBoundPredicate sig $ addBoundVars sch env
     addBoundVars (Monotype _) env = env
+    
+recheck :: MonadHorn s => ExplorerParams -> TypingParams -> RProgram -> [Goal] -> s (Either ErrorMessage RProgram)
+recheck eParams tParams p [] = return (Right (deANF p))
+recheck eParams tParams p (goal : goals) = do
+  initTS <- initTypingState $ gEnvironment goal
+  res <- runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS (go goal)
+  case res of
+    Left err -> return (Left err)
+    Right () -> recheck eParams tParams p goals
+  where
+    go goal = do
+      aImpl <- aNormalForm "T" (gImpl goal)
+      writeLog 2 (pretty aImpl)      
+      
+      p <- localizeTopLevel goal { gImpl = aImpl }
+      labels <- runInSolver getViolatingLabels
+      reqs <- uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType)))
+      finalP <- runInSolver $ finalizeProgram p
+      if Map.null reqs
+              then return ()
+              else throwErrorWithDescription $ 
+                    hang 2 (text "Patch verification failed with violations:" $+$ vMapDoc text pretty reqs $+$
+                      text "Probable causes: missing type qualifiers or policy incorrectly depends on another sensitive value"
+                    ) $+$ text "when checking" $+$ pretty finalP    
       
 {- Standard Tagged library -}
 
@@ -336,18 +360,18 @@ checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
   
 {- Repair -}
 
-replaceViolations :: MonadHorn s => Environment -> RProgram -> Explorer s RProgram
+replaceViolations :: MonadHorn s => Environment -> RProgram -> Explorer s (RProgram, [Goal])
 replaceViolations env (Program (PFun x body) t@(FunctionT _ tArg _)) = do
-  body' <- replaceViolations (addVariable x tArg env) body
-  return $ Program (PFun x body') t
+  (body', gs) <- replaceViolations (addVariable x tArg env) body
+  return (Program (PFun x body') t, gs)
 replaceViolations env (Program (PIf cond thn els) t) = do
   let ScalarT BoolT fml = typeOf cond
-  thn' <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ftrue) fml) env) thn
-  els' <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ffalse) fml) env) els
-  return $ Program (PIf cond thn' els') t
+  (thn', gs1) <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ftrue) fml) env) thn
+  (els', gs2) <- replaceViolations (addAssumption (substitute (Map.singleton valueVarName ffalse) fml) env) els
+  return $ (Program (PIf cond thn' els') t, gs1 ++ gs2)
 replaceViolations env (Program (PMatch scr cases) t) = do
-  cases' <- mapM replaceInCase cases
-  return $ Program (PMatch scr cases') t
+  (cases', gss) <- unzip <$> mapM replaceInCase cases
+  return $ (Program (PMatch scr cases') t, concat gss)
   where
     replaceInCase (Case consName args body) = do
       let scrT = typeOf scr
@@ -357,32 +381,32 @@ replaceViolations env (Program (PMatch scr cases) t) = do
       consT' <- runInSolver $ currentAssignment consT
       (syms, ass) <- caseSymbols env (Var (toSort $ baseTypeOf scrT) (symbolName scr)) args consT'
       let caseEnv = foldr (uncurry addVariable) (addAssumption ass env) syms
-      body' <- replaceViolations caseEnv body
-      return $ Case consName (map fst syms) body'
+      (body', gs) <- replaceViolations caseEnv body
+      return (Case consName (map fst syms) body', gs)
 replaceViolations env (Program (PFix xs body) t) = do
   body' <- replaceViolations env body
   return body'
 replaceViolations env p@(Program (PLet x def body) t) = do
   reqs <- use requiredTypes
-  (newDefs, def') <- case Map.lookup x reqs of
+  (newDefs, def', gs1) <- case Map.lookup x reqs of
             Nothing -> do
-                          def'<- replaceViolations env def
-                          return ([], def')
+                          (def', gs) <- replaceViolations env def
+                          return ([], def', gs)
             Just ts -> if length ts == 1
                           then generateRepair env (head ts) def
                           else throwErrorWithDescription $ hang 2 $ 
                                 text "Binder" <+> squotes (text x) <+> text "violates multiple requirements:" $+$ vsep (map pretty ts) $+$
                                 text "Probable causes: binder flows into multiple sinks or is itself a sink with a self-denying policy" $+$
                                 text "when checking" $+$ pretty p
-  body' <- replaceViolations (addLetBound x (typeOf def') env) body
-  return $ foldDefs (newDefs ++ [(x, def')]) body' t
+  (body', gs2) <- replaceViolations (addLetBound x (typeOf def') env) body
+  return (foldDefs (newDefs ++ [(x, def')]) body' t, gs1 ++ gs2)
 replaceViolations env (Program (PApp fun arg) t) = do
-  fun' <- replaceViolations env fun
-  arg' <- replaceViolations env arg
-  return $ Program (PApp fun' arg') t
-replaceViolations _ p = return p
+  (fun', gs1) <- replaceViolations env fun
+  (arg', gs2) <- replaceViolations env arg
+  return (Program (PApp fun' arg') t, gs1 ++ gs2)
+replaceViolations _ p = return (p, [])
 
-generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram)
+generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram, [Goal])
 generateRepair env typ p = do
   writeLog 2 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env
   cUnknown <- Unknown Map.empty <$> freshId "C"
@@ -397,13 +421,15 @@ generateRepair env typ p = do
       condANFs <- mapM generateDisjunct disjuncts
       let allDefs = concatMap fst condANFs
       let allConds = map snd condANFs            
-      mkCheck allDefs allConds p pElse)
+      (defs, body) <- mkCheck allDefs allConds p pElse
+      let patch = foldDefs defs body (typeOf body)
+      return (defs, body, [Goal "patch" env (Monotype typ) patch 0 noPos]))
     (do
       writeLog 0 $ hang 2 (
         text "WARNING: cannot abduce a condition for violation" $+$ pretty p </> text "::" </> pretty typ $+$ 
         text "Probable cause: missing condition qualifiers")
-      return ([], pElse))
-  where
+      return ([], pElse, []))
+  where    
     targetPolicy = case typ of
       ScalarT (DatatypeT _ _ [fml]) _ -> fml
       _ -> error $ unwords ["generateRepair: ill-formed target type", show typ]
