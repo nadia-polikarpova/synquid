@@ -236,16 +236,18 @@ stripTrivialClauses = do
   writeLog 2 (nest 2 $ text "Stripped trivial clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) trivial))        
   
   where
+    -- | Does `c' has an unknown in its head that is disjoint from all unknowns in bodies?
     isTrivialHead cs c = 
       let 
         heads = posUnknowns (fst c) 
         allNegUnknowns = Set.unions $ map (negUnknowns . fst) cs
-      in not (Set.null heads) && heads `disjoint` allNegUnknowns
+      in not (Set.null heads) && (heads `disjoint` allNegUnknowns)
+    -- | Does `c' has an unknown in its body that is disjoint from all unknowns in heads?
     isTrivialBody cs c =
       let
-        body = negUnknowns (fst c)
+        bodyUs = Set.toList $ negUnknowns (fst c)
         allPosUnknowns = Set.unions $ map (posUnknowns . fst) cs
-      in not (Set.null body) && body `disjoint` allPosUnknowns
+      in not $ all (`Set.member` allPosUnknowns) bodyUs
     strip isTrivial triv nontriv = 
       let (triv', nontriv') = partition (isTrivial nontriv) nontriv in
       if null triv'
