@@ -111,13 +111,13 @@ getTopScoreForAssignmentView =
 (Policy size: fromList [("Prelude.sq",20),("Tagged.sq",111),("gradr.sq",29),("models.sq.preprocessed",112)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 homePage              &        12  &        12  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-getClassesStdByUser   &        13  &        13  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
+getClassesStdByUser   &        13  &        13  &             0.04s  &      0.00s  &      0.00s  &        0.04s  \\
 getClassesInsByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 getProfileClassInfo   &        29  &        29  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-profileView           &        23  &        23  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-unauthProfileView     &        25  &        44  &             0.00s  &      0.04s  &      0.01s  &        0.07s  \\
-scoresForAssignmentView  &        36  &        53  &             0.00s  &      0.03s  &      0.02s  &        0.06s  \\
-scoresForStudentView  &        36  &        53  &             0.00s  &      0.03s  &      0.02s  &        0.06s  \\
+profileView           &        23  &        23  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+unauthProfileView     &        25  &        44  &             0.01s  &      0.04s  &      0.00s  &        0.06s  \\
+scoresForAssignmentView  &        36  &        53  &             0.00s  &      0.03s  &      0.00s  &        0.05s  \\
+scoresForStudentView  &        36  &        53  &             0.00s  &      0.03s  &      0.00s  &        0.05s  \\
 userFromUserAndScore  &         4  &         4  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-getTopScoreForAssignmentView  &        62  &        79  &             0.02s  &      0.03s  &      0.05s  &        0.11s  \\
-Totals                &       253  &       323  &             0.12s  &      0.15s  &      0.11s  &        0.39s  \\
+getTopScoreForAssignmentView  &        62  &        79  &             0.02s  &      0.03s  &      0.00s  &        0.06s  \\
+Totals                &       253  &       323  &             0.13s  &      0.15s  &      0.02s  &        0.31s  \\
