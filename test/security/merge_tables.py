@@ -1,6 +1,6 @@
 
 MICRO_METAPROGRAM = {
-  'columns':         ["micro(key)", "$3", "$4", "$5", "$6"],
+  'columns':         ["micro(key)", "$3", "sum_sec($4,$5)", "$6"],
   'rows': ["1-Basic.out:showPaper",
            "2-SelfRef.out:showPaper",
            "3-Implicit.out:showSession",
@@ -9,14 +9,15 @@ MICRO_METAPROGRAM = {
            "6-Multicast.out:notifyAuthors",
            "7-StateUpdate.out:notifyAuthors",
            "8-ProtectWrite.out:copyStatus"],
-  'fmt': ["\\d%-20s", "%s", "%s", "%s", "%s"],
+  'fmt': ["\\d%-20s", "%s", "%10s", "%s"],
   'helpers': {
-    'micro': (lambda txt: "{micro%s}" % txt.split('-')[0])
+    'micro': (lambda txt: "{micro%s}" % txt.split('-')[0]),
+    'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
   }
 }
 
 CONF_METAPROGRAM = {
-  'columns':         ["braces(key)", "$1", "nonneg(#2'-#1)", "nonneg(#2-#1)", "$3'", "$3", "$4", "$5", "$6"],
+  'columns':         ["braces(key)", "$1", "(#2'-#1)", "(#2-#1)", "$3'", "$3", "sum_sec($4,$5)", "$6"],
   'rows': ["registerUser",
            "usersView",
            "submitForm",
@@ -28,15 +29,16 @@ CONF_METAPROGRAM = {
            "submitReviewViewPost",
            "assignReviewersView",
            "Totals"],
-  'fmt': ["%-30s", "%s", "%8s", "%8s", "%s", "%s", "%s", "%s", "%s"],
+  'fmt': ["%-30s", "%s", "%8s", "%8s", "%s", "%s", "%10s", "%s"],
   'helpers': {
     'nonneg': (lambda n: max(0, n)),
+    'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
     'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
   }
 }
 
 GRADR_METAPROGRAM = {
-  'columns':         ["braces(key)", "$1", "nonneg(#2-#1)", "$3", "$4", "$5", "$6"],
+  'columns':         ["braces(key)", "$1", "(#2-#1)", "$3", "sum_sec($4, $5)", "$6"],
   'rows': ["homePage",
            "getClassesStdByUser",
            "getClassesInsByUser",
@@ -47,18 +49,17 @@ GRADR_METAPROGRAM = {
            "scoresForStudentView",
            "getTopScoreForAssignmentView",
            "Totals"],
-  'fmt': ["%-40s", "%s", "%8s", "%s", "%s", "%s", "%s"],
+  'fmt': ["%-40s", "%s", "%8s", "%s", "%10s", "%s"],
   'helpers': {
     'nonneg': (lambda n: max(0, n)),
+    'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
     'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
   }
 }
 
 HEALTH_METAPROGRAM = GRADR_METAPROGRAM.copy()
 HEALTH_METAPROGRAM.update({
-    'rows': ["defaultPsychiatristPatients",
-             "defaultDoctorPatients",
-             "showRecordByIdView",
+    'rows': ["showRecordByIdView",
              "showRecordsForPatientView",
              "showAuthoredRecordsView",
              "updateRecordForm",
@@ -91,6 +92,12 @@ def dictadd(*a):
     for x in a: d.update(x)
     return d
 
+def secs(*b):
+    """auxiliary for processing time entries"""
+    for el in b:
+        assert el.endswith("s")
+        yield float(el[:-1])
+
 def parse_table(fn):
     txt = open(fn).read()
     # assume that the table is separated from the rest of the text (if any) by a blank line
@@ -116,6 +123,8 @@ def eval_expr(expr, value, key=None, helpers={}):
     try:
         return eval(expr, dictadd({'_': value, 'key': key}, helpers))
     except:
+        import traceback
+        traceback.print_exc()
         return "??"
 
 
