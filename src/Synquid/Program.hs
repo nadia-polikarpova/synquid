@@ -18,6 +18,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Monad
 import Control.Lens
+import Debug.Trace
 
 {- Program terms -}
 
@@ -474,24 +475,31 @@ declToDef (MeasureDecl m inSort outSort post cases term) =
 makeGoal :: Environment -> Id -> MeasureDef -> Goal
 makeGoal env name measure = Goal{
   gName = name,
-  gEnvironment = env, --filterEnv env name,
-  gSpec = generateSchema env name (measure ^. inSort) (measure ^. outSort) (measure ^. postcondition),
+  gEnvironment = env', --filterEnv env name,
+  gSpec = spec,
   gImpl = measureProg name measure,
   gDepth = 0, -- TODO: figure out what to put
   gSourcePos = noPos {-TODO: change this!-} }
+  where
+    spec = generateSchema env name (measure ^. inSort) (measure ^. outSort) (measure ^. postcondition)
+    cs = env ^. unresolvedConstants
+    env' = set unresolvedConstants (Map.insert name spec cs) env
+
 
 -- Remove measure being typechecked from environment
 filterEnv :: Environment -> Id -> Environment
 filterEnv e m = set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)) e
 
 -- Transform a measure into a program
+-- TODO: don't hardcode "qs"
 measureProg :: Id -> MeasureDef -> UProgram
 measureProg name m = Program {
-  typeOf = t, content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase (m ^. definitions)) }
+  typeOf = t, content = PFun "qs" Program{ content = (PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase (m ^. definitions))), typeOf = t''} }
   where
     arg = fromSort (m ^. inSort)
     t = AnyT
     t' = AnyT
+    t'' = AnyT
     --t = FunctionT name arg (addRefinement (fromSort (m ^. outSort)) (m ^. postcondition))
     --t' = ScalarT (baseTypeOf arg) ftrue
 
@@ -525,5 +533,6 @@ predPolymorphic [] name inSort outSort f = genSkeleton name inSort outSort f
 predPolymorphic (x:xs) name inSort outSort f = ForallP x (predPolymorphic xs name inSort outSort f)
 
 -- Generate non-polymorphic core of schema
+-- TODO: don't hard code arg0
 genSkeleton :: Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-genSkeleton name inSort outSort post = Monotype (FunctionT name (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))
+genSkeleton name inSort outSort post = Monotype (FunctionT "arg0" (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))

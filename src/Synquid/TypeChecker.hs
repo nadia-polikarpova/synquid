@@ -31,7 +31,6 @@ reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Eithe
 reconstruct eParams tParams goal = do
     initTS <- initTypingState $ gEnvironment goal
     --traceShow (text "Env: " <+> L.list (map pretty (Map.toList ((gEnvironment goal) ^. measures)))) $ return ()
-    --traceShow (text "Spec: " <+> pretty (gSpec goal)) $ return ()
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do

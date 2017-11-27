@@ -70,9 +70,9 @@ instance MonadSMT Z3State where
     symb <- mkStringSymbol "mbqi"
     paramsSetBool params symb False
     solverSetParams params
-    
+
     convertDatatypes (allSymbols env) (Map.toList $ env ^. datatypes)
-  
+
     boolAux <- withAuxSolver mkBoolSort
     boolSortAux .= Just boolAux
 
@@ -86,7 +86,7 @@ instance MonadSMT Z3State where
         _ -> debug 2 (text "SMT CHECK" <+> pretty fml <+> text "UNKNOWN treating as SAT") $ return True
 
   allUnsatCores = getAllMUSs
-  
+
 convertDatatypes :: Map Id RSchema -> [(Id, DatatypeDef)] -> Z3State ()
 convertDatatypes _ [] = return ()
 convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
@@ -104,7 +104,7 @@ convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
   convertDatatypes symbols rest
   where
     dataSort = DataS dtName []
-  
+
     convertCtor cName = do
       z3CName <- mkStringSymbol cName
       recognizerName <- mkStringSymbol ("is" ++ cName)
@@ -113,21 +113,21 @@ convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
       if any isNothing (map (view _2) z3ArgsMb)
         then return Nothing -- It's a recursive type: ignore
         else Just <$> mkConstructor z3CName recognizerName z3ArgsMb
-      
+
     convertField (Var fSort fName) = do
       z3FName <- mkStringSymbol fName
       z3FSort <- case fSort of
-                    DataS dtName' [] -> 
+                    DataS dtName' [] ->
                       if dtName' == dtName
                         then return Nothing -- Recursive datatype, do not convert
                         else case lookup dtName' rest of
                               Nothing -> Just <$> toZ3Sort fSort -- Datatype dtName' should have already been processed
                               Just dtDef -> do -- It is an eligible datatype yet to process; process it now instead
                                               convertDatatypes symbols [(dtName', dtDef)]
-                                              Just <$> toZ3Sort fSort                                                
+                                              Just <$> toZ3Sort fSort
                     _ -> Just <$> toZ3Sort fSort
       return (z3FName, z3FSort, 0)
-    
+
 convertDatatypes symbols (_:rest) = convertDatatypes symbols rest
 
 -- | Get the literal in the auxiliary solver that corresponds to a given literal in the main solver
@@ -157,7 +157,7 @@ toZ3Sort s = do
         -- DataS name args -> mkStringSymbol name >>= mkUninterpretedSort
         DataS name args -> mkIntSort
         SetS el -> toZ3Sort el >>= mkSetSort
-        --AnyS -> mkIntSort
+        AnyS -> mkIntSort
       sorts %= Map.insert s z3s
       return z3s
 
@@ -215,8 +215,8 @@ toAST expr = case expr of
     mkIte e0' e1' e2'
   Pred s name args -> do
     let tArgs = map sortOf args
-    decl <- function s name tArgs    
-    mapM toAST args >>= mkApp decl    
+    decl <- function s name tArgs
+    mapM toAST args >>= mkApp decl
   Cons s name args -> do
     let tArgs = map sortOf args
     decl <- constructor s name tArgs
@@ -234,10 +234,10 @@ toAST expr = case expr of
       boundVars <- mapM toAST xs
       boundApps <- mapM toApp boundVars
       body <- toAST e
-      
+
       -- let triggers = case e of
                       -- Binary Implies lhs _ -> [lhs]
-                      -- _ -> []      
+                      -- _ -> []
       -- patterns <- mapM (toAST >=> (mkPattern . replicate 1)) triggers
       -- mkForallConst patterns boundApps body
       mkForallConst [] boundApps body
@@ -270,7 +270,7 @@ toAST expr = case expr of
     list2 o x y = o [x, y]
 
     -- | Lookup or create a variable with name `ident' and sort `s'
-    var s ident = do      
+    var s ident = do
       let ident' = ident ++ show (asZ3Sort s)
       varMb <- uses vars (Map.lookup ident')
 
@@ -297,10 +297,10 @@ toAST expr = case expr of
           functions %= Map.insert name' decl
           -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
           return decl
-          
-    constructor resT cName argTypes = do      
+
+    constructor resT cName argTypes = do
       case resT of
-        DataS dtName [] -> 
+        DataS dtName [] ->
           ifM (uses storedDatatypes (Set.member dtName))
             (do
               z3dt <- toZ3Sort resT
@@ -308,18 +308,18 @@ toAST expr = case expr of
               findDecl cName decls)
             (function resT cName argTypes)
         _ -> function resT cName argTypes
-      
+
     findDecl cName decls = do
       declNames <- mapM (\d -> getDeclName d >>= getSymbolString) decls
       return $ decls !! fromJust (elemIndex cName declNames)
-          
+
     -- | Sort as Z3 sees it
     asZ3Sort s = case s of
       VarS _ -> IntS
       DataS _ (_:_) -> IntS
       SetS el -> SetS (asZ3Sort el)
       _ -> s
-          
+
 
 -- | 'getAllMUSs' @assumption mustHave fmls@ : find all minimal unsatisfiable subsets of @fmls@ with @mustHave@, which contain @mustHave@, assuming @assumption@
 -- (implements Marco algorithm by Mark H. Liffiton et al.)
@@ -422,7 +422,7 @@ getAllMUSs' controlLitsAux mustHave cores = do
       res <- checkAssumptions lits
       case res of
         Unsat -> minimize' checked lits -- lit can be omitted
-        _ -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core        
+        _ -> assert lit >> minimize' (lit:checked) lits -- lit required for UNSAT: leave it in the minimal core
 
     -- | Grow satisfiable set @checked@ with literals from @rest@ to some MSS
     maximize checked rest = local $ mapM_ assert checked >> maximize' checked rest
