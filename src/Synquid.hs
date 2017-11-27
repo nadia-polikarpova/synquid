@@ -82,27 +82,6 @@ main = do
                     module_ = out_module
                   }
                   runOnFile synquidParams explorerParams solverParams codegenParams file libs
-    (Lifty file libs onlyGoals out_file out_module outFormat resolve verify print_spec print_stats log_) -> do
-                  let explorerParams = defaultExplorerParams {
-                    _explorerLogLevel = log_
-                    }
-                  let solverParams = defaultHornSolverParams {
-                    solverLogLevel = log_
-                    }
-                  let synquidParams = defaultSynquidParams {
-                    goalFilter = liftM (splitOn ",") onlyGoals,
-                    outputFormat = outFormat,
-                    resolveOnly = resolve,
-                    repairPolicies = True,
-                    verifyOnly = verify,
-                    showSpec = print_spec,
-                    showStats = print_stats
-                  }
-                  let codegenParams = defaultCodegenParams {
-                    filename = out_file,
-                    module_ = out_module
-                  }
-                  runOnFile synquidParams explorerParams solverParams codegenParams file libs                            
 
 {- Command line arguments -}
 
@@ -146,25 +125,10 @@ data CommandLineArgs
         print_spec :: Bool,
         print_stats :: Bool,
         log_ :: Int
-      } 
-      | Lifty {
-        -- | Input
-        file :: String,
-        libs :: [String],
-        only :: Maybe String,
-        -- | Output
-        out_file :: Maybe String,
-        out_module :: Maybe String,
-        output :: OutputFormat,
-        resolve :: Bool,
-        verify :: Bool,
-        print_spec :: Bool,
-        print_stats :: Bool,
-        log_ :: Int
       }
   deriving (Data, Typeable, Show, Eq)
 
-synt = Synthesis {  
+synt = Synthesis {
   file                = ""              &= typFile &= argPos 0,
   libs                = []              &= args &= typ "FILES",
   only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
@@ -193,27 +157,12 @@ synt = Synthesis {
   } &= auto &= help "Synthesize goals specified in the input file"
     where
       defaultFormat = outputFormat defaultSynquidParams
-      
-lifty = Lifty {  
-  file                = ""              &= typFile &= argPos 0,
-  libs                = []              &= args &= typ "FILES",
-  only                = Nothing         &= typ "GOAL,..." &= help ("Only synthesize the specified functions"),
-  resolve             = False           &= help ("Resolve only; no type checking or synthesis (default: False)"),
-  verify              = False           &= help ("Verification only mode (default: False)") &= name "v",
-  out_file            = Nothing         &= help ("Generate Haskell output file (default: none)") &= typFile &= name "o" &= opt "" &= groupname "Output",
-  out_module          = Nothing         &= help ("Name of Haskell module to generate (default: from file name)") &= typ "Name",
-  output              = defaultFormat   &= help ("Output format: Plain, Ansi or Html (default: " ++ show defaultFormat ++ ")") &= typ "FORMAT",
-  print_spec          = True            &= help ("Show specification of each synthesis goal (default: True)"),
-  print_stats         = False           &= help ("Show specification and solution size (default: False)"),
-  log_                = 0               &= help ("Logger verboseness level (default: 0)") &= name "l"
-  } &= help "Fix information leaks in the input file"
-    where
-      defaultFormat = outputFormat defaultSynquidParams
-      
-mode = cmdArgsMode $ modes [synt, lifty] &=
-  help "Synquid program synthesizer" &= 
-  program programName &= 
-  summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)      
+
+
+mode = cmdArgsMode $ synt &=
+  help "Synquid program synthesizer" &=
+  program programName &=
+  summary (programName ++ " v" ++ versionName ++ ", " ++ showGregorian releaseDate)
 
 -- | Parameters for template exploration
 defaultExplorerParams = ExplorerParams {
@@ -315,16 +264,24 @@ codegen params results = case params of
 collectLibDecls libs declsByFile =
   Map.filterWithKey (\k _ -> k `elem` libs) $ Map.fromList declsByFile
 
+
 -- | Parse and resolve file, then synthesize the specified goals
 runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParams
                            -> String -> [String] -> IO ()
 runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
   declsByFile <- parseFromFiles (libs ++ [file])
   let decls = concat $ map snd declsByFile
+      --isMeasure (MeasureDecl _ _ _ _ _ _) = True
+      --isMeasure _                     = False
+      --mDecls = filter isMeasure (map node decls)
+      --mDefs = map declToDef mDecls
+  --putStr $ "DECLS " ++ (show (pretty decls))
   case resolveDecls decls of
     Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
+      --putStr $ "GOALS " ++ (show ((extractMeasures (gEnvironment (head goals)) mDefs) ++ (requested goals)))
       results <- mapM (synthesizeGoal cquals tquals) (requested goals)
+      --results <- mapM (synthesizeGoal cquals tquals) ((extractMeasures (gEnvironment (head goals)) mDefs) ++ (requested goals))
       when (not (null results) && showStats synquidParams) $ printStats results declsByFile
       -- Generate output if requested
       let libsWithDecls = collectLibDecls libs declsByFile
@@ -337,11 +294,10 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
         Left parseErr -> (pdoc $ pretty $ toErrorMessage parseErr) >> pdoc empty >> exitFailure
         -- Right ast -> print $ vsep $ map pretty ast
         Right decls -> let decls' = if null rest then decls else filter (not . isSynthesisGoal) decls in -- Remove implementations from libraries
-          ((file, decls') :) <$> parseFromFiles rest    
+          ((file, decls') :) <$> parseFromFiles rest
     requested goals = case goalFilter synquidParams of
       Just filt -> filter (\goal -> gName goal `elem` filt) goals
       _ -> goals
-    
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
       when (showSpec synquidParams) $ pdoc (prettySpec goal)
@@ -349,9 +305,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
-      (mProg, stats) <- if repairPolicies synquidParams
-                        then policyRepair (verifyOnly synquidParams) explorerParams solverParams goal cquals tquals
-                        else synthesize explorerParams solverParams goal cquals tquals
+      (mProg, stats) <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
@@ -368,7 +322,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
            ) decls
       let totalSizeOf = sum . map (typeNodeCount . toMonotype .unresolvedType env)
       let policySize = Map.fromList $ map (\(file, decls) -> (file, totalSizeOf $ namesOfConstants decls)) declsByFile
-      let getStatsFor ((goal, prog), stats) = 
+      let getStatsFor ((goal, prog), stats) =
              StatsRow
              (gName goal)
              (typeNodeCount $ toMonotype $ unresolvedSpec goal)
@@ -381,7 +335,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       pdoc $ vsep $ [
                 parens (text "Goals:" <+> pretty (length results)),
                 parens (text "Measures:" <+> pretty measureCount)] ++
-              if repairPolicies synquidParams 
+              if repairPolicies synquidParams
                 then [
                   parens (text "Policy size:" <+> (text $ show policySize)),
                   statsTable perResult]

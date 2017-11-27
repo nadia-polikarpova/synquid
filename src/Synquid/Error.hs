@@ -3,7 +3,7 @@ module Synquid.Error (
   ,SourcePos
   ,sourceLine
   ,sourceColumn
-  ,sourceName  
+  ,sourceName
   ,noPos
   ,ErrorKind(..)
   ,ErrorMessage(..)
@@ -12,14 +12,14 @@ module Synquid.Error (
 import Text.PrettyPrint.ANSI.Leijen
 import Text.Parsec.Pos
 
--- | Anything with a source position attached 
+-- | Anything with a source position attached
 data Pos a = Pos {
       position :: SourcePos,
       node :: a
     }
-    
+
 -- | Dummy source position
-noPos = (initialPos "<no file name>")    
+noPos = initialPos "<no file name>"
 
 data ErrorKind = ParseError | ResolutionError | TypeError
 
@@ -28,4 +28,3 @@ data ErrorMessage = ErrorMessage {
   emPosition :: SourcePos,
   emDescription :: Doc
 }
-

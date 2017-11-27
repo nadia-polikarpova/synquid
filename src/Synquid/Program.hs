@@ -5,9 +5,9 @@ module Synquid.Program where
 
 import Synquid.Logic
 import Synquid.Type
-import Synquid.Error
 import Synquid.Tokens
 import Synquid.Util
+import Synquid.Error
 
 import Data.Maybe
 import Data.Either
@@ -19,15 +19,15 @@ import Data.Map (Map)
 import Control.Monad
 import Control.Lens
 
-{- Program terms -}    
-    
+{- Program terms -}
+
 -- | One case inside a pattern match expression
 data Case t = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
   expr :: Program t       -- ^ Result of the match in this case
 } deriving (Eq, Ord, Functor)
-    
+
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram t =
   PSymbol Id |                                -- ^ Symbol (variable or constant)
@@ -40,8 +40,8 @@ data BareProgram t =
   PHole |                                     -- ^ Hole (program to fill in)
   PErr                                        -- ^ Error
   deriving (Eq, Ord, Functor)
-  
--- | Programs annotated with types  
+
+-- | Programs annotated with types
 data Program t = Program {
   content :: BareProgram t,
   typeOf :: t
@@ -49,11 +49,11 @@ data Program t = Program {
 
 instance Eq (Program t) where
   (==) (Program l _) (Program r _) = l == r
-  
+
 instance Ord (Program t) where
   (<=) (Program l _) (Program r _) = l <= r
-  
--- | Untyped programs  
+
+-- | Untyped programs
 type UProgram = Program RType
 -- | Refinement-typed programs
 type RProgram = Program RType
@@ -70,10 +70,10 @@ symbolName (Program (PSymbol name) _) = name
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
 
-symbolsOf (Program p _) = case p of 
+symbolsOf (Program p _) = case p of
   PSymbol name -> Set.singleton name
   PApp fun arg -> symbolsOf fun `Set.union` symbolsOf arg
-  PFun x body -> symbolsOf body 
+  PFun x body -> symbolsOf body
   PIf cond thn els -> symbolsOf cond `Set.union` symbolsOf thn `Set.union` symbolsOf els
   PMatch scr cases -> symbolsOf scr `Set.union` Set.unions (map (symbolsOf . expr) cases)
   PFix x body -> symbolsOf body
@@ -83,56 +83,62 @@ symbolsOf (Program p _) = case p of
 errorProgram = Program PErr (vart dontCare ftrue)
 isError (Program PErr _) = True
 isError _ = False
-    
--- | Substitute a symbol for a subterm in a program    
+
+-- | Substitute a symbol for a subterm in a program
 programSubstituteSymbol :: Id -> RProgram -> RProgram -> RProgram
 programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteSymbol' p) t
   where
     pss = programSubstituteSymbol name subterm
-    
+
     programSubstituteSymbol' (PSymbol x) = if x == name then content subterm else p
     programSubstituteSymbol' (PApp fun arg) = PApp (pss fun) (pss arg)
-    programSubstituteSymbol' (PFun name pBody) = PFun name (pss pBody)    
+    programSubstituteSymbol' (PFun name pBody) = PFun name (pss pBody)
     programSubstituteSymbol' (PIf c p1 p2) = PIf (pss c) (pss p1) (pss p2)
     programSubstituteSymbol' (PMatch scr cases) = PMatch (pss scr) (map (\(Case ctr args pBody) -> Case ctr args (pss pBody)) cases)
     programSubstituteSymbol' (PFix args pBody) = PFix args (pss pBody)
     programSubstituteSymbol' (PLet x pDef pBody) = PLet x (pss pDef) (pss pBody)
 
--- | Convert an executable formula into a program    
+-- | Convert an executable formula into a program
 fmlToProgram :: Formula -> RProgram
 fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
 fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
 fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
-fmlToProgram fml@(Unary op e) = let 
-    s = sortOf fml 
+fmlToProgram fml@(Unary op e) = let
+    s = sortOf fml
     p = fmlToProgram e
     fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "x" (typeOf p) opRes)
   in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
-  where    
-    opRes 
+  where
+    opRes
       | op == Not = bool $ valBool |=| fnot (intVar "x")
-      | otherwise = int $ valInt |=| Unary op (intVar "x")    
-fmlToProgram fml@(Binary op e1 e2) = let 
-    s = sortOf fml 
+      | otherwise = int $ valInt |=| Unary op (intVar "x")
+fmlToProgram fml@(Binary op e1 e2) = let
+    s = sortOf fml
     p1 = fmlToProgram e1
     p2 = fmlToProgram e2
     fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
     fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
   in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
   where
-    opRes 
+    opRes
       | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
       | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
-      
+fmlToProgram fml@(Pred s x (f:fs)) = Program (PApp fn (curriedApp (fmlToProgram f) fs)) AnyT --(addRefinement (fromSort s) (varRefinement x s))
+  where
+    fn = Program (PSymbol x) (FunctionT x AnyT AnyT {-(fromSort s)-})
+    curriedApp :: RProgram -> [Formula] -> RProgram
+    curriedApp p [] = p
+    curriedApp p (f:fs) = curriedApp (Program (PApp p (fmlToProgram f)) AnyT {-(fromSort s)-}) fs
+
 -- | 'renameAsImpl' @p t@: change argument names in function type @t@ to be the same as in the abstraction @p@
 renameAsImpl :: (Id -> Bool) -> UProgram -> RType -> RType
 renameAsImpl isBound = renameAsImpl' Map.empty
   where
     renameAsImpl' subst (Program (PFun y pRes) _) (FunctionT x tArg tRes) = case tArg of
-      ScalarT baseT fml -> FunctionT y (substituteInType isBound subst tArg) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)    
-      _ -> FunctionT y (substituteInType isBound subst tArg) (renameAsImpl' subst pRes tRes)      
+      ScalarT baseT fml -> FunctionT y (substituteInType isBound subst tArg) (renameAsImpl' (Map.insert x (Var (toSort baseT) y) subst) pRes tRes)
+      _ -> FunctionT y (substituteInType isBound subst tArg) (renameAsImpl' subst pRes tRes)
     renameAsImpl' subst  _ t = substituteInType isBound subst t
-    
+
 {- Top-level definitions -}
 
 -- | User-defined datatype representation
@@ -146,7 +152,7 @@ data DatatypeDef = DatatypeDef {
 
 makeLenses ''DatatypeDef
 
--- | One case in a measure definition: constructor name, arguments, and body  
+-- | One case in a measure definition: constructor name, arguments, and body
 data MeasureCase = MeasureCase Id [Id] Formula
   deriving (Eq, Ord)
 
@@ -174,9 +180,9 @@ data Environment = Environment {
   _unfoldedVars :: Set Id,                 -- ^ In eager match mode, datatype variables that can be scrutinized
   _letBound :: Set Id,                     -- ^ Subset of symbols that are let-bound
   -- | Constant part:
-  _constants :: Set Id,                    -- ^ Subset of symbols that are constants  
+  _constants :: Set Id,                    -- ^ Subset of symbols that are constants
   _datatypes :: Map Id DatatypeDef,        -- ^ Datatype definitions
-  _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates) 
+  _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates)
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
   _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
@@ -186,9 +192,9 @@ makeLenses ''Environment
 
 instance Eq Environment where
   (==) e1 e2 = (e1 ^. symbols) == (e2 ^. symbols) && (e1 ^. assumptions) == (e2 ^. assumptions)
-  
+
 instance Ord Environment where
-  (<=) e1 e2 = (e1 ^. symbols) <= (e2 ^. symbols) && (e1 ^. assumptions) <= (e2 ^. assumptions)  
+  (<=) e1 e2 = (e1 ^. symbols) <= (e2 ^. symbols) && (e1 ^. assumptions) <= (e2 ^. assumptions)
 
 -- | Empty environment
 emptyEnv = Environment {
@@ -209,7 +215,7 @@ emptyEnv = Environment {
 }
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
-symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols) 
+symbolsOfArity n env = Map.findWithDefault Map.empty n (env ^. symbols)
 
 -- | All symbols in an environment
 allSymbols :: Environment -> Map Id RSchema
@@ -226,7 +232,7 @@ lookupSymbol name a env
   | otherwise                                         = Map.lookup name (allSymbols env)
   where
     asInt = asInteger name
-    
+
 symbolAsFormula :: Environment -> Id -> RType -> Formula
 symbolAsFormula _ name t | arity t > 0
                       = error $ unwords ["symbolAsFormula: not a scalar symbol", name]
@@ -240,7 +246,7 @@ symbolAsFormula env name t
     isConstructor = isJust (lookupConstructor name env)
     sort = toSort (baseTypeOf t)
     asInt = asInteger name
-    
+
 unOpType Neg       = Monotype $ FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))
 unOpType Not       = Monotype $ FunctionT "x" boolAll (bool (valBool |=| fnot (boolVar "x")))
 binOpType Times    = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |*| intVar "y")))
@@ -257,12 +263,12 @@ binOpType Or       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bo
 binOpType Implies  = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |=>| boolVar "y"))))
 binOpType Iff      = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |<=>| boolVar "y"))))
 
--- | Is @name@ a constant in @env@ including built-in constants)?    
+-- | Is @name@ a constant in @env@ including built-in constants)?
 isConstant name env = (name `elem` ["True", "False"]) ||
-                      isJust (asInteger name) || 
-                      (name `elem` Map.elems unOpTokens) || 
-                      (name `elem` Map.elems binOpTokens) || 
-                      (name `Set.member` (env ^. constants))    
+                      isJust (asInteger name) ||
+                      (name `elem` Map.elems unOpTokens) ||
+                      (name `elem` Map.elems binOpTokens) ||
+                      (name `Set.member` (env ^. constants))
 
 -- | 'isBound' @tv env@: is type variable @tv@ bound in @env@?
 isBound :: Environment -> Id -> Bool
@@ -292,17 +298,17 @@ removeVariable :: Id -> Environment -> Environment
 removeVariable name env = case Map.lookup name (allSymbols env) of
   Nothing -> env
   Just sch -> over symbols (Map.insertWith (flip Map.difference) (arity $ toMonotype sch) (Map.singleton name sch)) . over constants (Set.delete name) $ env
-  
+
 embedContext :: Environment -> RType -> (Environment, RType)
-embedContext env (LetT x tDef tBody) = 
-  let 
+embedContext env (LetT x tDef tBody) =
+  let
     (env', tDef') = embedContext (removeVariable x env) tDef
     (env'', tBody') = embedContext env' tBody
   in (addLetBound x tDef' env'', tBody')
--- TODO: function?  
+-- TODO: function?
 embedContext env t = (env, t)
-  
-unfoldAllVariables env = over unfoldedVars (Set.union (Map.keysSet (symbolsOfArity 0 env) Set.\\ (env ^. constants))) env  
+
+unfoldAllVariables env = over unfoldedVars (Set.union (Map.keysSet (symbolsOfArity 0 env) Set.\\ (env ^. constants))) env
 
 addMeasure :: Id -> MeasureDef -> Environment -> Environment
 addMeasure measureName m = over measures (Map.insert measureName m)
@@ -345,31 +351,31 @@ allPredicates env = Map.fromList (map (\(PredSig pName argSorts resSort) -> (pNa
 allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
-allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env = 
-    let 
-      allMeasures = Map.toList $ allMeasuresOf dtName env 
+allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env =
+    let
+      allMeasures = Map.toList $ allMeasuresOf dtName env
       isAbstract = null $ ((env ^. datatypes) Map.! dtName) ^. constructors
-    in catMaybes $ map extractPost allMeasures ++ 
+    in catMaybes $ map extractPost allMeasures ++
                    if isAbstract then map contentProperties allMeasures else [] ++
                    if includeQuanitifed then map elemProperties allMeasures else []
   where
-    extractPost (mName, MeasureDef _ outSort _ fml) = 
+    extractPost (mName, MeasureDef _ outSort _ fml) =
       if fml == ftrue
         then Nothing
         else Just $ substitute (Map.singleton valueVarName (Pred outSort mName [Var (toSort baseT) valueVarName])) fml
-        
+
     contentProperties (mName, MeasureDef (DataS _ vars) a _ _) = case elemIndex a vars of
       Nothing -> Nothing
-      Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ "returns" one of datatype's parameters: transfer the refinement onto the value of the measure 
+      Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ "returns" one of datatype's parameters: transfer the refinement onto the value of the measure
                 in let
                     elemSort = toSort elemT
                     measureApp = Pred elemSort mName [Var (toSort baseT) valueVarName]
                    in Just $ substitute (Map.singleton valueVarName measureApp) fml
     contentProperties (mName, MeasureDef {}) = Nothing
-        
+
     elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
       Nothing -> Nothing
-      Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property 
+      Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property
                 in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
                     then Nothing
                     else  let
@@ -378,7 +384,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                             setVal = Pred (SetS elemSort) mName [Var (toSort baseT) valueVarName]
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
     elemProperties (mName, MeasureDef {}) = Nothing
-    
+
 allMeasurePostconditions _ _ _ = []
 
 typeSubstituteEnv :: TypeSubstitution -> Environment -> Environment
@@ -386,7 +392,7 @@ typeSubstituteEnv tass = over symbols (Map.map (Map.map (schemaSubstitute tass))
 
 -- | Insert weakest refinement
 refineTop :: Environment -> SType -> RType
-refineTop env (ScalarT (DatatypeT name tArgs pArgs) _) = 
+refineTop env (ScalarT (DatatypeT name tArgs pArgs) _) =
   let variances = env ^. (datatypes . to (Map.! name) . predVariances) in
   ScalarT (DatatypeT name (map (refineTop env) tArgs) (map (BoolLit . not) variances)) ftrue
 refineTop _ (ScalarT IntT _) = ScalarT IntT ftrue
@@ -396,21 +402,21 @@ refineTop env (FunctionT x tArg tFun) = FunctionT x (refineBot env tArg) (refine
 
 -- | Insert strongest refinement
 refineBot :: Environment -> SType -> RType
-refineBot env (ScalarT (DatatypeT name tArgs pArgs) _) = 
+refineBot env (ScalarT (DatatypeT name tArgs pArgs) _) =
   let variances = env ^. (datatypes . to (Map.! name) . predVariances) in
   ScalarT (DatatypeT name (map (refineBot env) tArgs) (map BoolLit variances)) ffalse
 refineBot _ (ScalarT IntT _) = ScalarT IntT ffalse
 refineBot _ (ScalarT BoolT _) = ScalarT BoolT ffalse
 refineBot _ (ScalarT (TypeVarT vSubst a) _) = ScalarT (TypeVarT vSubst a) ffalse
 refineBot env (FunctionT x tArg tFun) = FunctionT x (refineTop env tArg) (refineBot env tFun)
-    
+
 {- Input language declarations -}
 
 -- | Constructor signature: name and type
 data ConstructorSig = ConstructorSig Id RType
   deriving (Eq)
-  
-constructorName (ConstructorSig name _) = name  
+
+constructorName (ConstructorSig name _) = name
 
 data BareDeclaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
@@ -428,9 +434,9 @@ type Declaration = Pos BareDeclaration
 
 isSynthesisGoal (Pos _ (SynthesisGoal _ _)) = True
 isSynthesisGoal _ = False
-            
+
 {- Misc -}
-          
+
 -- | Typing constraints
 data Constraint = Subtype Environment RType RType Bool Id
   | WellFormed Environment RType
@@ -438,7 +444,7 @@ data Constraint = Subtype Environment RType RType Bool Id
   | WellFormedMatchCond Environment Formula
   | WellFormedPredicate Environment [Sort] Id
   deriving (Eq, Ord)
-  
+
 -- | Synthesis goal
 data Goal = Goal {
   gName :: Id,                  -- ^ Function name
@@ -451,4 +457,73 @@ data Goal = Goal {
 
 unresolvedType env ident = (env ^. unresolvedConstants) Map.! ident
 unresolvedSpec goal = unresolvedType (gEnvironment goal) (gName goal)
-  
+
+
+-- Turn all measures in a goal into synthesis goals for typechecking
+extractMeasures :: Environment -> [(Id, MeasureDef)] -> [Goal]
+extractMeasures e xs = zipWith (makeGoal e) ids defs
+  where
+    ids = map fst xs
+    defs = map snd xs
+
+declToDef :: BareDeclaration -> (Id, MeasureDef)
+declToDef (MeasureDecl m inSort outSort post cases term) =
+  (m, MeasureDef inSort outSort cases post)
+
+-- Transform a measure into a synthesis goal for the purposes of typechecking
+makeGoal :: Environment -> Id -> MeasureDef -> Goal
+makeGoal env name measure = Goal{
+  gName = name,
+  gEnvironment = env, --filterEnv env name,
+  gSpec = generateSchema env name (measure ^. inSort) (measure ^. outSort) (measure ^. postcondition),
+  gImpl = measureProg name measure,
+  gDepth = 0, -- TODO: figure out what to put
+  gSourcePos = noPos {-TODO: change this!-} }
+
+-- Remove measure being typechecked from environment
+filterEnv :: Environment -> Id -> Environment
+filterEnv e m = set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)) e
+
+-- Transform a measure into a program
+measureProg :: Id -> MeasureDef -> UProgram
+measureProg name m = Program {
+  typeOf = t, content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase (m ^. definitions)) }
+  where
+    arg = fromSort (m ^. inSort)
+    t = AnyT
+    t' = AnyT
+    --t = FunctionT name arg (addRefinement (fromSort (m ^. outSort)) (m ^. postcondition))
+    --t' = ScalarT (baseTypeOf arg) ftrue
+
+-- Transform between case types
+mCase :: MeasureCase -> Case RType
+mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToProgram body}
+
+-- Transform type signature into a synthesis/typechecking schema
+generateSchema :: Environment -> Id -> Sort -> Sort -> Formula -> RSchema
+--generateSchema e f inSort outSort post = Monotype (ScalarT BoolT (BoolLit True)) -- Placeholder
+generateSchema e name (DataS inS sorts) outSort post = typePolymorphic (getTypeParams e inS) (getPredParams e inS) name (DataS inS sorts) outSort post
+
+getTypeParams :: Environment -> Id -> [Id]
+getTypeParams e name = case Map.lookup name (e ^. datatypes) of
+  Just d -> d ^. typeParams
+  Nothing -> []
+
+getPredParams :: Environment -> Id -> [PredSig]
+getPredParams e name = case Map.lookup name (e ^. datatypes) of
+  Just d -> d ^. predParams
+  Nothing -> []
+
+-- Wrap function in appropriate type-polymorphic Schema skeleton
+typePolymorphic :: [Id] -> [PredSig] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
+typePolymorphic [] ps name inSort outSort f = predPolymorphic ps name inSort outSort f
+typePolymorphic (x:xs) ps name inSort outSort f = ForallT x (typePolymorphic xs ps name inSort outSort f)
+
+-- Wrap function in appropriate predicate-polymorphic SchemaSkeleton
+predPolymorphic :: [PredSig] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
+predPolymorphic [] name inSort outSort f = genSkeleton name inSort outSort f
+predPolymorphic (x:xs) name inSort outSort f = ForallP x (predPolymorphic xs name inSort outSort f)
+
+-- Generate non-polymorphic core of schema
+genSkeleton :: Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
+genSkeleton name inSort outSort post = Monotype (FunctionT name (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))
