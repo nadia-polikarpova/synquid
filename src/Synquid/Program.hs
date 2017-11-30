@@ -27,7 +27,7 @@ data Case t = Case {
   constructor :: Id,      -- ^ Constructor name
   argNames :: [Id],       -- ^ Bindings for constructor arguments
   expr :: Program t       -- ^ Result of the match in this case
-} deriving (Eq, Ord, Functor)
+} deriving (Show, Eq, Ord, Functor)
 
 -- | Program skeletons parametrized by information stored symbols, conditionals, and by node types
 data BareProgram t =
@@ -40,13 +40,13 @@ data BareProgram t =
   PLet Id (Program t) (Program t) |           -- ^ Let binding
   PHole |                                     -- ^ Hole (program to fill in)
   PErr                                        -- ^ Error
-  deriving (Eq, Ord, Functor)
+  deriving (Show, Eq, Ord, Functor)
 
 -- | Programs annotated with types
 data Program t = Program {
   content :: BareProgram t,
   typeOf :: t
-} deriving (Functor)
+} deriving (Show, Functor)
 
 instance Eq (Program t) where
   (==) (Program l _) (Program r _) = l == r
@@ -149,13 +149,13 @@ data DatatypeDef = DatatypeDef {
   _predVariances :: [Bool],         -- ^ For each predicate parameter, whether it is contravariant
   _constructors :: [Id],            -- ^ Constructor names
   _wfMetric :: Maybe Id             -- ^ Name of the measure that serves as well founded termination metric
-} deriving (Eq, Ord)
+} deriving (Show, Eq, Ord)
 
 makeLenses ''DatatypeDef
 
 -- | One case in a measure definition: constructor name, arguments, and body
 data MeasureCase = MeasureCase Id [Id] Formula
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 -- | User-defined measure function representation
 data MeasureDef = MeasureDef {
@@ -163,7 +163,7 @@ data MeasureDef = MeasureDef {
   _outSort :: Sort,
   _definitions :: [MeasureCase],
   _postcondition :: Formula
-} deriving (Eq, Ord)
+} deriving (Show, Eq, Ord)
 
 makeLenses ''MeasureDef
 
@@ -187,7 +187,7 @@ data Environment = Environment {
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
   _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
-}
+} deriving (Show)
 
 makeLenses ''Environment
 
@@ -415,7 +415,7 @@ refineBot env (FunctionT x tArg tFun) = FunctionT x (refineTop env tArg) (refine
 
 -- | Constructor signature: name and type
 data ConstructorSig = ConstructorSig Id RType
-  deriving (Eq)
+  deriving (Show, Eq)
 
 constructorName (ConstructorSig name _) = name
 
@@ -429,7 +429,7 @@ data BareDeclaration =
   MutualDecl [Id] |                                         -- ^ Mutual recursion group
   InlineDecl Id [Id] Formula |                              -- ^ Inline predicate
   SynthesisGoal Id UProgram                                 -- ^ Name and template for the function to reconstruct
-  deriving (Eq)
+  deriving (Show, Eq)
 
 type Declaration = Pos BareDeclaration
 
@@ -444,7 +444,7 @@ data Constraint = Subtype Environment RType RType Bool Id
   | WellFormedCond Environment Formula
   | WellFormedMatchCond Environment Formula
   | WellFormedPredicate Environment [Sort] Id
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 -- | Synthesis goal
 data Goal = Goal {
@@ -454,30 +454,32 @@ data Goal = Goal {
   gImpl :: UProgram,            -- ^ Implementation template
   gDepth :: Int,                -- ^ Maximum level of auxiliary goal nesting allowed inside this goal
   gSourcePos :: SourcePos       -- ^ Source Position
-} deriving (Eq, Ord)
+} deriving (Show, Eq, Ord)
 
 unresolvedType env ident = (env ^. unresolvedConstants) Map.! ident
 unresolvedSpec goal = unresolvedType (gEnvironment goal) (gName goal)
 
 
 -- Turn all measures in a goal into synthesis goals for typechecking
-extractMeasures :: Environment -> [(Id, MeasureDef)] -> [Goal]
-extractMeasures e xs = zipWith (makeGoal e) ids defs
+extractMeasures :: [(Id, [MeasureCase])] -> Goal -> [Goal]
+extractMeasures mcs g = zipWith (makeGoal e mcs) ids defs
   where
-    ids = map fst xs
-    defs = map snd xs
+    e = gEnvironment g
+    ms = e ^. measures
+    ids = map fst (Map.assocs ms)
+    defs = map snd (Map.assocs ms)
 
 declToDef :: BareDeclaration -> (Id, MeasureDef)
 declToDef (MeasureDecl m inSort outSort post cases term) =
   (m, MeasureDef inSort outSort cases post)
 
 -- Transform a measure into a synthesis goal for the purposes of typechecking
-makeGoal :: Environment -> Id -> MeasureDef -> Goal
-makeGoal env name measure = Goal{
+makeGoal :: Environment -> [(Id, [MeasureCase])] -> Id -> MeasureDef -> Goal
+makeGoal env ms name measure = Goal{
   gName = name,
   gEnvironment = env', --filterEnv env name,
   gSpec = spec,
-  gImpl = measureProg name measure,
+  gImpl = measureProg name (lookup name ms) measure,
   gDepth = 0, -- TODO: figure out what to put
   gSourcePos = noPos {-TODO: change this!-} }
   where
@@ -492,9 +494,10 @@ filterEnv e m = set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)
 
 -- Transform a measure into a program
 -- TODO: don't hardcode "qs"
-measureProg :: Id -> MeasureDef -> UProgram
-measureProg name m = Program {
-  typeOf = t, content = PFun "qs" Program{ content = (PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase (m ^. definitions))), typeOf = t''} }
+measureProg :: Id -> Maybe [MeasureCase] -> MeasureDef -> UProgram
+measureProg _ Nothing _ = Program { content = PErr, typeOf = AnyT }
+measureProg name (Just cases) m = Program {
+  typeOf = t, content = PFun "qs" Program{ content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase cases), typeOf = t''} }
   where
     arg = fromSort (m ^. inSort)
     t = AnyT

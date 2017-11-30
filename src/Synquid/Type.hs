@@ -18,7 +18,7 @@ import Control.Lens
 {- Type skeletons -}
 
 data BaseType r = BoolT | IntT | DatatypeT Id [TypeSkeleton r] [r] | TypeVarT Substitution Id
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 -- | Type skeletons (parametrized by refinements)
 data TypeSkeleton r =
@@ -26,7 +26,7 @@ data TypeSkeleton r =
   FunctionT Id (TypeSkeleton r) (TypeSkeleton r) |
   LetT Id (TypeSkeleton r) (TypeSkeleton r) |
   AnyT
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 contextual x tDef (FunctionT y tArg tRes) = FunctionT y (contextual x tDef tArg) (contextual x tDef tRes)
 contextual _ _ AnyT = AnyT
@@ -64,11 +64,6 @@ toSort (TypeVarT _ name) = VarS name
 
 fromSort :: Sort -> TypeSkeleton Formula
 fromSort = flip refineSort ftrue
---fromSort BoolS = ScalarT BoolT ftrue
---fromSort IntS = ScalarT IntT ftrue
---fromSort (VarS name) = ScalarT (TypeVarT Map.empty name) ftrue
---fromSort (DataS name sArgs) = ScalarT (DatatypeT name (map fromSort sArgs) []) ftrue -- --TODO: what to do with pArgs?
---fromSort AnyS = AnyT
 
 
 refineSort :: Sort -> Formula -> TypeSkeleton Formula
@@ -130,7 +125,7 @@ data SchemaSkeleton r =
   Monotype (TypeSkeleton r) |
   ForallT Id (SchemaSkeleton r) |       -- Type-polymorphic
   ForallP PredSig (SchemaSkeleton r)    -- Predicate-polymorphic
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 toMonotype :: SchemaSkeleton r -> TypeSkeleton r
 toMonotype (Monotype t) = t

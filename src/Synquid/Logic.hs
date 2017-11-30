@@ -19,7 +19,7 @@ import Control.Monad
 
 -- | Sorts
 data Sort = BoolS | IntS | VarS Id | DataS Id [Sort] | SetS Sort | AnyS
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 isSetS (SetS _) = True
 isSetS _ = False
@@ -91,13 +91,13 @@ data PredSig = PredSig {
   predSigName :: Id,
   predSigArgSorts :: [Sort],
   predSigResSort :: Sort
-} deriving (Eq, Ord)
+} deriving (Show, Eq, Ord)
 
 {- Formulas of the refinement logic -}
 
 -- | Unary operators
 data UnOp = Neg | Not
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 -- | Binary operators
 data BinOp =
@@ -107,7 +107,7 @@ data BinOp =
     And | Or | Implies | Iff |      -- ^ Bool -> Bool -> Bool
     Union | Intersect | Diff |      -- ^ Set -> Set -> Set
     Member | Subset                 -- ^ Int/Set -> Set -> Bool
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 -- | Variable substitution
 type Substitution = Map Id Formula
@@ -126,7 +126,7 @@ data Formula =
   Pred Sort Id [Formula] |            -- ^ Logic function application
   Cons Sort Id [Formula] |            -- ^ Constructor application
   All Formula Formula                 -- ^ Universal quantification
-  deriving (Eq, Ord)
+  deriving (Show, Eq, Ord)
 
 dontCare = "_"
 valueVarName = "_v"
@@ -437,7 +437,7 @@ setToPredicate x s = Binary Member x s
 data QSpace = QSpace {
     _qualifiers :: [Formula],         -- ^ Qualifiers
     _maxCount :: Int                  -- ^ Maximum number of qualifiers in a valuation
-  } deriving (Eq, Ord)
+  } deriving (Show, Eq, Ord)
 
 makeLenses ''QSpace
 
@@ -512,7 +512,7 @@ data Candidate = Candidate {
     validConstraints :: Set Formula,
     invalidConstraints :: Set Formula,
     label :: String
-  }
+  } deriving (Show)
 
 initialCandidate = Candidate Map.empty Set.empty Set.empty "0"
 
