@@ -145,8 +145,6 @@ instance Pretty Sort where
   pretty (DataS name args) = text name <+> hsep (map (hlParens . pretty) args)
   pretty AnyS = operator "?"
 
-instance Show Sort where
-  show = show . pretty
 
 instance Pretty PredSig where
   pretty (PredSig p argSorts resSort) = hlAngles $ text p <+> text "::" <+> hsep (map (\s -> pretty s <+> text "->") argSorts) <+> pretty resSort
@@ -154,14 +152,8 @@ instance Pretty PredSig where
 instance Pretty UnOp where
   pretty op = operator $ unOpTokens Map.! op
 
-instance Show UnOp where
-  show = show . pretty
-
 instance Pretty BinOp where
   pretty op = operator $ binOpTokens Map.! op
-
-instance Show BinOp where
-  show = show . pretty
 
 -- | Binding power of a formula
 power :: Formula -> Int
@@ -208,9 +200,6 @@ fmlDocAt n fml = condHlParens (n' <= n) (
 
 instance Pretty Formula where pretty = fmlDoc
 
-instance Show Formula where
-  show = show . pretty
-
 instance Pretty Valuation where
   pretty val = braces $ commaSep $ map pretty $ Set.toList val
 
@@ -220,8 +209,6 @@ instance Pretty Solution where
 instance Pretty QSpace where
   pretty space = braces $ commaSep $ map pretty $ view qualifiers space
 
-instance Show QSpace where
-  show = show . pretty
 
 instance Pretty QMap where
   pretty = vMapDoc text pretty
@@ -241,8 +228,6 @@ instance Pretty (BaseType ()) where
 instance Pretty (BaseType Formula) where
   pretty = prettyBase (prettyTypeAt 1)
 
-instance Show (BaseType Formula) where
-  show = show . pretty
 
 prettySType :: SType -> Doc
 prettySType (ScalarT base _) = pretty base
@@ -281,8 +266,6 @@ prettyTypeAt n t = condHlParens (n' <= n) (
 instance Pretty RType where
   pretty = prettyType
 
-instance Show RType where
- show = show . pretty
 
 prettySchema :: Pretty (TypeSkeleton r) => SchemaSkeleton r -> Doc
 prettySchema sch = case sch of
@@ -293,19 +276,12 @@ prettySchema sch = case sch of
 instance Pretty SSchema where
   pretty = prettySchema
 
-instance Show SSchema where
- show = show . pretty
 
 instance Pretty RSchema where
   pretty = prettySchema
 
-instance Show RSchema where
-  show = show . pretty
 
 {- Programs -}
-
-instance (Pretty t) => Show (Case t) where
-  show = show . prettyCase
 
 prettyCase :: (Pretty t) => Case t -> Doc
 prettyCase cas = hang tab $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> operator "->" </> prettyProgram (expr cas)
@@ -343,9 +319,6 @@ prettyProgram (Program p typ) = case p of
 
 instance (Pretty t) => Pretty (Program t) where
   pretty = prettyProgram
-
-instance (Pretty t) => Show (Program t) where
-  show = show . pretty
 
 instance Pretty TypeSubstitution where
   pretty = hMapDoc text pretty
@@ -387,20 +360,12 @@ prettyConstraint (WellFormedPredicate _ sorts p) = operator "|-" <+> pretty p <+
 instance Pretty Constraint where
   pretty = prettyConstraint
 
-instance Show Constraint where
-  show = show . pretty
 
 instance Pretty Candidate where
   pretty (Candidate sol valids invalids label) = text label <> text ":" <+> pretty sol <+> parens (pretty (Set.size valids) <+> pretty (Set.size invalids))
 
-instance Show Candidate where
-  show = show . pretty
-
 instance Pretty Goal where
   pretty (Goal name env spec impl depth _) = pretty env <+> operator "|-" <+> text name <+> operator "::" <+> pretty spec $+$ text name <+> operator "=" <+> pretty impl $+$ parens (text "depth:" <+> pretty depth)
-
-instance Show Goal where
-  show = show. pretty
 
 prettySpec g@(Goal name _ _ _ _ _) = text name <+> operator "::" <+> pretty (unresolvedSpec g)
 prettySolution (Goal name _ _ _ _ _) prog = text name <+> operator "=" </> pretty prog
