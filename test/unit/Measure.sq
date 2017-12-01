@@ -6,9 +6,21 @@ data List a where
 
 
 -- This should currently **not** fail!
-termination measure ln :: List a -> {Int | _v >= 0} where
+termination measure ln :: List a -> {Int | _v < 0} where
   Nil -> 0
   Cons x xs -> 1 + ln xs
 
+zero :: {Int | _v == 0}
+neg :: x: Int -> {Int | _v == -x}
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}
+map :: (a -> b) -> List a -> List b
+
+absolutes :: List Int -> List Nat
+absolutes = \xs .
+  map (?? :: x: Int -> {Int | _v == x || _v == -x}) xs
+
+{-
 append ::  x: List a -> z: List a -> {List a | ln _v == ln x + ln z}
 append = ??
+-}

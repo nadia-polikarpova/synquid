@@ -459,7 +459,7 @@ data Goal = Goal {
 unresolvedType env ident = (env ^. unresolvedConstants) Map.! ident
 unresolvedSpec goal = unresolvedType (gEnvironment goal) (gName goal)
 
-
+{-
 -- Turn all measures in a goal into synthesis goals for typechecking
 extractMeasures :: [(Id, [MeasureCase])] -> Goal -> [Goal]
 extractMeasures mcs g = zipWith (makeGoal e mcs) ids defs
@@ -486,20 +486,18 @@ makeGoal env ms name measure = Goal{
     spec = generateSchema env name (measure ^. inSort) (measure ^. outSort) (measure ^. postcondition)
     cs = env ^. unresolvedConstants
     env' = set unresolvedConstants (Map.insert name spec cs) env
-
+-}
 
 -- Remove measure being typechecked from environment
 filterEnv :: Environment -> Id -> Environment
 filterEnv e m = set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)) e
 
--- Transform a measure into a program
+-- Transform a resolved measure into a program
 -- TODO: don't hardcode "qs"
-measureProg :: Id -> Maybe [MeasureCase] -> MeasureDef -> UProgram
-measureProg _ Nothing _ = Program { content = PErr, typeOf = AnyT }
-measureProg name (Just cases) m = Program {
-  typeOf = t, content = PFun "qs" Program{ content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase cases), typeOf = t''} }
+measureProg :: Id -> MeasureDef -> UProgram
+measureProg name (MeasureDef inSort outSort defs post) = Program {
+  typeOf = t, content = PFun "qs" Program{ content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase defs), typeOf = t''} }
   where
-    arg = fromSort (m ^. inSort)
     t = AnyT
     t' = AnyT
     t'' = AnyT
