@@ -182,7 +182,7 @@ resolveSignatures (DataDecl dtName tParams pParams ctors) = mapM_ resolveConstru
     resolveConstructorSignature (ConstructorSig name _) = do
       sch <- uses environment ((Map.! name) . allSymbols)
       sch' <- resolveSchema sch
-      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map nominalPredApp (map fst pParams))) ftrue
+      let nominalType = ScalarT (DatatypeT dtName (map vartAll tParams) (map (nominalPredApp  . fst) pParams)) ftrue
       let returnType = lastType (toMonotype sch')
       if nominalType == returnType
         then do
@@ -194,15 +194,18 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
   (outSort : (inSort@(DataS dtName sArgs) : _)) <- uses (environment . globalPredicates) (Map.! measureName)
   datatype <- uses (environment . datatypes) (Map.! dtName)
   post' <- resolveTypeRefinement outSort post
+  pos <- use currentPosition
   let ctors = datatype ^. constructors
   if length defCases /= length ctors
     then throwResError $ text "Definition of measure" <+> text measureName <+> text "must include one case per constructor of" <+> text dtName
     else do
       defs' <- mapM (resolveMeasureDef ctors) defCases
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')
+      --goals %= trace (show (pretty (impl (MeasureDef inSort outSort defs' post')))) (++ [(measureName, (impl (MeasureDef inSort outSort defs' post'), pos))])
   where
+    --impl = measureProg measureName
     resolveMeasureDef allCtors (MeasureCase ctorName binders body) =
-      if not (ctorName `elem` allCtors)
+      if ctorName `notElem` allCtors
         then throwResError $ text "Not in scope: data constructor" <+> text ctorName <+> text "used in definition of measure" <+> text measureName
         else do
           consSch <- uses environment ((Map.! ctorName) . allSymbols)
@@ -219,7 +222,27 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
                 environment %= addAllVariables ctorParams
                 resolveTypeRefinement (toSort $ baseTypeOf $ lastType consT) fml
               return $ MeasureCase ctorName (map varName ctorParams) fml'
-resolveSignatures _                      = return ()
+resolveSignatures (SynthesisGoal name impl) = do
+  resolveHole impl
+  return ()
+resolveSignatures _ = return ()
+
+resolveHole :: Program RType -> Resolver RType
+resolveHole Program{content = (PApp p1 p2), typeOf = _} = do
+  resolveHole p1
+  resolveHole p2
+resolveHole Program{content = (PFun _ p), typeOf = _} = resolveHole p
+resolveHole Program{content = (PIf p1 p2 p3), typeOf = _} = do
+  resolveHole p1
+  resolveHole p2
+  resolveHole p3
+resolveHole Program{content = (PMatch p _), typeOf = _} = resolveHole p
+resolveHole Program{content = (PFix _ p), typeOf = _} = resolveHole p
+resolveHole Program{content = (PLet _ p1 p2), typeOf = _} = do
+  resolveHole p1
+  resolveHole p2
+-- Resolve type if hole, symbol, or err:
+resolveHole Program{content = _, typeOf = t} = resolveType t
 
 {- Types and sorts -}
 
