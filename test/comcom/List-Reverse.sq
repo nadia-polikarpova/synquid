@@ -1,0 +1,31 @@
+---------------------------------------------------
+-- This example illustrates abstract refinements --
+---------------------------------------------------
+
+-- A datatype can be parametrized by a predicate;
+-- in this case we parametrize 'List' with a binary relation 'r'
+-- that must hold between any element and all subsequent elements;
+-- we shall call such a list 'r'-ordered
+-- (for example, instantiating 'r' with '<=' would yield an increasing list)
+data List a <r :: a -> a -> Bool> where
+	Nil :: List a <r>
+	Cons :: x: a -> xs: List {a | r x _v} <r> -> List a <r>
+  
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+	
+-- A function can also be parametrized with a predicate;
+-- in this example, we use the predicate parameter to constrain the order of elements in a list:
+-- 'snoc' is supposed to produce a r-ordered list
+-- from 'x' and a r-ordered list 'xs', where each element is "lower" than 'x' in the 'r' order;
+-- since the implementation has to work for any relation 'r', 'snoc' has no choice but to append 'x' at the end of 'xs'
+snoc :: <r :: a -> a -> Bool> . x: a -> xs: List {a | r _v x} <r> -> {List a <r> | len _v == len xs + 1}
+snoc = ??
+
+-- The same technique is used to specify that 'reverse' must reverse the order of list elements.
+-- We currently use de-Brujn indexes for actual predicate parameters: 
+-- 'List a <r>' is just a shortcut for 'List a <{r _0 _1}>', 
+-- and 'List a <{r _1 _0}>' denotes an invocation of 'r' with arguments reversed
+reverse :: <r :: a -> a -> Bool> . xs: List a <r> -> {List a <{r _1 _0}> | len _v == len xs}
+reverse = ??

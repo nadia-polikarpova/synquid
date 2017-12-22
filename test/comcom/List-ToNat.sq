@@ -1,0 +1,23 @@
+---------------------------------------------------------------------------------------------
+-- In this example we will write a program template and leave holes for Synquid to fill in --
+---------------------------------------------------------------------------------------------
+
+type Nat = {Int | _v >= 0}
+
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+zero :: {Int | _v == 0}  
+neg :: x: Int -> {Int | _v == -x}	
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}
+map :: (a -> b) -> List a -> List b
+	
+-- Compute the absolute value of each integer in a list.
+-- The signature only requires that the result be a list of naturals;
+-- the implementation maps an unknown function over the argument list, 
+-- and imposes an additional constraint on that function using a type annotation.
+absolutes :: List Int -> List Nat
+absolutes = \xs . 
+  map (?? :: x: Int -> {Int | _v == x || _v == -x}) xs

@@ -1,0 +1,31 @@
+---------------------------------------------------------------------------------------
+-- In this example we ask Synquid to synthesize a simple recursive function on lists --
+---------------------------------------------------------------------------------------
+
+-- Type synonym for natural numbers (_v denotes the "value variable")
+type Nat = {Int | _v >= 0}
+
+-- List data type: just like in Haskell
+data List a where
+	Nil :: List a
+	Cons :: x: a -> xs: List a -> List a
+  
+-- Measures define recursive properties of datatypes, which we can mention in refinements; 
+-- this measure is also marked as a termination metric for recursive calls
+termination measure len :: List a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs 
+  
+-- Synquid composes programs from component functions;
+-- here are some standard integer components we might need
+zero :: {Int | _v == 0}
+inc :: x: Int -> {Int | _v == x + 1}
+dec :: x: Int -> {Int | _v == x - 1}  
+leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
+neq :: x: Int -> y: Int -> {Bool | _v == (x != y)}
+	
+-- Our synthesis goal: a function that returns 'n' copies of 'x'
+replicate :: n: Nat -> x: a -> {List a | len _v == n}
+replicate = ??
+
+	
