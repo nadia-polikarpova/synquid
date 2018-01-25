@@ -508,6 +508,9 @@ measureProg name (MeasureDef inSort outSort defs post) = Program {
 mCase :: MeasureCase -> Case RType
 mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToProgram body}
 
+--unresolveCaseBody :: Formula -> Formula
+--unresolveCaseBody
+
 -- Transform type signature into a synthesis/typechecking schema
 generateSchema :: Environment -> Id -> Sort -> Sort -> Formula -> RSchema
 --generateSchema e f inSort outSort post = Monotype (ScalarT BoolT (BoolLit True)) -- Placeholder
