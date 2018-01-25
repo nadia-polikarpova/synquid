@@ -282,7 +282,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
     Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
       --putStr $ "SPECS " ++ show ((extractMeasures mCases (head goals)) ++ goals) --(show (map gSpec ((extractMeasures (gEnvironment (head goals)) mDefs) ++ (requested goals)))
-      putStr $ "GOALS: " ++ show (pretty (requested goals))
+      --putStr $ "GOALS: " ++ (unlines (map (show . gImpl) (requested goals)))
       results <- mapM (synthesizeGoal cquals tquals) (requested goals)
       --results <- mapM (synthesizeGoal cquals tquals) ((extractMeasures (gEnvironment (head goals)) mDefs) ++ (requested goals))
       --results <- mapM (synthesizeGoal cquals tquals) ((extractMeasures mCases (head goals)) ++ goals)

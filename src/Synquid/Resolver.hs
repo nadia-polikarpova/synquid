@@ -201,9 +201,9 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
     else do
       defs' <- mapM (resolveMeasureDef ctors) defCases
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')
-      --goals %= trace (show (pretty (impl (MeasureDef inSort outSort defs' post')))) (++ [(measureName, (impl (MeasureDef inSort outSort defs' post'), pos))])
+      goals %= trace (show (pretty (impl (MeasureDef inSort outSort defs' post')))) (++ [(measureName, (impl (MeasureDef inSort outSort defs' post'), pos))])
   where
-    --impl = measureProg measureName
+    impl = measureProg measureName
     resolveMeasureDef allCtors (MeasureCase ctorName binders body) =
       if ctorName `notElem` allCtors
         then throwResError $ text "Not in scope: data constructor" <+> text ctorName <+> text "used in definition of measure" <+> text measureName
@@ -260,7 +260,7 @@ resolveSchema sch = do
         (return ())
       mapM_ resolveSort argSorts
       when (resSort /= BoolS) $
-        (throwResError $ text "Bound predicate variable" <+> text predName <+> text "must return Bool")
+        throwResError (text "Bound predicate variable" <+> text predName <+> text "must return Bool")
       sch' <- withLocalEnv $ do
         environment %= addBoundPredicate sig
         resolveSchema' sch
