@@ -257,7 +257,7 @@ importTmpl = ImportDecl {
     importPkg = Nothing,
     importAs = Nothing,
     importSpecs = Nothing }
-    
+
 filterOutDeps deps env =
   let isDeclOf name Pos {node = (DataDecl name' _ _ _)} = (name == name')
       isDeclOf _ _ = False

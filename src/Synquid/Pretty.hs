@@ -196,7 +196,7 @@ fmlDocAt n fml = condHlParens (n' <= n) (
   )
   where
     n' = power fml
-    withSort s doc = doc -- <> text ":" <> pretty s
+    withSort s doc = doc <> text ":" <> pretty s
 
 instance Pretty Formula where pretty = fmlDoc
 

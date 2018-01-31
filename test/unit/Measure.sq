@@ -1,12 +1,9 @@
-type Nat = {Int | _v >= 0}
-
 data List a where
   Nil :: List a
   Cons :: x: a -> xs: List a -> List a
 
-
 -- This should currently **not** fail!
-termination measure ln :: List a -> {Int | _v < 0} where
+termination measure ln :: List a -> {Int | _v >= 0} where
   Nil -> 0
   Cons x xs -> 1 + ln xs
 
