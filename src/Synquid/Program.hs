@@ -102,28 +102,28 @@ programSubstituteSymbol name subterm (Program p t) = Program (programSubstituteS
 -- | Convert an executable formula into a program
 fmlToProgram :: Formula -> RProgram
 fmlToProgram (BoolLit b) = Program (PSymbol $ show b) (ScalarT BoolT $ valBool |=| BoolLit b)
-fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valBool |=| IntLit i)
+fmlToProgram (IntLit i) = Program (PSymbol $ show i) (ScalarT IntT $ valInt |=| IntLit i)
 fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRefinement x s))
 fmlToProgram fml@(Unary op e) = let
     s = sortOf fml
     p = fmlToProgram e
-    fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "x" (typeOf p) opRes)
+    fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "xxx" (typeOf p) opRes)
   in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
   where
     opRes
-      | op == Not = bool $ valBool |=| fnot (intVar "x")
-      | otherwise = int $ valInt |=| Unary op (intVar "x")
+      | op == Not = bool $ valBool |=| fnot (intVar "xxx")
+      | otherwise = int $ valInt |=| Unary op (intVar "xxx")
 fmlToProgram fml@(Binary op e1 e2) = let
     s = sortOf fml
     p1 = fmlToProgram e1
     p2 = fmlToProgram e2
-    fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
-    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
+    fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "xxx" (typeOf p1) (FunctionT "yyy" (typeOf p2) opRes))
+    fun2 = Program (PApp fun1 p1) (FunctionT "yyy" (typeOf p2) opRes)
   in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
   where
     opRes
-      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
-      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
+      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "xxx") (intVar "yyy")
+      | otherwise                                 = bool $ valBool |=| Binary op (intVar "xxx") (intVar "yyy")
 fmlToProgram fml@(Pred s x (f:fs)) = Program (PApp fn (curriedApp (fmlToProgram f) fs)) AnyT --(addRefinement (fromSort s) (varRefinement x s))
   where
     fn = Program (PSymbol x) (FunctionT x AnyT AnyT {-(fromSort s)-})
@@ -456,37 +456,9 @@ data Goal = Goal {
   gSourcePos :: SourcePos       -- ^ Source Position
 } deriving (Show, Eq, Ord)
 
+
 unresolvedType env ident = (env ^. unresolvedConstants) Map.! ident
 unresolvedSpec goal = unresolvedType (gEnvironment goal) (gName goal)
-
-{-
--- Turn all measures in a goal into synthesis goals for typechecking
-extractMeasures :: [(Id, [MeasureCase])] -> Goal -> [Goal]
-extractMeasures mcs g = zipWith (makeGoal e mcs) ids defs
-  where
-    e = gEnvironment g
-    ms = e ^. measures
-    ids = map fst (Map.assocs ms)
-    defs = map snd (Map.assocs ms)
-
-declToDef :: BareDeclaration -> (Id, MeasureDef)
-declToDef (MeasureDecl m inSort outSort post cases term) =
-  (m, MeasureDef inSort outSort cases post)
-
--- Transform a measure into a synthesis goal for the purposes of typechecking
-makeGoal :: Environment -> [(Id, [MeasureCase])] -> Id -> MeasureDef -> Goal
-makeGoal env ms name measure = Goal{
-  gName = name,
-  gEnvironment = env', --filterEnv env name,
-  gSpec = spec,
-  gImpl = measureProg name (lookup name ms) measure,
-  gDepth = 0, -- TODO: figure out what to put
-  gSourcePos = noPos {-TODO: change this!-} }
-  where
-    spec = generateSchema env name (measure ^. inSort) (measure ^. outSort) (measure ^. postcondition)
-    cs = env ^. unresolvedConstants
-    env' = set unresolvedConstants (Map.insert name spec cs) env
--}
 
 -- Remove measure being typechecked from environment
 filterEnv :: Environment -> Id -> Environment
@@ -498,23 +470,24 @@ measureProg :: Id -> MeasureDef -> UProgram
 measureProg name (MeasureDef inSort outSort defs post) = Program {
   typeOf = t, content = PFun "qs" Program{ content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase defs), typeOf = t''} }
   where
-    t = AnyT
-    t' = AnyT
+    --t = AnyT
+    t   = FunctionT name (fromSort inSort) (addRefinement (fromSort outSort) post)
+    t'  = AnyT
     t'' = AnyT
-    --t = FunctionT name arg (addRefinement (fromSort (m ^. outSort)) (m ^. postcondition))
+    -- TODO: fix
+    --t'  = fromSort inSort
+    --t'' = addRefinement (fromSort outSort) post
     --t' = ScalarT (baseTypeOf arg) ftrue
 
 -- Transform between case types
 mCase :: MeasureCase -> Case RType
 mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToProgram body}
 
---unresolveCaseBody :: Formula -> Formula
---unresolveCaseBody
-
 -- Transform type signature into a synthesis/typechecking schema
 generateSchema :: Environment -> Id -> Sort -> Sort -> Formula -> RSchema
---generateSchema e f inSort outSort post = Monotype (ScalarT BoolT (BoolLit True)) -- Placeholder
-generateSchema e name (DataS inS sorts) outSort post = typePolymorphic (getTypeParams e inS) (getPredParams e inS) name (DataS inS sorts) outSort post
+--generateSchema e name (DataS inS sorts) outSort post = typePolymorphic (getTypeParams e inS) (getPredParams e inS) name (DataS inS sorts) outSort post
+-- predicate polymorphic only:
+generateSchema e name (DataS inS sorts) outSort post = predPolymorphic (getPredParams e inS) name (DataS inS sorts) outSort post
 
 getTypeParams :: Environment -> Id -> [Id]
 getTypeParams e name = case Map.lookup name (e ^. datatypes) of
@@ -539,4 +512,4 @@ predPolymorphic (x:xs) name inSort outSort f = ForallP x (predPolymorphic xs nam
 -- Generate non-polymorphic core of schema
 -- TODO: don't hard code arg0
 genSkeleton :: Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-genSkeleton name inSort outSort post = Monotype (FunctionT "arg0" (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))
+genSkeleton name inSort outSort post = Monotype (FunctionT "qs" (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))

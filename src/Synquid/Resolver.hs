@@ -119,6 +119,8 @@ resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
   let addPreds typ = foldl (flip ForallP) (Monotype typ) pParams
   mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) ctors
 resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
+  env <- use environment
+  addNewSignature (measureName ++ "'") (generateSchema env measureName inSort outSort post)
   -- Resolve measure signature:
   resolveSort inSort
   resolveSort outSort
@@ -200,8 +202,11 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
     then throwResError $ text "Definition of measure" <+> text measureName <+> text "must include one case per constructor of" <+> text dtName
     else do
       defs' <- mapM (resolveMeasureDef ctors) defCases
+      sch <- uses environment ((Map.! (measureName ++ "'")) . allSymbols)
+      sch' <- resolveSchema sch
+      environment %= addPolyConstant (measureName ++ "'") sch'
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')
-      goals %= trace (show (pretty (impl (MeasureDef inSort outSort defs' post')))) (++ [(measureName, (impl (MeasureDef inSort outSort defs' post'), pos))])
+      goals %= (++ [(measureName ++ "'", (impl (MeasureDef inSort outSort defCases post'), pos))])
   where
     impl = measureProg measureName
     resolveMeasureDef allCtors (MeasureCase ctorName binders body) =
@@ -368,7 +373,7 @@ resolveFormula (Var _ x) = do
           return $ Var s' x
         _ -> error $ unwords ["resolveFormula: encountered non-scalar variable", x, "in a formula"]
     Nothing -> resolveFormula (Pred AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
-                  const (throwResError $ text "Variable" <+> text x <+> text "is not in scope")      -- but if not, throw this error to avoid confusion
+               const (throwResError $ text "Variable" <+> text x <+> text "is not in scope")      -- but if not, throw this error to avoid confusion
 
 resolveFormula (SetLit _ elems) = do
   elemSort <- freshSort

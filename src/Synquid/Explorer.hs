@@ -516,7 +516,7 @@ enumerateAt env typ d = do
 generateError :: MonadHorn s => Environment -> Explorer s RProgram
 generateError env = do
   ctx <- asks . view $ _1. context
-  writeLog 2 $ text "Checking" <+> pretty errorProgram <+> text "in" $+$ pretty (ctx errorProgram)
+  writeLog 2 $ text "Checking" <+> pretty (show errorProgram) <+> text "in" $+$ pretty (ctx errorProgram)
   tass <- use (typingState . typeAssignment)
   let env' = typeSubstituteEnv tass env
   addConstraint $ Subtype env (int $ conjunction $ Set.fromList $ map trivial (allScalars env')) (int ffalse) False ""

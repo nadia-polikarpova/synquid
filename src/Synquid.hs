@@ -271,21 +271,10 @@ runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParam
 runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
   declsByFile <- parseFromFiles (libs ++ [file])
   let decls = concat $ map snd declsByFile
-      --isMeasure (MeasureDecl _ _ _ _ _ _) = True
-      --isMeasure _                     = False
-      --getCases (MeasureDecl name _ _ _ cs _) = (name, cs)
-      --mDecls = filter isMeasure (map node decls)
-      --mDefs = map declToDef mDecls
-      --mCases = map getCases mDecls
-  --putStr $ "DECLS " ++ (show (pretty decls))
   case resolveDecls decls of
     Left resolutionError -> (pdoc $ pretty resolutionError) >> pdoc empty >> exitFailure
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
-      --putStr $ "SPECS " ++ show ((extractMeasures mCases (head goals)) ++ goals) --(show (map gSpec ((extractMeasures (gEnvironment (head goals)) mDefs) ++ (requested goals)))
-      --putStr $ "GOALS: " ++ (unlines (map (show . gImpl) (requested goals)))
       results <- mapM (synthesizeGoal cquals tquals) (requested goals)
-      --results <- mapM (synthesizeGoal cquals tquals) ((extractMeasures (gEnvironment (head goals)) mDefs) ++ (requested goals))
-      --results <- mapM (synthesizeGoal cquals tquals) ((extractMeasures mCases (head goals)) ++ goals)
       when (not (null results) && showStats synquidParams) $ printStats results declsByFile
       -- Generate output if requested
       let libsWithDecls = collectLibDecls libs declsByFile
@@ -309,7 +298,6 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
-      --putStr "Synthesizing:  "
       (mProg, stats) <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
