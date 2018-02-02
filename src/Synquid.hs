@@ -7,7 +7,7 @@ import Synquid.Type
 import Synquid.Program
 import Synquid.Error
 import Synquid.Pretty
-import Synquid.Parser (parseFromFile, parseProgram, toErrorMessage)
+import Synquid.Parser
 import Synquid.Resolver (resolveDecls)
 import Synquid.SolverMonad
 import Synquid.HornSolver

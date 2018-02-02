@@ -18,6 +18,9 @@ data Pos a = Pos {
       node :: a
     }
     
+instance (Eq a) => Eq (Pos a) where
+  (==) p1 p2 = node p1 == node p2     
+    
 -- | Dummy source position
 noPos = (initialPos "<no file name>")    
 
