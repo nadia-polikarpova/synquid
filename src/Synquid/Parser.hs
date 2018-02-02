@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 
 -- | The parser for Synquid's program specification DSL.
-module Synquid.Parser where
+module Synquid.Parser (parseFromFile, parseProgram, toErrorMessage) where
 
 import Synquid.Logic
 import Synquid.Type
