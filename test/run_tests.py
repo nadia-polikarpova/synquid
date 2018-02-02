@@ -212,14 +212,16 @@ def check_diff():
         # Check if diff is empty
         try:
             first = next(diff)            
-            printerr('TESTS FAILED WITH DIFF\n')
+            printerr('TESTS FAILED WITH DIFF')
+            print
             print first
             sys.stdout.writelines(diff)
             print
             return True
             
         except StopIteration:
-            printok('TESTS PASSED\n')
+            printok('TESTS PASSED')
+            print
             return False
         
 
