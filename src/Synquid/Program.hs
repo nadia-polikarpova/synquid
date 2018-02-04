@@ -17,7 +17,7 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Monad
-import Control.Lens
+import Control.Lens as Lens
 import Debug.Trace
 
 {- Program terms -}
@@ -107,29 +107,71 @@ fmlToProgram (Var s x) = Program (PSymbol x) (addRefinement (fromSort s) (varRef
 fmlToProgram fml@(Unary op e) = let
     s = sortOf fml
     p = fmlToProgram e
-    fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "xxx" (typeOf p) opRes)
+    fun = Program (PSymbol $ unOpTokens Map.! op) (FunctionT "x" (typeOf p) opRes)
   in Program (PApp fun p) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
   where
     opRes
-      | op == Not = bool $ valBool |=| fnot (intVar "xxx")
-      | otherwise = int $ valInt |=| Unary op (intVar "xxx")
+      | op == Not = bool $ valBool |=| fnot (intVar "x")
+      | otherwise = int $ valInt |=| Unary op (intVar "x")
 fmlToProgram fml@(Binary op e1 e2) = let
     s = sortOf fml
     p1 = fmlToProgram e1
     p2 = fmlToProgram e2
-    fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "xxx" (typeOf p1) (FunctionT "yyy" (typeOf p2) opRes))
-    fun2 = Program (PApp fun1 p1) (FunctionT "yyy" (typeOf p2) opRes)
+    fun1 = Program (PSymbol $ binOpTokens Map.! op) (FunctionT "x" (typeOf p1) (FunctionT "y" (typeOf p2) opRes))
+    fun2 = Program (PApp fun1 p1) (FunctionT "y" (typeOf p2) opRes)
   in Program (PApp fun2 p2) (addRefinement (fromSort s) (Var s valueVarName |=| fml))
   where
     opRes
-      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "xxx") (intVar "yyy")
-      | otherwise                                 = bool $ valBool |=| Binary op (intVar "xxx") (intVar "yyy")
+      | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
+      | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
 fmlToProgram fml@(Pred s x (f:fs)) = Program (PApp fn (curriedApp (fmlToProgram f) fs)) AnyT --(addRefinement (fromSort s) (varRefinement x s))
   where
     fn = Program (PSymbol x) (FunctionT x AnyT AnyT {-(fromSort s)-})
     curriedApp :: RProgram -> [Formula] -> RProgram
     curriedApp p [] = p
-    curriedApp p (f:fs) = curriedApp (Program (PApp p (fmlToProgram f)) AnyT {-(fromSort s)-}) fs
+    curriedApp p (f:fs) = curriedApp (Program (PApp p (fmlToProgram f)) AnyT {-fromSort s -}) fs
+
+-- | Convert an executable formula into an untyped program
+fmlToUProgram :: Formula -> RProgram
+fmlToUProgram (BoolLit b) = Program (PSymbol $ show b) AnyT
+fmlToUProgram (IntLit i) = Program (PSymbol $ show i) AnyT
+fmlToUProgram (Var s x) = Program (PSymbol x) AnyT
+fmlToUProgram fml@(Unary op e) = let
+    p = fmlToUProgram e
+    fun = Program (PSymbol $ unOpTokens Map.! op) AnyT
+  in Program (PApp fun p) AnyT
+fmlToUProgram fml@(Binary op e1 e2) = let
+    p1 = fmlToUProgram e1
+    p2 = fmlToUProgram e2
+    fun1 = Program (PSymbol $ binOpTokens Map.! op) AnyT
+    fun2 = Program (PApp fun1 p1) AnyT
+  in Program (PApp fun2 p2) AnyT
+fmlToUProgram fml@(Pred _ x (f:fs)) = Program (PApp fn (curriedApp (fmlToUProgram f) fs)) AnyT
+  where
+    fn = Program (PSymbol x) AnyT
+    curriedApp :: RProgram -> [Formula] -> RProgram
+    curriedApp p [] = p
+    curriedApp p (f:fs) = curriedApp (Program (PApp p (fmlToUProgram f)) AnyT) fs
+fmlToUProgram (Ite gf f1 f2) = Program (PIf gp p1 p2) AnyT
+  where
+    gp = fmlToUProgram gf
+    p1 = fmlToUProgram f1
+    p2 = fmlToUProgram f2
+fmlToUProgram (Cons _ x (f:fs)) = Program (PApp fn (curriedApp (fmlToUProgram f) fs)) AnyT
+  where
+    fn = Program (PSymbol x) AnyT
+    curriedApp :: RProgram -> [Formula] -> RProgram
+    curriedApp p [] = p
+    curriedApp p (f:fs) = curriedApp (Program (PApp p (fmlToUProgram f)) AnyT) fs
+fmlToUProgram (SetLit _ [])     = Program (PSymbol emptySetCtor) AnyT
+fmlToUProgram (SetLit _ [f])     = Program (PApp (Program (PSymbol singletonCtor) AnyT) (fmlToUProgram f)) AnyT
+fmlToUProgram (SetLit _ (f:fs)) = Program (PApp ins (curriedApp (fmlToUProgram f) fs)) AnyT
+  where
+    ins = Program (PSymbol insertSetCtor) AnyT
+    emp = Program (PSymbol emptySetCtor) AnyT
+    curriedApp :: RProgram -> [Formula] -> RProgram
+    curriedApp p [] = Program (PApp p emp) AnyT
+    curriedApp p (f:fs) = curriedApp (Program (PApp p (fmlToUProgram f)) AnyT) fs
 
 -- | 'renameAsImpl' @p t@: change argument names in function type @t@ to be the same as in the abstraction @p@
 renameAsImpl :: (Id -> Bool) -> UProgram -> RType -> RType
@@ -223,15 +265,20 @@ allSymbols :: Environment -> Map Id RSchema
 allSymbols env = Map.unions $ Map.elems (env ^. symbols)
 
 -- | 'lookupSymbol' @name env@ : type of symbol @name@ in @env@, including built-in constants
-lookupSymbol :: Id -> Int -> Environment -> Maybe RSchema
-lookupSymbol name a env
+lookupSymbol :: Id -> Int -> Bool -> Environment -> Maybe RSchema
+lookupSymbol name a hasSet env
   | a == 0 && name == "True"                          = Just $ Monotype $ ScalarT BoolT valBool
   | a == 0 && name == "False"                         = Just $ Monotype $ ScalarT BoolT (fnot valBool)
   | a == 0 && isJust asInt                            = Just $ Monotype $ ScalarT IntT (valInt |=| IntLit (fromJust asInt))
   | a == 1 && (name `elem` Map.elems unOpTokens)      = let op = head $ Map.keys $ Map.filter (== name) unOpTokens in Just $ unOpType op
-  | a == 2 && (name `elem` Map.elems binOpTokens)     = let op = head $ Map.keys $ Map.filter (== name) binOpTokens in Just $ binOpType op
+  | isBinary && hasSet                                = let ops = Map.keys $ Map.filter (== name) binOpTokens
+    in Just $ binOpType $ case tail ops of
+        [] -> head ops
+        _  -> head $ tail ops -- To account for set operator overloading
+  | isBinary                                          = let op = head $ Map.keys $ Map.filter (== name) binOpTokens in Just $ binOpType op
   | otherwise                                         = Map.lookup name (allSymbols env)
   where
+    isBinary = a == 2 && (name `elem` Map.elems binOpTokens)
     asInt = asInteger name
 
 symbolAsFormula :: Environment -> Id -> RType -> Formula
@@ -250,19 +297,25 @@ symbolAsFormula env name t
 
 unOpType Neg       = Monotype $ FunctionT "x" intAll (int (valInt |=| fneg (intVar "x")))
 unOpType Not       = Monotype $ FunctionT "x" boolAll (bool (valBool |=| fnot (boolVar "x")))
-binOpType Times    = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |*| intVar "y")))
-binOpType Plus     = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))
-binOpType Minus    = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |-| intVar "y")))
-binOpType Eq       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |=| vartVar "a" "y"))))
-binOpType Neq      = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |/=| vartVar "a" "y"))))
-binOpType Lt       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |<| vartVar "a" "y"))))
-binOpType Le       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |<=| vartVar "a" "y"))))
-binOpType Gt       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |>| vartVar "a" "y"))))
-binOpType Ge       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |>=| vartVar "a" "y"))))
-binOpType And      = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |&| boolVar "y"))))
-binOpType Or       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" ||| boolVar "y"))))
-binOpType Implies  = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |=>| boolVar "y"))))
-binOpType Iff      = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |<=>| boolVar "y"))))
+binOpType Times     = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |*| intVar "y")))
+binOpType Plus      = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |+| intVar "y")))
+binOpType Minus     = Monotype $ FunctionT "x" intAll (FunctionT "y" intAll (int (valInt |=| intVar "x" |-| intVar "y")))
+binOpType Eq        = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |=| vartVar "a" "y"))))
+binOpType Neq       = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |/=| vartVar "a" "y"))))
+binOpType Lt        = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |<| vartVar "a" "y"))))
+binOpType Le        = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |<=| vartVar "a" "y"))))
+binOpType Gt        = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |>| vartVar "a" "y"))))
+binOpType Ge        = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (vartAll "a") (bool (valBool |=| (vartVar "a" "x" |>=| vartVar "a" "y"))))
+binOpType And       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |&| boolVar "y"))))
+binOpType Or        = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" ||| boolVar "y"))))
+binOpType Implies   = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |=>| boolVar "y"))))
+binOpType Iff       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |<=>| boolVar "y"))))
+-- TODO: Add meaningful refinements
+binOpType Union     = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (setAll "a"))
+binOpType Intersect = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (setAll "a"))
+binOpType Diff      = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (setAll "a"))
+binOpType Member    = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (setAll "a") boolAll)
+binOpType Subset    = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") boolAll)
 
 -- | Is @name@ a constant in @env@ including built-in constants)?
 isConstant name env = (name `elem` ["True", "False"]) ||
@@ -279,7 +332,12 @@ addVariable :: Id -> RType -> Environment -> Environment
 addVariable name t = addPolyVariable name (Monotype t)
 
 addPolyVariable :: Id -> RSchema -> Environment -> Environment
-addPolyVariable name sch = let n = arity (toMonotype sch) in (symbols %~ Map.insertWith Map.union n (Map.singleton name sch))
+addPolyVariable name sch e =  let n = arity (toMonotype sch) in (symbols %~ Map.insertWith Map.union n (Map.singleton name sch)) e
+  where
+    syms = unwords $ Map.keys $ allSymbols e
+    en = Map.keys $ allSymbols e
+    n = arity (toMonotype sch)
+    en' = Map.keys $ allSymbols ((symbols %~ Map.insertWith Map.union n (Map.singleton name sch)) e)
 
 -- | 'addConstant' @name t env@ : add type binding @name@ :: Monotype @t@ to @env@
 addConstant :: Id -> RType -> Environment -> Environment
@@ -453,7 +511,8 @@ data Goal = Goal {
   gSpec :: RSchema,             -- ^ Specification
   gImpl :: UProgram,            -- ^ Implementation template
   gDepth :: Int,                -- ^ Maximum level of auxiliary goal nesting allowed inside this goal
-  gSourcePos :: SourcePos       -- ^ Source Position
+  gSourcePos :: SourcePos,      -- ^ Source Position,
+  gSynthesize :: Bool           -- ^ Synthesis flag (false implies typechecking only)
 } deriving (Show, Eq, Ord)
 
 
@@ -462,7 +521,7 @@ unresolvedSpec goal = unresolvedType (gEnvironment goal) (gName goal)
 
 -- Remove measure being typechecked from environment
 filterEnv :: Environment -> Id -> Environment
-filterEnv e m = set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)) e
+filterEnv e m = Lens.set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)) e
 
 -- Transform a resolved measure into a program
 -- TODO: don't hardcode "qs"
@@ -481,7 +540,7 @@ measureProg name (MeasureDef inSort outSort defs post) = Program {
 
 -- Transform between case types
 mCase :: MeasureCase -> Case RType
-mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToProgram body}
+mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToUProgram body}
 
 -- Transform type signature into a synthesis/typechecking schema
 generateSchema :: Environment -> Id -> Sort -> Sort -> Formula -> RSchema
@@ -510,6 +569,19 @@ predPolymorphic [] name inSort outSort f = genSkeleton name inSort outSort f
 predPolymorphic (x:xs) name inSort outSort f = ForallP x (predPolymorphic xs name inSort outSort f)
 
 -- Generate non-polymorphic core of schema
--- TODO: don't hard code arg0
+-- TODO: don't hard code qs
 genSkeleton :: Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
 genSkeleton name inSort outSort post = Monotype (FunctionT "qs" (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))
+
+-- Default set implementation -- Needed to typecheck measures involving sets
+
+defaultSetType :: BareDeclaration
+defaultSetType = DataDecl name typeVars preds cons
+  where
+    name = setTypeName
+    typeVars = ["a"]
+    preds = []
+    cons = [empty,single,insert]
+    empty = ConstructorSig emptySetCtor (ScalarT (DatatypeT setTypeName [ScalarT (TypeVarT Map.empty "a") (BoolLit True)] []) (BoolLit True))
+    single = ConstructorSig singletonCtor (FunctionT "x" (ScalarT (TypeVarT Map.empty "a") (BoolLit True)) (ScalarT (DatatypeT setTypeName [ScalarT (TypeVarT Map.empty "a") (BoolLit True)] []) (BoolLit True)))
+    insert = ConstructorSig insertSetCtor (FunctionT "x" (ScalarT (TypeVarT Map.empty "a") (BoolLit True)) (FunctionT "xs" (ScalarT (DatatypeT setTypeName [ScalarT (TypeVarT Map.empty "a") (BoolLit True)] []) (BoolLit True)) (ScalarT (DatatypeT setTypeName [ScalarT (TypeVarT Map.empty "a") (BoolLit True)] []) (BoolLit True))))

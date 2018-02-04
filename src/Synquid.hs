@@ -293,7 +293,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       _ -> goals
     pdoc = printDoc (outputFormat synquidParams)
     synthesizeGoal cquals tquals goal = do
-      when (showSpec synquidParams) $ pdoc (prettySpec goal)
+      when ((gSynthesize goal) && (showSpec synquidParams)) $ pdoc (prettySpec goal)
       -- print empty
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
@@ -302,7 +302,7 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
-          pdoc (prettySolution goal prog)
+          when (gSynthesize goal) $ pdoc (prettySolution goal prog)
           pdoc empty
           return ((goal, prog), stats)
     printStats results declsByFile = do

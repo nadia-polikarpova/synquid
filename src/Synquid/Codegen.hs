@@ -140,13 +140,13 @@ instance AsHaskellDecl (Id, DatatypeDef) where
       typeClss = if null ctors then [] else defaultTypeClasses |>> (\x -> (x, []))
 
 instance AsHaskellDecl (Goal, Program r) where
-  toHsDecl _ (Goal name env _ _ _ _, p) = PatBind unknownLoc
+  toHsDecl _ (Goal name env _ _ _ _ _, p) = PatBind unknownLoc
     (PVar $ vIdent env name)           -- lhs (pattern)
     (UnGuardedRhs $ toHsExp env p)     -- rhs (expression)
     Nothing                            -- bindings??
 
 instance AsHaskellDecl Goal where
-  toHsDecl _ (Goal name env spec _ _ _) = TypeSig unknownLoc
+  toHsDecl _ (Goal name env spec _ _ _ _) = TypeSig unknownLoc
     [Ident name]
     (toHsQualType env spec)
 

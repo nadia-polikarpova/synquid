@@ -2,11 +2,10 @@ data List a where
   Nil :: List a
   Cons :: x: a -> xs: List a -> List a
 
--- This should currently **not** fail!
-termination measure ln :: List a -> {Int | _v >= 0} where
+-- This should fail to typecheck!
+termination measure len :: List a -> {Int | _v < 0} where
   Nil -> 0
-  Cons x xs -> 1 + ln xs
+  Cons x xs -> 1 + len xs
 
-
-append ::  x: List a -> z: List a -> {List a | ln _v == ln x + ln z}
+append ::  x: List a -> z: List a -> {List a | len _v == len x + len z}
 append = ??

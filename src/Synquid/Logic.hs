@@ -117,7 +117,6 @@ data Formula =
   BoolLit Bool |                      -- ^ Boolean literal
   IntLit Integer |                    -- ^ Integer literal
   SetLit Sort [Formula] |             -- ^ Set literal ([1, 2, 3])
-  SetComp Formula Formula |           -- ^ Set comprehension ([x | x > 3])
   Var Sort Id |                       -- ^ Input variable (universally quantified first-order variable)
   Unknown Substitution Id |           -- ^ Predicate unknown (with a pending substitution)
   Unary UnOp Formula |                -- ^ Unary expression
@@ -184,7 +183,6 @@ infix 4 |<=>|
 -- | 'varsOf' @fml@ : set of all input variables of @fml@
 varsOf :: Formula -> Set Formula
 varsOf (SetLit _ elems) = Set.unions $ map varsOf elems
-varsOf (SetComp x e) = Set.delete x (varsOf e)
 varsOf v@(Var _ _) = Set.singleton v
 varsOf (Unary _ e) = varsOf e
 varsOf (Binary _ e1 e2) = varsOf e1 `Set.union` varsOf e2
@@ -196,7 +194,6 @@ varsOf _ = Set.empty
 
 -- | 'unknownsOf' @fml@ : set of all predicate unknowns of @fml@
 unknownsOf :: Formula -> Set Formula
-unknownsOf (SetComp _ e) = unknownsOf e
 unknownsOf u@(Unknown _ _) = Set.singleton u
 unknownsOf (Unary Not e) = unknownsOf e
 unknownsOf (Binary _ e1 e2) = unknownsOf e1 `Set.union` unknownsOf e2
@@ -234,7 +231,6 @@ negPreds = snd . posNegPreds
 predsOf :: Formula -> Set Id
 predsOf (Pred _ p es) = Set.insert p (Set.unions $ map predsOf es)
 predsOf (SetLit _ elems) = Set.unions $ map predsOf elems
-predsOf (SetComp _ e) = predsOf e
 predsOf (Unary _ e) = predsOf e
 predsOf (Binary _ e1 e2) = predsOf e1 `Set.union` predsOf e2
 predsOf (Ite e0 e1 e2) = predsOf e0 `Set.union` predsOf e1 `Set.union` predsOf e2
@@ -254,7 +250,6 @@ sortOf :: Formula -> Sort
 sortOf (BoolLit _)                               = BoolS
 sortOf (IntLit _)                                = IntS
 sortOf (SetLit s _)                              = SetS s
-sortOf (SetComp (Var s _) _)                     = SetS s
 sortOf (Var s _ )                                = s
 sortOf (Unknown _ _)                             = BoolS
 sortOf (Unary op _)
@@ -271,7 +266,6 @@ sortOf (All _ _)                                 = BoolS
 
 isExecutable :: Formula -> Bool
 isExecutable (SetLit _ _) = False
-isExecutable (SetComp _ _) = False
 isExecutable (Unary _ e) = isExecutable e
 isExecutable (Binary _ e1 e2) = isExecutable e1 && isExecutable e2
 isExecutable (Ite e0 e1 e2) = False
@@ -283,9 +277,6 @@ isExecutable _ = True
 substitute :: Substitution -> Formula -> Formula
 substitute subst fml = case fml of
   SetLit b elems -> SetLit b $ map (substitute subst) elems
-  SetComp v@(Var _ x) e -> if x `Map.member` subst
-                            then error $ unwords ["Scoped variable of the set comprehension clashes with substitution variable", x]
-                            else SetComp v (substitute subst e)
   Var s name -> case Map.lookup name subst of
     Just f -> f
     Nothing -> fml
@@ -313,7 +304,6 @@ deBrujns = map (\i -> dontCare ++ show i) [0..]
 sortSubstituteFml :: SortSubstitution -> Formula -> Formula
 sortSubstituteFml subst fml = case fml of
   SetLit el es -> SetLit (sortSubstitute subst el) (map (sortSubstituteFml subst) es)
-  SetComp x e -> SetComp (sortSubstituteFml subst x) (sortSubstituteFml subst e)
   Var s name -> Var (sortSubstitute subst s) name
   Unknown s name -> Unknown (Map.map (sortSubstituteFml subst) s) name
   Unary op e -> Unary op (sortSubstituteFml subst e)
@@ -338,7 +328,6 @@ substitutePredicate pSubst fml = case fml of
   Binary op e1 e2 -> Binary op (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   Ite e0 e1 e2 -> Ite (substitutePredicate pSubst e0) (substitutePredicate pSubst e1) (substitutePredicate pSubst e2)
   All v e -> All v (substitutePredicate pSubst e)
-  SetComp x e -> SetComp x (substitutePredicate pSubst e)
   _ -> fml
 
 -- | Negation normal form of a formula:
@@ -371,10 +360,7 @@ uDNF = dnf' . negationNF
                                 lClause <- dnf' e1
                                 rClause <- dnf' e2
                                 return $ lClause |&| rClause
-    dnf' fml
-      | hasComp fml && not (Set.null $ unknownsOf fml) =
-          error "Encountered second-order unknown in set comprehension"
-      | otherwise = [fml]
+    dnf' fml = [fml]
 
 atomsOf fml = atomsOf' (negationNF fml)
   where
@@ -393,38 +379,15 @@ splitByPredicate preds arg fmls = foldM (\m fml -> checkFml fml m fml) Map.empty
           then return $ Map.insertWith Set.union name (Set.singleton whole) m
           else foldM (checkFml whole) m args
       SetLit _ args -> foldM (checkFml whole) m args
-      SetComp _ f -> checkFml whole m f
       Unary _ f -> checkFml whole m f
       Binary _ l r -> foldM (checkFml whole) m [l, r]
       Ite c t e -> foldM (checkFml whole) m [c, t, e]
       Cons _ _ args -> foldM (checkFml whole) m args
       _ -> return m
 
--- | Eliminate set comprehensions from a Boolean formula
-eliminateComp :: Formula -> Formula
-eliminateComp (Binary Member x s) = setToPredicate x s
-eliminateComp (Binary Subset l r)
-  | hasComp l || hasComp r        = let scopedVar = Var (elemSort $ sortOf l) "_comp" in
-                                    All scopedVar (Binary Implies (setToPredicate scopedVar l) (setToPredicate scopedVar r))
-eliminateComp (Binary Eq l r) |
-  isSetS (sortOf l) && (hasComp l || hasComp r) = let scopedVar = Var (elemSort $ sortOf l) "_comp" in
-                                                  All scopedVar (Binary Iff (setToPredicate scopedVar l) (setToPredicate scopedVar r))
-eliminateComp (Binary Neq l r) |
-  isSetS (sortOf l) && (hasComp l || hasComp r) = error "Inequality on set comprehensions is not supported"
-eliminateComp (Binary op l r) |
-  op `elem` [And, Or, Implies, Iff]  = Binary op (eliminateComp l) (eliminateComp r)
-eliminateComp (Unary Not e) = Unary Not (eliminateComp e)
-eliminateComp fml = fml
-
-hasComp :: Formula -> Bool
-hasComp (SetComp _ _) = True
-hasComp (Binary op l r) = hasComp l || hasComp r
-hasComp (Ite _ l r) = hasComp l || hasComp r
-hasComp _ = False
 
 -- | 'setToPredicate' @x s@: predicate equivalent to @x in s@, which does not contain comprehensions
 setToPredicate :: Formula -> Formula -> Formula
-setToPredicate x (SetComp (Var _ y) e) = substitute (Map.singleton y x) e
 setToPredicate x (Binary Union sl sr) = Binary Or (setToPredicate x sl) (setToPredicate x sr)
 setToPredicate x (Binary Intersect sl sr) = Binary And (setToPredicate x sl) (setToPredicate x sr)
 setToPredicate x (Binary Diff sl sr) = Binary And (setToPredicate x sl) (Unary Not (setToPredicate x sr))
@@ -497,7 +460,6 @@ applySolution sol fml = case fml of
   Binary op e1 e2 -> Binary op (applySolution sol e1) (applySolution sol e2)
   Ite e0 e1 e2 -> Ite (applySolution sol e0) (applySolution sol e1) (applySolution sol e2)
   All x e -> All x (applySolution sol e)
-  SetComp x e -> SetComp x (applySolution sol e)
   otherwise -> fml
 
 -- | 'merge' @sol sol'@ : element-wise conjunction of @sol@ and @sol'@

@@ -194,7 +194,7 @@ evalZ3State f = do
 
 -- | Convert a first-order constraint to a Z3 AST.
 fmlToAST :: Formula -> Z3State AST
-fmlToAST = toAST . eliminateComp
+fmlToAST = toAST
 
 -- | Convert a Synquid refinement term to a Z3 AST
 toAST :: Formula -> Z3State AST
@@ -202,7 +202,6 @@ toAST expr = case expr of
   BoolLit True  -> mkTrue
   BoolLit False -> mkFalse
   SetLit el xs -> setLiteral el xs
-  SetComp _ _ -> error $ unwords ["toAST: encountered a set comprehension", show (pretty expr)]
   IntLit i -> mkIntNum i
   Var s name -> var s name
   Unknown _ name -> error $ unwords ["toAST: encountered a second-order unknown", name]
