@@ -183,14 +183,14 @@ fmlDocAt n fml = condHlParens (n' <= n) (
   case fml of
     BoolLit b -> pretty b
     IntLit i -> intLiteral i
-    SetLit s elems -> withSort (SetS s) (hlBrackets $ commaSep $ map fmlDoc elems)
-    Var s name -> withSort s $ if name == valueVarName then special name else text name
+    SetLit s elems -> (hlBrackets $ commaSep $ map fmlDoc elems)
+    Var s name -> if name == valueVarName then special name else text name
     Unknown s name -> if Map.null s then text name else hMapDoc pretty pretty s <> text name
     Unary op e -> pretty op <> fmlDocAt n' e
     Binary op e1 e2 -> fmlDocAt n' e1 <+> pretty op <+> fmlDocAt n' e2
     Ite e0 e1 e2 -> keyword "if" <+> fmlDoc e0 <+> keyword "then" <+> fmlDoc e1 <+> keyword "else" <+> fmlDoc e2
-    Pred b name args -> withSort b $ text name <+> hsep (map (fmlDocAt n') args)
-    Cons b name args -> withSort b $ hlParens (text name <+> hsep (map (fmlDocAt n') args))
+    Pred b name args -> text name <+> hsep (map (fmlDocAt n') args)
+    Cons b name args -> hlParens (text name <+> hsep (map (fmlDocAt n') args))
     All x e -> keyword "forall" <+> pretty x <+> operator "." <+> fmlDoc e
   )
   where
