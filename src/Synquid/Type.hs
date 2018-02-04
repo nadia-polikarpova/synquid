@@ -13,7 +13,7 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Monad
-import Control.Lens
+import Control.Lens hiding (set)
 
 {- Type skeletons -}
 
@@ -65,13 +65,15 @@ toSort (TypeVarT _ name) = VarS name
 fromSort :: Sort -> TypeSkeleton Formula
 fromSort = flip refineSort ftrue
 
-
 refineSort :: Sort -> Formula -> TypeSkeleton Formula
 refineSort BoolS f = ScalarT BoolT f
 refineSort IntS f = ScalarT IntT f
 refineSort (VarS name) f = ScalarT (TypeVarT Map.empty name) f
-refineSort (DataS name sArgs) f = ScalarT (DatatypeT name (map fromSort sArgs) []) f -- TODO: what to do with pArgs?
-refineSort (SetS s) f = ScalarT (TypeVarT (Map.singleton "x" (SetLit s [])) "x") f -- TODO: is this right?
+refineSort (DataS name sArgs) f = ScalarT (DatatypeT name (map fromSort sArgs) []) f
+refineSort (SetS s) f = ScalarT dt f
+  where
+    dt = DatatypeT setTypeName [fromSort s] []
+    tvar = ScalarT (TypeVarT Map.empty setTypeVar) f
 refineSort AnyS f = AnyT
 
 typeIsData :: TypeSkeleton r -> Bool
@@ -82,6 +84,13 @@ arity :: TypeSkeleton r -> Int
 arity (FunctionT _ _ t) = 1 + arity t
 arity (LetT _ _ t) = arity t
 arity _ = 0
+
+-- TODO: make sure the AnyT case is OK
+hasSet :: TypeSkeleton r -> Bool
+hasSet (ScalarT (DatatypeT name _ _) _) = name == setTypeName
+hasSet (FunctionT _ t1 t2) = hasSet t1 || hasSet t2
+hasSet (LetT _ t1 t2) = hasSet t1 || hasSet t2
+hasSet _ = False
 
 lastType (FunctionT _ _ tRes) = lastType tRes
 lastType (LetT _ _ t) = lastType t
@@ -150,6 +159,11 @@ pos = int (valInt |>| IntLit 0)
 vart n = ScalarT (TypeVarT Map.empty n)
 vart_ n = vart n ()
 vartAll n = vart n ftrue
+
+set n = ScalarT (DatatypeT setTypeName [tvar] [])
+  where
+    tvar = ScalarT (TypeVarT Map.empty n) ftrue
+setAll n = (set n) ftrue
 
 -- | Mapping from type variables to types
 type TypeSubstitution = Map Id RType
@@ -291,3 +305,11 @@ typeApplySolution sol (ScalarT base fml) = ScalarT base (applySolution sol fml)
 typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution sol tArg) (typeApplySolution sol tRes)
 typeApplySolution sol (LetT x tDef tBody) = LetT x (typeApplySolution sol tDef) (typeApplySolution sol tBody)
 typeApplySolution _ AnyT = AnyT
+
+
+-- Set strings: used for "fake" set type for typechecking measures
+emptySetCtor = "Emptyset"
+singletonCtor = "Singleton"
+insertSetCtor = "Insert"
+setTypeName = "DSet"
+setTypeVar = "setTypeVar"

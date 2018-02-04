@@ -37,9 +37,9 @@ parseFromFile :: Parser a -> String -> IO (Either ParseError a)
 parseFromFile aParser fname = do
   input <- readFile fname
   return $ runIndent fname $ runParserT aParser () fname input
-  
-toErrorMessage :: ParseError -> ErrorMessage  
-toErrorMessage err = ErrorMessage ParseError (errorPos err) 
+
+toErrorMessage :: ParseError -> ErrorMessage
+toErrorMessage err = ErrorMessage ParseError (errorPos err)
   (vsep $ map text $ tail $ lines $ showErrorMessages "or" "unknown parse error" "expecting" "Unexpected" "end of input" (errorMessages err))
 
 {- Lexical analysis -}
@@ -54,7 +54,7 @@ opLetter :: [Char]
 opLetter = nub (concatMap tail opNames)
 
 synquidDef :: Token.GenLanguageDef String st (State SourcePos)
-synquidDef = Token.LanguageDef 
+synquidDef = Token.LanguageDef
   commentStart
   commentEnd
   commentLine
@@ -66,10 +66,10 @@ synquidDef = Token.LanguageDef
   keywords
   opNames
   True
-  
+
 lexer :: Token.GenTokenParser String st (State SourcePos)
-lexer = Token.makeTokenParser synquidDef    
-      
+lexer = Token.makeTokenParser synquidDef
+
 identifier = Token.identifier lexer
 reserved = Token.reserved lexer
 reservedOp = Token.reservedOp lexer
@@ -83,8 +83,8 @@ comma = Token.comma lexer
 commaSep = Token.commaSep lexer
 commaSep1 = Token.commaSep1 lexer
 dot = Token.dot lexer
-      
-{- Declarations -}      
+
+{- Declarations -}
 
 parseDeclaration :: Parser Declaration
 parseDeclaration = attachPosBefore $
@@ -112,8 +112,8 @@ parseDataDecl = do
   typeName <- parseTypeName
   tParams <- many (sameOrIndented >> parseIdentifier)
   pParams <- many (sameOrIndented >> parsePredParam)
-  constructors <- option [] (reserved "where" >> indented >> block parseConstructorSig) 
-  return $ DataDecl typeName tParams pParams constructors  
+  constructors <- option [] (reserved "where" >> indented >> block parseConstructorSig)
+  return $ DataDecl typeName tParams pParams constructors
   where
     parsePredParam = do
       p <- angles parsePredSig
@@ -124,7 +124,7 @@ parseConstructorSig :: Parser ConstructorSig
 parseConstructorSig = do
   ctorName <- parseTypeName
   reservedOp "::"
-  ctorType <- parseType  
+  ctorType <- parseType
   return $ ConstructorSig ctorName ctorType
 
 parseMeasureDecl :: Parser BareDeclaration
@@ -136,7 +136,7 @@ parseMeasureDecl = do
   inSort <- parseSort
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
-  cases <- option [] (reserved "where" >> indented >> block parseDefCase) 
+  cases <- option [] (reserved "where" >> indented >> block parseDefCase)
   return $ MeasureDecl measureName inSort outSort post cases isTermination
   where
     parseDefCase = do
@@ -144,24 +144,24 @@ parseMeasureDecl = do
       binders <- many parseIdentifierOrBlank
       reservedOp "->"
       body <- parseFormula
-      return $ MeasureCase ctor binders body  
-  
+      return $ MeasureCase ctor binders body
+
 parsePredDecl :: Parser BareDeclaration
 parsePredDecl = do
   reserved "predicate"
   sig <- parsePredSig
   return $ PredDecl sig
-  
+
 parseQualifierDecl :: Parser BareDeclaration
 parseQualifierDecl = do
   reserved "qualifier"
   QualifierDecl <$> braces (commaSep parseFormula)
-  
+
 parseMutualDecl :: Parser BareDeclaration
 parseMutualDecl = do
   reserved "mutual"
-  MutualDecl <$> braces (commaSep parseIdentifier)  
-  
+  MutualDecl <$> braces (commaSep parseIdentifier)
+
 parseInlineDecl :: Parser BareDeclaration
 parseInlineDecl = do
   reserved "inline"
@@ -170,13 +170,13 @@ parseInlineDecl = do
   reservedOp "="
   body <- parseFormula
   return $ InlineDecl name args body
-  
+
 parseFuncDeclOrGoal :: Parser BareDeclaration
 parseFuncDeclOrGoal = do
   funcName <- parseIdentifier
   (reservedOp "::" >> FuncDecl funcName <$> parseSchema) <|>
     (reservedOp "=" >> SynthesisGoal funcName <$> parseImpl)
-  
+
 {- Types -}
 
 parseSchema :: Parser RSchema
@@ -191,10 +191,10 @@ parseForall = do
 
 parseType :: Parser RType
 parseType = withPos (choice [try parseFunctionTypeWithArg, parseFunctionTypeMb] <?> "type")
-  
+
 -- | Parse top-level type that starts with an argument name, and thus must be a function type
 parseFunctionTypeWithArg = do
-  argId <- parseArgName  
+  argId <- parseArgName
   argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
   reservedOp "->"
   returnType <- parseType
@@ -202,10 +202,10 @@ parseFunctionTypeWithArg = do
   where
     parseArgName = parseIdentifier <* reservedOp ":"
 
--- | Parse top-level type that does not start with an argument name 
+-- | Parse top-level type that does not start with an argument name
 -- and thus could be a scalar or a function type depending on whether followed by ->
 parseFunctionTypeMb = do
-  argType <- parseUnrefTypeWithArgs <|> parseTypeAtom   
+  argType <- parseUnrefTypeWithArgs <|> parseTypeAtom
   parseFunctionRest argType <|> return argType
   where
     parseFunctionRest argType = do
@@ -220,37 +220,37 @@ parseTypeAtom = choice [
   parseUnrefTypeNoArgs,
   parseListType
   ]
-  
+
 parseUnrefTypeNoArgs = do
   baseType <- parseBaseType
-  return $ ScalarT baseType ftrue  
+  return $ ScalarT baseType ftrue
   where
     parseBaseType = choice [
       BoolT <$ reserved "Bool",
       IntT <$ reserved "Int",
       (\name -> DatatypeT name [][]) <$> parseTypeName,
       TypeVarT Map.empty <$> parseIdentifier]
-  
+
 parseUnrefTypeWithArgs = do
   name <- parseTypeName
   typeArgs <- many (sameOrIndented >> parseTypeAtom)
   predArgs <- many (sameOrIndented >> angles parsePredArg)
-  return $ ScalarT (DatatypeT name typeArgs predArgs) ftrue    
-  
+  return $ ScalarT (DatatypeT name typeArgs predArgs) ftrue
+
 parsePredArg = braces parseFormula <|> (flip (Pred AnyS) [] <$> parseIdentifier)
-  
+
 parseScalarUnrefType = parseUnrefTypeWithArgs <|> parseUnrefTypeNoArgs
-  
+
 parseScalarRefType = braces $ do
   ScalarT baseType _ <- parseScalarUnrefType
   reservedOp "|"
   refinement <- parseFormula
-  return $ ScalarT baseType refinement  
+  return $ ScalarT baseType refinement
 
 parseListType = do
   elemType <- brackets parseType
   return $ ScalarT (DatatypeT "List" [elemType] []) ftrue
-  
+
 parseSort :: Parser Sort
 parseSort = withPos (parseSortWithArgs <|> parseSortAtom <?> "sort")
   where
@@ -261,22 +261,22 @@ parseSort = withPos (parseSortWithArgs <|> parseSortAtom <?> "sort")
       VarS <$> parseIdentifier,
       flip DataS [] <$> parseTypeName
       ]
-      
+
     parseSortWithArgs = choice [
       SetS <$> (reserved "Set" >> sameOrIndented >> parseSortAtom),
       do
-        typeName <- parseTypeName        
+        typeName <- parseTypeName
         typeParams <- many (sameOrIndented >> parseSortAtom)
         return $ DataS typeName typeParams
       ]
-      
+
 parseRefinedSort :: Parser (Sort, Formula)
 parseRefinedSort = braces $ do
   s <- parseSort
   reservedOp "|"
   refinement <- parseFormula
   return (s, refinement)
-      
+
 {- Formulas -}
 
 -- | Expression table
@@ -284,14 +284,14 @@ exprTable mkUnary mkBinary withGhost = [
   [unary Not, unary Neg],
   [binary Times AssocLeft],
   [binary Plus AssocLeft, binary Minus AssocLeft],
-  [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone] 
+  [binary Eq AssocNone, binary Neq AssocNone, binary Le AssocNone, binary Lt AssocNone, binary Ge AssocNone, binary Gt AssocNone]
     ++ if withGhost then [binaryWord Member AssocNone] else [],
   [binary And AssocLeft, binary Or AssocLeft],
   [binary Implies AssocRight, binary Iff AssocRight]]
   where
     unary op = Prefix (reservedOp (unOpTokens Map.! op) >> return (mkUnary op))
     binary op assoc = Infix (reservedOp (binOpTokens Map.! op) >> return (mkBinary op)) assoc
-    binaryWord op assoc = Infix (reserved (binOpTokens Map.! op) >> return (mkBinary op)) assoc    
+    binaryWord op assoc = Infix (reserved (binOpTokens Map.! op) >> return (mkBinary op)) assoc
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible
@@ -317,21 +317,15 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
         parens parseFormula
       , parseBoolLit
       , parseIntLit
-      , parseSetLitOrComp
+      , parseSetLit
       , parseNullaryCons
       , parseVariable
-      ]      
+      ]
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
-    parseSetLitOrComp = brackets (try parseSetComp <|> parseSetLit)
-    parseSetComp = do
-      name <- parseIdentifier
-      reservedOp "|"
-      e <- parseFormula
-      return $ SetComp (Var AnyS name) e
-    parseSetLit = SetLit AnyS <$> commaSep parseFormula    
+    parseSetLit = brackets $ SetLit AnyS <$> commaSep parseFormula
     parseNullaryCons = flip (Cons AnyS) [] <$> parseTypeName
-    parseVariable = Var AnyS <$> parseIdentifier 
+    parseVariable = Var AnyS <$> parseIdentifier
     parseConsApp = do
       name <- parseTypeName
       args <- many1 (sameOrIndented >> parseAtomTerm)
@@ -340,7 +334,7 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
       name <- parseIdentifier
       args <- many1 (sameOrIndented >> parseAtomTerm)
       return $ Pred AnyS name args
-      
+
 {- Implementations -}
 
 parseImpl :: Parser UProgram
@@ -367,7 +361,7 @@ parseLet = do
 parseMatch = do
     reserved "match"
     scr <- parseETerm
-    reserved "with"    
+    reserved "with"
     cases <- indented >> block parseCase
     return $ untyped $ PMatch scr cases
   where
@@ -381,7 +375,7 @@ parseMatch = do
 parseIf = do
   reserved "if"
   iCond <- parseETerm
-  reserved "then" 
+  reserved "then"
   iThen <- parseImpl
   reserved "else"
   iElse <- parseImpl
@@ -407,11 +401,11 @@ parseETerm = buildExpressionParser (exprTable mkUnary mkBinary False) parseAppTe
     parseIntLit = natural >>= return . untyped . PSymbol . show
     parseHole = reserved "??" >> return (untyped PHole)
     parseSymbol = (parseIdentifier <|> parseTypeName) >>= (return . untyped . PSymbol)
-    
+
 parseList = do
   elems <- brackets (commaSep parseImpl)
   return $ foldr cons nil elems
-  where 
+  where
     cons x xs = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "Cons") x) xs
     nil = untyped $ PSymbol "Nil"
 
@@ -419,7 +413,7 @@ withOptionalType p = do
   (Program content _) <- p
   typ <- option AnyT $ reserved "::" >> parseType
   return $ Program content typ
-      
+
 {- Misc -}
 
 parsePredSig :: Parser PredSig
@@ -432,32 +426,32 @@ parsePredSig = do
 parseIdentifier :: Parser Id
 parseIdentifier = try $ do
   name <- identifier
-  if isTypeName name 
-    then unexpected ("capitalized " ++ show name) 
+  if isTypeName name
+    then unexpected ("capitalized " ++ show name)
     else if name == dontCare then unexpected ("blank") else return name
-  
+
 parseIdentifierOrBlank :: Parser Id
 parseIdentifierOrBlank = try $ do
   name <- identifier
-  if isTypeName name then unexpected ("capitalized " ++ show name) else return name  
+  if isTypeName name then unexpected ("capitalized " ++ show name) else return name
 
 parseTypeName :: Parser Id
 parseTypeName = try $ do
   name <- identifier
   if not (isTypeName name) then unexpected ("non-capitalized " ++ show name) else return name
-  
+
 -- | 'attachPosBefore' @p@ : parser that behaves like @p@, but also attaches the source position before the first token it parsed to the result
 attachPosBefore :: Parser a -> Parser (Pos a)
-attachPosBefore = liftM2 Pos getPosition  
-  
+attachPosBefore = liftM2 Pos getPosition
+
 {- Debug -}
 
 printRefPos :: String -> Parser ()
 printRefPos msg = do
   pos <- get
   trace (msg ++ show pos) $ return ()
-  
+
 printCurPos :: String -> Parser ()
 printCurPos msg = do
   pos <- getPosition
-  trace (msg ++ show pos) $ return ()  
+  trace (msg ++ show pos) $ return ()

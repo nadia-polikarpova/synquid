@@ -4,7 +4,7 @@
 module Synquid.Explorer where
 
 import Synquid.Logic
-import Synquid.Type
+import Synquid.Type hiding (set)
 import Synquid.Program
 import Synquid.Error
 import Synquid.SolverMonad
@@ -545,7 +545,7 @@ isPolyConstructor (Program (PSymbol name) t) = isTypeName name && (not . Set.nul
 
 enqueueGoal env typ impl depth = do
   g <- freshVar env "f"
-  auxGoals %= ((Goal g env (Monotype typ) impl depth noPos) :)
+  auxGoals %= ((Goal g env (Monotype typ) impl depth noPos True) :)
   return $ Program (PSymbol g) typ
 
 {- Utility -}

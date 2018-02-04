@@ -35,7 +35,7 @@ module Synquid.TypeConstraintSolver (
 ) where
 
 import Synquid.Logic
-import Synquid.Type
+import Synquid.Type hiding (set)
 import Synquid.Program
 import Synquid.Error
 import Synquid.Pretty
@@ -634,7 +634,6 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
     SetLit _ elems -> Set.unions (map inst elems)
-    SetComp _ e -> inst e
     Pred _ p args -> Set.unions $ map inst args
     _ -> Set.empty
   where

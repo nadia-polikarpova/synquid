@@ -29,6 +29,7 @@ import Debug.Trace
 data ResolverState = ResolverState {
   _environment :: Environment,
   _goals :: [(Id, (UProgram, SourcePos))],
+  _checkingGoals :: [(Id, (UProgram, SourcePos))],
   _condQualifiers :: [Formula],
   _typeQualifiers :: [Formula],
   _mutuals :: Map Id [Id],
@@ -43,6 +44,7 @@ makeLenses ''ResolverState
 initResolverState = ResolverState {
   _environment = emptyEnv,
   _goals = [],
+  _checkingGoals = [],
   _condQualifiers = [],
   _typeQualifiers = [],
   _mutuals = Map.empty,
@@ -58,23 +60,27 @@ resolveDecls declarations =
   case runExcept (execStateT go initResolverState) of
     Left msg -> Left msg
     Right st ->
-      Right (map (makeGoal (st ^. environment) (map fst (st ^. goals)) (st ^. mutuals)) (st ^. goals), st ^. condQualifiers, st ^. typeQualifiers)
+      Right (typecheckingGoals st ++ synthesisGoals st, st ^. condQualifiers, st ^. typeQualifiers)
   where
     go = do
       -- Pass 1: collect all declarations and resolve sorts, but do not resolve refinement types yet
-      mapM_ (extractPos resolveDeclaration) declarations
+      mapM_ (extractPos resolveDeclaration) declarations'
       -- Pass 2: resolve refinement types in signatures
-      mapM_ (extractPos resolveSignatures) declarations
-    makeGoal env allNames allMutuals (name, (impl, pos)) =
+      mapM_ (extractPos resolveSignatures) declarations'
+    declarations' = setDecl : declarations
+    setDecl = Pos noPos defaultSetType
+    makeGoal synth env allNames allMutuals (name, (impl, pos)) =
       let
         spec = allSymbols env Map.! name
         myMutuals = Map.findWithDefault [] name allMutuals
         toRemove = drop (fromJust $ elemIndex name allNames) allNames \\ myMutuals -- All goals after and including @name@, except mutuals
         env' = foldr removeVariable env toRemove
-      in Goal name env' spec impl 0 pos
+      in Goal name env' spec impl 0 pos synth
     extractPos pass (Pos pos decl) = do
       currentPosition .= pos
       pass decl
+    synthesisGoals st = fmap (makeGoal True (st ^. environment) (map fst ((st ^. goals) ++ (st ^. checkingGoals))) (st ^. mutuals)) (st ^. goals)
+    typecheckingGoals st = fmap (makeGoal False (st ^. environment) (map fst ((st ^. goals) ++ (st ^. checkingGoals))) (st ^. mutuals)) (st ^. checkingGoals)
 
 resolveRefinement :: Environment -> Formula -> Either ErrorMessage Formula
 resolveRefinement env fml = runExcept (evalStateT (resolveTypeRefinement AnyS fml) (initResolverState {_environment = env}))
@@ -105,7 +111,7 @@ resolveDeclaration (TypeDecl typeName typeVars typeBody) = do
     else throwResError (text "Type variable(s)" <+> hsep (map text $ Set.toList extraTypeVars) <+>
               text "in the definition of type synonym" <+> text typeName <+> text "are undefined")
 resolveDeclaration (FuncDecl funcName typeSchema) = addNewSignature funcName typeSchema
-resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
+resolveDeclaration d@(DataDecl dtName tParams pVarParams ctors) = do
   let
     (pParams, pVariances) = unzip pVarParams
     datatype = DatatypeDef {
@@ -120,7 +126,7 @@ resolveDeclaration (DataDecl dtName tParams pVarParams ctors) = do
   mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) ctors
 resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
   env <- use environment
-  addNewSignature (measureName ++ "'") (generateSchema env measureName inSort outSort post)
+  addNewSignature measureName (generateSchema env measureName inSort outSort post)
   -- Resolve measure signature:
   resolveSort inSort
   resolveSort outSort
@@ -202,11 +208,11 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
     then throwResError $ text "Definition of measure" <+> text measureName <+> text "must include one case per constructor of" <+> text dtName
     else do
       defs' <- mapM (resolveMeasureDef ctors) defCases
-      sch <- uses environment ((Map.! (measureName ++ "'")) . allSymbols)
+      sch <- uses environment ((Map.! measureName) . allSymbols)
       sch' <- resolveSchema sch
-      environment %= addPolyConstant (measureName ++ "'") sch'
+      environment %= addPolyConstant measureName sch'
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')
-      goals %= (++ [(measureName ++ "'", (impl (MeasureDef inSort outSort defCases post'), pos))])
+      checkingGoals %= (++ [(measureName, (impl (MeasureDef inSort outSort defCases post'), pos))])
   where
     impl = measureProg measureName
     resolveMeasureDef allCtors (MeasureCase ctorName binders body) =
@@ -276,7 +282,7 @@ resolveSchema sch = do
     resolveSchema' (Monotype t) = Monotype <$> resolveType t
 
 resolveType :: RType -> Resolver RType
-resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
+resolveType s@(ScalarT (DatatypeT name tArgs pArgs) fml) = do
   ds <- use $ environment . datatypes
   case Map.lookup name ds of
     Nothing -> do
@@ -285,7 +291,7 @@ resolveType (ScalarT (DatatypeT name tArgs pArgs) fml) = do
       return $ addRefinement t' fml'
     Just (DatatypeDef tParams pParams _ _ _) -> do
       when (length tArgs /= length tParams) $
-        throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length tParams) <+> text "type arguments and got" <+> pretty (length tArgs)
+        throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length tParams) <+> text "type arguments and got" <+> pretty (length tArgs) <+> pretty tParams
       when (length pArgs /= length pParams) $
         throwResError $ text "Datatype" <+> text name <+> text "expected" <+> pretty (length pParams) <+> text "predicate arguments and got" <+> pretty (length pArgs)
       -- Resolve type arguments:
@@ -349,8 +355,8 @@ resolveTypeRefinement valueSort fml = do
       _ -> environment %= addVariable valueVarName (fromSort valueSort)
     resolveFormula fml
   enforceSame (sortOf fml') BoolS -- Refinements must have Boolean sort
-  sortAssignmnet <- solveSortConstraints -- Solve sort constraints and substitute
-  let fml'' = sortSubstituteFml sortAssignmnet fml'
+  sortAssignment <- solveSortConstraints -- Solve sort constraints and substitute
+  let fml'' = sortSubstituteFml sortAssignment fml'
 
   boundTvs <- use $ environment . boundTypeVars
   let freeTvs = typeVarsOfSort (sortOf fml'') Set.\\ (Set.fromList boundTvs) -- Remaining free type variables
@@ -380,13 +386,6 @@ resolveFormula (SetLit _ elems) = do
   elems' <- mapM resolveFormula elems
   zipWithM_ enforceSame (map sortOf elems') (repeat elemSort)
   return $ SetLit elemSort elems'
-
-resolveFormula (SetComp (Var _ x) e) = do
-  elemSort <- freshSort
-  e' <- withLocalEnv $ do
-    environment %= addVariable x (fromSort elemSort)
-    resolveFormula e
-  return $ SetComp (Var elemSort x) e'
 
 resolveFormula (Unary op fml) = fmap (Unary op) $ do
   fml' <- resolveFormula fml
