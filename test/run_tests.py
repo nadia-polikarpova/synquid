@@ -205,7 +205,7 @@ def check_diff():
         shutil.copyfile(LOGFILE_NAME,ORACLE_NAME)
     else:
         # Compare log with oracle
-        fromlines = open(ORACLE_NAME).readlines()
+        fromlines = open(ORACLE_NAME, 'U').readlines()
         tolines = open(LOGFILE_NAME, 'U').readlines()
         diff = difflib.unified_diff(fromlines, tolines, n=0)
 
