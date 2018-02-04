@@ -1,0 +1,179 @@
+------------------------------------------------------------------------------------
+-- In this example we use Synquid to verify existing code.                        --
+-- The code is adapted from the LiquidHaskell tutorial                            --
+-- (https://ucsd-progsys.github.io/liquidhaskell-tutorial/12-case-study-AVL.html) --
+------------------------------------------------------------------------------------
+
+-- Useful shortcuts
+inline max x y = if x >= y then x else y
+inline abs x = if x >= 0 then x else -x
+inline eqOrOneLess x y = x <= y && y <= x + 1 
+
+-- AVL trees
+data AVL a where
+  Leaf :: AVL a
+  Node :: x: a                                                                              -- key
+            -> l: AVL {a | _v < x}                                                          -- left subtree
+            -> r: {AVL {a | _v > x} | abs (height _v - height l) <= 1}                      -- right subtree 
+            -> h: {Int | _v == 1 + max (height l) (height r) }                             -- stored height
+            -> AVL a
+
+-- Real height            
+termination measure height :: AVL a -> {Int | _v >= 0} where
+  Leaf -> 0
+  Node x l r h -> 1 + max (height l) (height r)
+  
+-- Balance factor: the difference in height between left and right subtrees  
+measure balFac :: AVL a -> Int where
+  Leaf -> 0
+  Node x l r h -> height l - height r
+  
+-- The set of all keys   
+measure keys :: AVL a -> Set a where
+  Leaf -> []
+  Node x l r h -> [x] + keys l + keys r  
+  
+-- Empty AVL tree  
+empty :: {AVL a | height _v == 0 && keys _v == []}
+empty = Leaf  
+  
+-- Singleton AVL tree  
+singleton :: x: a -> {AVL a | height _v == 1 && keys _v == [x]}
+singleton = \x . Node x Leaf Leaf 1
+
+-- Return stored height
+getHeight :: t: AVL a -> {Int | _v == height t}
+getHeight = \t . 
+  match t with
+    Leaf -> 0
+    Node x l r h -> h
+    
+-- Return balance factor (with respect to stored heights)    
+getBalFac :: t: AVL a -> {Int | _v == balFac t}   
+getBalFac = \t .
+  match t with
+    Leaf -> 0
+    Node x l r h -> getHeight l - getHeight r
+
+-- Smart constructor    
+mkNode :: x: a 
+            -> l: AVL {a | _v < x} 
+            -> r: {AVL {a | _v > x} | abs (height _v - height l) <= 1} 
+            -> {AVL a | height _v == 1 + max (height l) (height r) &&
+                          keys _v == [x] + keys l + keys r}
+mkNode =  \x . \l . \r . 
+  if getHeight l >= getHeight r
+    then Node x l r (1 + getHeight l)
+    else Node x l r (1 + getHeight r)
+    
+-- Rotatation: left-big, no heavy
+balL0 :: x: a 
+          -> l: {AVL {a | _v < x} | balFac _v == 0} 
+          -> r: {AVL {a | _v > x} | height l - height _v == 2} 
+          -> {AVL a | height _v == 1 + height l && keys _v == [x] + keys l + keys r}
+balL0 = \x . \l . \r . 
+  match l with 
+    Leaf -> ??
+    Node lx ll lr lh -> mkNode lx ll (mkNode x lr r)    
+    
+-- Rotatation: left-big, left-heavy
+balLL :: x: a
+          -> l: {AVL {a | _v < x} | balFac _v > 0} 
+          -> r: {AVL {a | _v > x} | height l - height _v == 2} 
+          -> {AVL a | height _v == height l && keys _v == [x] + keys l + keys r}
+balLL = \x . \l . \r . 
+  match l with 
+    Leaf -> ??
+    Node lx ll lr lh -> mkNode lx ll (mkNode x lr r)
+    
+-- Rotatation: left-big, right-heavy    
+balLR :: x:a
+          -> l: {AVL {a | _v < x} | balFac _v < 0}
+          -> r: {AVL {a | _v > x} | height l - height _v == 2} 
+          -> {AVL a | height _v == height l && keys _v == [x] + keys l + keys r}
+balLR = \x . \l . \r .
+  match l with
+    Leaf -> ??
+    Node lx ll lr lh -> match lr with
+                          Leaf -> ??
+                          Node lrx lrl lrr lrh -> mkNode lrx (mkNode lx ll lrl) (mkNode x lrr r)
+              
+-- Rotatation: right-big, no heavy              
+balR0 :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | height _v - height l == 2 && balFac _v == 0} 
+          -> {AVL a | height _v == 1 + height r && keys _v == [x] + keys l + keys r}
+balR0 = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> mkNode rx (mkNode x l rl) rr
+    
+-- Rotatation: right-big, left-heavy
+balRL :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | height _v - height l == 2 && balFac _v > 0} 
+          -> {AVL a | height _v == height r && keys _v == [x] + keys l + keys r}
+balRL = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> match rl with
+                          Leaf -> ??
+                          Node rlx rll rlr rlh -> mkNode rlx (mkNode x l rll) (mkNode rx rlr rr)
+    
+-- Rotatation: right-big, right-heavy    
+balRR :: x: a 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | height _v - height l == 2 && balFac _v < 0} 
+          -> {AVL a | height _v == height r && keys _v == [x] + keys l + keys r}
+balRR = \x . \l . \r . 
+  match r with 
+    Leaf -> ??
+    Node rx rl rr rh -> mkNode rx (mkNode x l rl) rr
+
+-- Insert a key 'y' into an AVL tree 't'    
+insert :: y: a -> t: AVL a -> {AVL a | height t <= height _v && height _v <= height t + 1 &&
+                                        keys _v == [y] + keys t}
+insert = \y . \t .
+  match t with
+    Leaf -> singleton y
+    Node x l r h -> if y < x
+                      then insL y x l r
+                      else if y > x
+                        then insR y x l r 
+                        else t
+          
+-- Insert a key 'y' into the left subtree of 'Node x l r'
+insL :: y: a
+          -> x: {a | y < _v} 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | abs (height _v - height l) <= 1}                  
+          -> {AVL a | eqOrOneLess (1 + max (height l) (height r)) (height _v) && keys _v == [x, y] + keys l + keys r}
+insL = \y . \x . \l . \r . 
+  let l' = insert y l in
+  let isLeftBig = getHeight l' - getHeight r == 2 in
+  if isLeftBig && (getBalFac l' > 0)
+    then balLL x l' r
+    else if isLeftBig && (getBalFac l' < 0)
+          then balLR x l' r
+          else if isLeftBig
+                then balL0 x l' r
+                else mkNode x l' r
+             
+-- Insert a key 'y' into the right subtree of 'Node x l r'             
+insR :: y: a
+          -> x: {a | _v < y} 
+          -> l: AVL {a | _v < x}
+          -> r: {AVL {a | _v > x} | abs (height _v - height l) <= 1}                  
+          -> {AVL a | eqOrOneLess (1 + max (height l) (height r)) (height _v) && keys _v == [x, y] + keys l + keys r}
+insR = \y . \x . \l . \r . 
+  let r' = insert y r in
+  let isRightBig = getHeight r' - getHeight l == 2 in
+  if isRightBig && (getBalFac r' > 0)
+    then balRL x l r'
+    else if isRightBig && (getBalFac r' < 0)
+          then balRR x l r'
+          else if isRightBig
+                then balR0 x l r'
+                else mkNode x l r'
+                
+mutual {insert, insL, insR}                        

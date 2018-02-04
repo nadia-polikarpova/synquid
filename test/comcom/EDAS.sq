@@ -1,0 +1,63 @@
+{-# lifty #-}
+
+{- Datatypes -}
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Done :: Phase
+  
+data Status where
+  NoDecision :: Status
+  Accepted :: Status
+  Rejected :: Status
+  
+{- Policy module: defines data layout and policies -}  
+
+-- | Current session user
+predicate sessionUser :: World -> User      
+getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+
+-- | Current phase
+predicate currentPhase :: World -> Phase
+getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
+
+-- | Paper authors (only visible to authors themselves)
+predicate paperAuthors :: World -> PaperId -> Set User
+getPaperAuthors :: w: World -> pid: PaperId -> 
+  Tagged {List {User | (_v in paperAuthors w pid)} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid}>
+defaultPaperAuthors :: Tagged (List User) <{True}>
+
+-- | Paper status (only visible to authors when phase is Done)
+getPaperStatus :: w: World -> pid: PaperId -> Tagged Status <{_0 in paperAuthors w pid && currentPhase w == Done}>
+defaultPaperStatus :: Tagged Status <{True}>
+
+-- | Conference session where the paper is to be presented (public)
+getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
+
+getAllPIDs :: World -> Tagged (List PaperId) <{True}>
+
+{- Client code -}
+  
+-- | Show all sessions for current user's accepted papers  
+-- (Fix: when retrieving paper status, check that the conference is in appropriate phase;
+-- no need to check if the viewer is an author, since this is known statically)
+showMySessions :: w: World -> World
+showMySessions = \w . 
+  let me = getSessionUser w in
+  let isMyPaper = \pid . liftM2 elem me (getPaperAuthors w pid) in
+  let myPapers = bind (getAllPIDs w) (\allPids . filterM isMyPaper allPids) in
+  let showSession = \pid . bind (getPaperStatus w pid) 
+                                (\st . if st == Accepted 
+                                        then getPaperSession w pid
+                                        else return emptyString) in
+  let out = bind myPapers (\myPids . liftM unlines (mapM showSession myPids)) in
+  print w me out
+
+
+
+
+  
+qualifier {sessionUser w in paperAuthors w _v}

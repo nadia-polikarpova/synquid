@@ -1,0 +1,40 @@
+data Id
+
+data Expr where
+  Var :: x: Id -> Expr
+  Not :: e : Expr -> Expr
+  And :: lhs: Expr -> rhs: Expr -> Expr
+  Or :: lhs: Expr -> rhs: Expr -> Expr  
+  Implies :: lhs: Expr -> rhs: Expr -> Expr
+  
+termination measure size :: Expr -> {Int | _v > 0} where
+  Var x -> 1
+  Not e -> 1 + size e
+  And lhs rhs -> 1 + size lhs + size rhs
+  Or lhs rhs -> 1 + size lhs + size rhs
+  Implies lhs rhs -> 1 + size lhs + size rhs
+  
+predicate store :: Id -> Bool  
+
+measure sem :: Expr -> Bool where
+  Var x -> store x
+  Not e -> !(sem e)
+  And lhs rhs -> sem lhs && sem rhs
+  Or lhs rhs -> sem lhs || sem rhs
+  Implies lhs rhs -> sem lhs ==> sem rhs  
+  
+data NExpr where
+  NAtom :: x: Id -> neg: Bool -> NExpr
+  NAnd :: lhs : NExpr -> rhs : NExpr -> NExpr
+  NOr :: lhs : NExpr -> rhs : NExpr -> NExpr
+
+measure nsem :: NExpr -> Bool where
+  NAtom x neg -> if neg then !(store x) else store x 
+  NAnd lhs rhs -> nsem lhs && nsem rhs
+  NOr lhs rhs -> nsem lhs || nsem rhs
+  
+true :: {Bool | _v}  
+false :: {Bool | !_v}
+  
+desugar :: e: Expr -> {NExpr | nsem _v == sem e} 
+desugar = ??

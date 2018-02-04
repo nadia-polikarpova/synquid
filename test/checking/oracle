@@ -1,0 +1,158 @@
+append :: xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
+./List-Append.sq:10: Error:
+  Found inconsistent refinements
+  when checking consistency of type annotation
+  {List a|len _v > len xs} with
+  {List a|len _v >= 0 && len _v < len xs}
+  in
+  \xs . \ys . 
+      match xs with
+        Cons z zs -> Cons z (append
+                               (?? :: {List a|len _v > len xs})
+                               ??)
+
+replicate :: n1:Nat -> x:a -> {List a|len _v == n1}
+replicate = \n . \x . 
+    let n' = n - 1 in
+    
+    if n == 0
+      then Nil
+      else Cons x (replicate n' x)
+
+toNat :: xs:List Int -> {List Nat|len _v == len xs}
+toNat = 
+let f = \x . 
+    if x < 0
+      then - x
+      else x in
+\xs . map f xs
+
+empty :: {AVL a|height _v == 0 && keys _v == []}
+empty = Leaf
+
+singleton :: x:a -> {AVL a|height _v == 1 && keys _v == [x]}
+singleton = \x . Node x Leaf
+                   Leaf 1
+
+getHeight :: t:AVL a -> {Int|_v == height t}
+getHeight = \t . 
+  match t with
+    Leaf -> 0
+    Node x l r h -> h
+
+getBalFac :: t:AVL a -> {Int|_v == balFac t}
+getBalFac = \t . 
+  match t with
+    Leaf -> 0
+    Node x l r h -> (getHeight l) -
+                      (getHeight r)
+
+mkNode :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|abs (height _v - height l) <= 1} -> {AVL a|height _v == 1 + max (height l) (height r) && keys _v == ([x] + keys l) + keys r}
+mkNode = \x . \l . \r . 
+      if (getHeight l) >= (getHeight
+                             r)
+        then Node x l r (1 + (getHeight
+                                l))
+        else Node x l r (1 + (getHeight
+                                r))
+
+balL0 :: x:a -> l:{AVL {a|_v < x}|balFac _v == 0} -> r:{AVL {a|_v > x}|height l - height _v == 2} -> {AVL a|height _v == 1 + height l && keys _v == ([x] + keys l) + keys r}
+balL0 = \x . \l . \r . 
+      match l with
+        Leaf -> error
+        Node lx ll lr lh -> mkNode lx ll
+                              (mkNode x lr r)
+
+balLL :: x:a -> l:{AVL {a|_v < x}|balFac _v > 0} -> r:{AVL {a|_v > x}|height l - height _v == 2} -> {AVL a|height _v == height l && keys _v == ([x] + keys l) + keys r}
+balLL = \x . \l . \r . 
+      match l with
+        Leaf -> error
+        Node lx ll lr lh -> mkNode lx ll
+                              (mkNode x lr r)
+
+balLR :: x:a -> l:{AVL {a|_v < x}|balFac _v < 0} -> r:{AVL {a|_v > x}|height l - height _v == 2} -> {AVL a|height _v == height l && keys _v == ([x] + keys l) + keys r}
+balLR = \x . \l . \r . 
+      match l with
+        Leaf -> error
+        Node lx ll lr lh -> 
+          match lr with
+            Leaf -> error
+            Node lrx lrl lrr lrh -> mkNode
+                                      lrx (mkNode lx ll lrl) (mkNode x
+                                                                lrr r)
+
+balR0 :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|height _v - height l == 2 && balFac _v == 0} -> {AVL a|height _v == 1 + height r && keys _v == ([x] + keys l) + keys r}
+balR0 = \x . \l . \r . 
+      match r with
+        Leaf -> error
+        Node rx rl rr rh -> mkNode rx
+                              (mkNode x l rl) rr
+
+balRL :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|height _v - height l == 2 && balFac _v > 0} -> {AVL a|height _v == height r && keys _v == ([x] + keys l) + keys r}
+balRL = \x . \l . \r . 
+      match r with
+        Leaf -> error
+        Node rx rl rr rh -> 
+          match rl with
+            Leaf -> error
+            Node rlx rll rlr rlh -> mkNode
+                                      rlx (mkNode x l rll) (mkNode rx
+                                                              rlr rr)
+
+balRR :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|height _v - height l == 2 && balFac _v < 0} -> {AVL a|height _v == height r && keys _v == ([x] + keys l) + keys r}
+balRR = \x . \l . \r . 
+      match r with
+        Leaf -> error
+        Node rx rl rr rh -> mkNode rx
+                              (mkNode x l rl) rr
+
+insert :: y:a -> t:AVL a -> {AVL a|(height t <= height _v && height _v <= height t + 1) && keys _v == [y] + keys t}
+insert = \y . \t . 
+    match t with
+      Leaf -> singleton y
+      Node x l r h -> 
+        if y < x
+          then insL y x l r
+          else 
+            if y > x
+              then insR y x l r
+              else t
+
+insL :: y:a -> x:{a|y < _v} -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|abs (height _v - height l) <= 1} -> {AVL a|eqOrOneLess (1 + max (height l) (height r)) (height _v) && keys _v == ([x, y] + keys l) + keys r}
+insL = \y . \x . \l . \r . 
+        let l' = insert y l in
+        
+        let isLeftBig = ((getHeight l')
+                           - (getHeight r)) == 2 in
+        
+        if isLeftBig && ((getBalFac l')
+                           > 0)
+          then balLL x l' r
+          else 
+            if isLeftBig && ((getBalFac l')
+                               < 0)
+              then balLR x l' r
+              else 
+                if isLeftBig
+                  then balL0 x l' r
+                  else mkNode x l' r
+
+insR :: y:a -> x:{a|_v < y} -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|abs (height _v - height l) <= 1} -> {AVL a|eqOrOneLess (1 + max (height l) (height r)) (height _v) && keys _v == ([x, y] + keys l) + keys r}
+insR = \y . \x . \l . \r . 
+        let r' = insert y r in
+        
+        let isRightBig = ((getHeight r')
+                            - (getHeight l)) == 2 in
+        
+        if isRightBig && ((getBalFac r')
+                            > 0)
+          then balRL x l r'
+          else 
+            if isRightBig && ((getBalFac r')
+                                < 0)
+              then balRR x l r'
+              else 
+                if isRightBig
+                  then balR0 x l r'
+                  else mkNode x l r'
+
