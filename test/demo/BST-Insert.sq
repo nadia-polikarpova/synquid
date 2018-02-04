@@ -1,0 +1,27 @@
+-----------------------------------------
+-- Insertion into a binary search tree --
+-----------------------------------------
+
+-- Binary search tree:
+-- note how the refinements on the Node constructor define the binary-search ordering on the keys 
+data BST a where
+	Empty :: BST a
+	Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
+                        
+-- Size of a BST (termination metric)
+termination measure size :: BST a -> {Int | _v >= 0} where
+  Empty -> 0
+  Node x l r -> size l + size r + 1
+  
+-- The set of all keys in a BST
+measure keys :: BST a -> Set a where
+  Empty -> []
+  Node x l r -> keys l + keys r + [x]
+  
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}
+
+	
+-- Our synthesis goal: a function that inserts a key into a BST
+insert :: x: a -> t: BST a -> {BST a | keys _v == keys t + [x]}
+insert = ??
