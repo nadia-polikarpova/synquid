@@ -1,54 +1,64 @@
-range1 :: size:Nat -> lo:Int -> {List Int|elems _v == [0] + [x|lo <= x && x < lo + size]}
-range1 = \size . \lo . 
-    if size <= 0
-      then Cons size Nil
-      else Cons lo (range1 (dec size)
-                      (inc lo))
 
-range2 :: size:Nat -> lo:Int -> {List Int|elems _v == [x|lo <= x] * [x|x < lo + size]}
-range2 = \size . \lo . 
-    if size <= 0
-      then Nil
-      else Cons lo (range2 (dec size)
-                      (inc lo))
 
-range3 :: size:Nat -> lo:Int -> {List Int|[x|lo <= x && x < lo + size] <= elems _v}
-range3 = \size . \lo . range2
-                         size lo
-
-all :: <p :: a -> Bool> . arg1:(x:a -> {Bool|_v == p x}) -> arg0:List {a|p _v} -> {Bool|_v}
+all :: <p :: a -> Bool> . arg1:(x:a -> {Bool|_v:? == p x:?:?}) -> arg0:List {a|p _v:?:?} -> {Bool|_v:?}
 all = \f . \xs . 
     match xs with
       Nil -> True
       Cons y ys -> and (f y) (all f
                                 ys)
 
-allPos :: {Bool|_v}
+allPos :: {Bool|_v:?}
 allPos = all (\x . x > 0) (Cons
                              1 (Cons 2 (Cons 3 Nil)))
 
-notAllPos :: {Bool|_v}
+notAllPos :: {Bool|_v:?}
 ./HigherOrder.sq:32: Error:
   Cannot find sufficiently strong refinements
   when checking x > 0 ::
-  {Bool|_v == True} in
+  {Bool|_v:Bool == True} in
   \x . x > 0
 
-map1 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+
+
+client :: xs:List Nat -> List {Int|_v:? == 0}
+client = \xs . filterLE 0 xs
+
+clientBad :: xs:List Int -> ys:List Nat -> List {Int|_v:? == 0}
+./TypeAbduction.sq:27: Error:
+  Cannot find sufficiently strong refinements
+  when checking xs ::
+  List {Int|_v:Int >= 0} in
+  \xs . \ys . filterLE1 0 xs ??
+
+
+./Instantiation.sq:12: Resolution Error:
+  Constructor Zero must return type Natural n, got Natural Z
+
+./Measure.sq:6: Error:
+  Cannot find sufficiently strong refinements
+  when checking 1 + (len xs) ::
+  {Int|_v:Int < 0 && _v:Int < 0}
+  in
+  \qs . 
+    match qs with
+      Cons x xs -> 1 + (len xs)
+
+
+map1 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v:?:? == len xs:?:?}
 map1 = \f . \xs . 
     match xs with
       Nil -> Nil
       Cons x3 x4 -> Cons (f x3) (map1
                                    f x4)
 
-map2 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+map2 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v:?:? == len xs:?:?}
 map2 = \f . \xs . 
     match xs with
       Nil -> Nil
       Cons x3 x4 -> Cons (f x3) (map2
                                    f x4)
 
-map3 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+map3 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v:?:? == len xs:?:?}
 map3 = \f . \xs . 
     match xs with
       Nil -> Nil
@@ -56,7 +66,7 @@ map3 = \f . \xs .
         let f0 = f in
         Cons (f x3) (map3 f0 x4)
 
-map4 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+map4 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v:?:? == len xs:?:?}
 map4 = \f . \xs . 
     let f0 = f in
     
@@ -65,20 +75,7 @@ map4 = \f . \xs .
       Cons x3 x4 -> Cons (f x3) (map4
                                    f0 x4)
 
-map5 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
+map5 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v:?:? == len xs:?:?}
 ./HOChecking.sq:40: Error:
   Not in scope: f
-
-./Instantiation.sq:12: Resolution Error:
-  Constructor Zero must return type Natural n, got Natural Z
-
-client :: xs:List Nat -> List {Int|_v == 0}
-client = \xs . filterLE 0 xs
-
-clientBad :: xs:List Int -> ys:List Nat -> List {Int|_v == 0}
-./TypeAbduction.sq:27: Error:
-  Cannot find sufficiently strong refinements
-  when checking xs ::
-  List {Int|_v >= 0} in
-  \xs . \ys . filterLE1 0 xs ??
 

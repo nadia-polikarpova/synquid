@@ -109,7 +109,7 @@ BENCHMARKS = {
               ('AVL-Balance',         ['-a 2', '-e']),
               ('AVL-Insert',          ['-a 2']),
               ('AVL-ExtractMin',      ['-a 2']),
-              ('AVL-Delete',          ['-a 2', '-m 1']),  
+              ('AVL-Delete',          ['-a 2', '-m 1']),
           ],
   'rbt' : [
     # Red-black trees
@@ -117,8 +117,8 @@ BENCHMARKS = {
     ('RBT-BalanceR',        ['-a 2', '-u', '-z']),
     ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
           ]
-}          
-          
+}
+
 # RBT_BENCHMARKS = [
     # # Red-black trees
     # ('RBT-BalanceL',        ['-a 2', '-m 1', '-z']),
@@ -150,51 +150,51 @@ def cmdline():
     a.add_argument('--synt', action='store_true', help='run synthesis tests')
     a.add_argument('--sections', nargs="*", choices=SECTIONS + ['all'], default=['all'], help=('which synthesis tests to run'))
     return a.parse_args()
-    
-def printerr(str):    
-    print Back.RED + Fore.RED + Style.BRIGHT + str + Style.RESET_ALL
-    
-def printok(str):    
-    print Back.GREEN + Fore.GREEN + Style.BRIGHT + str + Style.RESET_ALL
-    
-def printwarn(str):    
-    print Back.YELLOW + Fore.YELLOW + Style.BRIGHT + str + Style.RESET_ALL    
+
+def printerr(str):
+    print (Back.RED + Fore.RED + Style.BRIGHT + str + Style.RESET_ALL)
+
+def printok(str):
+    print (Back.GREEN + Fore.GREEN + Style.BRIGHT + str + Style.RESET_ALL)
+
+def printwarn(str):
+    print (Back.YELLOW + Fore.YELLOW + Style.BRIGHT + str + Style.RESET_ALL)
 
 def run_benchmark(name, opts, path='.'):
     global total_time
-    print name,
+    print (name),
 
-    with open(LOGFILE_NAME, 'a+') as logfile:          
+    with open(LOGFILE_NAME, 'a+') as logfile:
       start = time.time()
       logfile.seek(0, os.SEEK_END)
       return_code = call([synquid_path] + COMMON_OPTS + opts + [os.path.join (path, name + '.sq')], stdout=logfile, stderr=logfile)
       end = time.time()
 
       t = end - start
-      print '{0:0.2f}'.format(t),
+      print ('{0:0.2f}'.format(t)),
       total_time = total_time + t
       if return_code:
           printerr("FAIL")
       else:
           printok("OK")
           results [name] = SynthesisResult(name, t)
-          
-          
-def run_test(name, path='.'):
-    print name
 
-    with open(LOGFILE_NAME, 'a+') as logfile:          
+
+def run_test(name, path='.'):
+    print (name)
+
+    with open(LOGFILE_NAME, 'a+') as logfile:
       logfile.seek(0, os.SEEK_END)
       call([synquid_path] + COMMON_OPTS + [os.path.join (path, name + '.sq')], stdout=logfile, stderr=logfile)
 
-def write_times(benchmarks):    
+def write_times(benchmarks):
     with open(OUTFILE_NAME, 'w') as outfile:
         for (name, args) in benchmarks:
             outfile.write (name + ',')
             if name in results:
                 res = results [name]
                 outfile.write ('{0:0.2f}'.format(res.time))
-                outfile.write (',')                
+                outfile.write (',')
             outfile.write ('\n')
 
 def check_diff():
@@ -207,23 +207,23 @@ def check_diff():
         # Compare log with oracle
         fromlines = open(ORACLE_NAME).readlines()
         tolines = open(LOGFILE_NAME, 'U').readlines()
-        diff = difflib.unified_diff(fromlines, tolines, n=0)        
-        
+        diff = difflib.unified_diff(fromlines, tolines, n=0)
+
         # Check if diff is empty
         try:
-            first = next(diff)            
+            first = next(diff)
             printerr('TESTS FAILED WITH DIFF')
             print
-            print first
+            print(first)
             sys.stdout.writelines(diff)
             print
             return True
-            
+
         except StopIteration:
             printok('TESTS PASSED')
             print
             return False
-        
+
 
 if __name__ == '__main__':
     init()
@@ -239,7 +239,7 @@ if __name__ == '__main__':
         synquid_path = SYNQUID_PATH_LINUX
     else:
         synquid_path = SYNQUID_PATH_WINDOWS
-        
+
     # By default enable all tests:
     if not (a.unit or a.check or a.synt):
       a.unit = True
@@ -247,22 +247,22 @@ if __name__ == '__main__':
       a.synt = True
 
     sections = [s.lower() for s in a.sections]
-    
+
     fail = False
     if a.unit:
-        # Run unit tests 
+        # Run unit tests
         os.chdir('unit')
         if os.path.isfile(LOGFILE_NAME):
-            os.remove(LOGFILE_NAME)        
-        
+            os.remove(LOGFILE_NAME)
+
         for name in os.listdir('.'):
             filename, file_extension = os.path.splitext(name)
             if file_extension == '.sq':
-                run_test(filename)        
+                run_test(filename)
         fail = check_diff()
         os.chdir('..')
-        
-    if not fail and a.check: 
+
+    if not fail and a.check:
         # Run type checking benchmarks
         os.chdir('checking')
         if os.path.isfile(LOGFILE_NAME):
@@ -271,23 +271,21 @@ if __name__ == '__main__':
             run_benchmark(name, args)
         fail = check_diff()
         os.chdir('..')
-            
+
     if not fail and a.synt:
         # Run synthesis benchmarks in 'current' directory
         os.chdir('current')
         if os.path.isfile(LOGFILE_NAME):
             os.remove(LOGFILE_NAME)
-            
-        for sec in SECTIONS:        
+
+        for sec in SECTIONS:
             if sec in sections or 'all' in sections:
                 for (name, args) in BENCHMARKS[sec]:
                     run_benchmark(name, args, sec)
-                            
-        print 'TOTAL', '{0:0.2f}'.format(total_time)
-        
+
+        print('TOTAL', '{0:0.2f}'.format(total_time))
+
         if sections == ['all']:
             write_times(sum(BENCHMARKS.values(), []))
             check_diff()
         os.chdir('..')
-            
-        
