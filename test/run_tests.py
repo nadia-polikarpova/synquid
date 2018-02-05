@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import sys
 import os, os.path
 import platform
@@ -201,7 +202,7 @@ def check_I ():
     print
     if not os.path.isfile(ORACLE_NAME):
         # Create oracle
-        printwarn('Oracle file not find, creating a new one')
+        printwarn('Oracle file not found, creating a new one')
         shutil.copyfile(LOGFILE_NAME,ORACLE_NAME)
     else:
         # Compare log with oracle

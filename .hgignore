@@ -15,3 +15,16 @@ test/security/conference/Conference.hs
 test/security/conference/ConferenceVerification.hs
 test/security/conference/ConferenceRepair.hs
 test/security/conference/Security.hs
+test/difflib
+*/results.log
+*/npm-debug.log
+*/os.path
+*/platform
+*/re
+*/shutil
+*/sys
+*/time
+*/results.csv
+os.path
+platform
+sys

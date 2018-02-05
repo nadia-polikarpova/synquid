@@ -524,19 +524,14 @@ filterEnv :: Environment -> Id -> Environment
 filterEnv e m = Lens.set measures (Map.filterWithKey (\k _ -> k == m) (e ^. measures)) e
 
 -- Transform a resolved measure into a program
--- TODO: don't hardcode "qs"
 measureProg :: Id -> MeasureDef -> UProgram
 measureProg name (MeasureDef inSort outSort defs post) = Program {
-  typeOf = t, content = PFun "qs" Program{ content = PMatch Program{ content = PSymbol "qs", typeOf = t' } (map mCase defs), typeOf = t''} }
+  typeOf = t, content = PFun "THIS" Program{ content = PMatch Program{ content = PSymbol "THIS", typeOf = t' } (map mCase defs), typeOf = t''} }
   where
-    --t = AnyT
-    t   = FunctionT name (fromSort inSort) (addRefinement (fromSort outSort) post)
+    --t   = FunctionT name (fromSort inSort) (addRefinement (fromSort outSort) post)
+    t   = AnyT
     t'  = AnyT
     t'' = AnyT
-    -- TODO: fix
-    --t'  = fromSort inSort
-    --t'' = addRefinement (fromSort outSort) post
-    --t' = ScalarT (baseTypeOf arg) ftrue
 
 -- Transform between case types
 mCase :: MeasureCase -> Case RType
@@ -546,7 +541,7 @@ mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, exp
 generateSchema :: Environment -> Id -> Sort -> Sort -> Formula -> RSchema
 --generateSchema e name (DataS inS sorts) outSort post = typePolymorphic (getTypeParams e inS) (getPredParams e inS) name (DataS inS sorts) outSort post
 -- predicate polymorphic only:
-generateSchema e name (DataS inS sorts) outSort post = predPolymorphic (getPredParams e inS) name (DataS inS sorts) outSort post
+generateSchema e name (DataS inS sorts) outSort post = predPolymorphic (getPredParams e inS) [] name (DataS inS sorts) outSort post
 
 getTypeParams :: Environment -> Id -> [Id]
 getTypeParams e name = case Map.lookup name (e ^. datatypes) of
@@ -560,21 +555,27 @@ getPredParams e name = case Map.lookup name (e ^. datatypes) of
 
 -- Wrap function in appropriate type-polymorphic Schema skeleton
 typePolymorphic :: [Id] -> [PredSig] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-typePolymorphic [] ps name inSort outSort f = predPolymorphic ps name inSort outSort f
+typePolymorphic [] ps name inSort outSort f = predPolymorphic ps [] name inSort outSort f
 typePolymorphic (x:xs) ps name inSort outSort f = ForallT x (typePolymorphic xs ps name inSort outSort f)
 
 -- Wrap function in appropriate predicate-polymorphic SchemaSkeleton
-predPolymorphic :: [PredSig] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-predPolymorphic [] name inSort outSort f = genSkeleton name inSort outSort f
-predPolymorphic (x:xs) name inSort outSort f = ForallP x (predPolymorphic xs name inSort outSort f)
+predPolymorphic :: [PredSig] -> [Id] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
+predPolymorphic [] ps name inSort outSort f = genSkeleton name ps inSort outSort f
+predPolymorphic (x:xs) ps name inSort outSort f = ForallP x (predPolymorphic xs  ((predSigName x) : ps) name inSort outSort f)
 
 -- Generate non-polymorphic core of schema
 -- TODO: don't hard code qs
-genSkeleton :: Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-genSkeleton name inSort outSort post = Monotype (FunctionT "qs" (ScalarT ((baseTypeOf . fromSort) inSort) (BoolLit True)) (ScalarT ((baseTypeOf . fromSort) outSort) post))
+genSkeleton :: Id -> [Id] -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
+genSkeleton name preds inSort outSort post = Monotype (FunctionT "THIS" (ScalarT inType ftrue) (ScalarT outType post))
+  where
+    inType  = case inSort of
+      (DataS name args) -> DatatypeT name (map fromSort args) pforms
+      _ -> (baseTypeOf . fromSort) inSort
+    outType = (baseTypeOf . fromSort) outSort
+    pforms = fmap predform preds
+    predform x = Pred AnyS x []
 
 -- Default set implementation -- Needed to typecheck measures involving sets
-
 defaultSetType :: BareDeclaration
 defaultSetType = DataDecl name typeVars preds cons
   where
