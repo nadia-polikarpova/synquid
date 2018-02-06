@@ -198,7 +198,7 @@ def write_times(benchmarks):
                 outfile.write (',')
             outfile.write ('\n')
 
-def check_I ():
+def check_diff ():
     print
     if not os.path.isfile(ORACLE_NAME):
         # Create oracle
