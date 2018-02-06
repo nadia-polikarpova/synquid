@@ -157,7 +157,7 @@ resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols
   pos <- use currentPosition
   if Map.member name syms
-    then goals %= (++ [(name, (impl, pos))])
+    then goals %= (++ [(name, (normalizeProgram impl, pos))])
     else throwResError (text "No specification found for synthesis goal" <+> text name)
 resolveDeclaration (QualifierDecl quals) = mapM_ resolveQualifier quals
   where
