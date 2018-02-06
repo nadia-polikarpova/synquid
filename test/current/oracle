@@ -1,56 +1,56 @@
 add :: x:Nat -> y:Nat -> {Int|_v == x + y}
-add = \x . \y . 
+add = \x . \y .
     if x <= 0
       then y
       else add (dec x) (inc y)
 
 null :: xs:List a -> {Bool|_v == (len xs == 0)}
-null = \xs . 
+null = \xs .
   match xs with
     Nil -> true
     Cons x3 x4 -> false
 
 elem :: x:a -> xs:List a -> {Bool|_v == (x in elems xs)}
-elem = \x . \xs . 
+elem = \x . \xs .
     match xs with
       Nil -> false
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if x3 == x
           then true
           else elem x x4
 
 stutter :: xs:List a -> {List a|len _v == 2 * len xs}
-stutter = \xs . 
+stutter = \xs .
   match xs with
     Nil -> xs
     Cons x3 x4 -> Cons x3 (Cons x3
                              (stutter x4))
 
 replicate :: n:Nat -> x:a -> {List a|len _v == n}
-replicate = \n . \x . 
+replicate = \n . \x .
     if n <= 0
       then Nil
       else Cons x (replicate (dec n)
                      x)
 
 append :: xs:List a -> ys:List a -> {List a|len _v == len xs + len ys && elems _v == elems xs + elems ys}
-append = \xs . \ys . 
+append = \xs . \ys .
     match xs with
       Nil -> ys
       Cons x7 x8 -> Cons x7 (append x8
                                ys)
 
 concat :: xss:ListOfLists a -> {List a|len _v == sumLen xss}
-concat = \xss . 
+concat = \xss .
   match xss with
     Nil2 -> Nil
     Cons2 x3 x4 -> append x3 (concat
                                 x4)
 
 take :: n:Nat -> xs:{List a|len _v >= n} -> {List a|len _v == n}
-take = \n . \xs . 
+take = \n . \xs .
     if 0 != n
-      then 
+      then
         match xs with
           Nil -> error
           Cons x3 x4 -> Cons x3 (take (dec
@@ -58,199 +58,192 @@ take = \n . \xs .
       else Nil
 
 drop :: n:Nat -> xs:{List a|len _v >= n} -> {List a|len _v == len xs - n}
-drop = \n . \xs . 
+drop = \n . \xs .
     if 0 != n
-      then 
+      then
         match xs with
           Nil -> error
           Cons x3 x4 -> drop (dec n) x4
       else xs
 
 delete :: x:a -> xs:List a -> {List a|elems _v == elems xs - [x]}
-delete = \x . \xs . 
+delete = \x . \xs .
     match xs with
       Nil -> xs
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if x3 == x
           then delete x x4
           else Cons x3 (delete x x4)
 
 map :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map = \f . \xs . 
+map = \f . \xs .
     match xs with
       Nil -> Nil
       Cons x3 x4 -> Cons (f x3) (map f
                                    x4)
 
 zipWith :: f:(arg1:a -> arg0:b -> c) -> xs:List a -> ys:{List b|len _v == len xs} -> {List c|len _v == len xs}
-zipWith = \f . \xs . \ys . 
+zipWith = \f . \xs . \ys .
       match xs with
         Nil -> Nil
-        Cons x3 x4 -> 
+        Cons x3 x4 ->
           match ys with
             Nil -> error
             Cons x7 x8 -> Cons (f x3 x7)
                             (zipWith f x4 x8)
 
 zip :: xs:List a -> ys:{List b|len _v == len xs} -> {List Pair a b|len _v == len xs}
-zip = \xs . \ys . 
+zip = \xs . \ys .
     match xs with
       Nil -> Nil
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         match ys with
           Nil -> error
           Cons x7 x8 -> Cons (Pair x3 x7)
                           (zip x4 x8)
 
 toNat :: xs:List Int -> {List Nat|len _v == len xs}
-toNat = \xs . 
-  let f0 = \x2 . 
+toNat = \xs .
+  let f0 = \x2 .
       if x2 <= 0
         then neg x2
         else x2 in
   map f0 xs
 
 product :: xs:List a -> ys:List b -> {List Pair a b|len _v == len xs * len ys}
-product = \xs . \ys . 
+product = \xs . \ys .
     match xs with
       Nil -> Nil
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         let f0 = \x12 . Pair x3 x12 in
         append (map f0 ys) (product x4
                               ys)
 
 extractMin :: xs:{List a|len _v > 0} -> {MinPair a|elems xs == [min _v] + elems (rest _v) && len xs == 1 + len (rest _v)}
-extractMin = \xs . 
+extractMin = \xs .
   match xs with
     Nil -> error
-    Cons x3 x4 -> 
+    Cons x3 x4 ->
       match x4 with
         Nil -> MinPair x3 Nil
-        Cons x9 x10 -> 
+        Cons x9 x10 ->
           match extractMin x4 with
-            MinPair x14 x15 -> 
+            MinPair x14 x15 ->
               if x14 <= x3
                 then MinPair x14 (Cons x3 x15)
                 else MinPair x3 (Cons x14 x15)
 
 member :: x:a -> xs:List a -> {Bool|_v == (x in elems xs)}
-member = \x . \xs . 
+member = \x . \xs .
     match xs with
       Nil -> false
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if x3 == x
           then true
           else member x x4
 
 coincidence :: xs:List a -> ys:List a -> {List a|elems _v == elems xs * elems ys}
-coincidence = \xs . \ys . 
+coincidence = \xs . \ys .
     match xs with
       Nil -> xs
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if member x3 ys
           then Cons x3 (coincidence x4 ys)
           else coincidence x4 ys
 
 foldr :: <p :: List (a) -> b -> Bool> . f:(xs:List a -> x:a -> acc:{b|p xs _v} -> {b|p ((Cons x xs)) _v}) -> seed:{b|p (Nil) _v} -> ys:List a -> {b|p ys _v}
-foldr = \f . \seed . \ys . 
+foldr = \f . \seed . \ys .
       match ys with
         Nil -> seed
         Cons x3 x4 -> f x4 x3 (foldr f
                                  seed x4)
 
 length :: xs:List a -> {Int|_v == len xs}
-length = \xs . 
+length = \xs .
   let f0 = \x2 . \x3 . \x4 . inc
                                x4 in
   foldr f0 zero xs
 
 append :: xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
-append = \xs . \ys . 
+append = \xs . \ys .
     let f0 = \x2 . \x3 . \x4 . Cons
                                  x3 x4 in
     foldr f0 xs ys
 
 ith :: <p :: Int -> a -> Bool> . xs:List a <p> -> i:{Int|0 <= _v && _v < len xs} -> {a|p i _v}
-ith = \xs . \i . 
+ith = \xs . \i .
     match xs with
       Nil -> error
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if 0 == i
           then x3
           else ith x4 (dec i)
 
 elemIndex :: <p :: Int -> a -> Bool> . x:a -> xs:{List a <p>|x in elems _v} -> {Int|p _v x}
-elemIndex = \x . \xs . 
+elemIndex = \x . \xs .
     match xs with
       Nil -> error
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if x3 == x
           then zero
           else inc (elemIndex x x4)
 
 snoc :: <p :: a -> a -> Bool> . x:a -> xs:List {a|p _v x} <p> -> {List a <p>|len _v == len xs + 1 && elems _v == elems xs + [x]}
-snoc = \x . \xs . 
+snoc = \x . \xs .
     match xs with
       Nil -> Cons x Nil
       Cons x5 x6 -> Cons x5 (snoc x
                                x6)
 
 reverse :: <p :: a -> a -> Bool> . xs:List a <p> -> {List a <p _1 _0>|len _v == len xs && elems _v == elems xs}
-reverse = \xs . 
+reverse = \xs .
   match xs with
     Nil -> Nil
     Cons x3 x4 -> snoc x3 (reverse
                              x4)
 
-range :: size:Nat -> lo:Int -> {List Int|elems _v == [x|lo <= x && x < lo + size]}
-range = \size . \lo . 
-    if size <= 0
-      then Nil
-      else Cons lo (range (dec size)
-                      (inc lo))
-
 insert :: x:a -> xs:UList a -> {UList a|elems _v == elems xs + [x]}
-insert = \x . \xs . 
+insert = \x . \xs .
     match xs with
       Nil -> Cons x xs
-      Cons x5 x6 -> 
+      Cons x5 x6 ->
         if x5 == x
           then xs
           else Cons x5 (insert x x6)
 
 delete :: x:a -> xs:UList a -> {UList a|elems _v == elems xs - [x]}
-delete = \x . \xs . 
+delete = \x . \xs .
     match xs with
       Nil -> xs
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if x3 == x
           then x4
           else Cons x3 (delete x x4)
 
 range :: size:Nat -> lo:Int -> {UList {Int|lo <= _v && _v <= lo + size}|len _v == size}
-range = \size . \lo . 
+range = \size . \lo .
     if size <= 0
       then Nil
       else Cons lo (range (dec size)
                       (inc lo))
 
 elem :: x:a -> xs:List a -> {Bool|_v == (x in elems xs)}
-elem = \x . \xs . 
+elem = \x . \xs .
     match xs with
       Nil -> false
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if x3 == x
           then true
           else elem x x4
 
 nub' :: xs:List a -> acc:UList a -> {UList a|elems _v == elems acc + elems xs}
-nub' = \xs . \acc . 
+nub' = \xs . \acc .
     match xs with
       Nil -> acc
-      Cons x3 x4 -> 
+      Cons x3 x4 ->
         if elem x3 acc
           then nub' x4 acc
-          else 
+          else
             if elem x3 x4
               then nub' x4 acc
               else Cons x3 (nub' x4 acc)
@@ -259,64 +252,64 @@ nub :: xs:List a -> {UList a|elems _v == elems xs}
 nub = \xs . nub' xs Nil
 
 compress :: xs:List a -> {CList a|elems _v == elems xs}
-compress = \xs . 
+compress = \xs .
   match xs with
     Nil -> Nil
-    Cons x3 x4 -> 
+    Cons x3 x4 ->
       match compress x4 with
         Nil -> Cons x3 Nil
-        Cons x10 x11 -> 
+        Cons x10 x11 ->
           if x3 == x10
             then compress x4
             else Cons x3 (Cons x10 x11)
 
 insert :: x:a -> xs:IList a -> {IList a|ielems _v == ielems xs + [x]}
-insert = \x . \xs . 
+insert = \x . \xs .
     match xs with
       INil -> ICons x INil
-      ICons x5 x6 -> 
+      ICons x5 x6 ->
         if x5 <= x
           then ICons x5 (insert x x6)
           else ICons x (ICons x5 x6)
 
 insertSort :: xs:List a -> {IList a|ielems _v == elems xs}
-insertSort = \xs . 
+insertSort = \xs .
   match xs with
     Nil -> INil
     Cons x3 x4 -> insert x3
                     (insertSort x4)
 
 sort :: xs:List a -> {IncList a|elems _v == elems xs && len _v == len xs}
-sort = \xs . 
-  let f0 = \x2 . \x3 . \x4 . 
+sort = \xs .
+  let f0 = \x2 . \x3 . \x4 .
           match x4 with
             Nil -> Cons x3 Nil
-            Cons x12 x13 -> 
+            Cons x12 x13 ->
               if x3 <= x12
                 then Cons x3 (Cons x12 x13)
                 else Cons x12 (f0 x13 x3 x13) in
   foldr f0 Nil xs
 
 split :: xs:List a -> {Pair {List a|abs (len xs - len _v * 2) <= 1} List a|len xs == len (fst _v) + len (snd _v) && elems xs == elems (fst _v) + elems (snd _v)}
-split = \xs . 
+split = \xs .
   match xs with
     Nil -> Pair xs xs
-    Cons x5 x6 -> 
+    Cons x5 x6 ->
       match x6 with
         Nil -> Pair x6 xs
-        Cons x11 x12 -> 
+        Cons x11 x12 ->
           match split x12 with
             Pair x16 x17 -> Pair (Cons x11
                                     x16) (Cons x5 x17)
 
 merge :: xs:IList a -> ys:IList a -> {IList a|ilen _v == ilen xs + ilen ys && ielems _v == ielems xs + ielems ys}
-merge = \xs . \ys . 
+merge = \xs . \ys .
     match ys with
       INil -> xs
-      ICons x4 x5 -> 
+      ICons x4 x5 ->
         match xs with
           INil -> ys
-          ICons x8 x9 -> 
+          ICons x8 x9 ->
             if x4 <= x8
               then ICons x4 (merge (ICons x8
                                       x9) x5)
@@ -324,140 +317,140 @@ merge = \xs . \ys .
                                          x4 x5))
 
 mergeSort :: xs:List a -> {IList a|ilen _v == len xs && ielems _v == elems xs}
-mergeSort = \xs . 
+mergeSort = \xs .
   match xs with
     Nil -> INil
-    Cons x3 x4 -> 
+    Cons x3 x4 ->
       match x4 with
         Nil -> ICons x3 INil
-        Cons x9 x10 -> 
+        Cons x9 x10 ->
           match split xs with
             Pair x14 x15 -> merge (mergeSort
                                      x14) (mergeSort x15)
 
 partition :: p:a -> xs:List a -> {Pair List {a|_v <= p} List {a|_v > p}|len (fst _v) + len (snd _v) == len xs && elems (fst _v) + elems (snd _v) == elems xs}
-partition = \p . \xs . 
+partition = \p . \xs .
     match xs with
       Nil -> Pair Nil Nil
-      Cons x5 x6 -> 
+      Cons x5 x6 ->
         match partition p x6 with
-          Pair x11 x12 -> 
+          Pair x11 x12 ->
             if x5 <= p
               then Pair (Cons x5 x11) x12
               else Pair x11 (Cons x5 x12)
 
 pivotAppend :: p:a -> xs:IList {a|_v <= p} -> ys:IList {a|_v > p} -> {IList a|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == (ielems xs + ielems ys) + [p]}
-pivotAppend = \p . \xs . \ys . 
+pivotAppend = \p . \xs . \ys .
       match xs with
         INil -> ICons p ys
         ICons x5 x6 -> ICons x5
                          (pivotAppend p x6 ys)
 
 quickSort :: xs:List a -> {IList a|ilen _v == len xs && ielems _v == elems xs}
-quickSort = \xs . 
+quickSort = \xs .
   match xs with
     Nil -> INil
-    Cons x3 x4 -> 
+    Cons x3 x4 ->
       match partition x3 x4 with
         Pair x9 x10 -> pivotAppend x3
                          (quickSort x9) (quickSort x10)
 
 elem :: x:a -> t:Tree a -> {Bool|_v == (x in telems t)}
-elem = \x . \t . 
+elem = \x . \t .
     match t with
       Empty -> false
-      Node x4 x5 x6 -> 
+      Node x4 x5 x6 ->
         if x4 == x
           then not false
           else or (elem x x5) (elem x x6)
 
 flatten :: t:Tree a -> {List a|len _v == size t}
-flatten = \t . 
+flatten = \t .
   match t with
     Empty -> Nil
     Node x4 x5 x6 -> Cons x4 (append
                                 (flatten x5) (flatten x6))
 
 member :: x:a -> t:BST a -> {Bool|_v == (x in telems t)}
-member = \x . \t . 
+member = \x . \t .
     match t with
       Empty -> false
-      Node x4 x5 x6 -> 
+      Node x4 x5 x6 ->
         if (x <= x4) && (x4 <= x)
           then true
-          else 
+          else
             if x <= x4
               then member x x5
               else member x x6
 
 insert :: x:a -> t:BST a -> {BST a|telems _v == telems t + [x]}
-insert = \x . \t . 
+insert = \x . \t .
     match t with
       Empty -> Node x Empty Empty
-      Node x7 x8 x9 -> 
+      Node x7 x8 x9 ->
         if (x <= x7) && (x7 <= x)
           then t
-          else 
+          else
             if x7 <= x
               then Node x7 x8 (insert x x9)
               else Node x7 (insert x x8) x9
 
 extractMin :: t:{BST a|size _v > 0} -> {MinPair a|telems t == [min _v] + telems (rest _v)}
-extractMin = \t . 
+extractMin = \t .
   match t with
     Empty -> error
-    Node x4 x5 x6 -> 
+    Node x4 x5 x6 ->
       match x5 with
         Empty -> MinPair x4 x6
-        Node x12 x13 x14 -> 
+        Node x12 x13 x14 ->
           match extractMin x5 with
             MinPair x18 x19 -> MinPair x18
                                  (Node x4 x19 x6)
 
 delete :: t:BST a -> x:a -> {BST a|telems _v == telems t - [x]}
-delete = \t . \x . 
+delete = \t . \x .
     match t with
       Empty -> t
-      Node x4 x5 x6 -> 
+      Node x4 x5 x6 ->
         if (x4 != x) && (x4 <= x)
           then Node x4 x5 (delete x6 x)
-          else 
+          else
             if x4 != x
               then Node x4 (delete x5 x) x6
-              else 
+              else
                 match x5 with
                   Empty -> x6
                   Node x20 x21 x22 -> Node x20 x21
                                         (delete (Node x x22 x6) x4)
 
 insert :: x:a -> t:BST a -> {BST a|telems _v == telems t + [x]}
-insert = \x . \t . 
+insert = \x . \t .
     match t with
       Empty -> Node x Empty Empty
-      Node x7 x8 x9 -> 
+      Node x7 x8 x9 ->
         if (x <= x7) && (x7 <= x)
           then t
-          else 
+          else
             if x7 <= x
               then Node x7 x8 (insert x x9)
               else Node x7 (insert x x8) x9
 
 toBST :: xs:List a -> {BST a|telems _v == elems xs}
-toBST = \xs . 
+toBST = \xs .
   match xs with
     Nil -> Empty
     Cons x3 x4 -> insert x3 (toBST
                                x4)
 
 pivotAppend :: p:a -> xs:IList {a|_v < p} -> ys:IList {a|_v > p} -> {IList a|ilen _v == (ilen xs + ilen ys) + 1 && ielems _v == (ielems xs + ielems ys) + [p]}
-pivotAppend = \p . \xs . \ys . 
+pivotAppend = \p . \xs . \ys .
       match xs with
         INil -> ICons p ys
         ICons x5 x6 -> ICons x5
                          (pivotAppend p x6 ys)
 
 flatten :: t:BST a -> {IList a|ielems _v == telems t}
-flatten = \t . 
+flatten = \t .
   match t with
     Empty -> INil
     Node x4 x5 x6 -> pivotAppend x4
@@ -467,32 +460,32 @@ sort :: xs:List a -> {IList a|ielems _v == elems xs}
 sort = \xs . flatten (toBST xs)
 
 member :: x:a -> t:Heap a -> {Bool|_v == (x in elems t)}
-member = \x . \t . 
+member = \x . \t .
     match t with
       Empty -> false
-      Node x4 x5 x6 -> 
+      Node x4 x5 x6 ->
         if (x4 != x) && (x <= x4)
           then false
-          else 
+          else
             if x <= x4
               then not false
               else or (member x x5) (member x
                                        x6)
 
 insert :: t:Heap a -> x:a -> {Heap a|elems _v == elems t + [x]}
-insert = \t . \x . 
+insert = \t . \x .
     match t with
       Empty -> Node x Empty Empty
-      Node x7 x8 x9 -> 
+      Node x7 x8 x9 ->
         if (x <= x7) && (x7 <= x)
           then t
-          else 
+          else
             if x7 <= x
               then Node x7 x8 (insert x9 x)
               else Node x x8 (insert x9 x7)
 
 transform :: x:AST -> {PAST|result2 _v == result x}
-transform = \x . 
+transform = \x .
   match x with
     One -> IntNode one
     Zero -> IntNode zero
@@ -506,12 +499,12 @@ transform = \x .
                                                     x25)
 
 mkAddressBook :: adds:List Address -> {AddressBook|size _v == len adds}
-mkAddressBook = \adds . 
+mkAddressBook = \adds .
   match adds with
     Nil -> AddressBook Nil Nil
-    Cons x5 x6 -> 
+    Cons x5 x6 ->
       match mkAddressBook x6 with
-        AddressBook x10 x11 -> 
+        AddressBook x10 x11 ->
           if getPriv x5
             then AddressBook x10 (Cons x5
                                     x11)
@@ -519,162 +512,162 @@ mkAddressBook = \adds .
                    x11
 
 mergeAddressBooks :: a:AddressBook -> b:AddressBook -> {AddressBook|size _v == size a + size b}
-mergeAddressBooks = \a . \b . 
+mergeAddressBooks = \a . \b .
     match a with
-      AddressBook x2 x3 -> 
+      AddressBook x2 x3 ->
         match b with
           AddressBook x6 x7 -> AddressBook
                                  (append x2 x6) (append x3 x7)
 
 replicate :: n:{Nat|_v <= 2} -> x:a -> {List a|((n == 0 ==> _v == (Nil)) && (n == 1 ==> _v == (Cons x (Nil)))) && (n == 2 ==> _v == (Cons x ((Cons x (Nil)))))}
-replicate = \n . \x . 
+replicate = \n . \x .
     if n <= 0
       then Nil
       else Cons x (replicate (dec n)
                      x)
 
 max2 :: x:Int -> y:Int -> {Int|_v >= x && _v >= y}
-max2 = \x . \y . 
+max2 = \x . \y .
     if x >= y
       then x
       else y
 
 max3 :: x:Int -> y:Int -> z:Int -> {Int|(_v >= x && _v >= y) && _v >= z}
-max3 = \x . \y . \z . 
+max3 = \x . \y . \z .
       if (x >= y) && (x >= z)
         then x
-        else 
+        else
           if y >= z
             then y
             else z
 
 max4 :: w:Int -> x:Int -> y:Int -> z:Int -> {Int|((_v >= w && _v >= x) && _v >= y) && _v >= z}
-max4 = \w . \x . \y . \z . 
+max4 = \w . \x . \y . \z .
         if ((w >= x) && (w >= y)) && (w
                                         >= z)
           then w
-          else 
+          else
             if (x >= y) && (x >= z)
               then x
-              else 
+              else
                 if y >= z
                   then y
                   else z
 
 max5 :: v:Int -> w:Int -> x:Int -> y:Int -> z:Int -> {Int|(((_v >= v && _v >= w) && _v >= x) && _v >= y) && _v >= z}
-max5 = \v . \w . \x . \y . \z . 
+max5 = \v . \w . \x . \y . \z .
           if (((v >= w) && (v >= x)) && (v
                                            >= y)) && (v >= z)
             then v
-            else 
+            else
               if ((w >= x) && (w >= y)) && (w
                                               >= z)
                 then w
-                else 
+                else
                   if (x >= y) && (x >= z)
                     then x
-                    else 
+                    else
                       if y >= z
                         then y
                         else z
 
 findIdx :: arr:Array a -> k:a -> {Int|((k < at0 arr ==> _v == 0) && (k > at1 arr ==> _v == 2)) && (k > at0 arr && k < at1 arr ==> _v == 1)}
-findIdx = \arr . \k . 
+findIdx = \arr . \k .
     match arr with
-      Array2 x2 x3 -> 
+      Array2 x2 x3 ->
         if k < x2
           then n0
-          else 
+          else
             if k < x3
               then n1
               else n2
 
 findIdx :: arr:Array a -> k:a -> {Int|(((k < at0 arr ==> _v == 0) && (k > at2 arr ==> _v == 3)) && (k > at0 arr && k < at1 arr ==> _v == 1)) && (k > at1 arr && k < at2 arr ==> _v == 2)}
-findIdx = \arr . \k . 
+findIdx = \arr . \k .
     match arr with
-      Array3 x3 x4 x5 -> 
+      Array3 x3 x4 x5 ->
         if k < x3
           then n0
-          else 
+          else
             if k < x4
               then n1
-              else 
+              else
                 if k < x5
                   then n2
                   else n3
 
 findIdx :: arr:Array a -> k:a -> {Int|((((k < at0 arr ==> _v == 0) && (k > at3 arr ==> _v == 4)) && (k > at0 arr && k < at1 arr ==> _v == 1)) && (k > at1 arr && k < at2 arr ==> _v == 2)) && (k > at2 arr && k < at3 arr ==> _v == 3)}
-findIdx = \arr . \k . 
+findIdx = \arr . \k .
     match arr with
-      Array4 x4 x5 x6 x7 -> 
+      Array4 x4 x5 x6 x7 ->
         if k < x4
           then n0
-          else 
+          else
             if k < x5
               then n1
-              else 
+              else
                 if k < x6
                   then n2
-                  else 
+                  else
                     if k < x7
                       then n3
                       else n4
 
 findIdx :: arr:Array a -> k:a -> {Int|(((((k < at0 arr ==> _v == 0) && (k > at4 arr ==> _v == 5)) && (k > at0 arr && k < at1 arr ==> _v == 1)) && (k > at1 arr && k < at2 arr ==> _v == 2)) && (k > at2 arr && k < at3 arr ==> _v == 3)) && (k > at3 arr && k < at4 arr ==> _v == 4)}
-findIdx = \arr . \k . 
+findIdx = \arr . \k .
     match arr with
-      Array5 x5 x6 x7 x8 x9 -> 
+      Array5 x5 x6 x7 x8 x9 ->
         if k < x5
           then n0
-          else 
+          else
             if k < x6
               then n1
-              else 
+              else
                 if k < x7
                   then n2
-                  else 
+                  else
                     if k < x8
                       then n3
-                      else 
+                      else
                         if k < x9
                           then n4
                           else n5
 
 findIdx :: arr:Array a -> k:a -> {Int|((((((k < at0 arr ==> _v == 0) && (k > at5 arr ==> _v == 6)) && (k > at0 arr && k < at1 arr ==> _v == 1)) && (k > at1 arr && k < at2 arr ==> _v == 2)) && (k > at2 arr && k < at3 arr ==> _v == 3)) && (k > at3 arr && k < at4 arr ==> _v == 4)) && (k > at4 arr && k < at5 arr ==> _v == 5)}
-findIdx = \arr . \k . 
+findIdx = \arr . \k .
     match arr with
-      Array6 x6 x7 x8 x9 x10 x11 -> 
+      Array6 x6 x7 x8 x9 x10 x11 ->
         if k < x6
           then n0
-          else 
+          else
             if k < x7
               then n1
-              else 
+              else
                 if k < x8
                   then n2
-                  else 
+                  else
                     if k < x9
                       then n3
-                      else 
+                      else
                         if k < x10
                           then n4
-                          else 
+                          else
                             if k < x11
                               then n5
                               else n6
 
 balanceL :: y:a -> isR:Bool -> l:{RBT {a|_v < y}|size _v > 0 && (isR ==> isOk _v)} -> r:{RBT {a|_v > y}|(isOk _v && (isRed _v ==> !isR)) && bHeight _v == bHeight l} -> {RBT a|((elems _v == ([y] + elems l) + elems r && bHeight _v == bHeight r + bHt isR) && size _v == (1 + size l) + size r) && (isR || isOk _v)}
 balanceL = \y . \isR . \l . \r .
-        
+
         match l with
           Empty -> error
-          Node x5 x6 x7 x8 -> 
+          Node x5 x6 x7 x8 ->
             if isR && x6
               then Bad y isR l r
               else Node y isR l r
-          Bad x33 x34 x35 x36 -> 
+          Bad x33 x34 x35 x36 ->
             if x34
-              then 
+              then
                 match x35 with
                   Empty -> error
                   Node x41 x42 x43 x44 -> Node x33
@@ -682,7 +675,7 @@ balanceL = \y . \isR . \l . \r .
                                                                           y isR
                                                                           x36 r)
                   Bad x61 x62 x63 x64 -> error
-              else 
+              else
                 match x36 with
                   Empty -> error
                   Node x69 x70 x71 x72 -> Node x69
@@ -693,17 +686,17 @@ balanceL = \y . \isR . \l . \r .
 
 balanceR :: x:a -> isR:Bool -> l:{RBT {a|_v < x}|isOk _v && (isRed _v ==> !isR)} -> r:{RBT {a|_v > x}|(size _v > 0 && (isR ==> isOk _v)) && bHeight _v == bHeight l} -> {RBT a|((elems _v == ([x] + elems l) + elems r && bHeight _v == bHeight l + bHt isR) && size _v == (1 + size l) + size r) && (isR || isOk _v)}
 balanceR = \x . \isR . \l . \r .
-        
+
         match r with
           Empty -> error
-          Node x5 x6 x7 x8 -> 
+          Node x5 x6 x7 x8 ->
             if isR && x6
               then Bad x5 isR (Node x x6 l x7)
                      x8
               else Node x isR l r
-          Bad x37 x38 x39 x40 -> 
+          Bad x37 x38 x39 x40 ->
             if x38
-              then 
+              then
                 match x39 with
                   Empty -> error
                   Node x45 x46 x47 x48 -> Node x45
@@ -711,7 +704,7 @@ balanceR = \x . \isR . \l . \r .
                                                                       isR x48
                                                                       x40)
                   Bad x65 x66 x67 x68 -> error
-              else 
+              else
                 match x40 with
                   Empty -> error
                   Node x73 x74 x75 x76 -> Node x37
@@ -721,13 +714,13 @@ balanceR = \x . \isR . \l . \r .
                   Bad x93 x94 x95 x96 -> error
 
 ins :: x:a -> t:{RBT a|isOk _v} -> {RBT a|((((elems _v == [x] + elems t && bHeight _v == bHeight t) && size _v > 0) && size t <= size _v) && size _v <= size t + 1) && (isOk _v || isRed t)}
-ins = \x . \t . 
+ins = \x . \t .
     match t with
       Empty -> Node x red Empty Empty
-      Node x9 x10 x11 x12 -> 
+      Node x9 x10 x11 x12 ->
         if (x <= x9) && (x9 <= x)
           then t
-          else 
+          else
             if x9 <= x
               then balanceR x9 x10 x11 (ins x
                                           x12)
@@ -736,7 +729,7 @@ ins = \x . \t .
       Bad x29 x30 x31 x32 -> error
 
 mkBlack :: t:RBT a -> {RBT a|isOk _v && elems _v == elems t}
-mkBlack = \t . 
+mkBlack = \t .
   match t with
     Empty -> t
     Node x5 x6 x7 x8 -> t
@@ -748,27 +741,27 @@ insert = \x . \t . mkBlack (ins
                               x t)
 
 balL0 :: x:a -> l:{AVL {a|_v < x}|balFac _v == 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == 1 + realHeight l && elems _v == ([x] + elems l) + elems r}
-balL0 = \x . \l . \r . 
+balL0 = \x . \l . \r .
       match l with
         Leaf -> error
         Node x5 x6 x7 x8 -> Node x5 x6
                               (Node x x7 r x8) (inc x8)
 
 balLL :: x:a -> l:{AVL {a|_v < x}|balFac _v > 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == realHeight l && elems _v == ([x] + elems l) + elems r}
-balLL = \x . \l . \r . 
+balLL = \x . \l . \r .
       match l with
         Leaf -> error
-        Node x5 x6 x7 x8 -> 
+        Node x5 x6 x7 x8 ->
           match x6 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x5
                                       x6 (Node x x7 r x16) x8
 
 balLR :: x:a -> l:{AVL {a|_v < x}|balFac _v < 0} -> r:{AVL {a|_v > x}|realHeight l - realHeight _v == 2} -> {AVL a|realHeight _v == realHeight l && elems _v == ([x] + elems l) + elems r}
-balLR = \x . \l . \r . 
+balLR = \x . \l . \r .
       match l with
         Leaf -> error
-        Node x5 x6 x7 x8 -> 
+        Node x5 x6 x7 x8 ->
           match x7 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x13
@@ -776,17 +769,17 @@ balLR = \x . \l . \r .
                                                               r x16) x8
 
 balR0 :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v == 0} -> {AVL a|realHeight _v == 1 + realHeight r && elems _v == ([x] + elems l) + elems r}
-balR0 = \x . \l . \r . 
+balR0 = \x . \l . \r .
       match r with
         Leaf -> error
         Node x5 x6 x7 x8 -> Node x5
                               (Node x l x6 x8) x7 (inc x8)
 
 balRL :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v > 0} -> {AVL a|realHeight _v == realHeight r && elems _v == ([x] + elems l) + elems r}
-balRL = \x . \l . \r . 
+balRL = \x . \l . \r .
       match r with
         Leaf -> error
-        Node x5 x6 x7 x8 -> 
+        Node x5 x6 x7 x8 ->
           match x6 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x13
@@ -794,79 +787,78 @@ balRL = \x . \l . \r .
                                                             x7 x16) x8
 
 balRR :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|realHeight _v - realHeight l == 2 && balFac _v < 0} -> {AVL a|realHeight _v == realHeight r && elems _v == ([x] + elems l) + elems r}
-balRR = \x . \l . \r . 
+balRR = \x . \l . \r .
       match r with
         Leaf -> error
-        Node x5 x6 x7 x8 -> 
+        Node x5 x6 x7 x8 ->
           match x7 with
             Leaf -> error
             Node x13 x14 x15 x16 -> Node x5
                                       (Node x l x6 x16) x7 x8
 
 balance :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|abs (realHeight l - realHeight _v) <= 2} -> {AVL a|(balHt l r _v && bigHt l r _v) && elems _v == ([x] + elems l) + elems r}
-balance = \x . \l . \r . 
+balance = \x . \l . \r .
       if (isSkewed l r) &&
            (isLeftHeavy l)
         then balLL x l r
-        else 
+        else
           if (isSkewed l r) &&
                (isRightHeavy l)
             then balLR x l r
-            else 
+            else
               if isSkewed l r
                 then balL0 x l r
-                else 
+                else
                   if (isSkewed r l) &&
                        (isLeftHeavy r)
                     then balRL x l r
-                    else 
+                    else
                       if (isSkewed r l) &&
                            (isRightHeavy r)
                         then balRR x l r
-                        else 
+                        else
                           if isSkewed r l
                             then balR0 x l r
                             else Node x l r (nodeHeight l r)
 
 insert :: y:a -> t:AVL a -> {AVL a|(realHeight t <= realHeight _v && realHeight _v <= realHeight t + 1) && elems _v == [y] + elems t}
-insert = \y . \t . 
+insert = \y . \t .
     match t with
       Leaf -> balance y Leaf Leaf
-      Node x8 x9 x10 x11 -> 
+      Node x8 x9 x10 x11 ->
         if x8 < y
           then balance x8 x9 (insert y
                                 x10)
-          else 
+          else
             if y < x8
               then balance x8 (insert y x9)
                      x10
               else t
 
 extractMin :: t:AVL a -> {MinPair a|elems t == melems _v && eqOrOneLess (mheight _v) (realHeight t)}
-extractMin = \t . 
+extractMin = \t .
   match t with
     Leaf -> Nothing
-    Node x5 x6 x7 x8 -> 
+    Node x5 x6 x7 x8 ->
       match extractMin x6 with
         Nothing -> MinPair x5 x7
         MinPair x14 x15 -> MinPair x14
                              (balance x5 x15 x7)
 
 merge :: x:a -> l:AVL {a|_v < x} -> r:{AVL {a|_v > x}|isBal l _v 1} -> {AVL a|bigHt l r _v && elems _v == elems l + elems r}
-merge = \x . \l . \r . 
+merge = \x . \l . \r .
       match extractMin r with
         Nothing -> l
         MinPair x4 x5 -> balance x4 l x5
 
 delete :: y:a -> t:AVL a -> {AVL a|eqOrOneLess (realHeight _v) (realHeight t) && elems t - [y] == elems _v}
-delete = \y . \t . 
+delete = \y . \t .
     match t with
       Leaf -> t
-      Node x5 x6 x7 x8 -> 
+      Node x5 x6 x7 x8 ->
         if x5 < y
           then balance x5 x6 (delete y x7)
-          else 
+          else
             if y < x5
               then balance x5 (delete y x6) x7
               else merge x5 x6 x7
-

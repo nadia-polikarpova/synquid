@@ -20,7 +20,7 @@ COMMON_OPTS = ['-z']
 TIMEOUT_COMMAND = 'timeout'
 TIMEOUT= '120'
 
-SECTIONS = ['.', 'sygus', 'rbt', 'avl']
+SECTIONS = ['.', 'sygus', 'rbt', 'AVL']
 
 BENCHMARKS = {
   '.' : [
