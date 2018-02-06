@@ -211,10 +211,13 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases _) = do
       sch <- uses environment ((Map.! measureName) . allSymbols)
       sch' <- resolveSchema sch
       environment %= addPolyConstant measureName sch'
+      defCases' <- mapM (\(MeasureCase n args body) -> do
+        body' <- resolveMeasureFormula body
+        return (MeasureCase n args body')) defCases
       environment %= addMeasure measureName (MeasureDef inSort outSort defs' post')
-      checkingGoals %= (++ [(measureName, (impl (MeasureDef inSort outSort defCases post'), pos))])
+      checkingGoals %= (++ [(measureName, (impl (MeasureDef inSort outSort defCases' post'), pos))])
   where
-    impl = measureProg measureName
+    impl def = normalizeProgram $ measureProg measureName def
     resolveMeasureDef allCtors (MeasureCase ctorName binders body) =
       if ctorName `notElem` allCtors
         then throwResError $ text "Not in scope: data constructor" <+> text ctorName <+> text "used in definition of measure" <+> text measureName
@@ -239,17 +242,17 @@ resolveSignatures (SynthesisGoal name impl) = do
 resolveSignatures _ = return ()
 
 resolveHole :: Program RType -> Resolver RType
-resolveHole Program{content = (PApp p1 p2), typeOf = _} = do
+resolveHole Program{content = (PApp p1 p2)} = do
   resolveHole p1
   resolveHole p2
-resolveHole Program{content = (PFun _ p), typeOf = _} = resolveHole p
-resolveHole Program{content = (PIf p1 p2 p3), typeOf = _} = do
+resolveHole Program{content = (PFun _ p)} = resolveHole p
+resolveHole Program{content = (PIf p1 p2 p3)} = do
   resolveHole p1
   resolveHole p2
   resolveHole p3
-resolveHole Program{content = (PMatch p _), typeOf = _} = resolveHole p
-resolveHole Program{content = (PFix _ p), typeOf = _} = resolveHole p
-resolveHole Program{content = (PLet _ p1 p2), typeOf = _} = do
+resolveHole Program{content = (PMatch p _)} = resolveHole p
+resolveHole Program{content = (PFix _ p)} = resolveHole p
+resolveHole Program{content = (PLet _ p1 p2)} = do
   resolveHole p1
   resolveHole p2
 -- Resolve type if hole, symbol, or err:
@@ -368,6 +371,40 @@ resolveTypeRefinement valueSort fml = do
     -- throwResError $ text "Bound predicate(s)" <+> commaSep (map text $ Set.toList invalidPreds)<+> text "occur negatively in a refinement" <+> pretty resolvedFml
   return resolvedFml
 
+-- Partially resolve formula describing measure case (just replace inline predicates)
+resolveMeasureFormula :: Formula -> Resolver Formula
+resolveMeasureFormula (SetLit s fs) = do
+  fs' <- mapM resolveMeasureFormula fs
+  return $ SetLit s fs'
+resolveMeasureFormula (Unary op f) = do
+  f' <- resolveMeasureFormula f
+  return $ Unary op f'
+resolveMeasureFormula (Binary op f1 f2) = do
+  f1' <- resolveMeasureFormula f1
+  f2' <- resolveMeasureFormula f2
+  return $ Binary op f1' f2'
+resolveMeasureFormula (Ite f1 f2 f3) = do
+  f1' <- resolveMeasureFormula f1
+  f2' <- resolveMeasureFormula f2
+  f3' <- resolveMeasureFormula f3
+  return $ Ite f1' f2' f3'
+resolveMeasureFormula (Pred s name f) = do
+  inlineMb <- uses inlines (Map.lookup name)
+  case inlineMb of
+    Just (args, body) -> resolveMeasureFormula (substitute (Map.fromList $ zip args f) body)
+    Nothing -> do
+      f' <- mapM resolveMeasureFormula f
+      return $ Pred s name f'
+resolveMeasureFormula (Cons s x f) = do
+  f' <- mapM resolveMeasureFormula f
+  return $ Cons s x f'
+resolveMeasureFormula (All f1 f2) = do
+  f1' <- resolveMeasureFormula f1
+  f2' <- resolveMeasureFormula f2
+  return $ All f1' f2'
+resolveMeasureFormula f = return f
+
+
 resolveFormula :: Formula -> Resolver Formula
 resolveFormula (Var _ x) = do
   env <- use environment
@@ -481,6 +518,62 @@ resolveFormula (Cons _ name argFmls) = do
 resolveFormula fml = return fml
 
 {- Misc -}
+
+-- Normalize program form for typechecking:
+-- Move conditional and match statements to top level of untyped program
+normalizeProgram :: UProgram -> UProgram
+normalizeProgram p@Program{content = (PSymbol name)} = p
+-- Ensure no conditionals inside application
+normalizeProgram p@Program{content = (PApp fun arg)} =
+  untypedProg $ case (isCond fun', isCond arg') of
+    -- Both sides are conditionals, can transform either side.
+    (True, True) -> transformLCond fun' arg'
+    -- Transform left side of application
+    (True, _)    -> transformLCond fun' arg'
+    -- Transform right side of application
+    (_, True)    -> transformRCond fun' arg'
+    -- Do not transform
+    _            -> PApp (normalizeProgram fun) (normalizeProgram arg)
+  where
+    fun' = normalizeProgram fun
+    arg' = normalizeProgram arg
+
+    untypedProg p = Program p AnyT
+
+    isCond Program{content = (PIf _ _ _)}  = True
+    isCond Program{content = (PMatch _ _)} = True
+    isCond _                               = False
+
+    transformCase prog (Case con args ex) = Case con args (untypedProg (prog (normalizeProgram ex)))
+
+    -- Conditional is on left side of application
+    transformLCond p@Program{content = (PIf guard t f)} p2    =
+      PIf guard (untypedProg (PApp t p2)) (untypedProg (PApp f p2))
+    transformLCond p@Program{content = (PMatch scr cases)} p2 =
+      PMatch scr (fmap (transformCase (`PApp` p2)) cases)
+    transformLCond l r = PApp l r
+
+    -- Conditional is on right side of application
+    transformRCond p2 p@Program{content = (PIf guard t f)}     =
+      PIf guard (untypedProg (PApp p2 t)) (untypedProg (PApp p2 f))
+    transformRCond p2 p@Program{content = (PMatch scr cases)}  =
+      PMatch scr (fmap (transformCase (PApp p2)) cases)
+    transformRCond l r = PApp l r
+
+normalizeProgram p@Program{content = (PFun name body)} =
+  Program (PFun name (normalizeProgram body)) AnyT
+normalizeProgram p@Program{content = (PIf guard p1 p2)} =
+  Program (PIf (normalizeProgram guard) (normalizeProgram p1) (normalizeProgram p2)) AnyT
+normalizeProgram p@Program{content = (PMatch arg cases)} =
+  Program (PMatch (normalizeProgram arg) (fmap normalizeCase cases)) AnyT
+  where
+    normalizeCase (Case con args expr) = Case con args (normalizeProgram expr)
+normalizeProgram p@Program{content = (PFix fs body)} =
+  Program (PFix fs (normalizeProgram body)) AnyT
+normalizeProgram p@Program{content = (PLet var val body)} =
+  Program (PLet var (normalizeProgram val) (normalizeProgram body)) AnyT
+normalizeProgram p = p
+
 
 nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Var argSorts deBrujns)
 

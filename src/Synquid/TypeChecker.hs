@@ -165,7 +165,6 @@ reconstructI' env t@(ScalarT _ _) impl = case impl of
   PMatch iScr iCases -> do
     (consNames, consTypes) <- unzip <$> checkCases Nothing iCases
     let scrT = refineTop env $ shape $ lastType $ head consTypes
-
     pScrutinee <- inContext (\p -> Program (PMatch p []) t) $ reconstructETopLevel env scrT iScr
     let (env', tScr) = embedContext env (typeOf pScrutinee)
     let scrutineeSymbols = symbolList pScrutinee

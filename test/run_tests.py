@@ -50,7 +50,7 @@ BENCHMARKS = {
               ('List-ElemIndex',      []),
               ('List-Snoc',           []),
               ('List-Reverse',        []),
-              ('List-Range',          []),
+              # ('List-Range',          []),
               # ('List-Filter',         ['-g=False']),
               # Unique lists
               ('UniqueList-Insert',   []),
@@ -99,7 +99,7 @@ BENCHMARKS = {
               ('Array-Search-5', []),
               ('Array-Search-6', []),
             ],
-  'avl' : [
+  'AVL' : [
               # AVL trees
               ('AVL-BalL0',           ['-a 2']),
               ('AVL-BalLL',           ['-a 2', '-u']),

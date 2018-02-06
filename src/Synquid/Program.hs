@@ -526,12 +526,9 @@ filterEnv e m = Lens.set measures (Map.filterWithKey (\k _ -> k == m) (e ^. meas
 -- Transform a resolved measure into a program
 measureProg :: Id -> MeasureDef -> UProgram
 measureProg name (MeasureDef inSort outSort defs post) = Program {
-  typeOf = t, content = PFun "THIS" Program{ content = PMatch Program{ content = PSymbol "THIS", typeOf = t' } (map mCase defs), typeOf = t''} }
+  typeOf = t, content = PFun "THIS" Program{ content = PMatch Program{ content = PSymbol "THIS", typeOf = t } (map mCase defs), typeOf = t} }
   where
-    --t   = FunctionT name (fromSort inSort) (addRefinement (fromSort outSort) post)
     t   = AnyT
-    t'  = AnyT
-    t'' = AnyT
 
 -- Transform between case types
 mCase :: MeasureCase -> Case RType
