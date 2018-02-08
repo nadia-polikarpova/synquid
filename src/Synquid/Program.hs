@@ -4,7 +4,7 @@
 module Synquid.Program where
 
 import Synquid.Logic
-import Synquid.Type
+import Synquid.Type as Type
 import Synquid.Tokens
 import Synquid.Util
 import Synquid.Error
@@ -310,12 +310,11 @@ binOpType And       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (b
 binOpType Or        = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" ||| boolVar "y"))))
 binOpType Implies   = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |=>| boolVar "y"))))
 binOpType Iff       = Monotype $ FunctionT "x" boolAll (FunctionT "y" boolAll (bool (valBool |=| (boolVar "x" |<=>| boolVar "y"))))
--- TODO: Add meaningful refinements
-binOpType Union     = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (setAll "a"))
-binOpType Intersect = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (setAll "a"))
-binOpType Diff      = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (setAll "a"))
-binOpType Member    = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (setAll "a") boolAll)
-binOpType Subset    = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") boolAll)
+binOpType Union     = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (Type.set "a" (valSet "a" |=| setVar "a" "x" /+/ setVar "a" "y")))
+binOpType Intersect = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (Type.set "a" (valSet "a" |=| setVar "a" "x" /*/ setVar "a" "y")))
+binOpType Diff      = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (Type.set "a" (valSet "a" |=| setVar "a" "x" /-/ setVar "a" "y")))
+binOpType Member    = ForallT "a" $ Monotype $ FunctionT "x" (vartAll "a") (FunctionT "y" (setAll "a") (bool (valBool |=| vartVar "a" "x" `fin` setVar "a" "y")))
+binOpType Subset    = ForallT "a" $ Monotype $ FunctionT "x" (setAll "a") (FunctionT "y" (setAll "a") (bool (valBool |=| setVar "a" "x" /<=/ setVar "a" "y")))
 
 -- | Is @name@ a constant in @env@ including built-in constants)?
 isConstant name env = (name `elem` ["True", "False"]) ||
