@@ -417,34 +417,21 @@ replaceViolations env (Program (PApp fun arg) t) = do
   return (Program (PApp fun' arg') t, gs1 ++ gs2)
 replaceViolations _ p = return (p, [])
 
+-- | Generate a patch for `p` so that it has type `typ`
 generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram, [Goal])
 generateRepair env typ p = do
-  writeLog 2 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env
-  cUnknown <- Unknown Map.empty <$> freshId "C"
-  let isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf p))
-  let env' = over globalPredicates (Map.filterWithKey isRelevant) env
-  addConstraint $ WellFormedCond env' cUnknown
-  addConstraint $ Subtype (addAssumption cUnknown env) (typeOf p) typ False ""
-  pElse <- defaultValue
-  ifte (runInSolver $ solveTypeConstraints)
-    (const $ do -- Condition found
-      disjuncts <- map conjunction <$> allCurrentValuations cUnknown
-      condANFs <- mapM generateDisjunct disjuncts
-      let allDefs = concatMap fst condANFs
-      let allConds = map snd condANFs            
-      (defs, body) <- mkCheck allDefs allConds p pElse
-      let patch = foldDefs defs body (typeOf body)
-      return (defs, body, [Goal "patch" env (Monotype typ) patch 0 noPos]))
-    (do
-      writeLog 0 $ hang 2 (
-        text "WARNING: cannot abduce a condition for violation" $+$ pretty p </> text "::" </> pretty typ $+$ 
-        text "Probable cause: missing condition qualifiers")
-      return ([], pElse, []))
-  where    
-    targetPolicy = case typ of
-      ScalarT (DatatypeT _ _ [fml]) _ -> fml
-      _ -> error $ unwords ["generateRepair: ill-formed target type", show typ]
+  writeLog 2 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env  
+  (branches, defaultBranch) <- generateBranches env typ p
+  (defs, body) <- generateGuards env typ branches ([], defaultBranch)
+  let patch = foldDefs defs body (typeOf body)
+  return (defs, body, [Goal "patch" env (Monotype typ) patch 0 noPos])
   
+-- | Generate all possible terms with policies between that of `p` and `typ`, and a default value of type `typ`
+generateBranches :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([RProgram], RProgram)
+generateBranches env typ p = do    
+    def <- defaultValue
+    return ([p], def)    
+  where
     -- | Public version of @p@
     defaultValue = do
       let f = head $ symbolList p
@@ -452,8 +439,30 @@ generateRepair env typ p = do
       case lookupSymbol f' 0 env of
         Nothing -> throwErrorWithDescription $ text "No default value found for sensitive component" $+$ text f
         Just (Monotype t) -> return $ Program (PSymbol f') t
-
-    -- | Synthesize a tagged Boolean program with value equivalent to @fml@ and policy (@targetPolicy@ && @fml@)
+  
+-- | Generate a guard for each of `branches` so that they have type `typ`
+generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> ([(Id, RProgram)], RProgram) -> Explorer s ([(Id, RProgram)], RProgram)  
+generateGuards env typ [] acc = return acc
+generateGuards env typ (branch : branches) (defs, els) = do  
+  cUnknown <- Unknown Map.empty <$> freshId "C"
+  let isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf branch))
+  let env' = over globalPredicates (Map.filterWithKey isRelevant) env
+  addConstraint $ WellFormedCond env' cUnknown
+  addConstraint $ Subtype (addAssumption cUnknown env) (typeOf branch) typ False ""
+  ifte (runInSolver $ solveTypeConstraints)
+    (const $ do -- Condition found
+      disjuncts <- map conjunction <$> allCurrentValuations cUnknown
+      condANFs <- mapM generateDisjunct disjuncts
+      let allDefs = defs ++ concatMap fst condANFs
+      let allConds = map snd condANFs            
+      mkCheck allDefs allConds branch els)
+    (do
+      writeLog 0 $ hang 2 (
+        text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty typ $+$ 
+        text "Probable cause: missing condition qualifiers")
+      return (defs, els))
+  where    
+    -- | Synthesize a tagged Boolean program with value equivalent to @fml@
     generateDisjunct:: MonadHorn s => Formula -> Explorer s ([(Id, RProgram)], RProgram)
     generateDisjunct fml = do
       let fml' = removeContent fml
@@ -476,9 +485,9 @@ generateRepair env typ p = do
         (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ cut (generateE strippedEnv targetType))
         (\pCond -> aNormalForm "TT" pCond)
         (throwErrorWithDescription $ hang 2 $ 
-          text "Cannot synthesize term of type" <+> pretty targetType $+$
-          text "when repairing violation" $+$ pretty p </> text "::" </> pretty typ $+$
-          text "Probable cause: missing components to implement check")
+          text "Cannot synthesize guard of type" <+> pretty targetType $+$
+          text "for branch" $+$ pretty branch </> text "::" </> pretty typ $+$
+          text "Probable cause: missing components to implement guard")
 
     -- | Strip tagged database accessors of their tags; only leave a symbol in the environment if it:
     --    - comes from Prelude
