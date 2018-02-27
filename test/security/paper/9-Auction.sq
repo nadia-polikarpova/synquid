@@ -32,11 +32,6 @@ getUserBid :: w: World -> u: User ->
   Tagged { Maybe (Tagged Int <{ phase w == Done }>) | just _v == (userBid w u != []) } <{ phase w == Done || userBid w _0 != [] }>
 defaultUserBid :: Tagged (Maybe (Tagged Int <{True}>)) <{True}>
 
--- qualifier {_v == sessionUser w}
--- qualifier {_v == (phase w == Done)}
--- qualifier {_v == (x == sessionUser w)}
--- qualifier {_v == (userBid x y != [])}
-
 maybe :: b -> (a -> b) -> Maybe a -> b
 -- maybe = \v . \f . \mX .
   -- match mX with

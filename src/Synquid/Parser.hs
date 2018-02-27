@@ -357,7 +357,7 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseMapOrAtom -- <|> parseAtomTer
 {- Implementations -}
 
 parseImpl :: Parser UProgram
-parseImpl = withPos (parseError <|> parseLet <|> parseFun <|> parseMatch <|> parseIf <|> parseETerm)
+parseImpl = withPos (parseError <|> parseLet <|> parseDo <|> parseFun <|> parseMatch <|> parseIf <|> parseETerm)
 
 parseError = reserved "error" >> return (untyped PErr)
 
@@ -376,6 +376,24 @@ parseLet = do
   reserved "in"
   e2 <- parseImpl
   return $ untyped $ PLet x e1 e2
+  
+parseDo = do
+  reserved "do"
+  (lines, lastLine) <- indented >> parseDoLines
+  return $ foldr mkBind lastLine lines
+  where
+    parseDoLines = withPos $ do
+      rs <- many (checkIndent >> try parseDoLine)
+      rlast <- (checkIndent >> parseImpl)
+      return (rs, rlast)
+  
+    parseDoLine = do
+      x <- parseIdentifierOrBlank
+      reservedOp "<-"
+      term <- parseImpl
+      return (x, term)
+
+    mkBind (x, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "bind") term) (untyped $ PFun x rest)
 
 parseMatch = do
     reserved "match"
@@ -461,7 +479,7 @@ parseTypeName = try $ do
   
 -- | 'attachPosBefore' @p@ : parser that behaves like @p@, but also attaches the source position before the first token it parsed to the result
 attachPosBefore :: Parser a -> Parser (Pos a)
-attachPosBefore = liftM2 Pos getPosition  
+attachPosBefore = liftM2 Pos getPosition
   
 {- Debug -}
 

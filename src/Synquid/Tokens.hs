@@ -9,7 +9,7 @@ import Data.Char
 
 -- | Keywords
 keywords :: [String]
-keywords = ["Bool", "data", "else", "error", "False", "if", "in", "inline", 
+keywords = ["Bool", "data", "do", "else", "error", "False", "if", "in", "inline", 
   "Int", "let", "Map", "match", "measure", "predicate", "qualifier", "Set", "termination",
   "then", "True", "type", "with", "where"
   ]
@@ -44,7 +44,7 @@ binOpTokens = fromList [ (Times,     "*")
                         
 -- | Other operators         
 otherOps :: [String]
-otherOps = ["::", ":", "->", "|", "=", "??", ",", ".", "\\"] 
+otherOps = ["::", ":", "->", "<-", "|", "=", "??", ",", ".", "\\"] 
 
 -- | Characters allowed in identifiers (in addition to letters and digits)
 identifierChars = "_'"
