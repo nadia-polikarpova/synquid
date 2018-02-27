@@ -38,11 +38,15 @@ sortPapersByScore :: w: World -> World
 sortPapersByScore = \w .
   let u = getSessionUser w in
   let cmpScore = \pid1. \pid2.
-    bind (getPaperScore w pid1) (\x1.
-      bind (getPaperScore w pid2) (\x2. return (x1 <= x2))) in
-  let sortedPids = bind (getAllPaperIds w) (\pids . sortByM cmpScore pids) in -- sorted paper IDs
-  let titles = bind sortedPids (\pids . mapM (\pid . getPaperTitle w pid) pids) in
-  let out = bind titles (\xs . foldM (\x . \y . return (strcat x y)) emptyString xs) in
+                  do x1 <- getPaperScore w pid1
+                     x2 <- getPaperScore w pid2
+                     return (x1 <= x2)
+                  in
+  let out = do pids <- getAllPaperIds w
+               sortedPids <- sortByM cmpScore pids
+               titles <- mapM (getPaperTitle w) sortedPids
+               foldM (\x . \y . return (strcat x y)) emptyString titles
+            in
   print w u out
   
 -- | Repaired version:  

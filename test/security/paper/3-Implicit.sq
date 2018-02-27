@@ -41,9 +41,9 @@ defaultPaperStatus :: Tagged Bool <{True}>
 showSession :: w: World -> pid: PaperId -> World
 showSession = \w . \pid .
   let u = getSessionUser w in
-  let out = bind (getPaperStatus w pid) (\st.
-        if st then (getPaperTitle w pid) else return emptyString) in
-  print w u out
+  let out = do st <- getPaperStatus w pid
+               if st then getPaperTitle w pid else return emptyString
+  in print w u out
 
 -- | Repaired version:  
 -- showSession = \w . \pid .
