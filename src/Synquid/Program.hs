@@ -181,6 +181,7 @@ data Environment = Environment {
   _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
+  _redactions :: Set Id,                   -- ^ Redaction functions (used in patch generation)
   _unresolvedConstants :: Map Id RSchema,  -- ^ Unresolved types of components (used for reporting specifications with macros)
   _moduleInfo :: Map Id Id                 -- ^ For each constant, the name of the module (file) it came from
 }
@@ -208,6 +209,7 @@ emptyEnv = Environment {
   _datatypes = Map.empty,
   _measures = Map.empty,
   _typeSynonyms = Map.empty,
+  _redactions = Set.singleton "Nil", -- Set.empty,
   _unresolvedConstants = Map.empty,
   _moduleInfo = Map.empty
 }
