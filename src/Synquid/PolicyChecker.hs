@@ -212,7 +212,7 @@ localizeTopLevel (Goal _ env (Monotype t) impl depth _) = localizeI env t impl
 -- | 'localizeI' @env t impl@ :: reconstruct unknown types and terms in a judgment @env@ |- @impl@ :: @t@ where @impl@ is a (possibly) introduction term
 -- (top-down phase of bidirectional reconstruction)
 localizeI :: MonadHorn s => Environment -> RType -> UProgram -> Explorer s RProgram
-localizeI env t (Program p AnyT) = localizeI' env t p
+localizeI env t (Program p _) = localizeI' env t p
 
 localizeI' env t PErr = generateError env
 localizeI' env t PHole = error "Holes not supported when checking policies"
