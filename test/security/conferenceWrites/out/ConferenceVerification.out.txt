@@ -150,11 +150,7 @@ reviewsView = \w . \pid .
                                                                 return (pid ==
                                                                           x)))
                                                            (bind u (\u0 . bind
-                                                           WARNING: cannot abduce a condition for violation
-  getPaperReviewers w' pid ::
-  Tagged List User <True>
-  Probable cause: missing condition qualifiers
-                 (getReviewPaper
+                                                                            (getReviewPaper
                                                                                w
                                                                                rid)
                                                                             (\pid0 .
@@ -225,7 +221,7 @@ assignReviewersView = \w .
       let allPids = getAllPapers w in
       foldl (\w' . \pid .
             setPaperReviewers w' pid (bind
-                                        defaultPaperReviewers (\l .
+                                        (getPaperReviewers w' pid) (\l .
                                           return (insertIf (elem pid pids)
                                                     reviewer (remove reviewer
                                                                 l))))) w allPids
@@ -237,11 +233,11 @@ Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repai
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 usersView             &        29  &        29  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &       173  &       173  &             0.90s  &      0.00s  &      0.00s  &        0.90s  \\
-paperView             &        99  &        99  &             0.34s  &      0.00s  &      0.00s  &        0.34s  \\
-reviewsView           &       111  &       111  &             0.39s  &      0.00s  &      0.00s  &        0.39s  \\
-profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
+searchForm            &       173  &       173  &             0.91s  &      0.00s  &      0.00s  &        0.91s  \\
+paperView             &        99  &        99  &             0.36s  &      0.00s  &      0.00s  &        0.36s  \\
+reviewsView           &       111  &       111  &             0.42s  &      0.00s  &      0.00s  &        0.42s  \\
+profileViewGet        &        66  &        66  &             0.04s  &      0.00s  &      0.00s  &        0.04s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-assignReviewersView   &        47  &        43  &             0.01s  &      2.25s  &      0.00s  &        2.26s  \\
-Totals                &       637  &       633  &             1.71s  &      2.25s  &      0.00s  &        3.97s  \\
+assignReviewersView   &        47  &        47  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
+Totals                &       637  &       637  &             1.77s  &      0.00s  &      0.00s  &        1.77s  \\

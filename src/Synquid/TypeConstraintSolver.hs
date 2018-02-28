@@ -182,6 +182,7 @@ getViolatingLabels = do
     then do
       -- First try to solve as many clauses as possible syntactically via unfolding:
       stripTrivialClauses -- Remove clauses with head U, which does not occur in any bodies
+      removeCyclic        -- Set solution for cyclic unknowns to true: dangerous!
       unfoldClauses       -- Prolog-style unfolding
     else return ()
 
@@ -252,7 +253,37 @@ stripTrivialClauses = do
       let (triv', nontriv') = partition (isTrivial nontriv) nontriv in
       if null triv'
         then (triv, nontriv) -- Fixpoint reached
-        else strip isTrivial (triv ++ triv') nontriv'  
+        else strip isTrivial (triv ++ triv') nontriv'
+        
+-- | Set the solution for all cyclic variables to True
+removeCyclic :: MonadHorn s => TCSolver s ()
+removeCyclic = do
+  clauses <- use hornClauses
+  let cyclicUnknowns = Set.toList $ Set.unions $ map (findCyclic clauses) clauses
+  let sol = Map.fromList (zip cyclicUnknowns (repeat Set.empty))      
+  let clauses' = over (mapped._1) (applySolution sol) clauses
+  hornClauses .= clauses'
+  setSolution sol           -- Set solution to unfolded unknowns  
+  writeLog 2 (nest 2 $ text "Removed cyclic unknowns" <+> pretty cyclicUnknowns)        
+  
+  where
+    -- | All cyclic unknowns in the head of a clause
+    findCyclic cs c = 
+      let 
+        us = heads c
+        allDeps = findDeps cs Set.empty us
+      in us `Set.intersection` allDeps
+      
+    findDeps cs acc us = 
+      if Set.null us 
+        then acc
+        else let 
+              depClauses = filter (\c -> not $ disjoint us (heads c)) cs
+              newDeps = Set.unions (map (negUnknowns . fst) depClauses) Set.\\ acc
+             in findDeps cs (newDeps `Set.union` acc) newDeps
+        
+    heads c = posUnknowns (fst c)
+    
 
 unfoldClauses :: MonadHorn s => TCSolver s ()
 unfoldClauses = do
@@ -334,8 +365,7 @@ unfoldClauses = do
     isNestedPredApp var (Pred _ name [arg]) = isOnlyPred name && isNestedPredApp var arg
     isNestedPredApp _ _                   = False
     isOnlyPred name = name == "content" || name == "just"
-    
-    
+        
     extractCommonConjuncts :: [Set Formula] -> (Set Formula, [Set Formula])
     extractCommonConjuncts disjuncts = 
       let d = head disjuncts in
@@ -343,8 +373,8 @@ unfoldClauses = do
       
     applyToClause sol (Binary Implies lhs rhs) =
       let lhs' = conjunction $ conjunctsOf $ applySolution sol lhs -- nub conjuncts
-      in Binary Implies lhs' rhs
-      
+      in Binary Implies lhs' rhs      
+            
     substitutePredApp from to fml = case fml of
       SetLit b elems -> SetLit b $ map (substitutePredApp from to) elems
       MapSel m k -> MapSel (substitutePredApp from to m) (substitutePredApp from to k)
