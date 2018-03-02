@@ -434,14 +434,14 @@ generateBranches env typ p = do
     let pureGoal = stripTags typ
     
     writeLog 3 $ text "Generating pure branches of type" <+> pretty pureGoal $+$ text "in environment" <+> vMapDoc text pretty (allSymbols strippedEnv)
-    b <- (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ 
-            cut (generateE strippedEnv pureGoal))
+    branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ 
+            generateMany (generateE strippedEnv pureGoal)
     writeLog 3 $ text "DONE"
     
-    allBranches <- mapM liftBranch [b]
+    liftedBranches <- mapM liftBranch branches
     
-    sortedBranches <- foldM insertBranch [p] allBranches
-    -- writeLog 0 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches ++ map (pretty .typeOf) sortedBranches)
+    sortedBranches <- foldM insertBranch [p] liftedBranches
+    writeLog 3 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches ++ map (pretty .typeOf) sortedBranches)
     
     -- Check for default
     let (h : rest) = sortedBranches
@@ -506,7 +506,8 @@ generateGuards env typ (branch : branches) (defs, els) = do
       condANFs <- mapM generateDisjunct disjuncts
       let allDefs = defs ++ concatMap fst condANFs
       let allConds = map snd condANFs            
-      mkCheck allDefs allConds branch els)
+      (defs', els') <- mkCheck allDefs allConds branch els
+      generateGuards env typ branches (defs', els'))
     (do
       writeLog 0 $ hang 2 (
         text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty typ $+$ 

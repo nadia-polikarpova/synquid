@@ -670,6 +670,14 @@ symbolType env _ sch = freshInstance sch
 cut :: MonadHorn s => Explorer s a -> Explorer s a
 cut = once
 
+-- | Observe all results of an exploration, until it fails
+generateMany :: MonadHorn s => Explorer s a -> Explorer s [a]
+generateMany e = do
+  mRes <- msplit e
+  case mRes of
+    Nothing -> return []
+    Just (x, e') -> (x :) <$> generateMany e'
+
 -- | Synthesize auxiliary goals accumulated in @auxGoals@ and store the result in @solvedAuxGoals@
 generateAuxGoals :: MonadHorn s => Explorer s ()
 generateAuxGoals = do
