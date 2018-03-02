@@ -2,21 +2,21 @@ searchByAuthor :: w:World -> a:User -> World
 searchByAuthor = \w . \a . 
     let u = getSessionUser w in
     
-    let isAuthor = \pid . bind (ifM
-                                  (bind (getChair w) (\x9 . bind u
-                                                              (\x8 . return (eq
+    let isAuthor = \pid . bind (bind
+                                  (downgrade (bind (getChair w)
+                                                (\x9 . bind u (\x8 . return (eq
                                                                                x9
-                                                                               x8))))
-                                  (getPaperAuthors w pid) (ifM
-                                                             (bind
-                                                                (getCurrentPhase
-                                                                   w) (\x13 .
-                                                                  return (leq
-                                                                            rebuttal
-                                                                            x13)))
-                                                             (getPaperAuthors w
-                                                                pid) (return
-                                                                        defaultPaperAuthors)))
+                                                                               x8)))))
+                                  (\g0 . bind (downgrade (bind
+                                                            (getCurrentPhase w)
+                                                            (\x13 . return (leq
+                                                                              rebuttal
+                                                                              x13))))
+                                           (\g1 . 
+                                             if g0 || g1
+                                               then getPaperAuthors w pid
+                                               else return
+                                                      defaultPaperAuthors)))
                             (\auths . return (elem a auths))
       in
     
@@ -37,5 +37,5 @@ searchByAuthor = \w . \a .
 (Measures: 3)
 (Policy size: fromList [("4-Search.sq",33),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-searchByAuthor        &        81  &       130  &             0.06s  &      0.84s  &      0.03s  &        0.94s  \\
-Totals                &        81  &       130  &             0.06s  &      0.84s  &      0.03s  &        0.94s  \\
+searchByAuthor        &        81  &       135  &             0.06s  &      0.91s  &      0.08s  &        1.06s  \\
+Totals                &        81  &       135  &             0.06s  &      0.91s  &      0.08s  &        1.06s  \\

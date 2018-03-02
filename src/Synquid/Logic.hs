@@ -270,6 +270,7 @@ leftHandSide (Binary _ l _) = l
 rightHandSide (Binary _ _ r) = r
 
 conjunctsOf (Binary And l r) = conjunctsOf l `Set.union` conjunctsOf r
+conjunctsOf (Unary Not (Unary Not f)) = conjunctsOf f
 conjunctsOf f = Set.singleton f
 
 -- | Base type of a term in the refinement logic
