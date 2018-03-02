@@ -1,10 +1,10 @@
 notifyAuthors :: w:World -> pid:PaperId -> World
 notifyAuthors = \w . \pid . 
     let status = ifM (bind
-                        (getCurrentPhase w) (\x3 .
-                          return (eq rebuttal x3)))
-                   (getPaperStatus w pid)
-                   defaultPaperStatus in
+                        (getCurrentPhase w) (\x7 .
+                          return (eq rebuttal x7)))
+                   (getPaperStatus w pid) (return
+                                             defaultPaperStatus) in
     
     let authors = getPaperAuthors w
                     pid in
@@ -20,5 +20,5 @@ notifyAuthors = \w . \pid .
 (Measures: 3)
 (Policy size: fromList [("7-StateUpdate.sq",57),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-notifyAuthors         &        44  &        63  &             0.01s  &      0.72s  &      0.00s  &        0.74s  \\
-Totals                &        44  &        63  &             0.01s  &      0.72s  &      0.00s  &        0.74s  \\
+notifyAuthors         &        44  &        65  &             0.01s  &      0.99s  &      0.00s  &        1.01s  \\
+Totals                &        44  &        65  &             0.01s  &      0.99s  &      0.00s  &        1.01s  \\

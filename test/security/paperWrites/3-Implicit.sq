@@ -31,7 +31,7 @@ getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 getPaperStatus :: w: World -> pid: PaperId -> Tagged Bool <{currentPhase _0 == done}>
-defaultPaperStatus :: Tagged Bool <{True}>
+defaultPaperStatus :: Bool
 
 -- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
 --getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>

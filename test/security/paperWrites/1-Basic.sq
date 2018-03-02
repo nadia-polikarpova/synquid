@@ -22,7 +22,7 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 -- | Paper authors (visible only to the chair)
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_1 == chair _0}>
-defaultPaperAuthors :: Tagged (List User) <{True}>
+defaultPaperAuthors :: List User
 
 {- Client code -}
   

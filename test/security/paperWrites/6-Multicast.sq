@@ -27,12 +27,12 @@ predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId -> 
   Tagged {List {User | _v in (paperAuthors w)[[pid]]} | elems _v == (paperAuthors w)[[pid]]} 
          <{_1 in (paperAuthors _0)[[pid]]}>
-defaultPaperAuthors :: Tagged (List User) <{True}>  
+defaultPaperAuthors :: List User
 
 -- | Paper status (secret until done)
 getPaperStatus :: w: World -> pid: PaperId -> 
   Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}>
-defaultPaperStatus :: Tagged Status <{True}>
+defaultPaperStatus :: Status
 
 {- Client code -}
 

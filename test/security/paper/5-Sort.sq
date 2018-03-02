@@ -28,7 +28,7 @@ getPaperConflicts :: w: World -> pid: PaperId
 
 -- | Paper score
 getPaperScore :: w: World -> pid: PaperId -> Tagged Int <{!(_0 in paperConflicts w pid)}>
-defaultPaperScore :: Tagged Int <{True}>
+defaultPaperScore :: Int
 
 {- Client code -}
   
