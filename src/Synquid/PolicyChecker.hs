@@ -434,7 +434,7 @@ generateBranches env typ p = do
     let pureGoal = stripTags typ
     
     writeLog 3 $ text "Generating pure branches of type" <+> pretty pureGoal $+$ text "in environment" <+> vMapDoc text pretty (allSymbols strippedEnv)
-    b <- (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace)) . over (_2 . typeQualsGen) (const (\_ _ _ -> emptyQSpace))) $ 
+    b <- (local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ 
             cut (generateE strippedEnv pureGoal))
     writeLog 3 $ text "DONE"
     
