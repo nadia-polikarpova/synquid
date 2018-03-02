@@ -588,7 +588,7 @@ generateGuards env typ (branch : branches) (defs, els) = do
     removeContent fml = fml    
             
     mkCheck defs conds pThen pElse = do
-      cTmps <- replicateM (length conds) (freshId "g") -- Binder for each guard      
+      cTmps <- replicateM (length conds) (freshVar env "g") -- Binder for each guard      
       let mkOr p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens Map.! Or)) p1) p2
       let body = untyped $ PIf (foldr1 mkOr $ map (untyped . PSymbol) cTmps) pThen pElse -- Conditional with disjunction of all binders
       return (defs, foldr (\(x, arg) b -> mkBind arg x b) body (zip cTmps $ map mkDowngrade conds)) -- Bind all guards to the binders
