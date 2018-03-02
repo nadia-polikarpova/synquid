@@ -34,7 +34,7 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 -- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_1 == chair _0 || currentPhase _0 >= rebuttal}>
-defaultPaperAuthors :: Tagged (List User) <{True}>
+defaultPaperAuthors :: List User
 
 {- Client code -}
   

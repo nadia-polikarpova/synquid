@@ -3,20 +3,20 @@ searchByAuthor = \w . \a .
     let u = getSessionUser w in
     
     let isAuthor = \pid . bind (ifM
-                                  (bind (getChair w) (\x5 . bind u
-                                                              (\x4 . return (eq
-                                                                               x5
-                                                                               x4))))
+                                  (bind (getChair w) (\x9 . bind u
+                                                              (\x8 . return (eq
+                                                                               x9
+                                                                               x8))))
                                   (getPaperAuthors w pid) (ifM
                                                              (bind
                                                                 (getCurrentPhase
-                                                                   w) (\x9 .
+                                                                   w) (\x13 .
                                                                   return (leq
                                                                             rebuttal
-                                                                            x9)))
+                                                                            x13)))
                                                              (getPaperAuthors w
-                                                                pid)
-                                                             defaultPaperAuthors))
+                                                                pid) (return
+                                                                        defaultPaperAuthors)))
                             (\auths . return (elem a auths))
       in
     
@@ -37,5 +37,5 @@ searchByAuthor = \w . \a .
 (Measures: 3)
 (Policy size: fromList [("4-Search.sq",33),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-searchByAuthor        &        81  &       128  &             0.06s  &      0.59s  &      0.02s  &        0.68s  \\
-Totals                &        81  &       128  &             0.06s  &      0.59s  &      0.02s  &        0.68s  \\
+searchByAuthor        &        81  &       130  &             0.06s  &      0.84s  &      0.03s  &        0.94s  \\
+Totals                &        81  &       130  &             0.06s  &      0.84s  &      0.03s  &        0.94s  \\

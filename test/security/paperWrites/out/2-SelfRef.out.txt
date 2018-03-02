@@ -6,22 +6,22 @@ showPaper = \w . \pid .
       in
     
     let authors = liftM show (ifM
-                                (bind (getChair w) (\x5 . bind u
-                                                            (\x4 . return (eq x5
-                                                                             x4))))
+                                (bind (getChair w) (\x9 . bind u
+                                                            (\x8 . return (eq x9
+                                                                             x8))))
                                 (getPaperAuthors w pid) (ifM
-                                                           (bind u (\x12 . bind
+                                                           (bind u (\x16 . bind
                                                                              (getPaperAuthors
                                                                                 w
                                                                                 pid)
-                                                                             (\x11 .
+                                                                             (\x15 .
                                                                                return
                                                                                  (elem
-                                                                                    x12
-                                                                                    x11))))
+                                                                                    x16
+                                                                                    x15))))
                                                            (getPaperAuthors w
-                                                              pid)
-                                                           defaultPaperAuthors))
+                                                              pid) (return
+                                                                      defaultPaperAuthors)))
       in
     
     let out = liftM2 strcat title
@@ -32,5 +32,5 @@ showPaper = \w . \pid .
 (Measures: 3)
 (Policy size: fromList [("2-SelfRef.sq",32),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showPaper             &        37  &        91  &             0.00s  &      0.14s  &      0.03s  &        0.19s  \\
-Totals                &        37  &        91  &             0.00s  &      0.14s  &      0.03s  &        0.19s  \\
+showPaper             &        37  &        93  &             0.01s  &      0.32s  &      0.04s  &        0.37s  \\
+Totals                &        37  &        93  &             0.01s  &      0.32s  &      0.04s  &        0.37s  \\

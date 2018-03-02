@@ -32,7 +32,7 @@ getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 getPaperStatus :: w: World -> pid: PaperId -> Tagged Bool <{currentPhase w == done}>
-defaultPaperStatus :: Tagged Bool <{True}>
+defaultPaperStatus :: Bool
 
 {- Client code -}
   
