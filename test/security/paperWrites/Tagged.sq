@@ -22,7 +22,7 @@ bind :: <bp :: World -> User -> Bool> . <bf :: a -> b -> Bool> .
   
 peel :: x: Tagged a <{True}> -> {a | _v == content x}
 
-downgradeBool :: <bp :: World -> User -> Bool> . <bc :: Bool> .
+downgrade :: <bp :: World -> User -> Bool> . <bc :: Bool> .
   x: Tagged {Bool | _v ==> bc} <{bp _0 _1 && bc}> -> Tagged {Bool | _v ==> bc} <bp>    
 
 ifM :: <ip :: World -> User -> Bool> . <ic :: Bool> .
@@ -30,7 +30,7 @@ ifM :: <ip :: World -> User -> Bool> . <ic :: Bool> .
     -> thn: Tagged a <{ic && ip _0 _1}> 
     -> els: Tagged a <ip> 
     -> Tagged a <ip>
-ifM = \cond . \thn . \els . bind (downgradeBool cond) (\c . if c then thn else els)
+ifM = \cond . \thn . \els . bind (downgrade cond) (\c . if c then thn else els)
 
 liftM :: <l1p :: World -> User -> Bool> . <l1f :: a -> b -> Bool> . 
   f: (u: a -> {b | l1f u _v}) ->

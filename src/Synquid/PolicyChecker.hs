@@ -588,12 +588,10 @@ generateGuards env typ (branch : branches) (defs, els) = do
     removeContent fml = fml    
             
     mkCheck defs conds pThen pElse = do
-      cTmps <- replicateM (length conds) (freshId "TT")
-      pTmp <- freshId "TT"
-      let allDefs = defs ++ zip cTmps conds ++ [(pTmp, pThen)]
-      let app1 cTmp = untyped (PApp (untyped (PSymbol "ifM")) (untyped (PSymbol cTmp)))
-      let app2 cTmp = untyped (PApp (app1 cTmp) (untyped (PSymbol pTmp)))      
-      return (allDefs, foldr (\cTmp els -> untyped $ PApp (app2 cTmp) els) pElse cTmps)
+      cTmps <- replicateM (length conds) (freshId "g") -- Binder for each guard      
+      let mkOr p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens Map.! Or)) p1) p2
+      let body = untyped $ PIf (foldr1 mkOr $ map (untyped . PSymbol) cTmps) pThen pElse -- Conditional with disjunction of all binders
+      return (defs, foldr (\(x, arg) b -> mkBind arg x b) body (zip cTmps $ map mkDowngrade conds)) -- Bind all guards to the binders
       
 -- | 'liftTerm' @env strippedEnv p@: turn a pure E-term @p@ into a tagged one, 
 -- by binding all lets that have different types in @env@ and @strippedEnv@
@@ -619,7 +617,7 @@ liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do
         else do -- This definition has been stripped: turn into a bind
           y <- freshVar env "x"
           let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
-          return ([(x, def)], mkBind x y body'')
+          return ([(x, def)], mkBind (untyped (PSymbol x)) y body'')
           
     liftArgs (arg:args) = 
       if allSymbols env Map.! arg == allSymbols strippedEnv Map.! arg
@@ -630,19 +628,23 @@ liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do
           let body' = programSubstituteSymbol arg (untyped (PSymbol y)) p'
           return $ Program (PLet y (untyped (PSymbol arg)) body') (typeOf body')
     liftArgs [] = return p
-    
-    mkBind argName x body = 
-      let 
-        app = untyped (PApp (untyped (PSymbol "bind")) (untyped (PSymbol argName)))
-        fun = untyped (PFun x body)
-      in untyped (PApp app fun)
-    
-  
+      
 liftTerm env strippedEnv pCond = do
   tmp <- freshId "TT"
   return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
-  where
-    mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)      
+
+mkReturn :: RProgram -> RProgram
+mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)  
+  
+mkBind :: RProgram -> Id -> RProgram -> RProgram
+mkBind arg x body = 
+  let 
+    app = untyped (PApp (untyped (PSymbol "bind")) arg)
+    fun = untyped (PFun x body)
+  in untyped (PApp app fun)    
+  
+mkDowngrade :: RProgram -> RProgram
+mkDowngrade p = untyped (PApp (untyped (PSymbol "downgrade")) p)    
 
 {- Misc -}  
                                             

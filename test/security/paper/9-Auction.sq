@@ -28,9 +28,8 @@ getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
 
 predicate userBid :: World -> User -> Set Int
 getUserBid :: w: World -> u: User -> 
-  -- Tagged { Maybe (Tagged {Int | _v in userBid w u} <{ _0 == u }>) | just _v == (userBid w u != []) } <{ _0 == u || userBid w _0 != [] }>
   Tagged { Maybe (Tagged Int <{ phase w == Done }>) | just _v == (userBid w u != []) } <{ phase w == Done || userBid w _0 != [] }>
-defaultUserBid :: Tagged (Maybe (Tagged Int <{True}>)) <{True}>
+defaultNothing :: Maybe a
 
 maybe :: b -> (a -> b) -> Maybe a -> b
 -- maybe = \v . \f . \mX .
@@ -41,22 +40,24 @@ maybe :: b -> (a -> b) -> Maybe a -> b
 showBids :: World -> User -> World
 showBids = \w . \who .
   let u = getSessionUser w in
-  -- let isMyBid = bind u (\tu . return (eq who tu)) in
-  let isDone = bind (getPhase w) (\p . return (eq p Done)) in
-  let haveBid = bind u (\tu . liftM isJust (getUserBid w tu)) in
-  let uBid = getUserBid w who in
-  let getBid = bind isDone (\c1 .
-                    if c1
-                      then uBid
-                      else bind (downgradeBool haveBid) (\c2 . 
-                        if c2 
-                          then bind uBid (\b . return (mapJust (\c . return 0) b))
-                          else defaultUserBid)) in
-                      
+  let getBid = getUserBid w who in                      
   let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
-  -- let out = bind getUser (\mB . match mB with
-                                  -- Nothing -> return emptyString
-                                  -- Just b -> liftM show b) in
   print w u out
+
+-- Repaired version:  
+-- showBids = \w . \who .
+  -- let u = getSessionUser w in
+  -- let uBid = getUserBid w who in
+  -- let getBid = do
+                -- isDone <- bind (getPhase w) (\p . return (eq p Done))
+                -- haveBid <- downgrade (bind u (\tu . liftM isJust (getUserBid w tu)))
+                -- if isDone
+                  -- then uBid
+                  -- else if haveBid
+                        -- then bind uBid (\b . return (mapJust (\c . return 0) b))
+                        -- else return Nothing
+               -- in  
+  -- let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
+  -- print w u out
   
   

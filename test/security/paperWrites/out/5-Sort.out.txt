@@ -3,37 +3,26 @@ sortPapersByScore = \w .
   let u = getSessionUser w in
   
   let cmpScore = \pid1 . \pid2 .
-        bind (ifM (bind u (\x11 . bind
-                                    (getPaperConflicts w pid1)
-                                    (\x10 . return (not (elem x11
-                                                           x10)))))
-                (getPaperScore w pid1) (return
-                                          defaultPaperScore)) (\x1 . bind
-                                                                       (ifM
-                                                                          (bind
-                                                                             u
-                                                                             (\x23 .
-                                                                               bind
-                                                                                 (getPaperConflicts
-                                                                                    w
-                                                                                    pid2)
-                                                                                 (\x22 .
-                                                                                   return
-                                                                                     (not
-                                                                                        (elem
-                                                                                           x23
-                                                                                           x22)))))
-                                                                          (getPaperScore
-                                                                             w
-                                                                             pid2)
-                                                                          (return
-                                                                             defaultPaperScore))
-                                                                       (\x2 .
-                                                                         return
-                                                                           (x1
-                                                                              <=
-                                                                              x2)))
-    in
+        bind (bind (downgrade (bind u
+                                 (\x11 . bind (getPaperConflicts
+                                                 w pid1) (\x10 . return (not
+                                                                           (elem
+                                                                              x11
+                                                                              x10))))))
+                (\g0 . 
+                  if g0
+                    then getPaperScore w pid1
+                    else return defaultPaperScore))
+          (\x1 . bind (bind (downgrade
+                               (bind u (\x23 . bind
+                                                 (getPaperConflicts w pid2)
+                                                 (\x22 . return (not (elem x23
+                                                                        x22))))))
+                         (\g1 . 
+                           if g1
+                             then getPaperScore w pid2
+                             else return defaultPaperScore))
+                   (\x2 . return (x1 <= x2))) in
   
   let pids = bind (getAllPaperIds
                      w) (\pids . sortByM cmpScore
@@ -46,5 +35,5 @@ sortPapersByScore = \w .
 (Measures: 3)
 (Policy size: fromList [("5-Sort.sq",28),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-sortPapersByScore     &        59  &       119  &             0.03s  &      1.61s  &      0.02s  &        1.67s  \\
-Totals                &        59  &       119  &             0.03s  &      1.61s  &      0.02s  &        1.67s  \\
+sortPapersByScore     &        59  &       127  &             0.04s  &      1.67s  &      0.03s  &        1.75s  \\
+Totals                &        59  &       127  &             0.04s  &      1.67s  &      0.03s  &        1.75s  \\

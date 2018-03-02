@@ -1,10 +1,11 @@
 copyStatus :: w:World -> pid1:PaperId -> pid2:PaperId -> World
 copyStatus = \w . \pid1 .
     \pid2 . 
-      let status1 = ifM (return (eq
-                                   pid1 pid2)) (getPaperStatus w
-                                                  pid1) (return
-                                                           defaultPaperStatus)
+      let status1 = bind (downgrade
+                            (return (eq pid1 pid2))) (\g0 . 
+                        if g0
+                          then getPaperStatus w pid1
+                          else return defaultPaperStatus)
         in
       setPaperStatus w pid2 status1
 
@@ -12,5 +13,5 @@ copyStatus = \w . \pid1 .
 (Measures: 3)
 (Policy size: fromList [("8-ProtectWrite.sq",89),("Prelude.sq",20),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-copyStatus            &        16  &        30  &             0.00s  &      0.33s  &      0.00s  &        0.34s  \\
-Totals                &        16  &        30  &             0.00s  &      0.33s  &      0.00s  &        0.34s  \\
+copyStatus            &        16  &        34  &             0.00s  &      0.32s  &      0.00s  &        0.34s  \\
+Totals                &        16  &        34  &             0.00s  &      0.32s  &      0.00s  &        0.34s  \\
