@@ -310,10 +310,10 @@ instance Show RSchema where
 
 {- Programs -}  
 
-prettyCase :: (Pretty t) => Case t -> Doc
+prettyCase :: (Pretty (TypeSkeleton r)) => Case (TypeSkeleton r) -> Doc
 prettyCase cas = hang tab $ text (constructor cas) <+> hsep (map text $ argNames cas) <+> operator "->" </> prettyProgram (expr cas)
 
-prettyProgram :: (Pretty t) => Program t -> Doc
+prettyProgram :: (Pretty (TypeSkeleton r)) => Program (TypeSkeleton r) -> Doc
 prettyProgram (Program p typ) = case p of
     PSymbol s -> case asInteger s of 
                   Nothing -> if s == valueVarName then special s else text s
@@ -344,10 +344,10 @@ prettyProgram (Program p typ) = case p of
   where
     withType doc t = doc -- <> text ":" <+> pretty t
 
-instance (Pretty t) => Pretty (Program t) where
+instance (Pretty (TypeSkeleton r)) => Pretty (Program (TypeSkeleton r)) where
   pretty = prettyProgram
 
-instance (Pretty t) => Show (Program t) where
+instance (Pretty (TypeSkeleton r)) => Show (Program (TypeSkeleton r)) where
   show = show . pretty
 
 instance Pretty TypeSubstitution where

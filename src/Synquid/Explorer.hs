@@ -668,7 +668,7 @@ symbolType env _ sch = freshInstance sch
   
 -- | Perform an exploration, and once it succeeds, do not backtrack it  
 cut :: MonadHorn s => Explorer s a -> Explorer s a
-cut = once
+cut = id
 
 -- | Observe all results of an exploration, until it fails
 generateMany :: MonadHorn s => Explorer s a -> Explorer s [a]

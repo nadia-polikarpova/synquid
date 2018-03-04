@@ -1,5 +1,5 @@
 -- | Refinement type reconstruction for programs with holes
-module Synquid.TypeChecker (reconstruct, reconstructTopLevel) where
+module Synquid.TypeChecker (reconstruct, reconstructTopLevel, insertAuxSolutions) where
 
 import Synquid.Logic
 import Synquid.Type

@@ -66,6 +66,8 @@ isHole _ = False
 eraseTypes :: RProgram -> UProgram
 eraseTypes = fmap (const AnyT)
 
+isSymbol name (Program (PSymbol name') _) | name == name' = True
+isSymbol _ _ = False
 symbolName (Program (PSymbol name) _) = name
 symbolList (Program (PSymbol name) _) = [name]
 symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg

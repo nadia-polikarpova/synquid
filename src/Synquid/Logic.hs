@@ -528,7 +528,7 @@ botSolution qmap = Map.map (\(QSpace _ quals _) -> Set.fromList quals) qmap
 valuation :: Solution -> Formula -> Valuation
 valuation sol (Unknown s u) = case Map.lookup u sol of
   Just quals -> Set.map (substitute s) quals
-  Nothing -> error $ unwords ["valuation: no value for unknown", u]
+  Nothing -> Set.empty -- error $ unwords ["valuation: no value for unknown", u]
 
 -- | 'applySolution' @sol fml@ : Substitute solutions from sol for all predicate variables in fml
 applySolution :: Solution -> Formula -> Formula   

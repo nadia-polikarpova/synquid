@@ -14,7 +14,7 @@ import Synquid.Pretty
 import Synquid.Resolver
 import Synquid.Tokens
 
-import Data.Char
+import Data.Char hiding (isSymbol)
 import Data.Maybe
 import Data.List
 import qualified Data.Set as Set
@@ -231,7 +231,7 @@ localizeI' env t@(FunctionT _ tArg tRes) impl = case impl of
   PSymbol f -> localizeETopLevel env t (untyped impl)
   _ -> throwErrorWithDescription $ text "Cannot assign function type" </> squotes (pretty t) </>
                     text "to non-lambda term" </> squotes (pretty $ untyped impl)
-localizeI' env t@(ScalarT _ _) impl = case impl of
+localizeI' env t impl = case impl of
   PFun _ _ -> throwErrorWithDescription $ text "Cannot assign non-function type" </> squotes (pretty t) </>
                            text "to lambda term" </> squotes (pretty $ untyped impl)
                            
@@ -422,98 +422,95 @@ replaceViolations _ p = return (p, [])
 generateRepair :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([(Id, RProgram)], RProgram, [Goal])
 generateRepair env typ p = do
   writeLog 2 $ text "Generating repair for" <+> pretty p <+> text "::" <+> pretty typ $+$ text "in environment" <+> pretty env  
-  (branches, defaultBranch) <- generateBranches env typ p
-  (defs, body) <- generateGuards env typ branches ([], defaultBranch)
+  branches <- generateBranches env typ p
+  (defs, body) <- generateGuards env typ (p : branches)
   let patch = foldDefs defs body (typeOf body)
   return (defs, body, [Goal "patch" env (Monotype typ) patch 0 noPos])
   
 -- | Generate all possible terms with policies between that of `p` and `typ`, and a default value of type `typ`
-generateBranches :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ([RProgram], RProgram)
+generateBranches :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s [RProgram]
 generateBranches env typ p = do
     -- Generate all branches
     let pureGoal = stripTags typ
     
-    writeLog 3 $ text "Generating pure branches of type" <+> pretty pureGoal $+$ text "in environment" <+> vMapDoc text pretty (allSymbols strippedEnv)
-    branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace))) $ 
-            generateMany (generateE strippedEnv pureGoal)
-    writeLog 3 $ text "DONE"
+    pVar <- freshId "X"    
+    let env' = addVariable pVar (stripTags $ typeOf p) strippedEnv     
     
-    liftedBranches <- mapM liftBranch branches
-    
-    sortedBranches <- foldM insertBranch [p] liftedBranches
-    writeLog 3 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches ++ map (pretty .typeOf) sortedBranches)
-    
-    -- Check for default
-    let (h : rest) = sortedBranches
-    dflt <- ifte (localizeE env typ h) -- Check the most public branch against the goal type
-              return -- This is the default branch
-              (throwErrorWithDescription $ text "No default branch can be synthesized for" <+> pretty p <+> text "::" <+> pretty typ)
+    writeLog 3 $ text "Generating pure branches of type" <+> pretty pureGoal $+$ text "in environment" <+> vMapDoc text pretty (allSymbols env')
+    branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace)) .
+                       over (_1 . eGuessDepth) (const 1)) $ 
+            (nubBy (bothConstant pVar) . filter (not . isSymbol pVar)) <$> generateMany (generateCandidate env' pureGoal)
+    writeLog 3 $ text "Generated pure branches" $+$ vsep (map (\b -> pretty b <+> text "::" <+> pretty (typeOf b)) branches)
         
-    return (reverse rest, dflt)
+    anfBranches <- mapM (aNormalForm "TB") branches 
+    writeLog 3 $ text "Generated ANF branches" $+$ vsep (map (\b -> pretty b <+> text "::" <+> pretty (typeOf b)) anfBranches)
+    liftedBranches <- mapM (liftBranch pVar) anfBranches
+    writeLog 3 $ text "Generated lifted branches" $+$ vsep (map (\b -> pretty b <+> text "::" <+> pretty (typeOf b)) liftedBranches)
+    return $ liftedBranches    
   where    
     strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
+    
+    bothConstant pVar b1 b2 = not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2) 
     
     updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol m name sch = if isDefaultValue name -- TODO: for real
                                 then Map.insert name sch m
                                 else m
-    -- updateSymbol m name (Monotype t) = 
-      -- let 
-        -- t' = stripTags t 
-        -- targetVars = Set.map varName $ varsOf targetRefinement
-        -- targetPreds = predsOf targetRefinement
-        -- getterPreds = predsOfType $ lastType t'
-      -- in
-          -- if isConstant name env 
-            -- then if isFromPrelude name || 
-                    -- isGoodType t || 
-                    -- (isDBGetter name && not (disjoint targetPreds getterPreds)) 
-                    -- -- any (\pred -> name == getterOf pred) targetPreds
-                   -- then Map.insert name (Monotype t') m -- Strip
-                   -- else m                  
-            -- else if name `elem` targetVars
-                  -- then Map.insert name (Monotype t') m -- Strip
-                  -- else m -- It's a variable that doesn't appear in the target refinement: remove
-    -- updateSymbol _ m name sch =
-      -- if isFromPrelude name
-          -- then Map.insert name sch m
-          -- else m
 
-  
-    insertBranch [] b = return [] -- This branch is more secret than the original term, throw away      
-    insertBranch (x : xs) b = do
-      let target = stripRefinements (typeOf x)
-      ifte (localizeE env target b)
-        (\lb -> return $ lb : x : xs) -- This branch is more public than x; TODO: prune equivalent!
-        ((x :) <$> insertBranch xs b) -- This branch is more secret than x, insert later
-  
-    liftBranch b = do      
-      (defs, body) <- liftTerm env strippedEnv b -- lift syntactically
-      return $ deANF $ foldDefs defs body (typeOf body)  
+    generateCandidate env' t' = do
+      cand <- generateE env' t'
+      cand' <- flip insertAuxSolutions cand <$> use solvedAuxGoals
+      solvedAuxGoals .= Map.empty
+      runInSolver $ finalizeProgram cand'
+    
+    liftBranch pVar b = do
+      let oldEnv = addVariable pVar (typeOf p) env 
+      let newEnv = addVariable pVar (stripTags $ typeOf p) strippedEnv 
+      (defs, body) <- liftTerm oldEnv newEnv b -- lift syntactically
+      return $ eraseTypes $ deANF $ foldDefs ((pVar, p) : defs) body AnyT
   
 -- | Generate a guard for each of `branches` so that they have type `typ`
-generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> ([(Id, RProgram)], RProgram) -> Explorer s ([(Id, RProgram)], RProgram)  
-generateGuards env typ [] acc = return acc
-generateGuards env typ (branch : branches) (defs, els) = do  
-  cUnknown <- Unknown Map.empty <$> freshId "C"
-  let isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf branch))
-  let env' = over globalPredicates (Map.filterWithKey isRelevant) env
-  addConstraint $ WellFormedCond env' cUnknown
-  addConstraint $ Subtype (addAssumption cUnknown env) (typeOf branch) typ False ""
-  ifte (runInSolver $ solveTypeConstraints)
-    (const $ do -- Condition found
-      disjuncts <- map conjunction <$> allCurrentValuations cUnknown
-      condANFs <- mapM generateDisjunct disjuncts
-      let allDefs = defs ++ concatMap fst condANFs
-      let allConds = map snd condANFs            
-      (defs', els') <- mkCheck allDefs allConds branch els
-      generateGuards env typ branches (defs', els'))
-    (do
-      writeLog 0 $ hang 2 (
-        text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty typ $+$ 
-        text "Probable cause: missing condition qualifiers")
-      return (defs, els))
-  where    
+generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> Explorer s ([(Id, RProgram)], RProgram)  
+generateGuards env typ branches = do
+  branchConditions <- catMaybes <$> mapM abduceCondition branches
+  let (defaults, rest) = partition (\(_, disjuncts) -> foldr orClean ffalse disjuncts == ftrue) branchConditions
+  -- TODO: compare conditions
+  if null defaults
+    then (throwErrorWithDescription $ text "No default branch can be synthesized for" <+> pretty typ)
+    else combineBranches env typ ([], fst $ head defaults) rest 
+  where
+    isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf $ head branches))
+  
+    abduceCondition branch = do
+      writeLog 3 $ text "Abducing condition for branch" <+> pretty branch <+> text "::" <+> pretty typ
+      cUnknown <- Unknown Map.empty <$> freshId "C"
+      let env' = over globalPredicates (Map.filterWithKey isRelevant) env
+      addConstraint $ WellFormedCond env' cUnknown
+      ifte 
+        (do
+          branch' <- aNormalForm "TTT" branch >>= localizeI (addAssumption cUnknown env) typ
+          runInSolver $ solveTypeConstraints
+          return branch')
+        (\branch' -> do -- Condition found
+          disjuncts <- map conjunction <$> allCurrentValuations cUnknown
+          writeLog 3 $ text "Abduced condition:" <+> pretty disjuncts <+> text "and type" <+> pretty (typeOf branch')
+          return $ Just (branch', disjuncts))
+        (do
+          writeLog 0 $ hang 2 (
+            text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty typ $+$ 
+            text "Probable cause: missing condition qualifiers")
+          return Nothing)
+  
+combineBranches :: MonadHorn s => Environment -> RType -> ([(Id, RProgram)], RProgram) -> [(RProgram, [Formula])] -> Explorer s ([(Id, RProgram)], RProgram)  
+combineBranches _ _ acc [] = return acc
+combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
+  writeLog 3 $ text "Generating guard for branch" <+> pretty branch -- <+> text "::" <+> pretty (typeOf branch)
+  condANFs <- mapM generateDisjunct disjuncts
+  let allDefs = defs ++ concatMap fst condANFs
+  let allConds = map snd condANFs            
+  (defs', els') <- mkCheck allDefs allConds branch els
+  combineBranches env typ (defs', els') bs
+  where
     -- | Synthesize a tagged Boolean program with value equivalent to @fml@
     generateDisjunct:: MonadHorn s => Formula -> Explorer s ([(Id, RProgram)], RProgram)
     generateDisjunct fml = do
@@ -596,28 +593,40 @@ generateGuards env typ (branch : branches) (defs, els) = do
 -- | 'liftTerm' @env strippedEnv p@: turn a pure E-term @p@ into a tagged one, 
 -- by binding all lets that have different types in @env@ and @strippedEnv@
 liftTerm :: MonadHorn s => Environment -> Environment -> RProgram -> Explorer s ([(Id, RProgram)], RProgram)  
-liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do      
-  let args = tail $ symbolList def      
-  p' <- liftArgs args
+liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do
+  p' <- case content def of
+          PFun x b -> return p -- Lambda-let: leave as is 
+          _ -> let args = tail $ symbolList def in liftArgs args -- Regular let: see if any variable arguments need lifting
   liftTerm' p'
   where
-    liftTerm' p@(Program (PLet x def body) typ) = do
-      let f = head $ symbolList def
-      let arity = length (symbolList def) - 1
-      let addX = addLetBound x (typeOf def)
-      (defs', body') <- liftTerm (addX env) (addX strippedEnv) body
-      let realType = case lookupSymbol f arity env of
-                    Nothing -> error $ unwords ["liftTerm: cannot find", f, "in original environment"]
-                    Just t -> t
-      let strippedType = case lookupSymbol f arity strippedEnv of
-                        Nothing -> error $ unwords ["liftTerm: cannot find", f, "in stripped environment"]
-                        Just t -> t      
-      if realType == strippedType
-        then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
-        else do -- This definition has been stripped: turn into a bind
-          y <- freshVar env "x"
-          let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
-          return ([(x, def)], mkBind (untyped (PSymbol x)) y body'')
+    liftTerm' p@(Program (PLet x def body) typ) = 
+      case content def of
+        PFun fx fBody -> do -- Lambda let: lift its body
+                      let FunctionT _ tArg _ = typeOf def
+                      let addFX = addVariable fx tArg
+                      let addFXTagged = addVariable fx (ScalarT (mkTagged tArg ffalse) ftrue)
+                      (fDefs, fBody') <- liftTerm (addFXTagged env) (addFX strippedEnv) fBody -- TODO: fix
+                      let liftedFun = untyped $ PFun fx (foldDefs fDefs fBody' AnyT)
+                      let addX = addLetBound x (typeOf def)
+                      (defs', body') <- liftTerm (addX env) (addX strippedEnv) body
+                      return ((x, liftedFun):defs', body')
+        _ -> do
+              let f = head $ symbolList def
+              let arity = length (symbolList def) - 1
+              let addX = addLetBound x (typeOf def)
+              (defs', body') <- liftTerm (addX env) (addX strippedEnv) body
+              let realType = case lookupSymbol f arity env of
+                            Nothing -> error $ unwords ["liftTerm: cannot find", f, "in original environment"]
+                            Just t -> t
+              let strippedType = case lookupSymbol f arity strippedEnv of
+                                Nothing -> error $ unwords ["liftTerm: cannot find", f, "in stripped environment"]
+                                Just t -> t      
+              if realType == strippedType
+                then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
+                else do -- This definition has been stripped: turn into a bind
+                  y <- freshVar env "x"
+                  let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
+                  return ([(x, def)], mkBind (untyped (PSymbol x)) y body'')
           
     liftArgs (arg:args) = 
       if allSymbols env Map.! arg == allSymbols strippedEnv Map.! arg
@@ -629,9 +638,18 @@ liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do
           return $ Program (PLet y (untyped (PSymbol arg)) body') (typeOf body')
     liftArgs [] = return p
       
-liftTerm env strippedEnv pCond = do
-  tmp <- freshId "TT"
-  return ([(tmp, mkReturn pCond)], untyped $ PSymbol tmp)
+liftTerm env strippedEnv p@(Program (PSymbol name) _) = do
+  let realType = case lookupSymbol name 0 env of
+                Nothing -> error $ unwords ["liftTerm: cannot find", name, "in original environment"]
+                Just t -> t
+  let strippedType = case lookupSymbol name 0 strippedEnv of
+                    Nothing -> error $ unwords ["liftTerm: cannot find", name, "in stripped environment"]
+                    Just t -> t      
+  if realType == strippedType
+    then do
+      tmp <- freshId "TT"
+      return ([(tmp, mkReturn p)], untyped $ PSymbol tmp)
+    else return $ ([], p)
 
 mkReturn :: RProgram -> RProgram
 mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)  
@@ -677,7 +695,7 @@ aNormalForm prefix eTerm@(Program _ t) = do
   
 foldDefs defs body t = foldr (\(name, def) p -> Program (PLet name def p) t) body defs
   
--- | 'anfE' @p varRequired@: convert E-term @p@ to a list of bindings and either a variable (if @varRequired@) or a flat application (if not @varRequired@)
+-- | 'anfE' @prefix p varRequired@: convert E-term @p@ to a list of bindings and a variable (if @varRequired@) or a simple application (otherwise)
 anfE :: MonadHorn s => Id -> RProgram -> Bool -> Explorer s ([(Id, RProgram)], RProgram)
 anfE prefix p@(Program (PSymbol x) t) _ = return ([], p)
 anfE prefix (Program (PApp pFun pArg) t) varRequired = do
@@ -688,9 +706,13 @@ anfE prefix (Program (PApp pFun pArg) t) varRequired = do
       tmp <- freshId prefix
       return (defsFun ++ defsArg ++ [(tmp, Program (PApp xFun xArg) t)], (Program (PSymbol tmp) t))
     else return (defsFun ++ defsArg, (Program (PApp xFun xArg) t))
-anfE prefix p@(Program (PFun _ _) t) _ = do -- A case for abstraction, which can appear in applications and let-bindings
+anfE prefix p@(Program (PFun _ _) t) varRequired = do -- A case for abstraction, which can appear in applications and let-bindings
   p' <- aNormalForm prefix p
-  return ([], p')    
+  if varRequired
+    then do
+      tmp <- freshId prefix
+      return ([(tmp, p')], (Program (PSymbol tmp) t))
+    else return ([], p')    
 anfE _ p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]
 
 deANF :: RProgram -> RProgram
