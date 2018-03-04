@@ -43,6 +43,7 @@ isFunctionType (FunctionT _ _ _) = True
 -- isFunctionType (LetT _ _ t) = isFunctionType t
 isFunctionType _ = False
 argType (FunctionT _ t _) = t
+argType _ = AnyT
 resType (FunctionT _ _ t) = t
 
 hasAny AnyT = True
