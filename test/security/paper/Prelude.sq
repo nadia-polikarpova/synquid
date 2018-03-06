@@ -35,3 +35,17 @@ disjoint :: xs: List a -> ys: List a -> {Bool | _v <==> (elems xs * elems ys == 
 		-- seed: {b | p Nil _v} ->
     -- ys: List a ->    
 		-- {b | p ys _v}
+    
+{- Maybe -}
+
+data Maybe a where
+  Nothing :: Maybe a
+  Just :: a -> Maybe a
+  
+measure just :: Maybe a -> Bool where
+  Nothing -> False
+  Just x -> True
+  
+isJust :: x:Maybe a -> {Bool | _v == just x}  
+
+    

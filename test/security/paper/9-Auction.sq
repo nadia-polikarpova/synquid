@@ -1,17 +1,7 @@
 data User
 
-data Maybe a where
-  Nothing :: Maybe a
-  Just :: a -> Maybe a
-  
-measure just :: Maybe a -> Bool where
-  Nothing -> False
-  Just x -> True
-  
-isJust :: x:Maybe a -> {Bool | _v == just x}  
-
-mapJust :: (a -> b) -> Maybe a -> Maybe b
--- mapJust = \f . \mb . 
+defaultFmap :: (a -> b) -> Maybe a -> Maybe b
+-- fmap = \f . \mb . 
   -- match mb with
     -- Nothing -> Nothing
     -- Just x -> Just (f x)
@@ -26,23 +16,25 @@ getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
 predicate phase :: World -> Phase
 getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
 
-predicate userBid :: World -> User -> Set Int
+predicate hasBid :: World -> User -> Bool
 getUserBid :: w: World -> u: User -> 
-  Tagged { Maybe (Tagged Int <{ phase w == Done }>) | just _v == (userBid w u != []) } <{ phase w == Done || userBid w _0 != [] }>
-defaultNothing :: Maybe a
+  Tagged { Maybe (Tagged Int <{ phase w == Done }>) | just _v == hasBid w u } <{ phase w == Done || hasBid w _0 }>  
 
 maybe :: b -> (a -> b) -> Maybe a -> b
 -- maybe = \v . \f . \mX .
   -- match mX with
     -- Nothing -> v
-    -- Just x -> f x    
+    -- Just x -> f x
+    
+defaultNothing :: Maybe a
+defaultInt :: Int  
   
-showBids :: World -> User -> World
-showBids = \w . \who .
-  let u = getSessionUser w in
+showBids :: World -> User -> User -> World
+showBids = \w . \u . \who .
+  -- let u = getSessionUser w in
   let getBid = getUserBid w who in                      
   let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
-  print w u out
+  print w (return u) out
 
 -- Repaired version:  
 -- showBids = \w . \who .
@@ -54,10 +46,12 @@ showBids = \w . \who .
                 -- if isDone
                   -- then uBid
                   -- else if haveBid
-                        -- then bind uBid (\b . return (mapJust (\c . return 0) b))
+                        -- then bind uBid (\b . return (fmap (\c . return 0) b))
                         -- else return Nothing
                -- in  
   -- let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
   -- print w u out
+  
+-- qualifier {userBid x y != []}  
   
   
