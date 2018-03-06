@@ -479,25 +479,37 @@ generateGuards env typ branches = do
     then (throwErrorWithDescription $ text "No default branch can be synthesized for" <+> pretty typ)
     else combineBranches env typ ([], fst $ head defaults) rest 
   where
-    isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf $ head branches))
-  
     abduceCondition branch = do
-      writeLog 3 $ text "Abducing condition for branch" <+> pretty branch <+> text "::" <+> pretty typ
+      writeLog 3 $ text "Abducing condition for branch" <+> pretty branch
+      
+      case typeOf branch of
+        AnyT -> do -- One of the default branches
+          branch' <- aNormalForm "TTT" branch >>= localizeI env typ
+          labels <- runInSolver getViolatingLabels
+          reqs <- Map.map (map stripRefinements) <$> (uses requiredTypes (restrictDomain labels) >>= (mapM (liftM nub . mapM (runInSolver . finalizeType))))
+          writeLog 3 $ text "Violations:" $+$ vMapDoc text pretty reqs
+          if Map.null reqs
+            then do 
+                  writeLog 3 $ text "Branch is secure unconditionally"
+                  return $ Just (branch, [ftrue])
+            else let (_, [r]) = head $ Map.toList reqs 
+                 in abduceCondition' branch (typeOf $ head branches) r -- TODO: what if more than one?        
+        _ -> abduceCondition' branch (typeOf branch) typ -- Original term
+      
+    abduceCondition' branch t req = do 
       cUnknown <- Unknown Map.empty <$> freshId "C"
+      let isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf $ head branches))
       let env' = over globalPredicates (Map.filterWithKey isRelevant) env
       addConstraint $ WellFormedCond env' cUnknown
-      ifte 
-        (do
-          branch' <- aNormalForm "TTT" branch >>= localizeI (addAssumption cUnknown env) typ
-          runInSolver $ solveTypeConstraints
-          return branch')
-        (\branch' -> do -- Condition found
+      addConstraint $ Subtype (addAssumption cUnknown env) t req False ""
+      ifte (runInSolver $ solveTypeConstraints)
+        (const $ do -- Condition found
           disjuncts <- map conjunction <$> allCurrentValuations cUnknown
-          writeLog 3 $ text "Abduced condition:" <+> pretty disjuncts <+> text "and type" <+> pretty (typeOf branch')
-          return $ Just (branch', disjuncts))
+          writeLog 3 $ text "Abduced condition:" <+> pretty disjuncts
+          return $ Just (branch, disjuncts))
         (do
           writeLog 0 $ hang 2 (
-            text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty typ $+$ 
+            text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty req $+$ 
             text "Probable cause: missing condition qualifiers")
           return Nothing)
   

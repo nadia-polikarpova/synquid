@@ -207,6 +207,8 @@ getViolatingLabels = do
     nest 2 $ text "Invalid TERMINALS" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) invalidTerminals)
     ])
   
+  hornClauses .= []
+  
   return $ Set.fromList $ map snd invalidTerminals
   where
     isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
