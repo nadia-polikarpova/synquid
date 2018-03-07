@@ -472,12 +472,10 @@ generateBranches env typ p = do
 -- | Generate a guard for each of `branches` so that they have type `typ`
 generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> Explorer s ([(Id, RProgram)], RProgram)  
 generateGuards env typ branches = do
-  branchConditions <- catMaybes <$> mapM abduceCondition branches
-  let (defaults, rest) = partition (\(_, disjuncts) -> foldr orClean ffalse disjuncts == ftrue) branchConditions
-  -- TODO: compare conditions
-  if null defaults
-    then (throwErrorWithDescription $ text "No default branch can be synthesized for" <+> pretty typ)
-    else combineBranches env typ ([], fst $ head defaults) rest 
+  guardedBranches <- catMaybes <$> mapM abduceCondition branches -- Abduce a guard for each branch (original term is the head, then simpler to more complex)
+  sortedBranches <- foldM insertBranch [head guardedBranches] (tail guardedBranches) -- Sort branches by their guards, from weakest to strongest
+  writeLog 3 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches)
+  combineBranches env typ ([], fst $ head sortedBranches) (tail sortedBranches) -- Generate a program for each guard and combine into a conditional
   where
     abduceCondition branch = do
       writeLog 3 $ text "Abducing condition for branch" <+> pretty branch
@@ -512,6 +510,26 @@ generateGuards env typ branches = do
             text "WARNING: cannot abduce a condition for branch" $+$ pretty branch </> text "::" </> pretty req $+$ 
             text "Probable cause: missing condition qualifiers")
           return Nothing)
+          
+    insertBranch [] _ = return [] -- This guard is stronger than the original code, throw away
+    insertBranch sorted@((b, ds):bs) (branch, disjuncts) = do
+      let newCond = foldr1 orClean disjuncts
+      let oldCond = foldr1 orClean ds
+      disjuncts' <- filterM (\d -> not <$> implies d oldCond) disjuncts -- new disjuncts that do not subsume `oldCond`
+      oldSubsumes <- implies oldCond newCond
+      if null disjuncts' -- New subsumes `b`
+        then if oldSubsumes 
+              then return sorted -- Equivalent to b: throw away
+              else ((b, ds) :) <$> insertBranch bs (branch, disjuncts) -- Strictly stronger than b, insert later
+        else -- Some of the disjuncts do not subsume `b`: insert here          
+          return $ (branch, disjuncts') : sorted
+        
+    implies c c' = ifte 
+      (do
+        addConstraint $ Subtype env (int c) (int c') False ""
+        runInSolver $ checkTypeConstraints) 
+      (const $ return True) 
+      (return False)      
   
 combineBranches :: MonadHorn s => Environment -> RType -> ([(Id, RProgram)], RProgram) -> [(RProgram, [Formula])] -> Explorer s ([(Id, RProgram)], RProgram)  
 combineBranches _ _ acc [] = return acc
