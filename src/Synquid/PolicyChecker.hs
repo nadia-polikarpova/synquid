@@ -583,8 +583,7 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
         getterPreds = predsOfType $ lastType t'
       in
           if isConstant name env 
-            then if isFromPrelude name || 
-                    isGoodType t || 
+            then if name `Set.member` (env ^. guards) || 
                     (isDBGetter name && not (disjoint targetPreds getterPreds)) 
                     -- any (\pred -> name == getterOf pred) targetPreds
                    then Map.insert name (Monotype t') m -- Strip
@@ -593,17 +592,10 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
                   then Map.insert name (Monotype t') m -- Strip
                   else m -- It's a variable that doesn't appear in the target refinement: remove
     updateSymbol _ m name sch =
-      if isFromPrelude name
+      if name `Set.member` (env ^. guards)
           then Map.insert name sch m
           else m
           
-    isGoodType (ScalarT (DatatypeT "String" _ _) _) = False
-    isGoodType (ScalarT (DatatypeT "Tagged" _ _) _) = False
-    isGoodType (ScalarT _ _) = True
-    isGoodType _ = False
-    
-    isFromPrelude name = (env ^. moduleInfo) Map.! name == "Prelude"    
-    
     removeContent (Pred s name args) = if name == "content"
                                           then let [Var (DataS _ [varS]) v] = args
                                                in Var varS v

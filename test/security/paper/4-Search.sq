@@ -11,6 +11,7 @@ submission :: {Phase | _v == 0}
 review :: {Phase | _v == 1}
 rebuttal :: {Phase | _v == 2}
 done :: {Phase | _v == 3}
+guard {submission, review, rebuttal, done}
 
 {- Sensitive data and policies -}
    
@@ -33,7 +34,6 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 -- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
 getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>
-defaultPaperAuthors :: List User
 
 {- Client code -}
   
