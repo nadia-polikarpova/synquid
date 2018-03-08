@@ -453,7 +453,7 @@ generateBranches env typ p = do
     bothConstant pVar b1 b2 = not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2) 
     
     updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
-    updateSymbol m name sch = if isDefaultValue name -- TODO: for real
+    updateSymbol m name sch = if name `Set.member` (env ^. redactions)
                                 then Map.insert name sch m
                                 else m
 

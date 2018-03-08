@@ -1,6 +1,6 @@
 data User
 
-defaultFmap :: (a -> b) -> Maybe a -> Maybe b
+fmap :: (a -> b) -> Maybe a -> Maybe b
 -- fmap = \f . \mb . 
   -- match mb with
     -- Nothing -> Nothing
@@ -26,8 +26,9 @@ maybe :: b -> (a -> b) -> Maybe a -> b
     -- Nothing -> v
     -- Just x -> f x
     
-defaultNothing :: Maybe a
-defaultInt :: Int  
+zero :: {Int | _v == 0}
+
+redact {zero, Nil, Nothing, fmap}
   
 showBids :: World -> User -> User -> World
 showBids = \w . \u . \who .
@@ -52,6 +53,5 @@ showBids = \w . \u . \who .
   -- let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
   -- print w u out
   
--- qualifier {userBid x y != []}  
   
   
