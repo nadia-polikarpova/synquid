@@ -3,20 +3,19 @@ showSession = \w . \pid .
     let u = getSessionUser w in
     
     let out = bind (bind (downgrade
-                            (bind (getCurrentPhase w) (\x7 .
-                                 return (eq done x7)))) (\g0 . 
+                            (bind (getCurrentPhase w) (\x5 .
+                                 return (eq done x5)))) (\g0 . 
                         if g0
                           then getPaperStatus w pid
-                          else return defaultPaperStatus))
-                (\st . 
+                          else return false)) (\st . 
                   if st
                     then getPaperTitle w pid
                     else return emptyString) in
     print w u out
 
 (Goals: 1)
-(Measures: 3)
-(Policy size: fromList [("3-Implicit.sq",28),("Prelude.sq",20),("Tagged.sq",123)])
+(Measures: 4)
+(Policy size: fromList [("3-Implicit.sq",28),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showSession           &        33  &        58  &             0.00s  &      0.46s  &      0.01s  &        0.48s  \\
-Totals                &        33  &        58  &             0.00s  &      0.46s  &      0.01s  &        0.48s  \\
+showSession           &        33  &        58  &             0.00s  &      0.44s  &      0.01s  &        0.47s  \\
+Totals                &        33  &        58  &             0.00s  &      0.44s  &      0.01s  &        0.47s  \\

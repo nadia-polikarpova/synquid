@@ -1,0 +1,39 @@
+{- Datatypes -}
+
+data Phase where
+  Bidding :: Phase
+  Done :: Phase  
+guard {Bidding, Done}
+
+{- Sensitive data and policies -}   
+  
+predicate phase :: World -> Phase
+getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
+
+predicate hasBid :: World -> Map User Bool
+getUserBid :: w: World -> u: User -> 
+  Tagged { Maybe (Tagged Int <{ phase _0 == Done || _1 == u }>) | just _v == (hasBid w)[[u]] } <{ phase _0 == Done || _1 == u || (hasBid _0)[[_1]]}>    
+  
+showBids :: World -> User -> User -> World
+showBids = \w . \u . \who .
+  let getBid = getUserBid w who in                      
+  let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
+  print w (return u) out
+
+-- Repaired version:  
+-- showBids = \w . \u. \who .
+  -- let uBid = getUserBid w who in
+  -- let getBid = do
+                -- isDone <- bind (getPhase w) (\p . return (eq p Done))
+                -- haveBid <- downgrade (liftM isJust (getUserBid w u))
+                -- if isDone || (eq who u)
+                  -- then uBid
+                  -- else if haveBid
+                        -- then bind uBid (\b . return (fmap (\c . return 0) b))
+                        -- else return Nothing
+               -- in  
+  -- let out = bind getBid (\mB . maybe (return emptyString) (\x . liftM show x) mB) in
+  -- print w (return u) out
+  
+  
+  

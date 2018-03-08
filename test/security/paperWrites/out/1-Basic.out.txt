@@ -7,22 +7,21 @@ showPaper = \w . \pid .
     
     let authors = liftM show (bind
                                 (downgrade (bind (getChair w)
-                                              (\x9 . bind u (\x8 . return (eq
-                                                                             x9
-                                                                             x8)))))
+                                              (\x7 . bind u (\x6 . return (eq
+                                                                             x7
+                                                                             x6)))))
                                 (\g0 . 
                                   if g0
                                     then getPaperAuthors w pid
-                                    else return
-                                           defaultPaperAuthors)) in
+                                    else return Nil)) in
     
     let out = liftM2 strcat title
                 authors in
     print w u out
 
 (Goals: 1)
-(Measures: 3)
-(Policy size: fromList [("1-Basic.sq",12),("Prelude.sq",20),("Tagged.sq",123)])
+(Measures: 4)
+(Policy size: fromList [("1-Basic.sq",12),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showPaper             &        37  &        67  &             0.01s  &      0.15s  &      0.01s  &        0.18s  \\
-Totals                &        37  &        67  &             0.01s  &      0.15s  &      0.01s  &        0.18s  \\
+showPaper             &        37  &        67  &             0.01s  &      0.04s  &      0.02s  &        0.08s  \\
+Totals                &        37  &        67  &             0.01s  &      0.04s  &      0.02s  &        0.08s  \\

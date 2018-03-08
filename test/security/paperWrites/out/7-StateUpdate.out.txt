@@ -1,13 +1,12 @@
 notifyAuthors :: w:World -> pid:PaperId -> World
 notifyAuthors = \w . \pid . 
     let status = bind (downgrade
-                         (bind (getCurrentPhase w) (\x7 .
-                              return (eq rebuttal x7))))
+                         (bind (getCurrentPhase w) (\x5 .
+                              return (eq rebuttal x5))))
                    (\g0 . 
                      if g0
                        then getPaperStatus w pid
-                       else return defaultPaperStatus)
-      in
+                       else return NoDecision) in
     
     let authors = getPaperAuthors w
                     pid in
@@ -20,8 +19,8 @@ notifyAuthors = \w . \pid .
                            status)
 
 (Goals: 1)
-(Measures: 3)
-(Policy size: fromList [("7-StateUpdate.sq",57),("Prelude.sq",20),("Tagged.sq",123)])
+(Measures: 4)
+(Policy size: fromList [("7-StateUpdate.sq",57),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-notifyAuthors         &        44  &        69  &             0.01s  &      0.98s  &      0.01s  &        1.01s  \\
-Totals                &        44  &        69  &             0.01s  &      0.98s  &      0.01s  &        1.01s  \\
+notifyAuthors         &        44  &        69  &             0.01s  &      1.24s  &      0.01s  &        1.27s  \\
+Totals                &        44  &        69  &             0.01s  &      1.24s  &      0.01s  &        1.27s  \\
