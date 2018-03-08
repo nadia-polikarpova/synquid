@@ -168,7 +168,14 @@ resolveDeclaration (RedactDecl names) = mapM_ addR names
       syms <- uses environment allSymbols
       if Map.member name syms
         then environment %= addRedaction name
-        else throwResError (text "Redaction" <+> text name <+> text "is undefined")    
+        else throwResError (text "Redaction" <+> text name <+> text "is undefined")
+resolveDeclaration (GuardDecl names) = mapM_ addG names
+  where
+    addG name = do
+      syms <- uses environment allSymbols
+      if Map.member name syms
+        then environment %= addGuard name
+        else throwResError (text "Redaction" <+> text name <+> text "is undefined")        
 resolveDeclaration (InlineDecl name args body) = 
   ifM (uses inlines (Map.member name))
     (throwResError (text "Duplicate definition of inline" <+> text name))
@@ -504,8 +511,6 @@ addNewSignature name sch = do
   ifM (Set.member name <$> use (environment . constants)) (throwResError $ text "Duplicate declaration of function" <+> text name) (return ())  
   environment %= addPolyConstant name sch
   environment %= addUnresolvedConstant name sch
-  moduleName <- uses currentPosition (takeBaseName . sourceName)
-  environment %= addModuleInfo name moduleName
   
 substituteTypeSynonym name tArgs = do
   tss <- use $ environment . typeSynonyms

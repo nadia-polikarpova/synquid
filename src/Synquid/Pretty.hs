@@ -436,6 +436,7 @@ instance Pretty BareDeclaration where
   pretty (SynthesisGoal name impl) = text name <+> operator "=" <+> pretty impl
   pretty (MutualDecl names) = keyword "mutual" <+> commaSep (map text names)
   pretty (RedactDecl names) = keyword "redact" <+> commaSep (map text names)
+  pretty (GuardDecl names) = keyword "guard" <+> commaSep (map text names)  
   pretty (InlineDecl name args body) = keyword "inline" <+> text name <+> hsep (map text args) <+> operator "=" <+> pretty body
   
 instance Pretty a => Pretty (Pos a) where

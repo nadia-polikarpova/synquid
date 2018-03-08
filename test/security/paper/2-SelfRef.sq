@@ -23,7 +23,6 @@ getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 predicate paperAuthors :: World -> PaperId -> Set User
 getPaperAuthors :: w: World -> pid: PaperId -> 
   Tagged {List {User | _v in paperAuthors w pid} | elems _v == paperAuthors w pid} <{_0 in paperAuthors w pid || _0 == chair w}>
-defaultPaperAuthors :: List User
 
 {- Client code -}
   

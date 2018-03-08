@@ -1,10 +1,11 @@
 {- Primitives -}
 
 true :: {Bool | _v}
--- false :: {Bool | !_v}
+false :: {Bool | !_v}
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 not :: x: Bool -> {Bool | _v == !x}
 
+zero :: {Int | _v == 0}
 leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
 
 {- Lists -}
@@ -46,6 +47,24 @@ measure just :: Maybe a -> Bool where
   Nothing -> False
   Just x -> True
   
-isJust :: x:Maybe a -> {Bool | _v == just x}  
+fmap :: (a -> b) -> Maybe a -> Maybe b
+-- fmap = \f . \mb . 
+  -- match mb with
+    -- Nothing -> Nothing
+    -- Just x -> Just (f x)  
+  
+isJust :: x:Maybe a -> {Bool | _v == just x}
+
+maybe :: b -> (a -> b) -> Maybe a -> b
+-- maybe = \v . \f . \mX .
+  -- match mX with
+    -- Nothing -> v
+    -- Just x -> f x
+
+{- Guards and redaction functions -}
+
+redact {false, zero, Nil, Nothing, fmap}
+
+guard {true, eq, not, leq, elem, sameElems, disjoint, isJust}
 
     

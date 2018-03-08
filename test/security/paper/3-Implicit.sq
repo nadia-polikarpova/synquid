@@ -13,6 +13,7 @@ submission :: {Phase | _v == 0}
 review :: {Phase | _v == 1}
 rebuttal :: {Phase | _v == 2}
 done :: {Phase | _v == 3}
+guard {submission, review, rebuttal, done}
 
 {- Sensitive data and policies -}
    
@@ -32,7 +33,6 @@ getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 getPaperStatus :: w: World -> pid: PaperId -> Tagged Bool <{currentPhase w == done}>
-defaultPaperStatus :: Bool
 
 {- Client code -}
   

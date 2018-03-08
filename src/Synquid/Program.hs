@@ -183,9 +183,9 @@ data Environment = Environment {
   _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates) 
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
-  _redactions :: Set Id,                   -- ^ Redaction functions (used in patch generation)
-  _unresolvedConstants :: Map Id RSchema,  -- ^ Unresolved types of components (used for reporting specifications with macros)
-  _moduleInfo :: Map Id Id                 -- ^ For each constant, the name of the module (file) it came from
+  _redactions :: Set Id,                   -- ^ Redaction components (used in patch generation)
+  _guards :: Set Id,                       -- ^ Guard components (used in patch generation)  
+  _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
 }
 
 makeLenses ''Environment
@@ -212,8 +212,8 @@ emptyEnv = Environment {
   _measures = Map.empty,
   _typeSynonyms = Map.empty,
   _redactions = Set.empty,
-  _unresolvedConstants = Map.empty,
-  _moduleInfo = Map.empty
+  _guards = Set.empty,
+  _unresolvedConstants = Map.empty
 }
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
@@ -296,9 +296,6 @@ addLetBound name t = addVariable name t . (letBound %~ Set.insert name)
 addUnresolvedConstant :: Id -> RSchema -> Environment -> Environment
 addUnresolvedConstant name sch = unresolvedConstants %~ Map.insert name sch
 
-addModuleInfo :: Id -> Id -> Environment -> Environment
-addModuleInfo name moduleName = moduleInfo %~ Map.insert name moduleName
-
 removeVariable :: Id -> Environment -> Environment
 removeVariable name env = case Map.lookup name (allSymbols env) of
   Nothing -> env
@@ -352,6 +349,9 @@ addScrutinee p = usedScrutinees %~ (p :)
 
 addRedaction :: Id -> Environment -> Environment
 addRedaction name = over redactions (Set.insert name)
+
+addGuard :: Id -> Environment -> Environment
+addGuard name = over guards (Set.insert name)
 
 allPredicates env = Map.fromList (map (\(PredSig pName argSorts resSort) -> (pName, resSort:argSorts)) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
 
@@ -439,6 +439,7 @@ data BareDeclaration =
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
   MutualDecl [Id] |                                         -- ^ Mutual recursion group
   RedactDecl [Id] |                                         -- ^ Redaction functions
+  GuardDecl [Id] |                                          -- ^ Guard functions
   InlineDecl Id [Id] Formula |                              -- ^ Inline predicate
   SynthesisGoal Id UProgram                                 -- ^ Name and template for the function to reconstruct
   deriving (Eq)
