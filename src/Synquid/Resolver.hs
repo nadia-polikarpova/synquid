@@ -162,6 +162,13 @@ resolveDeclaration (MutualDecl names) = mapM_ addMutuals names
       case goalMb of
         Just _ -> mutuals %= Map.insert name (delete name names)
         Nothing -> throwResError (text "Synthesis goal" <+> text name <+> text "in a mutual clause is undefined")
+resolveDeclaration (RedactDecl names) = mapM_ addR names
+  where
+    addR name = do
+      syms <- uses environment allSymbols
+      if Map.member name syms
+        then environment %= addRedaction name
+        else throwResError (text "Redaction" <+> text name <+> text "is undefined")    
 resolveDeclaration (InlineDecl name args body) = 
   ifM (uses inlines (Map.member name))
     (throwResError (text "Duplicate definition of inline" <+> text name))

@@ -211,7 +211,7 @@ emptyEnv = Environment {
   _datatypes = Map.empty,
   _measures = Map.empty,
   _typeSynonyms = Map.empty,
-  _redactions = Set.singleton "Nil", -- Set.empty,
+  _redactions = Set.empty,
   _unresolvedConstants = Map.empty,
   _moduleInfo = Map.empty
 }
@@ -350,6 +350,9 @@ addAssumption f = assumptions %~ Set.insert f
 addScrutinee :: RProgram -> Environment -> Environment
 addScrutinee p = usedScrutinees %~ (p :)
 
+addRedaction :: Id -> Environment -> Environment
+addRedaction name = over redactions (Set.insert name)
+
 allPredicates env = Map.fromList (map (\(PredSig pName argSorts resSort) -> (pName, resSort:argSorts)) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
@@ -435,6 +438,7 @@ data BareDeclaration =
   PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
   MutualDecl [Id] |                                         -- ^ Mutual recursion group
+  RedactDecl [Id] |                                         -- ^ Redaction functions
   InlineDecl Id [Id] Formula |                              -- ^ Inline predicate
   SynthesisGoal Id UProgram                                 -- ^ Name and template for the function to reconstruct
   deriving (Eq)

@@ -94,6 +94,7 @@ parseDeclaration = attachPosBefore $
          , parsePredDecl
          , parseQualifierDecl
          , parseMutualDecl
+         , parseRedactDecl
          , parseInlineDecl
          , parseFuncDeclOrGoal] <?> "declaration")
 
@@ -163,6 +164,11 @@ parseMutualDecl :: Parser BareDeclaration
 parseMutualDecl = do
   reserved "mutual"
   MutualDecl <$> braces (commaSep parseIdentifier)  
+  
+parseRedactDecl :: Parser BareDeclaration
+parseRedactDecl = do
+  reserved "redact"
+  RedactDecl <$> braces (commaSep identifier)    
   
 parseInlineDecl :: Parser BareDeclaration
 parseInlineDecl = do
