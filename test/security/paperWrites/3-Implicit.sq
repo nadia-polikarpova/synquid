@@ -12,6 +12,7 @@ submission :: {Phase | _v == 0}
 review :: {Phase | _v == 1}
 rebuttal :: {Phase | _v == 2}
 done :: {Phase | _v == 3}
+guard {submission, review, rebuttal, done}
 
 {- Sensitive data and policies -}
    
@@ -31,11 +32,6 @@ getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
 getPaperStatus :: w: World -> pid: PaperId -> Tagged Bool <{currentPhase _0 == done}>
-defaultPaperStatus :: Bool
-
--- | Paper authors (visible only to the chair unless the phase is rebuttal or later)
---getPaperAuthors :: w: World -> pid: PaperId -> Tagged (List User) <{_0 == chair w || currentPhase w >= rebuttal}>
---defaultPaperAuthors :: Tagged (List User) <{True}>
 
 {- Client code -}
   
@@ -44,6 +40,7 @@ defaultPaperStatus :: Bool
 showSession :: w: World -> pid: PaperId -> World
 showSession = \w . \pid .
   let u = getSessionUser w in
-  let out = bind (getPaperStatus w pid) (\st.
-        if st then (getPaperTitle w pid) else return emptyString) in
-  print w u out
+  let out = do st <- getPaperStatus w pid
+               if st then getPaperTitle w pid else return emptyString
+  in print w u out
+  

@@ -1,0 +1,56 @@
+showBids :: arg2:World -> arg1:User -> arg0:User -> World
+showBids = \w . \u . \who . 
+      let getBid = bind (downgrade
+                           (return (eq who u))) (\g1 . bind
+                                                         (downgrade (bind
+                                                                       (getPhase
+                                                                          w)
+                                                                       (\x50 .
+                                                                         return
+                                                                           (eq
+                                                                              Done
+                                                                              x50))))
+                                                         (\g2 . 
+                                                           if g1 || g2
+                                                             then getUserBid w
+                                                                    who
+                                                             else bind
+                                                                    (downgrade
+                                                                       (bind
+                                                                          (getUserBid
+                                                                             w
+                                                                             u)
+                                                                          (\x44 .
+                                                                            return
+                                                                              (isJust
+                                                                                 x44))))
+                                                                    (\g0 . 
+                                                                      if g0
+                                                                        then
+                                                                          bind
+                                                                            (getUserBid
+                                                                               w
+                                                                               who)
+                                                                            (\x4 .
+                                                                              return
+                                                                                (fmap
+                                                                                   (\x1 .
+                                                                                     return
+                                                                                       zero)
+                                                                                   x4))
+                                                                        else
+                                                                          return
+                                                                            Nothing)))
+        in
+      
+      let out = bind getBid (\mB .
+                    maybe (return emptyString) (\x .
+                        liftM show x) mB) in
+      print w (return u) out
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("9-Auction.sq",32),("Prelude.sq",46),("Tagged.sq",123)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showBids              &        38  &       121  &             0.03s  &      0.45s  &      0.34s  &        0.84s  \\
+Totals                &        38  &       121  &             0.03s  &      0.45s  &      0.34s  &        0.84s  \\

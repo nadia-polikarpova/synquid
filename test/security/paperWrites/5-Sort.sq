@@ -7,12 +7,6 @@
 
 data PaperId
 
--- type Phase = {Int | 0 <= _v && _v < 4}
--- submission :: {Phase | _v == 0}
--- review :: {Phase | _v == 1}
--- rebuttal :: {Phase | _v == 2}
--- done :: {Phase | _v == 3}
-
 {- Sensitive data and policies -}
    
 -- | Current session user
@@ -25,10 +19,6 @@ getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
 
 getAllPaperIds :: w: World -> Tagged (List PaperId) <{True}>
 
--- -- | Current phase
--- predicate currentPhase :: World -> Int
--- getCurrentPhase :: w: World -> Tagged {Int | _v == currentPhase w} <{True}>
-
 -- | Paper title (public)
 getPaperTitle :: w: World -> pid: PaperId -> Tagged String <{True}>
 
@@ -39,7 +29,6 @@ getPaperConflicts :: w: World -> pid: PaperId
 
 -- | Paper score
 getPaperScore :: w: World -> pid: PaperId -> Tagged Int <{!(_1 in (paperConflicts _0)[[pid]])}>
-defaultPaperScore :: Int
 
 {- Client code -}
   
@@ -49,10 +38,13 @@ sortPapersByScore :: w: World -> World
 sortPapersByScore = \w .
   let u = getSessionUser w in
   let cmpScore = \pid1. \pid2.
-    bind (getPaperScore w pid1) (\x1.
-      bind (getPaperScore w pid2) (\x2. return (x1 <= x2))) in
-  let pids = bind (getAllPaperIds w) (\pids . sortByM cmpScore pids) in -- sorted paper IDs
-  let out = liftM show pids in
-  --let titles = bind aPids (\pids . mapM (\pid . getPaperTitle w pid) pids) in -- a's paper titles
-  --let out = bind titles (\xs . foldM (\x . \y . return (strcat x y)) emptyString xs) in -- concatenate them together
-  print w u out
+                  do x1 <- getPaperScore w pid1
+                     x2 <- getPaperScore w pid2
+                     return (x1 <= x2)
+                  in
+  let out = do pids <- getAllPaperIds w
+               sortedPids <- sortByM cmpScore pids
+               titles <- mapM (getPaperTitle w) sortedPids
+               foldM (\x . \y . return (strcat x y)) emptyString titles
+            in
+  print w u out  

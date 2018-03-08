@@ -10,11 +10,14 @@ submission :: {Phase | _v == 0}
 review :: {Phase | _v == 1}
 rebuttal :: {Phase | _v == 2}
 done :: {Phase | _v == 3}
+guard {submission, review, rebuttal, done}
 
 data Status where
   NoDecision :: Status
   Accepted :: Status
   Rejected :: Status
+guard {NoDecision, Accepted, Rejected}
+redact {NoDecision}
 
 {- Sensitive data and policies -}
    
@@ -27,12 +30,10 @@ predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId -> 
   Tagged {List {User | _v in (paperAuthors w)[[pid]]} | elems _v == (paperAuthors w)[[pid]]} 
          <{_1 in (paperAuthors _0)[[pid]]}>
-defaultPaperAuthors :: List User
 
 -- | Paper status (secret until done)
 getPaperStatus :: w: World -> pid: PaperId -> 
   Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}>
-defaultPaperStatus :: Status
 
 {- Client code -}
 

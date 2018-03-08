@@ -1,4 +1,3 @@
-
 {- Datatypes -}
 
 data PaperId
@@ -8,11 +7,14 @@ submission :: {Phase | _v == 0}
 review :: {Phase | _v == 1}
 rebuttal :: {Phase | _v == 2}
 done :: {Phase | _v == 3}
+guard {submission, review, rebuttal, done}
 
 data Status where
   NoDecision :: Status
   Accepted :: Status
   Rejected :: Status
+guard {NoDecision, Accepted, Rejected}
+redact {NoDecision}
 
 {- Sensitive data and policies -}   
    
@@ -29,13 +31,11 @@ setCurrentPhase :: w: World -> phase: Tagged Int <{True}> ->
 predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId -> 
   Tagged {List {User | _v in (paperAuthors w)[[pid]]} | elems _v == (paperAuthors w)[[pid]]}  <{_1 in (paperAuthors _0)[[pid]]}>
-defaultPaperAuthors :: List User
 
 -- | Paper status (secret until done)
 predicate paperStatus :: World -> Map PaperId Status
 getPaperStatus :: w: World -> pid: PaperId -> 
   Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}>
-defaultPaperStatus :: Status
 setPaperStatus :: w: World -> pid: PaperId -> 
   st: Tagged Status <{_1 in (paperAuthors _0)[[pid]] && currentPhase _0 == done}> ->
   {World | 

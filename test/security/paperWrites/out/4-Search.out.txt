@@ -2,40 +2,47 @@ searchByAuthor :: w:World -> a:User -> World
 searchByAuthor = \w . \a . 
     let u = getSessionUser w in
     
-    let isAuthor = \pid . bind (bind
-                                  (downgrade (bind (getChair w)
-                                                (\x9 . bind u (\x8 . return (eq
-                                                                               x9
-                                                                               x8)))))
-                                  (\g0 . bind (downgrade (bind
-                                                            (getCurrentPhase w)
-                                                            (\x13 . return (leq
+    let isAuthor = \pid . liftM
+                            (elem a) (bind (downgrade (bind
+                                                         (getChair w) (\x7 .
+                                                           bind u (\x6 . return
+                                                                           (eq
+                                                                              x7
+                                                                              x6)))))
+                                        (\g0 . bind (downgrade (bind
+                                                                  (getCurrentPhase
+                                                                     w) (\x11 .
+                                                                    return (leq
                                                                               rebuttal
-                                                                              x13))))
-                                           (\g1 . 
-                                             if g0 || g1
-                                               then getPaperAuthors w pid
-                                               else return
-                                                      defaultPaperAuthors)))
-                            (\auths . return (elem a auths))
+                                                                              x11))))
+                                                 (\g1 . 
+                                                   if g0 || g1
+                                                     then getPaperAuthors w pid
+                                                     else return Nil))) in
+    
+    let out = bind (getAllPaperIds
+                      w) (\pids . bind (filterM
+                                          isAuthor pids) (\myPids . bind
+                                                                      (mapM
+                                                                         (getPaperTitle
+                                                                            w)
+                                                                         myPids)
+                                                                      (\myTitles .
+                                                                        foldM
+                                                                          (\x .
+                                                                            \y .
+                                                                              return
+                                                                                (strcat
+                                                                                   x
+                                                                                   y))
+                                                                          emptyString
+                                                                          myTitles)))
       in
-    
-    let aPids = bind (getAllPaperIds
-                        w) (\pids . filterM isAuthor
-                                      pids) in
-    
-    let titles = bind aPids (\pids .
-                     mapM (\pid . getPaperTitle w
-                                    pid) pids) in
-    
-    let out = bind titles (\xs .
-                  foldM (\x . \y . return (strcat
-                                             x y)) emptyString xs) in
     print w u out
 
 (Goals: 1)
-(Measures: 3)
-(Policy size: fromList [("4-Search.sq",33),("Prelude.sq",20),("Tagged.sq",123)])
+(Measures: 4)
+(Policy size: fromList [("4-Search.sq",33),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-searchByAuthor        &        81  &       135  &             0.06s  &      0.91s  &      0.08s  &        1.06s  \\
-Totals                &        81  &       135  &             0.06s  &      0.91s  &      0.08s  &        1.06s  \\
+searchByAuthor        &        69  &       123  &             0.06s  &      0.67s  &      0.08s  &        0.83s  \\
+Totals                &        69  &       123  &             0.06s  &      0.67s  &      0.08s  &        0.83s  \\

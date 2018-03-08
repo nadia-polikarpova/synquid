@@ -4,36 +4,49 @@ sortPapersByScore = \w .
   
   let cmpScore = \pid1 . \pid2 .
         bind (bind (downgrade (bind u
-                                 (\x11 . bind (getPaperConflicts
-                                                 w pid1) (\x10 . return (not
-                                                                           (elem
-                                                                              x11
-                                                                              x10))))))
+                                 (\x9 . bind (getPaperConflicts w
+                                                pid1) (\x8 . return (not (elem
+                                                                            x9
+                                                                            x8))))))
                 (\g0 . 
                   if g0
                     then getPaperScore w pid1
-                    else return defaultPaperScore))
-          (\x1 . bind (bind (downgrade
-                               (bind u (\x23 . bind
-                                                 (getPaperConflicts w pid2)
-                                                 (\x22 . return (not (elem x23
-                                                                        x22))))))
-                         (\g1 . 
-                           if g1
-                             then getPaperScore w pid2
-                             else return defaultPaperScore))
-                   (\x2 . return (x1 <= x2))) in
+                    else return zero)) (\x1 . bind
+                                                (bind (downgrade (bind u (\x19 .
+                                                                      bind
+                                                                        (getPaperConflicts
+                                                                           w
+                                                                           pid2)
+                                                                        (\x18 .
+                                                                          return
+                                                                            (not
+                                                                               (elem
+                                                                                  x19
+                                                                                  x18))))))
+                                                   (\g1 . 
+                                                     if g1
+                                                       then getPaperScore w pid2
+                                                       else return zero)) (\x2 .
+                                                  return (x1 <= x2))) in
   
-  let pids = bind (getAllPaperIds
-                     w) (\pids . sortByM cmpScore
-                                   pids) in
-  
-  let out = liftM show pids in
+  let out = bind (getAllPaperIds
+                    w) (\pids . bind (sortByM
+                                        cmpScore pids) (\sortedPids .
+                                    bind (mapM (getPaperTitle w)
+                                            sortedPids) (\titles . foldM
+                                                                     (\x . \y .
+                                                                         return
+                                                                           (strcat
+                                                                              x
+                                                                              y))
+                                                                     emptyString
+                                                                     titles)))
+    in
   print w u out
 
 (Goals: 1)
-(Measures: 3)
-(Policy size: fromList [("5-Sort.sq",28),("Prelude.sq",20),("Tagged.sq",123)])
+(Measures: 4)
+(Policy size: fromList [("5-Sort.sq",28),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-sortPapersByScore     &        59  &       127  &             0.04s  &      1.67s  &      0.03s  &        1.75s  \\
-Totals                &        59  &       127  &             0.04s  &      1.67s  &      0.03s  &        1.75s  \\
+sortPapersByScore     &        83  &       151  &             0.07s  &      0.48s  &      0.04s  &        0.60s  \\
+Totals                &        83  &       151  &             0.07s  &      0.48s  &      0.04s  &        0.60s  \\
