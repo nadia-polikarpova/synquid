@@ -1,11 +1,3 @@
-{- Strings -}
-
-data String
-emptyString :: String
-show :: a -> String
-strcat :: String -> String -> String
-unlines :: List String -> String
-  
 {- Tagged -}
 
 data User 
@@ -117,8 +109,13 @@ print :: <pp :: User -> Bool> . w: World -> viewer: Tagged {User | pp _v} <pp> -
 -- | Output to multiple viewers.
 printAll :: <pp :: User -> Bool> . w: World -> viewers: Tagged (List {User | pp _v}) <pp> -> x: Tagged String <pp> -> World
 
-{- Qualifiers -}
+{- Guards, redaction functions, and qualifiers -}
+
+redact {false, zero, Nil, Nothing, fmap, emptyString}
+
+guard {true, eq, not, leq, elem, sameElems, disjoint, isJust}
 
 qualifier {x == y, x in y, !(x in y)}
 qualifier {_v == (x in y), _v == !(x in y), _v == (x && y)}
+
   

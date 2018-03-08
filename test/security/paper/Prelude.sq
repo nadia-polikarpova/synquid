@@ -60,11 +60,12 @@ maybe :: b -> (a -> b) -> Maybe a -> b
   -- match mX with
     -- Nothing -> v
     -- Just x -> f x
+    
+{- Strings -}
 
-{- Guards and redaction functions -}
-
-redact {false, zero, Nil, Nothing, fmap}
-
-guard {true, eq, not, leq, elem, sameElems, disjoint, isJust}
-
+data String
+emptyString :: String
+show :: a -> String
+strcat :: String -> String -> String
+unlines :: List String -> String
     
