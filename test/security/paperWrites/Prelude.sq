@@ -52,7 +52,7 @@ measure just :: Maybe a -> Bool where
   Nothing -> False
   Just x -> True
   
-fmap :: (a -> b) -> Maybe a -> Maybe b
+fmap :: Maybe a -> (a -> b) -> Maybe b
 -- fmap = \f . \mb . 
   -- match mb with
     -- Nothing -> Nothing

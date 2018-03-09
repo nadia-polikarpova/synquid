@@ -28,7 +28,7 @@ data TypeSkeleton r =
   AnyT
   deriving (Eq, Ord)
 
-contextual x tDef (FunctionT y tArg tRes) = FunctionT y (contextual x tDef tArg) (contextual x tDef tRes)
+-- contextual x tDef (FunctionT y tArg tRes) = FunctionT y (contextual x tDef tArg) (contextual x tDef tRes)
 contextual _ _ AnyT = AnyT
 contextual x tDef t = LetT x tDef t
   

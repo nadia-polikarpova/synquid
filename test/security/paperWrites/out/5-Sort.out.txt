@@ -48,5 +48,5 @@ sortPapersByScore = \w .
 (Measures: 4)
 (Policy size: fromList [("5-Sort.sq",28),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-sortPapersByScore     &        83  &       151  &             0.07s  &      0.48s  &      0.04s  &        0.60s  \\
-Totals                &        83  &       151  &             0.07s  &      0.48s  &      0.04s  &        0.60s  \\
+sortPapersByScore     &        83  &       151  &             0.07s  &      0.49s  &      0.04s  &        0.60s  \\
+Totals                &        83  &       151  &             0.07s  &      0.49s  &      0.04s  &        0.60s  \\

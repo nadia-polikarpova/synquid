@@ -437,8 +437,9 @@ generateBranches env typ p = do
     let env' = addVariable pVar (stripTags $ typeOf p) strippedEnv     
     
     writeLog 3 $ text "Generating pure branches of type" <+> pretty pureGoal $+$ text "in environment" <+> vMapDoc text pretty (allSymbols env')
-    branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace)) .
-                       over (_1 . eGuessDepth) (const 1)) $ 
+    branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace)) 
+                       . over (_1 . eGuessDepth) (const 2)
+                       ) $ 
             (nubBy (bothConstant pVar) . filter (not . isSymbol pVar)) <$> generateMany (generateCandidate env' pureGoal)
     writeLog 3 $ text "Generated pure branches" $+$ vsep (map (\b -> pretty b <+> text "::" <+> pretty (typeOf b)) branches)
         
@@ -473,7 +474,8 @@ generateBranches env typ p = do
 generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> Explorer s ([(Id, RProgram)], RProgram)  
 generateGuards env typ branches = do
   guardedBranches <- catMaybes <$> mapM abduceCondition branches -- Abduce a guard for each branch (original term is the head, then simpler to more complex)
-  sortedBranches <- foldM insertBranch [head guardedBranches] (tail guardedBranches) -- Sort branches by their guards, from weakest to strongest
+  sortedBranches <- (snd . removeRedundantDisjuncts) <$> 
+                    foldM insertBranch [head guardedBranches] (tail guardedBranches) -- Sort branches by their guards, from weakest to strongest
   writeLog 3 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches)
   combineBranches env typ ([], fst $ head sortedBranches) (tail sortedBranches) -- Generate a program for each guard and combine into a conditional
   where
@@ -515,21 +517,29 @@ generateGuards env typ branches = do
     insertBranch sorted@((b, ds):bs) (branch, disjuncts) = do
       let newCond = foldr1 orClean disjuncts
       let oldCond = foldr1 orClean ds
-      disjuncts' <- filterM (\d -> not <$> implies d oldCond) disjuncts -- new disjuncts that do not subsume `oldCond`
+      newSubsumes <- implies newCond oldCond
       oldSubsumes <- implies oldCond newCond
-      if null disjuncts' -- New subsumes `b`
+      if newSubsumes -- New subsumes `b`
         then if oldSubsumes 
               then return sorted -- Equivalent to b: throw away
               else ((b, ds) :) <$> insertBranch bs (branch, disjuncts) -- Strictly stronger than b, insert later
         else -- Some of the disjuncts do not subsume `b`: insert here          
-          return $ (branch, disjuncts') : sorted
+          return $ (branch, disjuncts) : sorted
         
     implies c c' = ifte 
       (do
         addConstraint $ Subtype env (int c) (int c') False ""
         runInSolver $ checkTypeConstraints) 
       (const $ return True) 
-      (return False)      
+      (return False)
+
+    removeRedundantDisjuncts :: [(RProgram, [Formula])] -> ([Formula], [(RProgram, [Formula])])
+    removeRedundantDisjuncts [] = ([], [])
+    removeRedundantDisjuncts ((b, disjuncts):bs) = 
+      let 
+        (ds, bs') = removeRedundantDisjuncts bs
+        disjuncts' = disjuncts \\ ds
+      in (ds ++ disjuncts', (b, disjuncts') : bs')
   
 combineBranches :: MonadHorn s => Environment -> RType -> ([(Id, RProgram)], RProgram) -> [(RProgram, [Formula])] -> Explorer s ([(Id, RProgram)], RProgram)  
 combineBranches _ _ acc [] = return acc

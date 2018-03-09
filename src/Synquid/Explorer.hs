@@ -130,6 +130,7 @@ runExplorer eParams tParams topLevel initTS go = do
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
 generateI :: MonadHorn s => Environment -> RType -> Explorer s RProgram
+generateI env (LetT _ _ t) = generateI env t
 generateI env t@(FunctionT x tArg tRes) = do
   let ctx = \p -> Program (PFun x p) t
   pBody <- inContext ctx $ generateI (unfoldAllVariables $ addVariable x tArg $ env) tRes
@@ -498,23 +499,28 @@ enumerateAt env typ d = do
       x <- freshId "X"
       fun <- inEContext (\p -> Program (PApp p uHole) typ)
                 $ genFun env (FunctionT x AnyT typ) -- Find all functions that unify with (? -> typ)
-      let FunctionT x tArg tRes = typeOf fun
+      let FunctionT x tArg tRes = distributeLet $ typeOf fun
 
-      pApp <- if isFunctionType tArg
+      if isFunctionType tArg
         then do -- Higher-order argument: its value is not required for the function type, return a placeholder and enqueue an auxiliary goal
           d <- asks . view $ _1 . auxDepth
           when (d <= 0) $ writeLog 2 (text "Cannot synthesize higher-order argument: no auxiliary functions allowed") >> mzero
-          arg <- enqueueGoal env tArg (untyped PHole) (d - 1)
+          -- arg <- enqueueGoal env tArg (untyped PHole) (d - 1)
+          writeLog 3 (text "Synthesizing function argument of type" <+> pretty tArg)
+          arg <- local (over (_1 . auxDepth) (-1 +))
+                    $ inEContext (\p -> Program (PApp fun p) tRes)
+                    $ generateI env tArg
           return $ Program (PApp fun arg) tRes
         else do -- First-order argument: generate now
-          let mbCut = id -- if Set.member x (varsOfType tRes) then id else cut
           arg <- local (over (_1 . eGuessDepth) (-1 +))
                     $ inEContext (\p -> Program (PApp fun p) tRes)
-                    $ mbCut (genArg env tArg)
+                    $ (genArg env tArg)
           writeLog 3 (text "Synthesized argument" <+> pretty arg <+> text "of type" <+> pretty (typeOf arg))
           let tRes' = appType env arg x tRes
           return $ Program (PApp fun arg) tRes'
-      return pApp
+      
+    distributeLet (LetT x tx (FunctionT y tArg tRes)) = FunctionT y (LetT x tx tArg) (LetT x tx tRes)
+    distributeLet t = t
       
 -- | Make environment inconsistent (if possible with current unknown assumptions)
 generateError :: MonadHorn s => Environment -> Explorer s RProgram

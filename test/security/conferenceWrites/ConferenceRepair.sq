@@ -7,18 +7,6 @@ s_paperNo :: String
 s_authors :: String
 s_qmark :: String
 
--- Default values yay!!
-
-defaultUsers          :: Tagged (List User) <{True}>
-defaultUserProfile    :: Tagged UserProfile <{True}>
-defaultPaperTitle     :: Tagged String <{True}>
-defaultPaperAuthors   :: Tagged (List User) <{True}>
-defaultPaperConflicts :: Tagged (List User) <{True}>
-defaultPaperReviewers :: Tagged (List User) <{True}>
-defaultPaperStatus    :: Tagged Status <{True}>
-defaultPaperBidToken  :: Tagged (Maybe Token) <{True}>
-defaultReview         :: Tagged Review <{True}>
-
 -- Create a user (open to all)
 registerUser :: w: World -> u: User -> pw: String -> World
 registerUser = \w . \u . \pw . addUser w u pw
