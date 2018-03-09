@@ -114,13 +114,8 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
                         in recheck explorerParams typingParams p goals
                                
                                
-    withPredApps env vars = 
-      let vars' = filter (\v -> not (isVar v) || not (isDefaultValue (varName v))) vars in
-      allPredApps env vars' 1
+    withPredApps env vars = allPredApps env vars 1
       
-    -- isUsefulVar (Var (DataS name _) _) | name == "Tagged" || name == "String" || name == "Maybe" = False
-    -- isUsefulVar _ = True
-
     typeVarsOnlySpace :: Environment -> Formula -> [Formula] -> QSpace
     typeVarsOnlySpace _ val vars = toSpace Nothing (Set.fromList $ val : vars) []
     
@@ -139,7 +134,8 @@ policyRepair verifyOnly explorerParams solverParams goal cquals tquals = evalZ3S
     -- | Qualifier generator for conditionals
     condQuals :: VarsForQuals -> Environment -> [Formula] -> QSpace
     condQuals varsForQuals env vars = let vars' = varsForQuals env vars in toSpace Nothing (Set.fromList vars) $ filter (not . isSetMapEq) $ concat $
-      map (instantiateCondQualifier True env vars') cquals ++ map (extractCondFromType env vars') components                  
+      map (instantiateCondQualifier True env vars') cquals
+      ++ map (extractCondFromType env vars') components
       
     -- | Qualifier generator for bound predicates
     predQuals :: VarsForQuals -> Bool -> Environment -> [Formula] -> [Formula] -> QSpace
@@ -286,16 +282,30 @@ extractQGenFromType positive env val vars t = extractQGenFromType' positive t
               fmls = Set.toList $ conjunctsOf $ sortSubstituteFml sortInst $ substitute (Map.singleton lastParam (Var lastSort valueVarName)) fml        
              in concatMap (instantiateTypeQualifier env val vars) fmls
     
--- | Extract conditional qualifiers from the types of Boolean functions    
+-- | Extract conditional qualifiers from refinements on Bool and predicate parameters
 extractCondFromType :: Environment -> [Formula] -> RType -> [Formula]
-extractCondFromType env vars t@(FunctionT _ tArg _) = case lastType t of
-    ScalarT BoolT (Binary Eq (Var BoolS v) fml) | v == valueVarName ->
+extractCondFromType env vars t = extractCondFromType' t
+  where
+    sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
+    extractCondFromType' (ScalarT BoolT (Binary Eq (Var BoolS v) fml)) | v == valueVarName =
       let 
-        sortInst = Map.fromList $ zip (Set.toList $ typeVarsOf t) (map VarS distinctTypeVars)
         fml' = sortSubstituteFml sortInst fml 
-      in filter (not . isDataEq) $ allSubstitutions env fml' (Set.toList . varsOf $ fml') vars [] []
-    _ -> []
-extractCondFromType _ _ _ = []
+        formals = Set.toList . varsOf $ fml'
+      in filter (not . isDataEq) $ allSubstitutions env fml' formals vars [] []
+      
+    extractCondFromType' (FunctionT _ tArg tRes) = extractCondFromType' tArg ++ extractCondFromType' tRes
+    
+    extractCondFromType' (ScalarT (DatatypeT dtName tArgs pArgs) _) =
+      let extractFromPArg pArg = 
+            let
+              pArg' = sortSubstituteFml sortInst pArg
+              formals = Set.toList $ varsOf pArg'
+              atoms = Set.toList $ atomsOf pArg'
+              extractFromAtom atom = allSubstitutions env atom formals vars [] []              
+            in concatMap extractFromAtom atoms -- Substitute the variables, but leave predicate parameters unchanged (optimization)
+      in concatMap extractFromPArg pArgs ++ concatMap extractCondFromType' tArgs
+    
+    extractCondFromType' _ = []
 
 extractPredQGenFromQual :: Bool -> Environment -> [Formula] -> [Formula] -> Formula -> [Formula]
 extractPredQGenFromQual useAllArgs env actualParams actualVars fml = 
