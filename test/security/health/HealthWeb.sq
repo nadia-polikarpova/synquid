@@ -57,7 +57,9 @@ getRecord :: w:World -> rid:RecordId -> Tagged {Record | _v == record w rid} <{
   (isPsychiatrist _0 _1 && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
 }>
 
-defaultRecord :: Tagged Record <{True}>
+-- defaultRecord :: Tagged Record <{True}>
+defaultRecord :: Record
+redact {defaultRecord}
 
 getAllRecordIds :: World -> List RecordId
 
@@ -72,12 +74,6 @@ setRecord :: w:World -> rid:RecordId -> Tagged Record <{
 
 getPsychiatristPatients :: u:User -> Tagged (List User) <{isPsychiatrist _0 _1 && _1 == u}>
 getDoctorPatients :: u:User -> Tagged (List User) <{isDoctor _0 _1 && _1 == u}>
-
-defaultPsychiatristPatients :: Tagged (List User) <{True}>
-defaultPsychiatristPatients = return Nil
-
-defaultDoctorPatients :: Tagged (List User) <{True}>
-defaultDoctorPatients = return Nil
 
 showRecordByIdView :: w:World -> rid:RecordId -> World
 showRecordByIdView = \w . \rid .

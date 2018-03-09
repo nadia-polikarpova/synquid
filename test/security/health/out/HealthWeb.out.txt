@@ -1,160 +1,122 @@
-defaultPsychiatristPatients :: Tagged List User <True>
-defaultPsychiatristPatients =
-return Nil
-
-defaultDoctorPatients :: Tagged List User <True>
-defaultDoctorPatients = return
-                          Nil
-
 showRecordByIdView :: w:World -> rid:RecordId -> World
 showRecordByIdView = \w . \rid .
     
     let u = getSessionUser w in
     
-    let record = ifM (bind u (\x8 .
-                          bind (getRecord w rid) (\x7 .
-                              bind (getAuthor x7) (\x6 .
-                                  return (eq x8 x6))))) (getRecord
-                                                           w rid) (ifM (andM
-                                                                          (bind
-                                                                             u
-                                                                             (\x20 .
-                                                                               bind
-                                                                                 (getRecord
-                                                                                    w
-                                                                                    rid)
-                                                                                 (\x19 .
-                                                                                   bind
-                                                                                     (getShouldWithhold
-                                                                                        x20
-                                                                                        x19)
-                                                                                     (\x18 .
-                                                                                       return
-                                                                                         (not
-                                                                                            x18)))))
-                                                                          (bind
-                                                                             u
-                                                                             (\x22 .
-                                                                               bind
-                                                                                 (getIsDoctor
-                                                                                    w
-                                                                                    x22)
-                                                                                 (\x21 .
-                                                                                   return
-                                                                                     x21))))
-                                                                     (getRecord
-                                                                        w rid)
-                                                                     (ifM (andM
-                                                                             (andM
-                                                                                (bind
-                                                                                   u
-                                                                                   (\x40 .
-                                                                                     bind
-                                                                                       (getRecord
-                                                                                          w
-                                                                                          rid)
-                                                                                       (\x39 .
-                                                                                         bind
-                                                                                           (getShouldWithhold
-                                                                                              x40
-                                                                                              x39)
-                                                                                           (\x38 .
-                                                                                             return
-                                                                                               (not
-                                                                                                  x38)))))
-                                                                                (bind
-                                                                                   u
-                                                                                   (\x43 .
-                                                                                     bind
-                                                                                       (getRecord
-                                                                                          w
-                                                                                          rid)
-                                                                                       (\x42 .
-                                                                                         bind
-                                                                                           (getPatient
-                                                                                              x42)
-                                                                                           (\x41 .
-                                                                                             return
-                                                                                               (eq
-                                                                                                  x43
-                                                                                                  x41))))))
-                                                                             (bind
-                                                                                u
-                                                                                (\x45 .
-                                                                                  bind
-                                                                                    (getIsPatient
-                                                                                       w
-                                                                                       x45)
-                                                                                    (\x44 .
-                                                                                      return
-                                                                                        x44))))
-                                                                        (getRecord
-                                                                           w
-                                                                           rid)
-                                                                        (ifM
-                                                                           (andM
-                                                                              (andM
-                                                                                 (andM
-                                                                                    (bind
-                                                                                       u
-                                                                                       (\x66 .
-                                                                                         bind
-                                                                                           (getRecord
-                                                                                              w
-                                                                                              rid)
-                                                                                           (\x65 .
-                                                                                             bind
-                                                                                               (getShouldWithhold
-                                                                                                  x66
-                                                                                                  x65)
-                                                                                               (\x64 .
-                                                                                                 return
-                                                                                                   (not
-                                                                                                      x64)))))
-                                                                                    (bind
-                                                                                       (getRecord
-                                                                                          w
-                                                                                          rid)
-                                                                                       (\x68 .
-                                                                                         bind
-                                                                                           (getIsPsychiatricRecord
-                                                                                              x68)
-                                                                                           (\x67 .
-                                                                                             return
-                                                                                               x67))))
-                                                                                 (bind
-                                                                                    u
-                                                                                    (\x70 .
-                                                                                      bind
-                                                                                        (getIsPsychiatrist
-                                                                                           w
-                                                                                           x70)
-                                                                                        (\x69 .
-                                                                                          return
-                                                                                            x69))))
-                                                                              (bind
-                                                                                 u
-                                                                                 (\x74 .
-                                                                                   bind
-                                                                                     (getRecord
-                                                                                        w
-                                                                                        rid)
-                                                                                     (\x73 .
-                                                                                       bind
-                                                                                         (getPatient
-                                                                                            x73)
-                                                                                         (\x72 .
-                                                                                           bind
-                                                                                             (getIsTreating
-                                                                                                x74
-                                                                                                x72)
-                                                                                             (\x71 .
-                                                                                               return
-                                                                                                 x71))))))
+    let record = bind (downgrade
+                         (bind u (\x10 . bind (getRecord
+                                                 w rid) (\x9 . bind (getAuthor
+                                                                       x9)
+                                                                 (\x8 . return
+                                                                          (eq
+                                                                             x10
+                                                                             x8))))))
+                   (\g0 . bind (downgrade (andM
+                                             (bind u (\x22 . bind (getRecord
+                                                                     w rid)
+                                                               (\x21 . bind
+                                                                         (getShouldWithhold
+                                                                            x22
+                                                                            x21)
+                                                                         (\x20 .
+                                                                           return
+                                                                             (not
+                                                                                x20)))))
+                                             (bind u (\x24 . bind
+                                                               (getIsDoctor w
+                                                                  x24) (\x23 .
+                                                                 return x23)))))
+                            (\g1 . bind (downgrade (andM
+                                                      (andM (bind u (\x42 . bind
+                                                                              (getRecord
+                                                                                 w
+                                                                                 rid)
+                                                                              (\x41 .
+                                                                                bind
+                                                                                  (getShouldWithhold
+                                                                                     x42
+                                                                                     x41)
+                                                                                  (\x40 .
+                                                                                    return
+                                                                                      (not
+                                                                                         x40)))))
+                                                         (bind u (\x45 . bind
                                                                            (getRecord
                                                                               w
                                                                               rid)
-                                                                           defaultRecord)))
+                                                                           (\x44 .
+                                                                             bind
+                                                                               (getPatient
+                                                                                  x44)
+                                                                               (\x43 .
+                                                                                 return
+                                                                                   (eq
+                                                                                      x45
+                                                                                      x43))))))
+                                                      (bind u (\x47 . bind
+                                                                        (getIsPatient
+                                                                           w
+                                                                           x47)
+                                                                        (\x46 .
+                                                                          return
+                                                                            x46)))))
+                                     (\g2 . bind (downgrade (andM
+                                                               (andM (andM (bind
+                                                                              u
+                                                                              (\x68 .
+                                                                                bind
+                                                                                  (getRecord
+                                                                                     w
+                                                                                     rid)
+                                                                                  (\x67 .
+                                                                                    bind
+                                                                                      (getShouldWithhold
+                                                                                         x68
+                                                                                         x67)
+                                                                                      (\x66 .
+                                                                                        return
+                                                                                          (not
+                                                                                             x66)))))
+                                                                        (bind
+                                                                           (getRecord
+                                                                              w
+                                                                              rid)
+                                                                           (\x70 .
+                                                                             bind
+                                                                               (getIsPsychiatricRecord
+                                                                                  x70)
+                                                                               (\x69 .
+                                                                                 return
+                                                                                   x69))))
+                                                                  (bind u
+                                                                     (\x72 .
+                                                                       bind
+                                                                         (getIsPsychiatrist
+                                                                            w
+                                                                            x72)
+                                                                         (\x71 .
+                                                                           return
+                                                                             x71))))
+                                                               (bind u (\x76 .
+                                                                    bind
+                                                                      (getRecord
+                                                                         w rid)
+                                                                      (\x75 .
+                                                                        bind
+                                                                          (getPatient
+                                                                             x75)
+                                                                          (\x74 .
+                                                                            bind
+                                                                              (getIsTreating
+                                                                                 x76
+                                                                                 x74)
+                                                                              (\x73 .
+                                                                                return
+                                                                                  x73)))))))
+                                              (\g3 . 
+                                                if g0 || (g1 || (g2 || g3))
+                                                  then getRecord w rid
+                                                  else return defaultRecord))))
       in
     print w u (liftM show record)
 
@@ -168,152 +130,159 @@ showRecordsForPatientView = \w .
                       w in
     
     let records = sequence (map
-                              (\rid . ifM (bind sessionUser
-                                             (\x8 . bind (getRecord w rid)
-                                                      (\x7 . bind (getAuthor x7)
-                                                               (\x6 . return (eq
-                                                                                x8
-                                                                                x6)))))
-                                        (getRecord w rid) (ifM (andM
-                                                                  (bind
-                                                                     sessionUser
-                                                                     (\x20 .
-                                                                       bind
-                                                                         (getRecord
-                                                                            w
-                                                                            rid)
-                                                                         (\x19 .
-                                                                           bind
-                                                                             (getShouldWithhold
-                                                                                x20
-                                                                                x19)
-                                                                             (\x18 .
-                                                                               return
-                                                                                 (not
-                                                                                    x18)))))
+                              (\rid . bind (downgrade (bind
+                                                         sessionUser (\x10 .
+                                                           bind (getRecord w
+                                                                   rid) (\x9 .
+                                                               bind (getAuthor
+                                                                       x9)
+                                                                 (\x8 . return
+                                                                          (eq
+                                                                             x10
+                                                                             x8))))))
+                                        (\g0 . bind (downgrade (andM
                                                                   (bind
                                                                      sessionUser
                                                                      (\x22 .
                                                                        bind
+                                                                         (getRecord
+                                                                            w
+                                                                            rid)
+                                                                         (\x21 .
+                                                                           bind
+                                                                             (getShouldWithhold
+                                                                                x22
+                                                                                x21)
+                                                                             (\x20 .
+                                                                               return
+                                                                                 (not
+                                                                                    x20)))))
+                                                                  (bind
+                                                                     sessionUser
+                                                                     (\x24 .
+                                                                       bind
                                                                          (getIsDoctor
                                                                             w
-                                                                            x22)
-                                                                         (\x21 .
+                                                                            x24)
+                                                                         (\x23 .
                                                                            return
-                                                                             x21))))
-                                                             (getRecord w rid)
-                                                             (ifM (andM (andM
-                                                                           (bind
-                                                                              sessionUser
-                                                                              (\x40 .
-                                                                                bind
-                                                                                  (getRecord
-                                                                                     w
-                                                                                     rid)
-                                                                                  (\x39 .
-                                                                                    bind
-                                                                                      (getShouldWithhold
-                                                                                         x40
-                                                                                         x39)
-                                                                                      (\x38 .
-                                                                                        return
-                                                                                          (not
-                                                                                             x38)))))
-                                                                           (bind
-                                                                              sessionUser
-                                                                              (\x43 .
-                                                                                bind
-                                                                                  (getRecord
-                                                                                     w
-                                                                                     rid)
-                                                                                  (\x42 .
-                                                                                    bind
-                                                                                      (getPatient
-                                                                                         x42)
-                                                                                      (\x41 .
-                                                                                        return
-                                                                                          (eq
-                                                                                             x43
-                                                                                             x41))))))
-                                                                     (bind
-                                                                        sessionUser
-                                                                        (\x45 .
-                                                                          bind
-                                                                            (getIsPatient
-                                                                               w
-                                                                               x45)
-                                                                            (\x44 .
-                                                                              return
-                                                                                x44))))
-                                                                (getRecord w
-                                                                   rid) (ifM
+                                                                             x23)))))
+                                                 (\g1 . bind (downgrade (andM
                                                                            (andM
-                                                                              (andM
-                                                                                 (andM
-                                                                                    (bind
-                                                                                       sessionUser
-                                                                                       (\x66 .
-                                                                                         bind
-                                                                                           (getRecord
-                                                                                              w
-                                                                                              rid)
-                                                                                           (\x65 .
-                                                                                             bind
-                                                                                               (getShouldWithhold
-                                                                                                  x66
-                                                                                                  x65)
-                                                                                               (\x64 .
-                                                                                                 return
-                                                                                                   (not
-                                                                                                      x64)))))
-                                                                                    (bind
-                                                                                       (getRecord
-                                                                                          w
-                                                                                          rid)
-                                                                                       (\x68 .
-                                                                                         bind
-                                                                                           (getIsPsychiatricRecord
-                                                                                              x68)
-                                                                                           (\x67 .
-                                                                                             return
-                                                                                               x67))))
-                                                                                 (bind
-                                                                                    sessionUser
-                                                                                    (\x70 .
-                                                                                      bind
-                                                                                        (getIsPsychiatrist
-                                                                                           w
-                                                                                           x70)
-                   WARNING: cannot abduce a condition for violation
-  getRecord w' rid ::
-  Tagged Record <_1 == sessionUser _0 && sessionUser _0 == sessionUser w>
-  Probable cause: missing condition qualifiers
-                                                                     (\x69 .
-                                                                                          return
-                                                                                            x69))))
                                                                               (bind
                                                                                  sessionUser
-                                                                                 (\x74 .
+                                                                                 (\x42 .
                                                                                    bind
                                                                                      (getRecord
                                                                                         w
                                                                                         rid)
-                                                                                     (\x73 .
+                                                                                     (\x41 .
+                                                                                       bind
+                                                                                         (getShouldWithhold
+                                                                                            x42
+                                                                                            x41)
+                                                                                         (\x40 .
+                                                                                           return
+                                                                                             (not
+                                                                                                x40)))))
+                                                                              (bind
+                                                                                 sessionUser
+                                                                                 (\x45 .
+                                                                                   bind
+                                                                                     (getRecord
+                                                                                        w
+                                                                                        rid)
+                                                                                     (\x44 .
                                                                                        bind
                                                                                          (getPatient
-                                                                                            x73)
-                                                                                         (\x72 .
+                                                                                            x44)
+                                                                                         (\x43 .
+                                                                                           return
+                                                                                             (eq
+                                                                                                x45
+                                                                                                x43))))))
+                                                                           (bind
+                                                                              sessionUser
+                                                                              (\x47 .
+                                                                                bind
+                                                                                  (getIsPatient
+                                                                                     w
+                                                                                     x47)
+                                                                                  (\x46 .
+                                                                                    return
+                                                                                      x46)))))
+                                                          (\g2 . bind (downgrade
+                                                                         (andM
+                                                                            (andM
+                                                                               (andM
+                                                                                  (bind
+                                                                                     sessionUser
+                                                                                     (\x68 .
+                                                                                       bind
+                                                                                         (getRecord
+                                                                                            w
+                                                                                            rid)
+                                                                                         (\x67 .
                                                                                            bind
-                                                                                             (getIsTreating
-                                                                                                x74
-                                                                                                x72)
-                                                                                             (\x71 .
+                                                                                             (getShouldWithhold
+                                                                                                x68
+                                                                                                x67)
+                                                                                             (\x66 .
                                                                                                return
-                                                                                                 x71))))))
-                                                                           (getRecord
-                                                                              w
-                                                                              rid)
-                                                                           defaultRecord))))
+                                                                                                 (not
+                                                                                                    x66)))))
+                                                                                  (bind
+                                                                                     (getRecord
+                                                                                        w
+                                                                                        rid)
+                                                                                     (\x70 .
+                                                                                       bind
+                                                                                         (getIsPsychiatricRecord
+                                                                                            x70)
+                                                                                         (\x69 .
+                                                                                           return
+                                                                                             x69))))
+                                                                               (bind
+                                                                                  sessionUser
+                                                                                  (\x72 .
+                                                                                    bind
+                                                                                      (getIsPsychiatrist
+                                                                                         w
+                                                                                         x72)
+                                                                                      (\x71 .
+                                                                                        return
+                                                                                          x71))))
+                                                                            (bind
+                                                                               sessionUser
+                                                                               (\x76 .
+                                                                                 bind
+                                                                                   (getRecord
+                                                                                      w
+                                                                                      rid)
+                                                                                   (\x75 .
+                                                                                     bind
+                                                                                       (getPatient
+                                                                                          x75)
+                                                                                       (\x74 .
+                                                                                         bind
+                                                                                           (getIsTreating
+                                                                                              x76
+                                                                                              x74)
+                                                                                           (\x73 .
+                                                                                             return
+                                                                                               x73)))))))
+                                                                   (\g3 . 
+                                                                     if g0 ||
+                                                                          (g1 ||
+                                                                             (g2
+                                                                                ||
+                                                                                g3))
+                                                                       then
+                                                                         getRecord
+                                                                           w rid
+                                                                       else
+                                                                         return
+                                                                           defaultRecord)))))
                               recordIds) in
     
     let recordsForPatient = bind
@@ -331,7 +300,11 @@ showAuthoredRecordsView = \w .
                       w in
   
   let recordIds = bind sessionUser
-                    (\user . return
+   WARNING: cannot abduce a condition for branch
+  getRecord w' rid ::
+  Tagged Record <_1 == sessionUser _0 && sessionUser _0 == sessionUser w>
+  Probable cause: missing condition qualifiers
+                 (\user . return
                                (getAuthoredRecordIds w user))
     in
   
@@ -347,7 +320,8 @@ updateRecordForm = \w . \rid .
       let w' = setRecord w rid (return
                                   record) in
       
-      let newRecord = defaultRecord in
+      let newRecord = return
+                        defaultRecord in
       
       let u = getSessionUser w' in
       print w' u (liftM show
@@ -359,18 +333,29 @@ listOfPatientsView = \w .
                       w in
   
   let patients1 = bind sessionUser
-                    (\u . ifM (bind sessionUser
-                                 (\x4 . bind (getIsPsychiatrist w
-                                                x4) (\x3 . return x3)))
-                            (getPsychiatristPatients u)
-                            defaultPsychiatristPatients) in
+                    (\u . bind (downgrade (bind
+                                             sessionUser (\x6 . bind
+                                                                  (getIsPsychiatrist
+                                                                     w x6)
+                                                                  (\x5 . return
+                                                                           x5))))
+                            (\g0 . 
+                              if g0
+                                then getPsychiatristPatients u
+                                else return Nil)) in
   
   let patients2 = bind sessionUser
-                    (\u . ifM (bind sessionUser
-                                 (\x9 . bind (getIsDoctor w x9)
-                                          (\x8 . return x8)))
-                            (getDoctorPatients u)
-                            defaultDoctorPatients) in
+                    (\u . bind (downgrade (bind
+                                             sessionUser (\x13 . bind
+                                                                   (getIsDoctor
+                                                                      w x13)
+                                                                   (\x12 .
+                                                                     return
+                                                                       x12))))
+                            (\g1 . 
+                              if g1
+                                then getDoctorPatients u
+                                else return Nil)) in
   
   let patients = bind patients1
                    (\p1 . bind patients2 (\p2 .
@@ -378,15 +363,13 @@ listOfPatientsView = \w .
   print w sessionUser (liftM show
                          patients)
 
-(Goals: 7)
-(Measures: 3)
-(Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("HealthWeb.sq",194)])
+(Goals: 5)
+(Measures: 4)
+(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",123),("HealthWeb.sq",194)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-defaultPsychiatristPatients  &         3  &         3  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-defaultDoctorPatients  &         3  &         3  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-showRecordByIdView    &        23  &       316  &             0.00s  &      6.04s  &      6.06s  &       12.11s  \\
-showRecordsForPatientView  &        56  &       349  &             0.03s  &      6.74s  &      6.36s  &       13.14s  \\
+showRecordByIdView    &        23  &       325  &             0.00s  &      1.51s  &      8.65s  &       10.18s  \\
+showRecordsForPatientView  &        56  &       358  &             0.03s  &      2.26s  &      8.90s  &       11.20s  \\
 showAuthoredRecordsView  &        45  &        45  &             0.02s  &      0.00s  &      0.00s  &        0.02s  \\
-updateRecordForm      &        34  &        30  &             0.00s  &      0.15s  &      0.00s  &        0.15s  \\
-listOfPatientsView    &        52  &        96  &             0.03s  &      0.07s  &      0.02s  &        0.13s  \\
-Totals                &       216  &       842  &             0.10s  &     13.01s  &     12.45s  &       25.57s  \\
+updateRecordForm      &        34  &        32  &             0.00s  &      0.88s  &      0.00s  &        0.89s  \\
+listOfPatientsView    &        52  &       108  &             0.04s  &      0.38s  &      0.05s  &        0.48s  \\
+Totals                &       210  &       868  &             0.12s  &      5.04s  &     17.61s  &       22.78s  \\
