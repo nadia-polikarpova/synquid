@@ -108,9 +108,9 @@ recheck eParams tParams p (goal : goals) = do
       if Map.null reqs
               then return ()
               else throwErrorWithDescription $ 
-                    hang 2 (text "Patch verification failed with violations:" $+$ vMapDoc text pretty reqs $+$
-                      text "Probable causes: missing type qualifiers or policy incorrectly depends on another sensitive value"
-                    ) $+$ text "when checking" $+$ pretty finalP    
+                    text "Failed to verify patch" $+$ indent 2 (pretty $ deANF finalP) $+$
+                      text "against type" <+> pretty (gSpec goal) $+$ 
+                      text "Probable causes: patch has no default branch or causes leaky enforcement"
       
 {- Standard Tagged library -}
 
