@@ -5,11 +5,11 @@ showBids = \w . \u . \who .
                                                          (downgrade (bind
                                                                        (getPhase
                                                                           w)
-                                                                       (\x50 .
+                                                                       (\x86 .
                                                                          return
                                                                            (eq
                                                                               Done
-                                                                              x50))))
+                                                                              x86))))
                                                          (\g2 . 
                                                            if g1 || g2
                                                              then getUserBid w
@@ -20,10 +20,10 @@ showBids = \w . \u . \who .
                                                                           (getUserBid
                                                                              w
                                                                              u)
-                                                                          (\x44 .
+                                                                          (\x80 .
                                                                             return
                                                                               (isJust
-                                                                                 x44))))
+                                                                                 x80))))
                                                                     (\g0 . 
                                                                       if g0
                                                                         then
@@ -34,10 +34,10 @@ showBids = \w . \u . \who .
                                                                             (\x4 .
                                                                               return
                                                                                 (fmap
-                                                                                   (\x1 .
+                                                                                   x4
+                                                                                   (\x2 .
                                                                                      return
-                                                                                       zero)
-                                                                                   x4))
+                                                                                       zero)))
                                                                         else
                                                                           return
                                                                             Nothing)))
@@ -52,5 +52,5 @@ showBids = \w . \u . \who .
 (Measures: 4)
 (Policy size: fromList [("9-Auction.sq",32),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showBids              &        38  &       121  &             0.03s  &      0.45s  &      0.34s  &        0.84s  \\
-Totals                &        38  &       121  &             0.03s  &      0.45s  &      0.34s  &        0.84s  \\
+showBids              &        38  &       121  &             0.03s  &      0.80s  &      0.34s  &        1.17s  \\
+Totals                &        38  &       121  &             0.03s  &      0.80s  &      0.34s  &        1.17s  \\

@@ -14,13 +14,12 @@ registerUser = \w . \u . \pw . addUser w u pw
 
 -- Show all users (only pc chair can see!)
 usersView :: World -> World
-usersView = \w . 
+usersView = \w .
   let u = getSessionUser w in
-  if (u == getChair w) then
-    let users = getUsers w in
-    print w u (liftM show users)
-  else
-    w
+  let users = ifM (liftM2 eq u (getChair w)) 
+                (getUsers w) 
+                (return Nil) in
+  print w u (liftM show users)
 
 -- Submit paper
 submitForm :: w: World -> title: String -> [User] -> [User] -> World
@@ -33,9 +32,6 @@ submitForm = \w . \title . \authors . \conflicts .
   w4
 
 -- Search papers
-
-defaultPaperReviewers :: Tagged (List User) <{True}> -- I'm cheating because smt doesn't work
-
 
 searchForm :: w: World -> byAuthor: Maybe String -> byReviewer: Maybe String -> World
 searchForm = \w . \byAuthor . \byReviewer .
@@ -63,6 +59,9 @@ paperView = \w. \pid .
   let conflicts' = ifM noConflict conflicts (return Nil) in
   let out = liftM2 strcat title (liftM2 strcat (liftM show authors') (liftM show conflicts')) in
   print w u out
+  
+emptyReview :: Tagged Review <{True}>
+emptyReview = return (ReviewEntry emptyString emptyString (ReviewScoresEntry 0 0 0 0))  
 
 -- Show reviews for paper
 reviewsView :: World -> PaperId -> World
@@ -76,8 +75,6 @@ reviewsView = \w. \pid.
           (bind (getReviewPaper w rid) (\x. return (pid == x))) -- WHY IS THIS NEEDED instead of
                                                          --  just using pid0 below  \/
           (bind u (\u0. bind (getReviewPaper w rid) (\pid0. bind (getPaperAuthors w pid) (\authors0. return (elem u0 authors0)))))) (getReview w rid) emptyReview) rids'))))
-
-emptyReview :: Tagged Review <{True}>
 
 -- View/change profile
 profileViewGet :: World -> World

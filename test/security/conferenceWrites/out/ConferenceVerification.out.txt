@@ -6,11 +6,10 @@ usersView :: arg0:World -> World
 usersView = \w . 
   let u = getSessionUser w in
   
-  if u == (getChair w)
-    then 
-      let users = getUsers w in
-      print w u (liftM show users)
-    else w
+  let users = ifM (liftM2 eq u
+                     (getChair w)) (getUsers w)
+                (return Nil) in
+  print w u (liftM show users)
 
 submitForm :: w:World -> title:String -> arg1:List User -> arg0:List User -> World
 submitForm = \w . \title .
@@ -134,6 +133,12 @@ paperView = \w . \pid .
                                                conflicts')) in
     print w u out
 
+emptyReview :: Tagged Review <True>
+emptyReview = return
+                (ReviewEntry emptyString
+                   emptyString (ReviewScoresEntry 0
+                                  0 0 0))
+
 reviewsView :: arg1:World -> arg0:PaperId -> World
 reviewsView = \w . \pid . 
     let u = getSessionUser w in
@@ -226,18 +231,19 @@ assignReviewersView = \w .
                                                     reviewer (remove reviewer
                                                                 l))))) w allPids
 
-(Goals: 10)
-(Measures: 3)
-(Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceVerification.sq",0)])
+(Goals: 11)
+(Measures: 4)
+(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceVerification.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        29  &        29  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
+usersView             &        36  &        36  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &       173  &       173  &             0.91s  &      0.00s  &      0.00s  &        0.91s  \\
+searchForm            &       173  &       173  &             0.93s  &      0.00s  &      0.00s  &        0.93s  \\
 paperView             &        99  &        99  &             0.36s  &      0.00s  &      0.00s  &        0.36s  \\
-reviewsView           &       111  &       111  &             0.42s  &      0.00s  &      0.00s  &        0.42s  \\
-profileViewGet        &        66  &        66  &             0.04s  &      0.00s  &      0.00s  &        0.04s  \\
+emptyReview           &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+reviewsView           &       111  &       111  &             0.41s  &      0.00s  &      0.00s  &        0.41s  \\
+profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 assignReviewersView   &        47  &        47  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-Totals                &       637  &       637  &             1.77s  &      0.00s  &      0.00s  &        1.77s  \\
+Totals                &       661  &       661  &             1.81s  &      0.00s  &      0.00s  &        1.81s  \\

@@ -6,10 +6,13 @@ usersView :: arg0:World -> World
 usersView = \w . 
   let u = getSessionUser w in
   
-  let users = ifM (bind (getChair
-                           w) (\x5 . bind u (\x4 . return
-                                                     (eq x5 x4)))) (getUsers w)
-                defaultUsers in
+  let users = bind (downgrade
+                      (bind (getChair w) (\x7 . bind u
+                                                  (\x6 . return (eq x7 x6)))))
+                (\g0 . 
+                  if g0
+                    then getUsers w
+                    else return Nil) in
   print w u (liftM show users)
 
 submitForm :: w:World -> title:String -> arg1:List User -> arg0:List User -> World
@@ -36,58 +39,74 @@ searchForm = \w . \byAuthor .
       
       let pids = filterM (\pid . andM
                                    (ifJust byAuthor (\author . bind
-                                                                 (ifM (bind
-                                                                         (getSessionUser
-                                                                            w)
-                                                                         (\x6 .
-                                                                           bind
-                                                                             (getPaperAuthors
-                                                                                w
-                                                                                pid)
-                                                                             (\x5 .
-                                                                               return
-                                                                                 (elem
-                                                                                    x6
-                                                                                    x5))))
-                                                                    (getPaperAuthors
-                                                                       w pid)
-                                                                    defaultPaperAuthors)
+                                                                 (bind
+                                                                    (downgrade
+                                                                       (bind
+                                                                          (getSessionUser
+                                                                             w)
+                                                                          (\x8 .
+                                                                            bind
+                                                                              (getPaperAuthors
+                                                                                 w
+                                                                                 pid)
+                                                                              (\x7 .
+                                                                                return
+                                                                                  (elem
+                                                                                     x8
+                                                                                     x7)))))
+                                                                    (\g0 . 
+                                                                      if g0
+                                                                        then
+                                                                          getPaperAuthors
+                                                                            w
+                                                                            pid
+                                                                        else
+                                                                          return
+                                                                            Nil))
                                                                  (\cs . return
                                                                           (userFilter
                                                                              w
                                                                              author
                                                                              cs))))
                                    (ifJust byReviewer (\revr . bind
-                                                                 (ifM (andM
-                                                                         (bind
-                                                                            (getSessionUser
-                                                                               w)
-                                                                            (\x18 .
-                                                                              bind
-                                                                                (getPaperConflicts
-                                                                                   w
-                                                                                   pid)
-                                                                                (\x17 .
-                                                                                  return
-                                                                                    (not
-                                                                                       (elem
-                                                                                          x18
-                                                                                          x17)))))
-                                                                         (bind
-                                                                            (getSessionUser
-                                                                               w)
-                                                                            (\x20 .
-                                                                              bind
-                                                                                (getPC
-                                                                                   w)
-                                                                                (\x19 .
-                                                                                  return
-                                                                                    (elem
-                                                                                       x20
-                                                                                       x19)))))
-                                                                    (getPaperReviewers
-                                                                       w pid)
-                                                                    defaultPaperReviewers)
+                                                                 (bind
+                                                                    (downgrade
+                                                                       (andM
+                                                                          (bind
+                                                                             (getSessionUser
+                                                                                w)
+                                                                             (\x22 .
+                                                                               bind
+                                                                                 (getPaperConflicts
+                                                                                    w
+                                                                                    pid)
+                                                                                 (\x21 .
+                                                                                   return
+                                                                                     (not
+                                                                                        (elem
+                                                                                           x22
+                                                                                           x21)))))
+                                                                          (bind
+                                                                             (getSessionUser
+                                                                                w)
+                                                                             (\x24 .
+                                                                               bind
+                                                                                 (getPC
+                                                                                    w)
+                                                                                 (\x23 .
+                                                                                   return
+                                                                                     (elem
+                                                                                        x24
+                                                                                        x23))))))
+                                                                    (\g1 . 
+                                                                      if g1
+                                                                        then
+                                                                          getPaperReviewers
+                                                                            w
+                                                                            pid
+                                                                        else
+                                                                          return
+                                                                            Nil))
                                                                  (\cs . return
                                                                           (userFilter
                                                                              w
@@ -102,26 +121,33 @@ paperView :: arg1:World -> arg0:PaperId -> World
 paperView = \w . \pid . 
     let u = getSessionUser w in
     
-    let title = ifM (bind u (\x7 .
-                         bind (getPaperConflicts w pid)
-                           (\x6 . return (not (elem x7
-                                                 x6))))) (getPaperTitle w pid)
-                  defaultPaperTitle in
+    let title = bind (downgrade
+                        (bind u (\x9 . bind
+                                         (getPaperConflicts w pid) (\x8 .
+                                           return (not (elem x9 x8))))))
+                  (\g0 . 
+                    if g0
+                      then getPaperTitle w pid
+                      else return emptyString) in
     
-    let authors = ifM (bind u
-                         (\x14 . bind (getPaperAuthors w
-                                         pid) (\x13 . return (elem x14
-                                                                x13))))
-                    (getPaperAuthors w pid)
-                    defaultPaperAuthors in
+    let authors = bind (downgrade
+                          (bind u (\x18 . bind
+                                            (getPaperAuthors w pid) (\x17 .
+                                              return (elem x18 x17))))) (\g1 .
+                      
+                      if g1
+                        then getPaperAuthors w pid
+                        else return Nil) in
     
-    let conflicts = ifM (bind u
-                           (\x22 . bind (getPaperConflicts
-                                           w pid) (\x21 . return (not (elem
-                                                                         x22
-                                                                         x21)))))
-                      (getPaperConflicts w pid)
-                      defaultPaperConflicts in
+    let conflicts = bind (downgrade
+                            (bind u (\x28 . bind
+                                              (getPaperConflicts w pid)
+                                              (\x27 . return (not (elem x28
+                                                                     x27))))))
+                      (\g2 . 
+                        if g2
+                          then getPaperConflicts w pid
+                          else return Nil) in
     
     let out = liftM2 strcat title
                 (liftM2 strcat (liftM show
@@ -139,23 +165,39 @@ reviewsView = \w . \pid .
                                  (getReviewPaper w rid) (\p .
                                    return (p == pid))) allRids in
     print w u (liftM show (bind rids
-                             (\rids' . mapM (\rid . ifM (andM
-                                                           (bind (getReviewPaper
-                                                                    w rid)
-                                                              (\x9 . return (eq
-                                                                               pid
-                                                                               x9)))
-                                                           (bind u (\x11 . bind
-                                                                             (getPaperAuthors
-                                                                                w
-                                                                                pid)
-                                                                             (\x10 .
-                                                                               return
-                                                                                 (elem
-                                                                                    x11
-                                                                                    x10)))))
-                                                      (getReview w rid)
-                                                      defaultReview) rids')))
+                             (\rids' . mapM (\rid . bind
+                                                      (downgrade (andM (bind
+                                                                          (getReviewPaper
+                                                                             w
+                                                                             rid)
+                                                                          (\x32 .
+                                                                            return
+                                                                              (eq
+                                                                                 pid
+                                                                                 x32)))
+                                                                    (bind u
+                                                                       (\x34 .
+                                                                         bind
+                                                                           (getPaperAuthors
+                                                                              w
+                                                                              pid)
+                                                                           (\x33 .
+                                                                             return
+                                                                               (elem
+                                                                                  x34
+                                                                                  x33))))))
+                                                      (\g0 . 
+                                                        if g0
+                                                          then getReview w rid
+                                                          else return
+                                                                 (ReviewEntry
+                                                                    emptyString
+                                                                    emptyString
+                                                                    (ReviewScoresEntry
+                                                                       zero zero
+                                                                       zero
+                                                                       zero))))
+                                         rids')))
 
 profileViewGet :: arg0:World -> World
 profileViewGet = \w . 
@@ -218,17 +260,17 @@ assignReviewersView = \w .
                                                                 l))))) w allPids
 
 (Goals: 10)
-(Measures: 3)
-(Policy size: fromList [("../paperWrites/Prelude.sq",20),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
+(Measures: 4)
+(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        44  &             0.01s  &      0.49s  &      0.02s  &        0.53s  \\
+usersView             &        20  &        50  &             0.00s  &      1.20s  &      0.04s  &        1.25s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &        77  &       159  &             0.08s  &      6.44s  &      0.12s  &        6.65s  \\
-paperView             &        53  &       135  &             0.04s  &      7.90s  &      0.08s  &        8.03s  \\
-reviewsView           &        57  &       102  &             0.05s  &      0.49s  &      0.05s  &        0.60s  \\
+searchForm            &        77  &       171  &             0.08s  &      5.73s  &      0.20s  &        6.02s  \\
+paperView             &        53  &       153  &             0.04s  &      7.21s  &      0.13s  &        7.39s  \\
+reviewsView           &        57  &       122  &             0.05s  &      2.34s  &      0.11s  &        2.51s  \\
 profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 assignReviewersView   &        47  &        47  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-Totals                &       432  &       665  &             0.26s  &     15.34s  &      0.28s  &       15.88s  \\
+Totals                &       432  &       721  &             0.25s  &     16.50s  &      0.49s  &       17.24s  \\
