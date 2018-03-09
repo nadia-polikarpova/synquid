@@ -126,10 +126,6 @@ getFreshReviewId :: w: World -> ReviewId
 
 getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
 
-qualifier {x == w, x in y, !(x in y)}
-qualifier {_v == (x in y), _v == !(x in y)}
-qualifier {_v == sessionUser w}
-
 {- Some Strings -}
 
 s_delighted :: String

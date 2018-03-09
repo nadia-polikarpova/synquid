@@ -264,13 +264,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        50  &             0.00s  &      1.20s  &      0.04s  &        1.25s  \\
+usersView             &        20  &        50  &             0.01s  &      1.16s  &      0.04s  &        1.21s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &        77  &       171  &             0.08s  &      5.73s  &      0.20s  &        6.02s  \\
-paperView             &        53  &       153  &             0.04s  &      7.21s  &      0.13s  &        7.39s  \\
-reviewsView           &        57  &       122  &             0.05s  &      2.34s  &      0.11s  &        2.51s  \\
+searchForm            &        77  &       171  &             0.08s  &      5.55s  &      0.20s  &        5.84s  \\
+paperView             &        53  &       153  &             0.04s  &      6.89s  &      0.14s  &        7.07s  \\
+reviewsView           &        57  &       122  &             0.06s  &      2.21s  &      0.10s  &        2.39s  \\
 profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 assignReviewersView   &        47  &        47  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-Totals                &       432  &       721  &             0.25s  &     16.50s  &      0.49s  &       17.24s  \\
+Totals                &       432  &       721  &             0.25s  &     15.82s  &      0.49s  &       16.57s  \\
