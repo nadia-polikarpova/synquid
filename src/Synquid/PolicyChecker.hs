@@ -495,7 +495,7 @@ generateGuards env typ branches = do
     abduceCondition' branch t req = do 
       cUnknown <- Unknown Map.empty <$> freshId "C"
       let isRelevantPred name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf $ head branches))
-      let isRevelantSymb name _ = True -- not $ isConstant name env
+      let isRevelantSymb name _ = not (isConstant name env) || (name `Set.member` (env ^. guards)) -- Only constants allowed are guards
       let env' = over globalPredicates (Map.filterWithKey isRelevantPred) . 
                  over symbols (Map.map (Map.filterWithKey isRevelantSymb)) $ env
       addConstraint $ WellFormedCond env' cUnknown

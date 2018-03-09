@@ -22,5 +22,5 @@ notifyAuthors = \w . \pid .
 (Measures: 4)
 (Policy size: fromList [("7-StateUpdate.sq",57),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-notifyAuthors         &        44  &        69  &             0.01s  &      1.35s  &      0.01s  &        1.38s  \\
-Totals                &        44  &        69  &             0.01s  &      1.35s  &      0.01s  &        1.38s  \\
+notifyAuthors         &        44  &        69  &             0.01s  &      0.75s  &      0.01s  &        0.78s  \\
+Totals                &        44  &        69  &             0.01s  &      0.75s  &      0.01s  &        0.78s  \\
