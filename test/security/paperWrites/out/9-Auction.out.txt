@@ -52,5 +52,5 @@ showBids = \w . \u . \who .
 (Measures: 4)
 (Policy size: fromList [("9-Auction.sq",32),("Prelude.sq",46),("Tagged.sq",123)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showBids              &        38  &       121  &             0.03s  &      0.80s  &      0.34s  &        1.17s  \\
-Totals                &        38  &       121  &             0.03s  &      0.80s  &      0.34s  &        1.17s  \\
+showBids              &        38  &       121  &             0.03s  &      1.15s  &      0.37s  &        1.57s  \\
+Totals                &        38  &       121  &             0.03s  &      1.15s  &      0.37s  &        1.57s  \\

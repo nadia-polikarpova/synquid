@@ -1,5 +1,5 @@
 -- | Type-checker for programs without holes that collects errors
-module Synquid.PolicyChecker (localize, repair, recheck, isDefaultValue) where
+module Synquid.PolicyChecker (localize, repair, recheck) where
 
 import Synquid.Logic
 import Synquid.Type
@@ -113,10 +113,6 @@ recheck eParams tParams p (goal : goals) = do
                       text "Probable causes: patch has no default branch or causes leaky enforcement"
       
 {- Standard Tagged library -}
-
-defaultPrefix = "default"
-isDefaultValue name = take (length defaultPrefix) name == defaultPrefix
-defaultValueOf name = defaultPrefix ++ drop 3 name
 
 getPrefix = "get"
 isDBGetter name = take (length getPrefix) name == getPrefix
@@ -498,8 +494,10 @@ generateGuards env typ branches = do
       
     abduceCondition' branch t req = do 
       cUnknown <- Unknown Map.empty <$> freshId "C"
-      let isRelevant name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf $ head branches))
-      let env' = over globalPredicates (Map.filterWithKey isRelevant) env
+      let isRelevantPred name _ = name `Set.member` (predsOfType typ `Set.union` predsOfType (typeOf $ head branches))
+      let isRevelantSymb name _ = True -- not $ isConstant name env
+      let env' = over globalPredicates (Map.filterWithKey isRelevantPred) . 
+                 over symbols (Map.map (Map.filterWithKey isRevelantSymb)) $ env
       addConstraint $ WellFormedCond env' cUnknown
       addConstraint $ Subtype (addAssumption cUnknown env) t req False ""
       ifte (runInSolver $ solveTypeConstraints)

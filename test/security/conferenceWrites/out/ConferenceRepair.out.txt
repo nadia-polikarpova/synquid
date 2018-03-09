@@ -166,26 +166,21 @@ reviewsView = \w . \pid .
                                    return (p == pid))) allRids in
     print w u (liftM show (bind rids
                              (\rids' . mapM (\rid . bind
-                                                      (downgrade (andM (bind
-                                                                          (getReviewPaper
-                                                                             w
-                                                                             rid)
-                                                                          (\x32 .
-                                                                            return
-                                                                              (eq
-                                                                                 pid
-                                                                                 x32)))
-                                                                    (bind u
-                                                                       (\x34 .
-                                                                         bind
-                                                                           (getPaperAuthors
-                                                                              w
-                                                                              pid)
-                                                                           (\x33 .
-                                                                             return
-                                                                               (elem
-                                                                                  x34
-                                                                                  x33))))))
+                                                      (downgrade (bind u (\x32 .
+                                                                      bind
+                                                                        (getReviewPaper
+                                                                           w
+                                                                           rid)
+                                                                        (\x31 .
+                                                                          bind
+                                                                            (getPaperAuthors
+                                                                               w
+                                                                               x31)
+                                                                            (\x30 .
+                                                                              return
+                                                                                (elem
+                                                                                   x32
+                                                                                   x30))))))
                                                       (\g0 . 
                                                         if g0
                                                           then getReview w rid
@@ -264,13 +259,13 @@ assignReviewersView = \w .
 (Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",123),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        50  &             0.01s  &      1.16s  &      0.04s  &        1.21s  \\
+usersView             &        20  &        50  &             0.01s  &      1.20s  &      0.04s  &        1.26s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &        77  &       171  &             0.08s  &      5.55s  &      0.20s  &        5.84s  \\
-paperView             &        53  &       153  &             0.04s  &      6.89s  &      0.14s  &        7.07s  \\
-reviewsView           &        57  &       122  &             0.06s  &      2.21s  &      0.10s  &        2.39s  \\
+searchForm            &        77  &       171  &             0.09s  &      6.30s  &      0.21s  &        6.61s  \\
+paperView             &        53  &       153  &             0.04s  &      7.91s  &      0.14s  &        8.10s  \\
+reviewsView           &        57  &       112  &             0.05s  &      4.39s  &      0.09s  &        4.55s  \\
 profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 assignReviewersView   &        47  &        47  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-Totals                &       432  &       721  &             0.25s  &     15.82s  &      0.49s  &       16.57s  \\
+Totals                &       432  &       711  &             0.26s  &     19.81s  &      0.50s  &       20.59s  \\
