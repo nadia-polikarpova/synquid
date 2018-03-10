@@ -256,16 +256,16 @@ assignReviewersView = \w .
 
 (Goals: 10)
 (Measures: 4)
-(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",122),("Conference.sq",345),("ConferenceRepair.sq",0)])
+(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",108),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        50  &             0.01s  &      0.06s  &      0.03s  &        0.11s  \\
+usersView             &        20  &        50  &             0.01s  &      0.06s  &      0.01s  &        0.08s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &        77  &       171  &             0.07s  &      1.18s  &      0.17s  &        1.44s  \\
-paperView             &        53  &       153  &             0.03s  &      1.39s  &      0.13s  &        1.56s  \\
-reviewsView           &        57  &       112  &             0.05s  &      0.92s  &      0.09s  &        1.07s  \\
-profileViewGet        &        66  &        66  &             0.03s  &      0.00s  &      0.00s  &        0.03s  \\
+searchForm            &        77  &       171  &             0.04s  &      1.21s  &      0.03s  &        1.29s  \\
+paperView             &        53  &       153  &             0.04s  &      1.39s  &      0.03s  &        1.47s  \\
+reviewsView           &        57  &       112  &             0.02s  &      0.92s  &      0.01s  &        0.96s  \\
+profileViewGet        &        66  &        66  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-assignReviewersView   &        47  &        47  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-Totals                &       432  &       711  &             0.24s  &      3.56s  &      0.44s  &        4.25s  \\
+assignReviewersView   &        47  &        47  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+Totals                &       432  &       711  &             0.14s  &      3.59s  &      0.10s  &        3.84s  \\
