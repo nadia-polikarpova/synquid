@@ -37,8 +37,11 @@ getRecord :: w:World -> rid:RecordId -> Tagged {Record | _v == record w rid} <{
   (isPsychiatrist _0 _1 && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
 }>
 
-defaultRecord :: Record
-redact {defaultRecord}
+-- defaultRecord :: Record
+-- redact {defaultRecord}
+
+removePersonalInfo :: Tagged Record <{False}> -> Tagged Record <{True}>
+redact {removePersonalInfo}
 
 getAllRecordIds :: World -> List RecordId
 

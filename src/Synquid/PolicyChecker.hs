@@ -132,6 +132,14 @@ stripTags (ScalarT (DatatypeT dtName tArgs pArgs) fml) = (ScalarT (DatatypeT dtN
 stripTags (FunctionT x tArg tRes) = FunctionT x (stripTags tArg) (stripTags tRes)
 stripTags t = t
 
+stripTagsSchema (Monotype t) = Monotype $ stripTags t
+stripTagsSchema (ForallT a sch) = ForallT a (stripTagsSchema sch)
+stripTagsSchema (ForallP sig sch) = let 
+                                      sch' = stripTagsSchema sch 
+                                      freePreds = predsOfType $ toMonotype sch'
+                                    in if predSigName sig `Set.member` freePreds 
+                                       then ForallP sig sch' 
+                                       else sch'
       
 {- Localization -}
     
@@ -448,10 +456,10 @@ generateBranches env typ p = do
     strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
     
     bothConstant pVar b1 b2 = not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2) 
-    
+        
     updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol m name sch = if name `Set.member` (env ^. redactions)
-                                then Map.insert name sch m
+                                then Map.insert name (stripTagsSchema sch) m
                                 else m
 
     generateCandidate env' t' = do
@@ -463,7 +471,7 @@ generateBranches env typ p = do
     liftBranch pVar b = do
       let oldEnv = addVariable pVar (typeOf p) env 
       let newEnv = addVariable pVar (stripTags $ typeOf p) strippedEnv 
-      (defs, body) <- liftTerm oldEnv newEnv b -- lift syntactically
+      (defs, body, _) <- liftTerm oldEnv newEnv b -- lift syntactically
       return $ eraseTypes $ deANF $ foldDefs ((pVar, p) : defs) body AnyT
   
 -- | Generate a guard for each of `branches` so that they have type `typ`
@@ -557,13 +565,13 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
       let allConjuncts = Set.toList $ conjunctsOf fml'
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
       writeLog 3 $ text "Generated pure disjunct for condition" <+> pretty fml' <+> pretty conjuncts
-      lifted <- mapM (liftTerm env strippedEnv) conjuncts    
-      let defs = concatMap fst lifted
-      let conjuncts' = map snd lifted
+      lifted <- mapM (liftTerm env strippedEnv) conjuncts
+      writeLog 3 $ text "Generated lifted disjunct" <+> vsep (map (\(defs, p, _) -> pretty defs $+$ pretty p) lifted)
+      let defs = concatMap (view _1) lifted
+      let conjuncts' = map (view _2) lifted
       let liftAndSymb = untyped (PSymbol "andM")
       let conjoin p1 p2 = untyped (PApp (untyped (PApp liftAndSymb p1)) p2)
       let pCond = foldl1 conjoin conjuncts'
-      -- return (defs, pCond)
       (defs', xCond) <- anfE "TT" pCond False
       return (defs ++ defs', xCond)
               
@@ -622,7 +630,7 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
       
 -- | 'liftTerm' @env strippedEnv p@: turn a pure E-term @p@ into a tagged one, 
 -- by binding all lets that have different types in @env@ and @strippedEnv@
-liftTerm :: MonadHorn s => Environment -> Environment -> RProgram -> Explorer s ([(Id, RProgram)], RProgram)  
+liftTerm :: MonadHorn s => Environment -> Environment -> RProgram -> Explorer s ([(Id, RProgram)], RProgram, Set Id)  
 liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do
   p' <- case content def of
           PFun x b -> return p -- Lambda-let: leave as is 
@@ -635,28 +643,35 @@ liftTerm env strippedEnv p@(Program (PLet x def body) typ) = do
                       let FunctionT _ tArg _ = typeOf def
                       let addFX = addVariable fx tArg
                       let addFXTagged = addVariable fx (ScalarT (mkTagged tArg ffalse) ftrue)
-                      (fDefs, fBody') <- liftTerm (addFXTagged env) (addFX strippedEnv) fBody -- TODO: fix
+                      (fDefs, fBody', fArgsToLift) <- liftTerm (addFXTagged env) (addFX strippedEnv) fBody -- TODO: fix
                       let liftedFun = untyped $ PFun fx (foldDefs fDefs fBody' AnyT)
                       let addX = addLetBound x (typeOf def)
-                      (defs', body') <- liftTerm (addX env) (addX strippedEnv) body
-                      return ((x, liftedFun):defs', body')
+                      (defs', body', argsToLift') <- liftTerm (addX env) (addX strippedEnv) body
+                      return ((x, liftedFun):defs', body', fArgsToLift `Set.union` argsToLift')
         _ -> do
-              let f = head $ symbolList def
+              let (f : argVars) = symbolList def
               let arity = length (symbolList def) - 1
               let addX = addLetBound x (typeOf def)
-              (defs', body') <- liftTerm (addX env) (addX strippedEnv) body
-              let realType = case lookupSymbol f arity env of
+              let realType = toMonotype $ case lookupSymbol f arity env of
                             Nothing -> error $ unwords ["liftTerm: cannot find", f, "in original environment"]
                             Just t -> t
-              let strippedType = case lookupSymbol f arity strippedEnv of
+              let strippedType = toMonotype $ case lookupSymbol f arity strippedEnv of
                                 Nothing -> error $ unwords ["liftTerm: cannot find", f, "in stripped environment"]
-                                Just t -> t      
-              if realType == strippedType
-                then return ((x, def):defs', body') -- This definition hasn't been stripped: leave as is
-                else do -- This definition has been stripped: turn into a bind
-                  y <- freshVar env "x"
-                  let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
-                  return ([(x, def)], mkBind (untyped (PSymbol x)) y body'')
+                                Just t -> t
+              let realArgs = allArgTypes $ realType
+              let strippedArgs = allArgTypes $ strippedType
+              let argsToLift = Set.fromList $ map fst $ filter (\(_, (t, t')) -> t /= t') (zip argVars $ (zip realArgs strippedArgs))
+                                
+              (defs', body', argsToLift') <- liftTerm (addX env) (addX strippedEnv) body
+              let allArgsToLift = argsToLift `Set.union` argsToLift'
+              if realType == strippedType || x `Set.member` argsToLift'
+                then return ((x, def):defs', body', allArgsToLift) -- This definition hasn't been stripped: leave as is
+                else if isSymbol x body
+                      then return ([], def, argsToLift) -- This definition has been stripped, but skip the redundant bind
+                      else do -- This definition has been stripped: turn into a bind
+                        y <- freshVar env "x"
+                        let body'' = programSubstituteSymbol x (untyped (PSymbol y)) (foldDefs defs' body' AnyT)
+                        return ([(x, def)], mkBind (untyped (PSymbol x)) y body'', allArgsToLift)
           
     liftArgs (arg:args) = 
       if allSymbols env Map.! arg == allSymbols strippedEnv Map.! arg
@@ -678,8 +693,8 @@ liftTerm env strippedEnv p@(Program (PSymbol name) _) = do
   if realType == strippedType
     then do
       tmp <- freshId "TT"
-      return ([(tmp, mkReturn p)], untyped $ PSymbol tmp)
-    else return $ ([], p)
+      return ([(tmp, mkReturn p)], untyped $ PSymbol tmp, Set.empty)
+    else return $ ([], p, Set.empty)
 
 mkReturn :: RProgram -> RProgram
 mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)  
