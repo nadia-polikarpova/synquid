@@ -318,11 +318,11 @@ listOfPatientsView = \w .
 
 (Goals: 5)
 (Measures: 4)
-(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",123),("HealthWeb.sq",194)])
+(Policy size: fromList [("../paperWrites/Prelude.sq",46),("../paperWrites/Tagged.sq",122),("HealthWeb.sq",194)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showRecordByIdView    &        23  &       294  &             0.00s  &      1.25s  &      5.32s  &        6.59s  \\
-showRecordsForPatientView  &        56  &       327  &             0.03s  &      2.12s  &      5.42s  &        7.59s  \\
+showRecordByIdView    &        23  &       294  &             0.01s  &      1.25s  &      4.80s  &        6.07s  \\
+showRecordsForPatientView  &        56  &       327  &             0.03s  &      2.13s  &      4.91s  &        7.08s  \\
 showAuthoredRecordsView  &        45  &        45  &             0.02s  &      0.00s  &      0.00s  &        0.02s  \\
-updateRecordForm      &        34  &        36  &             0.00s  &      1.10s  &      0.00s  &        1.10s  \\
-listOfPatientsView    &        52  &        94  &             0.04s  &      0.27s  &      0.03s  &        0.35s  \\
-Totals                &       210  &       796  &             0.12s  &      4.76s  &     10.78s  &       15.67s  \\
+updateRecordForm      &        34  &        36  &             0.01s  &      1.10s  &      0.00s  &        1.11s  \\
+listOfPatientsView    &        52  &        94  &             0.04s  &      0.04s  &      0.02s  &        0.11s  \\
+Totals                &       210  &       796  &             0.12s  &      4.53s  &      9.74s  &       14.41s  \\

@@ -8,7 +8,7 @@ data World
 data Tagged a <visibleTo :: World -> User -> Bool>-
 measure content :: Tagged a -> a
 
-return :: <rp :: World -> User -> Bool> . x: a -> Tagged {a | _v == x} <rp>
+return :: x: a -> Tagged {a | _v == x} <{True}>
 
 bind :: <bp :: World -> User -> Bool> . <bf :: a -> b -> Bool> .
   x: Tagged a <bp> -> (u: a -> Tagged {b | bf u _v} <bp>) -> Tagged {b | bf (content x) _v} <bp>  
