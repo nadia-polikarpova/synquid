@@ -406,7 +406,7 @@ parseDo = do
       return (x, term)
       
     mkBindOrIf (x, term) rest = case content term of
-      PIf c t e -> untyped $ PIf c (mkBind (x, t) rest) (mkBind (x, e) rest)
+      PIf c t e -> untyped $ PIf c (mkBindOrIf (x, t) rest) (mkBindOrIf (x, e) rest)
       otherwise -> mkBind (x, term) rest
 
     mkBind (x, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "bind") term) (untyped $ PFun x rest)
