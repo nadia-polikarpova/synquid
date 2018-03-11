@@ -60,7 +60,7 @@ reviewsView = \w. \pid.
   let allRids = getAllReviews w in
   let rids =
     filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
-  print w u (liftM show (bind rids (\rids'. (mapM (\rid . (getReview w rid)) rids'))))
+  print w u (liftM show (bind rids (\rids'. (mapM (\rid . bind (getReview w rid) (\rev. bind (getReviewAuthor w rid) (\auth. return [show rev, show auth]))) rids'))))
 
 -- View/change profile
 profileViewGet :: World -> World
