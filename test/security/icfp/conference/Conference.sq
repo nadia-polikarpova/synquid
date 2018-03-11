@@ -24,6 +24,15 @@ data ReviewScores where
   
 redact {ReviewScoresEntry}  
 
+data Reviewer where
+  ReviewerEntry :: idx: Int -> user: User -> Reviewer
+
+measure ruser :: Reviewer -> User where
+  ReviewerEntry i u -> u
+
+anonymousReviewer :: Tagged Reviewer <{False}> -> Tagged Reviewer <{True}>
+redact {anonymousReviewer}
+
 data Review where
   ReviewEntry :: time: String -> contents: String -> scores: ReviewScores -> Review
   
@@ -108,9 +117,10 @@ setPaperReviewers :: w: World ->  pid: PaperId
    -> {World | users _v == users w && passwords _v == passwords w}
 
 
-predicate reviewAuthor :: World -> Map ReviewId User
-getReviewAuthor :: w: World -> rid: ReviewId -> Tagged {User | _v == (reviewAuthor w)[[rid]]} <{_1 == chair _0}>
-setReviewAuthor :: w: World -> rid: ReviewId -> Tagged User <{_1 == chair _0}> -> World
+predicate reviewAuthor :: World -> Map ReviewId Reviewer
+getReviewAuthor :: w: World -> rid: ReviewId -> Tagged {Reviewer | _v == (reviewAuthor w)[[rid]]} <{_1 == chair _0}>
+--   I want this:   <{_1 == chair _0 || _1 == ruser ((reviewAuthor _0)[[rid]])}>
+setReviewAuthor :: w: World -> rid: ReviewId -> Tagged Reviewer <{_1 == chair _0}> -> World
 
 predicate reviewPaper :: World -> Map ReviewId PaperId
 getReviewPaper :: w: World -> rid: ReviewId -> Tagged {PaperId | _v == (reviewPaper w)[[rid]]} <{True}>
