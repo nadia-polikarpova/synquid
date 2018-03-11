@@ -38,8 +38,9 @@ localize isRecheck eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do
+      writeLog 2 (pretty $ gImpl goal)      
       aImpl <- aNormalForm "T" (gImpl goal)
-      writeLog 2 (pretty aImpl)      
+      writeLog 2 (text "A Normal Form" $+$ pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }
       labels <- runInSolver getViolatingLabels
