@@ -445,7 +445,7 @@ generateBranches env typ p = do
     branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace)) 
                        . over (_1 . eGuessDepth) (const 2)
                        ) $ 
-            (nubBy (bothConstant pVar) . filter (not . isSymbol pVar)) <$> generateMany (generateCandidate env' pureGoal)
+            (sortBy (occursMore pVar) . nubBy (bothConstant pVar) . filter (not . isSymbol pVar)) <$> generateMany (generateCandidate env' pureGoal)
     writeLog 3 $ text "Generated pure branches" $+$ vsep (map (\b -> pretty b <+> text "::" <+> pretty (typeOf b)) branches)
         
     anfBranches <- mapM (aNormalForm "TB") branches 
@@ -456,7 +456,9 @@ generateBranches env typ p = do
   where    
     strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
     
-    bothConstant pVar b1 b2 = not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2) 
+    bothConstant pVar b1 b2 = not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2)
+    
+    occursMore pVar b1 b2 = compare (pVar `Set.member` symbolsOf b2) (pVar `Set.member` symbolsOf b1)
         
     updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
     updateSymbol m name sch = if name `Set.member` (env ^. redactions)
@@ -479,6 +481,7 @@ generateBranches env typ p = do
 generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> Explorer s ([(Id, RProgram)], RProgram)  
 generateGuards env typ branches = do
   guardedBranches <- catMaybes <$> mapM abduceCondition branches -- Abduce a guard for each branch (original term is the head, then simpler to more complex)
+  writeLog 3 $ text "Generated guarded branches" $+$ vsep (map pretty guardedBranches)
   sortedBranches <- (snd . removeRedundantDisjuncts) <$> 
                     foldM insertBranch [head guardedBranches] (tail guardedBranches) -- Sort branches by their guards, from weakest to strongest
   writeLog 3 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches)

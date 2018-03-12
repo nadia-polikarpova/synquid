@@ -1,0 +1,45 @@
+{- Datatypes -}
+
+data Phase where
+  Bidding :: Phase
+  Done :: Phase  
+guard {Bidding, Done}
+
+{- Sensitive data and policies -}   
+
+getAllParticipants :: w: World -> [User]
+
+-- | Auction phase (public)
+predicate phase :: World -> Phase
+getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
+
+-- | User bid (fully visible to the user themselves and once the phase is done; partially visible to all users who have bid)
+predicate hasBid :: World -> Map User Bool
+getBid :: w: World -> u: User -> 
+  Tagged { Maybe (Tagged Int <{ phase _0 == Done || _1 == u }>) | just _v == (hasBid w)[[u]] } 
+    <{ phase _0 == Done || _1 == u || (hasBid _0)[[_1]]}>
+setBid :: w: World -> u: User 
+   -> b: Tagged (Maybe (Tagged Int <{ phase _0 == Done || _1 == u }>))<{ phase _0 == Done || _1 == u || (hasBid _0)[[_1]]}>
+   -> {World | (hasBid _v)[[u]] == just (content b) && phase _v == phase w}
+    
+  
+{- Client code -}
+
+setIfNothing :: <p :: World -> User -> Bool> . x:Int -> m:Maybe (Tagged Int <p>) -> {Maybe (Tagged Int <p>) | just _v}
+setIfNothing = \x . \m . maybe (Just (return x)) (\y . Just y) m
+  
+-- | Place `client`s bid and then show them all bids
+-- | Repair: for getBid, check that phase is done or client is p,
+--           otherwise then apply `fmap (const 0)`, since we already know that client has bid
+placeBid :: World -> User -> Int -> World
+placeBid = \w . \client . \b .
+  let showParticipant = \p . 
+    do mB <- getBid w p
+       maybe (return emptyString) (\x . liftM show x) mB in
+  let out = liftM unlines (mapM showParticipant (getAllParticipants w)) in
+  let newBid = do
+                mB <- getBid w client
+                return (setIfNothing b mB) in
+  let w' = setBid w client newBid in
+  print w' (return client) out  
+  
