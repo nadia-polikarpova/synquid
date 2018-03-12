@@ -4,20 +4,20 @@ showBids = \w . \client .
                                  (bind (downgrade (return (eq p
                                                              client))) (\g1 .
                                       bind (downgrade (bind (getPhase
-                                                               w) (\x86 . return
+                                                               w) (\x50 . return
                                                                             (eq
                                                                                Done
-                                                                               x86))))
+                                                                               x50))))
                                         (\g2 . 
                                           if g1 || g2
                                             then getBid w p
                                             else bind (downgrade (bind
                                                                     (getBid w
                                                                        client)
-                                                                    (\x80 .
+                                                                    (\x44 .
                                                                       return
                                                                         (isJust
-                                                                           x80))))
+                                                                           x44))))
                                                    (\g0 . 
                                                      if g0
                                                        then bind (getBid w p)
@@ -40,5 +40,5 @@ showBids = \w . \client .
 (Measures: 4)
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("4-Auction.sq",32)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showBids              &        48  &       131  &             0.03s  &      0.83s  &      0.11s  &        0.98s  \\
-Totals                &        48  &       131  &             0.03s  &      0.83s  &      0.11s  &        0.98s  \\
+showBids              &        48  &       131  &             0.03s  &      0.50s  &      0.11s  &        0.65s  \\
+Totals                &        48  &       131  &             0.03s  &      0.50s  &      0.11s  &        0.65s  \\

@@ -10,10 +10,10 @@ placeBid = \w . \client . \b .
                                                                client p)))
                                       (\g0 . bind (downgrade (bind
                                                                 (getPhase w)
-                                                                (\x82 . return
+                                                                (\x65 . return
                                                                           (eq
                                                                              Done
-                                                                             x82))))
+                                                                             x65))))
                                                (\g1 . 
                                                  if g0 || g1
                                                    then getBid w p
@@ -44,5 +44,5 @@ placeBid = \w . \client . \b .
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("5-StateUpdate.sq",71)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 setIfNothing          &        16  &        16  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-placeBid              &        74  &       132  &             0.07s  &      0.81s  &      0.04s  &        0.92s  \\
-Totals                &        90  &       148  &             0.08s  &      0.81s  &      0.04s  &        0.93s  \\
+placeBid              &        74  &       132  &             0.07s  &      0.64s  &      0.04s  &        0.75s  \\
+Totals                &        90  &       148  &             0.08s  &      0.64s  &      0.04s  &        0.76s  \\
