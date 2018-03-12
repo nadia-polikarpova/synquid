@@ -1,0 +1,29 @@
+sendPasswordReminder :: arg1:World -> arg0:User -> World
+sendPasswordReminder = \w . \u .
+    
+    let preview = liftM2 strcat
+                    (getUserName w u) (liftM show
+                                         (bind (downgrade (bind (getChair
+                                                                   w) (\x19 .
+                                                               return (eq u
+                                                                         x19))))
+                                            (\g0 . 
+                                              if g0
+                                                then getUserPassword w u
+                                                else mask (getUserPassword w
+                                                             u)))) in
+    
+    let message = liftM2 strcat
+                    (getUserName w u) (liftM show
+                                         (getUserPassword w u)) in
+    
+    let w' = print w (getChair w)
+               preview in
+    print w' (return u) message
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("9-HotCRP.sq",7)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+sendPasswordReminder  &        61  &        90  &             0.02s  &      0.01s  &      0.00s  &        0.05s  \\
+Totals                &        61  &        90  &             0.02s  &      0.01s  &      0.00s  &        0.05s  \\
