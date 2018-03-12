@@ -1,4 +1,4 @@
-{- Searching by sensitive value: self-referential policy inside a filter -}
+{- Sending a message to multiple viewers, viewers are sensitive -}
 
 {- Datatypes -}
 
@@ -35,7 +35,7 @@ getPaperAuthors :: w: World -> p: PaperId ->
     <{_1 in (paperAuthors _0)[[p]] || phase _0 == Done}>
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{phase _0 == Done}>
+getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{_1 in (paperAuthors _0)[[p]] && phase _0 == Done}>
 
 -- | All papers in the conference
 getAllPaperIds :: w: World -> Tagged [PaperId] <{True}>
@@ -44,19 +44,11 @@ redact {NoDecision}
 
 {- Client code -}
   
--- | Show `client` all their accepted papers
--- | Repair: for `getPaperStatus` inside `isMyAccepted` check that phase is Done, otherwise return NoDecision;
---           note how Lifty can determine that the author check is okay.
-showMyAcceptedPapers :: World -> User -> World
-showMyAcceptedPapers = \w . \client .
-  let isMyAccepted = \p . 
-    do auts <- getPaperAuthors w p
-       st <- getPaperStatus w p
-       return (elem client auts && st == Accepted) in
-  let out = 
-    do allPaperIDs <- getAllPaperIds w
-       paperIDs <- filterM isMyAccepted allPaperIDs
-       titles <- mapM (\p . getPaperTitle w p) paperIDs
-       return (unlines titles) in 
-  print w (return client) out
+-- | Send status notification to authors
+-- | Repair: check that phase is Done (we already know viewer is an author)
+notifyAuthors :: w: World -> p: PaperId -> World
+notifyAuthors = \w . \p .
+  let status = getPaperStatus w p in
+  let authors = getPaperAuthors w p in
+  printAll w authors (liftM show status)
   
