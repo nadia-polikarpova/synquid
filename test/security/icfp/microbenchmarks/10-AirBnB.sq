@@ -14,15 +14,16 @@ getAdmin :: w: World -> Tagged {User | _v == admin w} <{True}>
 
 -- | Message sender
 predicate sender :: World -> Map MessageId User
-getSender :: w: World -> m: MessageId -> Tagged {User | _v == (sender w)[[m]]} <{True}>
+getSender :: w: World -> m: MessageId -> Tagged {User | _v == (sender w)[[m]] && _v != (recipient w)[[m]]} <{True}>
 
 -- | Message recipient
 predicate recipient :: World -> Map MessageId User
-getRecipient :: w: World -> m: MessageId -> Tagged {User | _v == (recipient w)[[m]]} <{True}>
+getRecipient :: w: World -> m: MessageId -> Tagged {User | _v == (recipient w)[[m]] && _v != (sender w)[[m]]} <{True}>
 
 -- | Message text (only visible to the admin and the sender)
 getText :: w: World -> m: MessageId -> Tagged String <{_1 == admin _0 || _1 == (sender _0)[[m]]}>
 
+-- | Scrape phone numbers from the message, making it visible to the recipient
 scrapePhoneNumbers :: m: MessageId -> Tagged String <{_1 == admin _0 || _1 == (sender _0)[[m]]}>
                                    -> Tagged String <{_1 == admin _0 || _1 == (sender _0)[[m]] || _1 == (recipient _0)[[m]]}>
 
@@ -30,10 +31,11 @@ redact {scrapePhoneNumbers}
 
 {- Client code -}
   
--- | Send `u` a reminder of their password on behalf on the chair
--- | Repair: in preview, check if u is chair, and otherwise mask the password
-viewMessages :: World -> User -> World
-viewMessages = \w . \client .
+-- | View all client's messages.
+-- | Repair: in viewMessage, check if client is admin (client cannot be sender as per refinement on getRecipient)
+--           scraping the message is enough, since we know that client is recipient
+viewInbox :: World -> User -> World
+viewInbox = \w . \client .
   let viewMessage = \m .
         do to <- getRecipient w m
            if to == client
