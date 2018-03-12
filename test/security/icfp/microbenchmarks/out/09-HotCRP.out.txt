@@ -23,7 +23,7 @@ sendPasswordReminder = \w . \u .
 
 (Goals: 1)
 (Measures: 4)
-(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("09-HotCRP.sq",7)])
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("09-HotCRP.sq",7)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 sendPasswordReminder  &        61  &        90  &             0.02s  &      0.01s  &      0.00s  &        0.05s  \\
 Totals                &        61  &        90  &             0.02s  &      0.01s  &      0.00s  &        0.05s  \\
