@@ -1,0 +1,39 @@
+{- Sorting by sensitive value + negative self-referential policies -}
+
+{- Datatypes -}
+
+data PaperId
+
+{- Sensitive data and policies -}
+
+-- | Paper title (public)
+getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
+
+-- | Paper conflicts (public)
+predicate paperConflicts :: World -> Map PaperId (Set User)
+getPaperConflicts :: w: World -> pid: PaperId 
+                        -> Tagged {List User | elems _v == (paperConflicts w)[[pid]]} <{!(_1 in (paperConflicts _0)[[pid]])}>
+
+-- | Paper score (only visible if not in conflict)
+getPaperScore :: w: World -> pid: PaperId -> Tagged Int <{!(_1 in (paperConflicts _0)[[pid]])}>
+
+-- | All papers in the conference
+getAllPaperIds :: w: World -> Tagged [PaperId] <{True}>  
+
+{- Client code -}
+  
+-- | Sort papers by their score.
+-- | Repair: inside cmpScore, check that u is not conflicted with pid1/2
+sortPapersByScore :: World -> User -> World
+sortPapersByScore = \w . \client .
+  let cmpScore = \pid1. \pid2.
+                  do x1 <- getPaperScore w pid1
+                     x2 <- getPaperScore w pid2
+                     return (x1 <= x2)
+                  in
+  let out = do pids <- getAllPaperIds w
+               sortedPids <- sortByM cmpScore pids
+               titles <- mapM (getPaperTitle w) sortedPids
+               return (unlines titles)
+            in
+  print w (return client) out  
