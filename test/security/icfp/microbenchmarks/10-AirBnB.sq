@@ -1,4 +1,10 @@
-{- AirBnB bug: they scrape phone numbers from user messages, but forgot to do so in the preview  -}
+{- 
+  AirBnB bug: they scrape phone numbers from user messages, but forgot to do so in the preview.
+  This example features a custom redaction function that makes a message text visible to the recipient,
+  but not completely public.
+  It also showcases expressive functional reasoning with higher-order functions,
+  since correctness depends on the argument of filterM.
+-}
 
 {- Datatypes -}
 
@@ -6,7 +12,7 @@ data MessageId
 
 {- Sensitive data and policies -}
 
-getAllMessageIds :: w: World -> [MessageId]
+getAllMessageIDs :: w: World -> [MessageId]
 
 -- | AirBnB admin
 predicate admin :: World -> User
@@ -32,15 +38,18 @@ redact {scrapePhoneNumbers}
 {- Client code -}
   
 -- | View all client's messages.
--- | Repair: in viewMessage, check if client is admin (client cannot be sender as per refinement on getRecipient)
---           scraping the message is enough, since we know that client is recipient
+-- | Repair: inside the first argument of mapM, check if client is admin (client cannot be sender as per refinement on getRecipient),
+--           and otherwise scrape the message.
+--           To determine that scraping the message is enough, we need to know that client is recipient for all messages in myMIDs,
+--           which we infer from the type of filterM
 viewInbox :: World -> User -> World
 viewInbox = \w . \client .
-  let viewMessage = \m .
+  let isMyMessage = \m .
         do to <- getRecipient w m
-           if to == client
-            then getText w m
-            else return emptyString in
-  let out = liftM unlines (mapM viewMessage (getAllMessageIds w)) in
-  print w (return client) out
+           return (to == client) in
+  let inbox = 
+        do myMIDs <- filterM isMyMessage (getAllMessageIDs w) 
+           messages <- mapM (\m . getText w m) myMIDs 
+           return (unlines messages) in 
+  print w (return client) inbox
   
