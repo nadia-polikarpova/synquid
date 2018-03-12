@@ -30,8 +30,9 @@ getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
 
 -- | Paper authors (only visible to themselves or when phase is done)
 predicate paperAuthors :: World -> Map PaperId (Set User)
-getPaperAuthors :: w: World -> pid: PaperId -> 
-  Tagged {List User | elems _v == (paperAuthors w)[[pid]]} <{_1 in (paperAuthors _0)[[pid]] || phase _0 == Done}>
+getPaperAuthors :: w: World -> p: PaperId -> 
+  Tagged {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
+    <{_1 in (paperAuthors _0)[[p]] || phase _0 == Done}>
 
 -- | Paper status (only visible when phase is done)
 getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{phase _0 == Done}>
