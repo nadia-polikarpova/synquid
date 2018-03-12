@@ -1,0 +1,44 @@
+{- AirBnB bug: they scrape phone numbers from user messages, but forgot to do so in the preview  -}
+
+{- Datatypes -}
+
+data MessageId
+
+{- Sensitive data and policies -}
+
+getAllMessageIds :: w: World -> [MessageId]
+
+-- | AirBnB admin
+predicate admin :: World -> User
+getAdmin :: w: World -> Tagged {User | _v == admin w} <{True}>
+
+-- | Message sender
+predicate sender :: World -> Map MessageId User
+getSender :: w: World -> m: MessageId -> Tagged {User | _v == (sender w)[[m]]} <{True}>
+
+-- | Message recipient
+predicate recipient :: World -> Map MessageId User
+getRecipient :: w: World -> m: MessageId -> Tagged {User | _v == (recipient w)[[m]]} <{True}>
+
+-- | Message text (only visible to the admin and the sender)
+getText :: w: World -> m: MessageId -> Tagged String <{_1 == admin _0 || _1 == (sender _0)[[m]]}>
+
+scrapePhoneNumbers :: m: MessageId -> Tagged String <{_1 == admin _0 || _1 == (sender _0)[[m]]}>
+                                   -> Tagged String <{_1 == admin _0 || _1 == (sender _0)[[m]] || _1 == (recipient _0)[[m]]}>
+
+redact {scrapePhoneNumbers}
+
+{- Client code -}
+  
+-- | Send `u` a reminder of their password on behalf on the chair
+-- | Repair: in preview, check if u is chair, and otherwise mask the password
+viewMessages :: World -> User -> World
+viewMessages = \w . \client .
+  let viewMessage = \m .
+        do to <- getRecipient w m
+           if to == client
+            then getText w m
+            else return emptyString in
+  let out = liftM unlines (mapM viewMessage (getAllMessageIds w)) in
+  print w (return client) out
+  
