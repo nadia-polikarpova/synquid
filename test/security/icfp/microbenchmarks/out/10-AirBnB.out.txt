@@ -1,27 +1,42 @@
 viewInbox :: arg1:World -> arg0:User -> World
 viewInbox = \w . \client . 
-    let viewMessage = \m . bind
-                             (getRecipient w m) (\to . 
-                               if to == client
-                                 then bind (downgrade (bind
-                                                         (getAdmin w) (\x29 .
-                                                           return (eq client
-                                                                     x29))))
-                                        (\g0 . 
-                                          if g0
-                                            then getText w m
-                                            else scrapePhoneNumbers m
-                                                   (getText w m))
-                                 else return emptyString) in
+    let isMyMessage = \m . bind
+                             (getRecipient w m) (\to . return
+                                                         (to == client)) in
     
-    let out = liftM unlines (mapM
-                               viewMessage (getAllMessageIds
-                                              w)) in
-    print w (return client) out
+    let inbox = bind (filterM
+                        isMyMessage (getAllMessageIDs
+                                       w)) (\myMIDs . bind (mapM (\m .
+                                                                bind (downgrade
+                                                                        (bind
+                                                                           (getAdmin
+                                                                              w)
+                                                                           (\x29 .
+                                                                             return
+                                                                               (eq
+                                                                                  client
+                                                                                  x29))))
+                                                                  (\g0 . 
+                                                                    if g0
+                                                                      then
+                                                                        getText
+                                                                          w m
+                                                                      else
+                                                                        scrapePhoneNumbers
+                                                                          m
+                                                                          (getText
+                                                                             w
+                                                                             m)))
+                                                              myMIDs)
+                                                        (\messages . return
+                                                                       (unlines
+                                                                          messages)))
+      in
+    print w (return client) inbox
 
 (Goals: 1)
 (Measures: 4)
-(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("10-AirBnB.sq",70)])
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("10-AirBnB.sq",70)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-viewInbox             &        48  &        79  &             0.01s  &      0.03s  &      0.00s  &        0.05s  \\
-Totals                &        48  &        79  &             0.01s  &      0.03s  &      0.00s  &        0.05s  \\
+viewInbox             &        60  &        91  &             0.01s  &      0.02s  &      0.00s  &        0.05s  \\
+Totals                &        60  &        91  &             0.01s  &      0.02s  &      0.00s  &        0.05s  \\
