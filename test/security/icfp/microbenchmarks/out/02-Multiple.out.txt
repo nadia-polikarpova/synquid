@@ -72,7 +72,7 @@ showSession = \w . \client .
 
 (Goals: 1)
 (Measures: 4)
-(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("2-Multiple.sq",12)])
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("02-Multiple.sq",12)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showSession           &       100  &       150  &             0.01s  &      0.16s  &      0.01s  &        0.19s  \\
-Totals                &       100  &       150  &             0.01s  &      0.16s  &      0.01s  &        0.19s  \\
+showSession           &       100  &       150  &             0.02s  &      0.15s  &      0.01s  &        0.19s  \\
+Totals                &       100  &       150  &             0.02s  &      0.15s  &      0.01s  &        0.19s  \\

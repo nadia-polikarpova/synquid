@@ -100,7 +100,7 @@ recheck eParams tParams p (goal : goals) = do
     Right () -> recheck eParams tParams p goals
   where
     go goal = do
-      aImpl <- aNormalForm "T" (gImpl goal)
+      aImpl <- aNormalForm "TR" (gImpl goal)
       writeLog 2 (pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }

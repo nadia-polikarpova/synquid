@@ -1,0 +1,32 @@
+viewMessages :: arg1:World -> arg0:User -> World
+viewMessages = \w . \client . 
+    let viewMessage = \m . bind
+                             (getRecipient w m) (\to . 
+                               if to == client
+                                 then bind (downgrade (bind
+                                                         (getSender w m) (\x30 .
+                                                           return (eq to x30))))
+                                        (\g0 . bind (downgrade (bind
+                                                                  (getAdmin w)
+                                                                  (\x34 . return
+                                                                            (eq
+                                                                               client
+                                                                               x34))))
+                                                 (\g1 . 
+                                                   if g0 || g1
+                                                     then getText w m
+                                                     else scrapePhoneNumbers m
+                                                            (getText w m)))
+                                 else return emptyString) in
+    
+    let out = liftM unlines (mapM
+                               viewMessage (getAllMessageIds
+                                              w)) in
+    print w (return client) out
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("10-AirBnB.sq",56)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+viewMessages          &        48  &       105  &             0.01s  &      0.05s  &      0.01s  &        0.08s  \\
+Totals                &        48  &       105  &             0.01s  &      0.05s  &      0.01s  &        0.08s  \\
