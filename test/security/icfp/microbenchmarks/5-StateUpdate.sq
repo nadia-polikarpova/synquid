@@ -1,3 +1,5 @@
+{- Auction with state update between retrieval and print -}
+
 {- Datatypes -}
 
 data Phase where

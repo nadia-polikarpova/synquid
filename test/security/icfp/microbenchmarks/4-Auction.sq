@@ -1,3 +1,5 @@
+{- Auction: nontrivial redaction -}
+
 {- Datatypes -}
 
 data Phase where

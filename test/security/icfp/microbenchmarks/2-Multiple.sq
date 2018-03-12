@@ -29,7 +29,7 @@ getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
 getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
 
 -- | Paper authors (only visible when phase is done)
-getPaperAuthors :: w: World -> p: PaperId -> Tagged (List User) <{phase _0 == Done}>
+getPaperAuthors :: w: World -> p: PaperId -> Tagged [User] <{phase _0 == Done}>
 
 -- | Paper status (only visible when phase is done)
 getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{phase _0 == Done}>

@@ -1,0 +1,43 @@
+sortPapersByScore :: arg1:World -> arg0:User -> World
+sortPapersByScore = \w .
+  \client . 
+    let cmpScore = \pid1 . \pid2 .
+          bind (bind (downgrade (bind
+                                   (getPaperConflicts w pid1)
+                                   (\x7 . return (not (elem client
+                                                         x7))))) (\g0 . 
+                    if g0
+                      then getPaperScore w pid1
+                      else return zero)) (\x1 . bind
+                                                  (bind (downgrade (bind
+                                                                      (getPaperConflicts
+                                                                         w pid2)
+                                                                      (\x15 .
+                                                                        return
+                                                                          (not
+                                                                             (elem
+                                                                                client
+                                                                                x15)))))
+                                                     (\g1 . 
+                                                       if g1
+                                                         then getPaperScore w
+                                                                pid2
+                                                         else return zero))
+                                                  (\x2 . return (x1 <= x2))) in
+    
+    let out = bind (getAllPaperIds
+                      w) (\pids . bind (sortByM
+                                          cmpScore pids) (\sortedPids .
+                                      bind (mapM (getPaperTitle w)
+                                              sortedPids) (\titles . return
+                                                                       (unlines
+                                                                          titles))))
+      in
+    print w (return client) out
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("6-Sort.sq",21)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+sortPapersByScore     &        72  &       130  &             0.01s  &      0.20s  &      0.01s  &        0.23s  \\
+Totals                &        72  &       130  &             0.01s  &      0.20s  &      0.01s  &        0.23s  \\
