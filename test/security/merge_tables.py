@@ -76,12 +76,12 @@ MICRO_TABLES = ["paperWrites/out/1-Basic.out.txt",
                 "paperWrites/out/7-StateUpdate.out.txt",
                 "paperWrites/out/8-ProtectWrite.out.txt"]
 
-CONF_TABLES = ["conferenceWrites/out/ConferenceRepair.out.txt", 
-               "conferenceWrites/out/ConferenceVerification.out.txt"]
+CONF_TABLES = ["icfp/conference/out/ConferenceRepair.out.txt", 
+               "icfp/conference/out/ConferenceVerification.out.txt"]
 
-GRADR_TABLES = ["gradr/out/gradr.out.txt"]
+GRADR_TABLES = ["icfp/gradr/out/gradr.out.txt"]
 
-HEALTH_TABLES = ["health/out/HealthWeb.out.txt"]
+HEALTH_TABLES = ["icfp/health/out/HealthWeb.out.txt"]
 
 
 import re
