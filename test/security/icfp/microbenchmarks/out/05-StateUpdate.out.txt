@@ -1,0 +1,48 @@
+setIfNothing :: <p :: World -> User -> Bool> . x:Int -> m:Maybe Tagged Int <p> -> {Maybe Tagged Int <p>|just _v}
+setIfNothing = \x . \m . maybe
+                           (Just (return x)) (\y . Just y)
+                           m
+
+placeBid :: arg2:World -> arg1:User -> arg0:Int -> World
+placeBid = \w . \client . \b . 
+      let showParticipant = \p . bind
+                                   (bind (downgrade (return (eq
+                                                               client p)))
+                                      (\g0 . bind (downgrade (bind
+                                                                (getPhase w)
+                                                                (\x65 . return
+                                                                          (eq
+                                                                             Done
+                                                                             x65))))
+                                               (\g1 . 
+                                                 if g0 || g1
+                                                   then getBid w p
+                                                   else bind (getBid w p) (\x4 .
+                                                            return (fmap x4
+                                                                      (\x2 .
+                                                                        return
+                                                                          zero))))))
+                                   (\mB . maybe (return
+                                                   emptyString) (\x . liftM show
+                                                                        x) mB)
+        in
+      
+      let out = liftM unlines (mapM
+                                 showParticipant
+                                 (getAllParticipants w)) in
+      
+      let newBid = bind (getBid w
+                           client) (\mB . return
+                                            (setIfNothing b mB)) in
+      
+      let w' = setBid w client newBid
+        in
+      print w' (return client) out
+
+(Goals: 2)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("05-StateUpdate.sq",71)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+setIfNothing          &        16  &        16  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+placeBid              &        74  &       132  &             0.07s  &      0.65s  &      0.04s  &        0.76s  \\
+Totals                &        90  &       148  &             0.08s  &      0.65s  &      0.04s  &        0.77s  \\

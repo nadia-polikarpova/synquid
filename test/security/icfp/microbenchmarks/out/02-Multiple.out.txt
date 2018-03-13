@@ -1,0 +1,78 @@
+showSession :: arg2:World -> arg1:User -> arg0:PaperId -> World
+showSession = \w . \client .
+    \p . 
+      let row = bind (getPaperTitle w
+                        p) (\t . bind (bind (downgrade
+                                               (bind (getPhase w) (\x5 . return
+                                                                           (eq
+                                                                              Done
+                                                                              x5))))
+                                         (\g0 . 
+                                           if g0
+                                             then getPaperAuthors w p
+                                             else return Nil)) (\auts . bind
+                                                                          (bind
+                                                                             (downgrade
+                                                                                (bind
+                                                                                   (getPhase
+                                                                                      w)
+                                                                                   (\x11 .
+                                                                                     return
+                                                                                       (eq
+                                                                                          Done
+                                                                                          x11))))
+                                                                             (\g1 .
+                                                                               
+                                                                               if g1
+                                                                                 then
+                                                                                   getPaperStatus
+                                                                                     w
+                                                                                     p
+                                                                                 else
+                                                                                   return
+                                                                                     NoDecision))
+                                                                          (\st .
+                                                                            
+                                                                            if st
+                                                                                 ==
+                                                                                 Accepted
+                                                                              then
+                                                                                bind
+                                                                                  (getPaperSession
+                                                                                     w
+                                                                                     p)
+                                                                                  (\ses .
+                                                                                    return
+                                                                                      (unwords
+                                                                                         (Cons
+                                                                                            t
+                                                                                            (Cons
+                                                                                               (show
+                                                                                                  auts)
+                                                                                               (Cons
+                                                                                                  ses
+                                                                                                  Nil)))))
+                                                                              else
+                                                                                bind
+                                                                                  (return
+                                                                                     emptyString)
+                                                                                  (\ses .
+                                                                                    return
+                                                                                      (unwords
+                                                                                         (Cons
+                                                                                            t
+                                                                                            (Cons
+                                                                                               (show
+                                                                                                  auts)
+                                                                                               (Cons
+                                                                                                  ses
+                                                                                                  Nil))))))))
+        in
+      print w (return client) row
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("02-Multiple.sq",12)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showSession           &       100  &       150  &             0.02s  &      0.16s  &      0.01s  &        0.19s  \\
+Totals                &       100  &       150  &             0.02s  &      0.16s  &      0.01s  &        0.19s  \\

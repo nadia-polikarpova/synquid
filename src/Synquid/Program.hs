@@ -75,11 +75,11 @@ symbolList (Program (PApp fun arg) _) = symbolList fun ++ symbolList arg
 symbolsOf (Program p _) = case p of 
   PSymbol name -> Set.singleton name
   PApp fun arg -> symbolsOf fun `Set.union` symbolsOf arg
-  PFun x body -> symbolsOf body 
+  PFun x body -> Set.delete x (symbolsOf body)
   PIf cond thn els -> symbolsOf cond `Set.union` symbolsOf thn `Set.union` symbolsOf els
   PMatch scr cases -> symbolsOf scr `Set.union` Set.unions (map (symbolsOf . expr) cases)
   PFix x body -> symbolsOf body
-  PLet x def body -> symbolsOf def `Set.union` symbolsOf body
+  PLet x def body -> symbolsOf def `Set.union` Set.delete x (symbolsOf body)
   _ -> Set.empty
 
 errorProgram = Program PErr (vart dontCare ftrue)

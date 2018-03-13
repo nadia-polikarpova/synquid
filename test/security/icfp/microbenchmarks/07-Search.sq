@@ -1,0 +1,62 @@
+{- Searching by sensitive value: self-referential policy inside a filter -}
+
+{- Datatypes -}
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Rebuttal :: Phase
+  Done :: Phase
+  
+guard {Submission, Review, Rebuttal, Done}
+
+data Status where
+  Accepted :: Status
+  Rejected :: Status
+  NoDecision :: Status
+  
+guard {Accepted, Rejected, NoDecision}
+
+{- Sensitive data and policies -}
+   
+-- | Conference phase (public)
+predicate phase :: World -> Phase
+getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
+
+-- | Paper title (public)
+getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
+
+-- | Paper authors (only visible to themselves or when phase is done)
+predicate paperAuthors :: World -> Map PaperId (Set User)
+getPaperAuthors :: w: World -> p: PaperId -> 
+  Tagged {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
+    <{_1 in (paperAuthors _0)[[p]] || phase _0 == Done}>
+
+-- | Paper status (only visible when phase is done)
+getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{phase _0 == Done}>
+
+-- | All papers in the conference
+getAllPaperIds :: w: World -> Tagged [PaperId] <{True}>
+
+redact {NoDecision}  
+
+{- Client code -}
+  
+-- | Show `client` all their accepted papers
+-- | Repair: for `getPaperStatus` inside `isMyAccepted` check that phase is Done, otherwise return NoDecision;
+--           note how Lifty can determine that the author check is okay.
+showMyAcceptedPapers :: World -> User -> World
+showMyAcceptedPapers = \w . \client .
+  let isMyAccepted = \p . 
+    do auts <- getPaperAuthors w p
+       st <- getPaperStatus w p
+       return (elem client auts && st == Accepted) in
+  let out = 
+    do allPaperIDs <- getAllPaperIds w
+       paperIDs <- filterM isMyAccepted allPaperIDs
+       titles <- mapM (\p . getPaperTitle w p) paperIDs
+       return (unlines titles) in 
+  print w (return client) out
+  

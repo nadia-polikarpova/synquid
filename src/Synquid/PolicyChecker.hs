@@ -17,6 +17,7 @@ import Synquid.Tokens
 import Data.Char hiding (isSymbol)
 import Data.Maybe
 import Data.List
+import Data.Function (on)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -38,8 +39,9 @@ localize isRecheck eParams tParams goal = do
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do
+      writeLog 2 (pretty $ gImpl goal)      
       aImpl <- aNormalForm "T" (gImpl goal)
-      writeLog 2 (pretty aImpl)      
+      writeLog 2 (text "A Normal Form" $+$ pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }
       labels <- runInSolver getViolatingLabels
@@ -98,7 +100,7 @@ recheck eParams tParams p (goal : goals) = do
     Right () -> recheck eParams tParams p goals
   where
     go goal = do
-      aImpl <- aNormalForm "T" (gImpl goal)
+      aImpl <- aNormalForm "TR" (gImpl goal)
       writeLog 2 (pretty aImpl)      
       
       p <- localizeTopLevel goal { gImpl = aImpl }
@@ -444,7 +446,10 @@ generateBranches env typ p = do
     branches <- local (over (_2 . condQualsGen) (const (\_ _ -> emptyQSpace)) 
                        . over (_1 . eGuessDepth) (const 2)
                        ) $ 
-            (nubBy (bothConstant pVar) . filter (not . isSymbol pVar)) <$> generateMany (generateCandidate env' pureGoal)
+                (nubBy (bothConstant pVar)           -- Leave only one branch that does mention any variables (they are all constant)
+                . sortBy (compare `on` relevance pVar) -- Sort branches by relevance (those with pVar first, those with other vars last)
+                . filter (not . isSymbol pVar))       -- Remove the original term (we'll re-add it later) 
+                <$> generateMany (generateCandidate env' pureGoal) -- Enumerate candidate pure branches 
     writeLog 3 $ text "Generated pure branches" $+$ vsep (map (\b -> pretty b <+> text "::" <+> pretty (typeOf b)) branches)
         
     anfBranches <- mapM (aNormalForm "TB") branches 
@@ -455,12 +460,18 @@ generateBranches env typ p = do
   where    
     strippedEnv = over symbols (Map.map (Map.foldlWithKey updateSymbol Map.empty)) env
     
-    bothConstant pVar b1 b2 = not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2) 
+    isInputVariable name = not (isConstant name env) && not (name `Set.member` (env ^. letBound))
+        
+    bothConstant pVar b1 b2 = b1 == b2 || not (pVar `Set.member` symbolsOf b1 || pVar `Set.member` symbolsOf b2)
+    
+    -- More relevant if it has `pVar` but less relevant if it has other variables
+    relevance pVar b = let freeVars = symbolsOf b in 
+                        (not (pVar `Set.member` freeVars), Set.size $ Set.filter isInputVariable freeVars)
         
     updateSymbol :: Map Id RSchema -> Id -> RSchema -> Map Id RSchema
-    updateSymbol m name sch = if name `Set.member` (env ^. redactions)
-                                then Map.insert name (stripTagsSchema sch) m
-                                else m
+    updateSymbol m name sch = if isInputVariable name || name `Set.member` (env ^. redactions)
+                                then Map.insert name (stripTagsSchema sch) m -- Variable or redaction function: strip tags and keep
+                                else m -- Non-redaction constant or let-bound: skip
 
     generateCandidate env' t' = do
       cand <- generateE env' t'
@@ -478,6 +489,7 @@ generateBranches env typ p = do
 generateGuards :: MonadHorn s => Environment -> RType -> [RProgram] -> Explorer s ([(Id, RProgram)], RProgram)  
 generateGuards env typ branches = do
   guardedBranches <- catMaybes <$> mapM abduceCondition branches -- Abduce a guard for each branch (original term is the head, then simpler to more complex)
+  writeLog 3 $ text "Generated guarded branches" $+$ vsep (map pretty guardedBranches)
   sortedBranches <- (snd . removeRedundantDisjuncts) <$> 
                     foldM insertBranch [head guardedBranches] (tail guardedBranches) -- Sort branches by their guards, from weakest to strongest
   writeLog 3 $ text "Generated sorted branches" $+$ vsep (map pretty sortedBranches)
