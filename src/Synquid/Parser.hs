@@ -392,7 +392,7 @@ parseLet = do
 parseDo = do
   reserved "do"
   (lines, lastLine) <- indented >> parseDoLines
-  return $ foldr mkBind lastLine lines
+  return $ foldr mkBindOrIf lastLine lines
   where
     parseDoLines = withPos $ do
       rs <- many (checkIndent >> try parseDoLine)
@@ -404,6 +404,10 @@ parseDo = do
       reservedOp "<-"
       term <- parseImpl
       return (x, term)
+      
+    mkBindOrIf (x, term) rest = case content term of
+      PIf c t e -> untyped $ PIf c (mkBindOrIf (x, t) rest) (mkBindOrIf (x, e) rest)
+      otherwise -> mkBind (x, term) rest
 
     mkBind (x, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "bind") term) (untyped $ PFun x rest)
 

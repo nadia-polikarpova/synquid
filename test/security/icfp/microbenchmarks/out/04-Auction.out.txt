@@ -1,0 +1,44 @@
+showBids :: arg1:World -> arg0:User -> World
+showBids = \w . \client . 
+    let showParticipant = \p . bind
+                                 (bind (downgrade (return (eq p
+                                                             client))) (\g1 .
+                                      bind (downgrade (bind (getPhase
+                                                               w) (\x50 . return
+                                                                            (eq
+                                                                               Done
+                                                                               x50))))
+                                        (\g2 . 
+                                          if g1 || g2
+                                            then getBid w p
+                                            else bind (downgrade (bind
+                                                                    (getBid w
+                                                                       client)
+                                                                    (\x44 .
+                                                                      return
+                                                                        (isJust
+                                                                           x44))))
+                                                   (\g0 . 
+                                                     if g0
+                                                       then bind (getBid w p)
+                                                              (\x4 . return
+                                                                       (fmap x4
+                                                                          (\x2 .
+                                                                            return
+                                                                              zero)))
+                                                       else return Nothing))))
+                                 (\mB . maybe (return
+                                                 emptyString) (\x . liftM show
+                                                                      x) mB) in
+    
+    let out = liftM unlines (mapM
+                               showParticipant
+                               (getAllParticipants w)) in
+    print w (return client) out
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("04-Auction.sq",32)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showBids              &        48  &       131  &             0.03s  &      0.49s  &      0.11s  &        0.64s  \\
+Totals                &        48  &       131  &             0.03s  &      0.49s  &      0.11s  &        0.64s  \\
