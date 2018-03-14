@@ -1,5 +1,5 @@
-#define Instructor User
-#define Teacher User
+
+
 -- Users can be students or instructors
 
 -- Students can be enrolled in classes
@@ -20,9 +20,9 @@ CREATE TABLE "instructor" ("id" INTEGER PRIMARY KEY,"name" INTEGER NOT NULL REFE
 CREATE TABLE "comment"    ("id" INTEGER PRIMARY KEY,"message" VARCHAR NOT NULL,"user_id" INTEGER NULL REFERENCES "user");
 -}
 
-data Maybe a where
-  Nothing :: Maybe a
-  Just :: a -> Maybe a
+--data Maybe a where
+--  Nothing :: Maybe a
+--  Just :: a -> Maybe a
 
 {- Rows in Tables -}
 -- type Id = Int
@@ -57,10 +57,10 @@ data Maybe a where
 data User
 data Username
 data Password
-#if 0
-type Instructor = User
-type Teacher = User
-#endif
+
+
+
+
 defaultUser :: Tagged User <{True}>
 
 predicate users :: World -> Set User
@@ -86,8 +86,8 @@ type ClassTerm = String
 
 predicate className :: World -> Class -> String
 predicate classTerm :: World -> Class -> String
-predicate classInstructor :: World -> Map Class Instructor
-predicate classTeachers :: World -> Map Class (Set Teacher)
+predicate classInstructor :: World -> Map Class User
+predicate classTeachers :: World -> Map Class (Set User)
 predicate classStudents :: World -> Map Class (Set User)
 -- predicate classContains :: w: World -> c: Class -> u: User -> {Bool | ((classInstructor w)[[c]] == u) || (u in classTeachers w c )|| (u in classStudents w) }
 
@@ -100,21 +100,21 @@ getClassContains
                      || (u in (classStudents   w)[[c]]))
      }
 getClasses :: w:World -> {List (Class) | True} --elems _v == classes w}
-getClassTeachers :: w: World -> c: Class -> Tagged {List Teacher | elems _v == (classTeachers w)[[c]]} <{True}>
+getClassTeachers :: w: World -> c: Class -> Tagged {List User | elems _v == (classTeachers w)[[c]]} <{True}>
 
 getClassStudents
   :: w: World
   -> c: Class
   -> (Tagged (List {User | _v in (classStudents w)[[c]]})
-       <{ _0 in (classTeachers w)[[c]]
-       || _0 == (classInstructor w)[[c]]}>)
+       <{ _1 in (classTeachers w)[[c]]
+       || _1 == (classInstructor w)[[c]]}>)
 
 isStudentInClass
   :: w: World
   -> u: User
   -> c: Class
   -> (Tagged {Bool | _v == (u in (classStudents w)[[c]])}
-       <{_0 == u || (_0 in (classTeachers w)[[c]]) || _0 == (classInstructor w)[[c]]}>)
+       <{_1 == u || (_1 in (classTeachers w)[[c]]) || _1 == (classInstructor w)[[c]]}>)
 
 teachesClass
   :: w: World
@@ -123,7 +123,8 @@ teachesClass
   -> (Tagged {Bool | _v == (u in (classTeachers w)[[c]] || (u == (classInstructor w)[[c]]))}
        <{True}>)
 
-getClassInstructor :: w: World -> c: Class -> Tagged {Instructor | _v == (classInstructor w)[[c]]} <{True}>
+getClassInstructor :: w: World -> c: Class -> Tagged {User | _v == (classInstructor w)[[c]]} <{True}>
+guard { getClassInstructor }
 
 getClassName :: w: World -> u: Class -> Tagged String <{True}>
 
@@ -131,24 +132,25 @@ addClass
   :: w: World
   -> className: ClassName
   -> classTerm: ClassTerm
-  -> instr: Instructor
-  -> teachers: List {Teacher | _v != instr}
+  -> instr: User
+  -> teachers: List {User | _v != instr}
   -> World
 
-data Assignment
 
 
--- {- Class Data -}
--- type ClassName = String
--- type ClassTerm = String
--- type ClassInstructor = User
+{- Class Data -}
+--type ClassName = String
+--type ClassTerm = String
+--type ClassInstructor = User
 
--- data Class where
---   Class :: Tagged ClassName <{True}>
---     -> Tagged ClassTerm <{True}>
---     -> Tagged ClassInstructor <{True}>
---     -> Class
--- type ClassId = Key Class
+--data Class where
+--  Class :: Tagged ClassName <{True}>
+--    -> Tagged ClassTerm <{True}>
+--    -> Tagged ClassInstructor <{True}>
+--    -> Class
+--data ClassId
+
+--predicate classInstructor :: Class -> ClassInstructor
 
 {- Teachers -}
 -- type TeacherName = Key User
@@ -164,21 +166,39 @@ data Assignment
 --   Student :: StudentName -> StudentClass -> Student
 -- type StudentId = Key Student
 
--- {- Assignments -}
--- type AssignmentName = String
--- type AssignmentPoints = Int
--- type AssignmentClass = ClassId
--- data Assignment where
---   Assignment :: AssignmentName -> AssignmentPoints -> AssignmentClass -> Assignment
--- type AssignmentId = Key Assignment
+{- Assignments -}
+type AssignmentName = String
+type AssignmentPoints = Int
+data Assignment where
+  Assignment :: AssignmentName -> AssignmentPoints -> Class -> Assignment
+data AssignmentId
 
--- {- Scores -}
--- type ScoreStudent = StudentId
--- type ScoreAssignment = AssignmentId
--- type ScorePoints = Int
--- data Score where
---   Score :: ScoreStudent -> ScoreAssignment -> ScorePoints
--- type ScoreId = Key Score
+predicate assignmentClass :: Assignment -> Class
+
+getAssignmentClass :: a:Assignment -> {Class | _v == assignmentClass a}
+
+{- Scores -}
+type ScoreStudent = User
+type ScoreAssignment = Assignment
+type ScorePoints = Int
+data Score where
+  Score :: ScoreStudent -> ScoreAssignment -> ScorePoints -> Score
+data ScoreId
+
+getScore :: w:World -> student:ScoreStudent -> assn:ScoreAssignment -> Tagged Score <{ _1 == student || _1 == (classInstructor _0)[[assignmentClass assn]] }>
+
+defaultScore :: Score
+redact { defaultScore }
+
+getStudentsWhoDidAssignment :: w:World -> assn:ScoreAssignment -> List User
+
+getAssignmentsForStudent :: w:World -> student:User -> List Assignment
+
+scorePoints :: Score -> ScorePoints
+scoreStudent :: Score -> User
+
+--compareScores :: Score -> Score -> Bool
+--compareScores = \s1 . \s2 . (scorePoints s1) > (scorePoints s2)
 
 -- {- Instructors -}
 -- type InstructorName = UserId
