@@ -1,14 +1,17 @@
 
 MICRO_METAPROGRAM = {
   'columns':         ["micro(key)", "$3", "sum_sec($4,$5)", "$6"],
-  'rows': ["1-Basic.out:showPaper",
-           "2-SelfRef.out:showPaper",
-           "3-Implicit.out:showSession",
-           "4-Search.out:searchByAuthor",
-           "5-Sort.out:sortPapersByScore",
-           "6-Multicast.out:notifyAuthors",
-           "7-StateUpdate.out:notifyAuthors",
-           "8-ProtectWrite.out:copyStatus"],
+  'rows': ["01-EDAS.out:showSession",
+           "02-Multiple.out:showSession",
+           "03-SelfRef.out:showSession",
+           "04-Auction.out:showBids",
+           "05-StateUpdate.out:placeBid",
+           "06-Search.out:showMyAcceptedPapers",
+           "07-Sort.out:sortPapersByScore",
+           "08-Broadcast.out:notifyAuthors",
+           "09-HotCRP.out:sendPasswordReminder",
+           "10-AirBnB.out:viewInbox",
+           "11-Instagram.out:follow"],
   'fmt': ["\\d%-20s", "%s", "%10s", "%s"],
   'helpers': {
     'micro': (lambda txt: "{micro%s}" % txt.split('-')[0]),
@@ -67,14 +70,18 @@ HEALTH_METAPROGRAM.update({
              "Totals"]
 })
 
-MICRO_TABLES = ["paperWrites/out/1-Basic.out.txt", 
-                "paperWrites/out/2-SelfRef.out.txt", 
-                "paperWrites/out/3-Implicit.out.txt", 
-                "paperWrites/out/4-Search.out.txt", 
-                "paperWrites/out/5-Sort.out.txt", 
-                "paperWrites/out/6-Multicast.out.txt",
-                "paperWrites/out/7-StateUpdate.out.txt",
-                "paperWrites/out/8-ProtectWrite.out.txt"]
+MICRO_TABLES = ["icfp/microbenchmarks/out/01-EDAS.out.txt", 
+                "icfp/microbenchmarks/out/02-Multiple.out.txt", 
+                "icfp/microbenchmarks/out/03-SelfRef.out.txt", 
+                "icfp/microbenchmarks/out/04-Auction.out.txt", 
+                "icfp/microbenchmarks/out/05-StateUpdate.out.txt", 
+                "icfp/microbenchmarks/out/06-Search.out.txt",
+                "icfp/microbenchmarks/out/07-Sort.out.txt",
+                "icfp/microbenchmarks/out/08-Broadcast.out.txt",
+                "icfp/microbenchmarks/out/09-HotCRP.out.txt",
+                "icfp/microbenchmarks/out/10-AirBnB.out.txt",
+                "icfp/microbenchmarks/out/11-Instagram.out.txt"]
+                
 
 CONF_TABLES = ["icfp/conference/out/ConferenceRepair.out.txt", 
                "icfp/conference/out/ConferenceVerification.out.txt"]
