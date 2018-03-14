@@ -1,19 +1,21 @@
 
 MICRO_METAPROGRAM = {
-  'columns':         ["micro(key)", "$3", "sum_sec($4,$5)", "$6"],
+  'columns':         ["num(key)", "micro(key)", "$1", "(#2-#1)", "$3", "sum_sec($4,$5)", "$6"],
   'rows': ["01-EDAS.out:showSession",
            "02-Multiple.out:showSession",
            "03-SelfRef.out:showSession",
            "04-Auction.out:showBids",
            "05-StateUpdate.out:placeBid",
-           "06-Search.out:showMyAcceptedPapers",
-           "07-Sort.out:sortPapersByScore",
+           "06-Sort.out:sortPapersByScore",
+           "07-Search.out:showMyAcceptedPapers",
            "08-Broadcast.out:notifyAuthors",
            "09-HotCRP.out:sendPasswordReminder",
            "10-AirBnB.out:viewInbox",
-           "11-Instagram.out:follow"],
-  'fmt': ["\\d%-20s", "%s", "%10s", "%s"],
+           "11-Instagram.out:follow"
+           ],
+  'fmt': ["%-2s", " \\d%-20s", "%s", "%8s", "%8s", "%10s", "%s"],
   'helpers': {
+    'num': (lambda txt: int(txt.split('-')[0])),
     'micro': (lambda txt: "{micro%s}" % txt.split('-')[0]),
     'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
   }
@@ -75,13 +77,12 @@ MICRO_TABLES = ["icfp/microbenchmarks/out/01-EDAS.out.txt",
                 "icfp/microbenchmarks/out/03-SelfRef.out.txt", 
                 "icfp/microbenchmarks/out/04-Auction.out.txt", 
                 "icfp/microbenchmarks/out/05-StateUpdate.out.txt", 
-                "icfp/microbenchmarks/out/06-Search.out.txt",
-                "icfp/microbenchmarks/out/07-Sort.out.txt",
+                "icfp/microbenchmarks/out/06-Sort.out.txt",
+                "icfp/microbenchmarks/out/07-Search.out.txt",
                 "icfp/microbenchmarks/out/08-Broadcast.out.txt",
                 "icfp/microbenchmarks/out/09-HotCRP.out.txt",
                 "icfp/microbenchmarks/out/10-AirBnB.out.txt",
                 "icfp/microbenchmarks/out/11-Instagram.out.txt"]
-                
 
 CONF_TABLES = ["icfp/conference/out/ConferenceRepair.out.txt", 
                "icfp/conference/out/ConferenceVerification.out.txt"]
