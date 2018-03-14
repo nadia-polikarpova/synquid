@@ -25,34 +25,31 @@ showRecordByIdView = \w . \rid .
                                              (bind u (\x37 . getIsDoctor w
                                                                x37)))) (\g1 .
                               bind (downgrade (andM (andM
-                                                       (bind u (\x55 . bind
+                                                       (bind u (\x53 .
+                                                            getIsPatient w x53))
+                                                       (bind u (\x56 . bind
                                                                          (getRecord
                                                                             w
                                                                             rid)
-                                                                         (\x54 .
+                                                                         (\x55 .
                                                                            bind
                                                                              (getShouldWithhold
-                                                                                x55
-                                                                                x54)
-                                                                             (\x53 .
+                                                                                x56
+                                                                                x55)
+                                                                             (\x54 .
                                                                                return
                                                                                  (not
-                                                                                    x53)))))
-                                                       (bind u (\x58 . bind
-                                                                         (getRecord
-                                                                            w
-                                                                            rid)
-                                                                         (\x57 .
-                                                                           bind
+                                                                                    x54))))))
+                                                 (bind u (\x59 . bind (getRecord
+                                                                         w rid)
+                                                                   (\x58 . bind
                                                                              (getPatient
-                                                                                x57)
-                                                                             (\x56 .
+                                                                                x58)
+                                                                             (\x57 .
                                                                                return
                                                                                  (eq
-                                                                                    x58
-                                                                                    x56))))))
-                                                 (bind u (\x59 . getIsPatient w
-                                                                   x59))))
+                                                                                    x59
+                                                                                    x57)))))))
                                 (\g2 . bind (downgrade (andM
                                                           (andM (andM (bind u
                                                                          (\x80 .
@@ -144,42 +141,42 @@ showRecordsForPatientView = \w .
                                                                            (andM
                                                                               (bind
                                                                                  sessionUser
-                                                                                 (\x55 .
-                                                                                   bind
-                                                                                     (getRecord
-                                                                                        w
-                                                                                        rid)
-                                                                                     (\x54 .
-                                                                                       bind
-                                                                                         (getShouldWithhold
-                                                                                            x55
-                                                                                            x54)
-                                                                                         (\x53 .
-                                                                                           return
-                                                                                             (not
-                                                                                                x53)))))
+                                                                                 (\x53 .
+                                                                                   getIsPatient
+                                                                                     w
+                                                                                     x53))
                                                                               (bind
                                                                                  sessionUser
-                                                                                 (\x58 .
+                                                                                 (\x56 .
                                                                                    bind
                                                                                      (getRecord
                                                                                         w
                                                                                         rid)
-                                                                                     (\x57 .
+                                                                                     (\x55 .
                                                                                        bind
-                                                                                         (getPatient
-                                                                                            x57)
-                                                                                         (\x56 .
+                                                                                         (getShouldWithhold
+                                                                                            x56
+                                                                                            x55)
+                                                                                         (\x54 .
                                                                                            return
-                                                                                             (eq
-                                                                                                x58
-                                                                                                x56))))))
+                                                                                             (not
+                                                                                                x54))))))
                                                                            (bind
                                                                               sessionUser
                                                                               (\x59 .
-                                                                                getIsPatient
-                                                                                  w
-                                                                                  x59))))
+                                                                                bind
+                                                                                  (getRecord
+                                                                                     w
+                                                                                     rid)
+                                                                                  (\x58 .
+                                                                                    bind
+                                                                                      (getPatient
+                                                                                         x58)
+                                                                                      (\x57 .
+                                                                                        return
+                                                                                          (eq
+                                                                                             x59
+                                                                                             x57)))))))
                                                           (\g2 . bind (downgrade
                                                                          (andM
                                                                             (andM
@@ -200,14 +197,14 @@ showRecordsForPatientView = \w .
                                                                                                return
                                                                                                  (not
                                                                                                     x78)))))
-             WARNING: cannot abduce a condition for branch
+                                                                                  (bind
+                                                                                     (getRecord
+                                                                                        w
+         WARNING: cannot abduce a condition for branch
   getRecord w' rid ::
   Tagged Record <_1 == sessionUser _0 && sessionUser _0 == sessionUser w>
   Probable cause: missing condition qualifiers
-                                                                     (bind
-                                                                                     (getRecord
-                                                                                        w
-                                                                                        rid)
+                                                                               rid)
                                                                                      (\x81 .
                                                                                        getIsPsychiatricRecord
                                                                                          x81)))
@@ -318,11 +315,11 @@ listOfPatientsView = \w .
 
 (Goals: 5)
 (Measures: 4)
-(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("HealthWeb.sq",194)])
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("HealthWeb.sq",197)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showRecordByIdView    &        23  &       294  &             0.01s  &      1.30s  &      0.38s  &        1.69s  \\
-showRecordsForPatientView  &        56  &       327  &             0.01s  &      2.22s  &      0.38s  &        2.63s  \\
+showRecordByIdView    &        23  &       294  &             0.01s  &      1.34s  &      0.38s  &        1.74s  \\
+showRecordsForPatientView  &        56  &       327  &             0.01s  &      2.50s  &      0.40s  &        2.92s  \\
 showAuthoredRecordsView  &        45  &        45  &             0.01s  &      0.00s  &      0.00s  &        0.01s  \\
-updateRecordForm      &        34  &        36  &             0.00s  &      1.11s  &      0.00s  &        1.12s  \\
-listOfPatientsView    &        52  &        94  &             0.01s  &      0.04s  &      0.01s  &        0.06s  \\
-Totals                &       210  &       796  &             0.06s  &      4.69s  &      0.78s  &        5.54s  \\
+updateRecordForm      &        34  &        36  &             0.00s  &      1.66s  &      0.00s  &        1.67s  \\
+listOfPatientsView    &        52  &        94  &             0.01s  &      0.04s  &      0.01s  &        0.07s  \\
+Totals                &       210  &       796  &             0.05s  &      5.56s  &      0.80s  &        6.42s  \\
