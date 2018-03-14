@@ -20,9 +20,9 @@ CREATE TABLE "instructor" ("id" INTEGER PRIMARY KEY,"name" INTEGER NOT NULL REFE
 CREATE TABLE "comment"    ("id" INTEGER PRIMARY KEY,"message" VARCHAR NOT NULL,"user_id" INTEGER NULL REFERENCES "user");
 -}
 
-data Maybe a where
-  Nothing :: Maybe a
-  Just :: a -> Maybe a
+--data Maybe a where
+--  Nothing :: Maybe a
+--  Just :: a -> Maybe a
 
 {- Rows in Tables -}
 -- type Id = Int
@@ -106,15 +106,15 @@ getClassStudents
   :: w: World
   -> c: Class
   -> (Tagged (List {User | _v in (classStudents w)[[c]]})
-       <{ _0 in (classTeachers w)[[c]]
-       || _0 == (classInstructor w)[[c]]}>)
+       <{ _1 in (classTeachers w)[[c]]
+       || _1 == (classInstructor w)[[c]]}>)
 
 isStudentInClass
   :: w: World
   -> u: User
   -> c: Class
   -> (Tagged {Bool | _v == (u in (classStudents w)[[c]])}
-       <{_0 == u || (_0 in (classTeachers w)[[c]]) || _0 == (classInstructor w)[[c]]}>)
+       <{_1 == u || (_1 in (classTeachers w)[[c]]) || _1 == (classInstructor w)[[c]]}>)
 
 teachesClass
   :: w: World
@@ -182,9 +182,10 @@ data Score where
   Score :: ScoreStudent -> ScoreAssignment -> ScorePoints -> Score
 data ScoreId
 
-getScore :: w:World -> student:ScoreStudent -> assn:ScoreAssignment -> Tagged Score <{ _0 == student || _0 == (classInstructor w)[[assignmentClass assn]] }>
+getScore :: w:World -> student:ScoreStudent -> assn:ScoreAssignment -> Tagged Score <{ _1 == student || _1 == (classInstructor _0)[[assignmentClass assn]] }>
 
-defaultScore :: Tagged Score <{True}>
+defaultScore :: Score
+redact { defaultScore }
 
 getStudentsWhoDidAssignment :: w:World -> assn:ScoreAssignment -> List User
 
