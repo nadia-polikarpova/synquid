@@ -124,6 +124,7 @@ teachesClass
        <{True}>)
 
 getClassInstructor :: w: World -> c: Class -> Tagged {User | _v == (classInstructor w)[[c]]} <{True}>
+guard { getClassInstructor }
 
 getClassName :: w: World -> u: Class -> Tagged String <{True}>
 
@@ -173,6 +174,8 @@ data Assignment where
 data AssignmentId
 
 predicate assignmentClass :: Assignment -> Class
+
+getAssignmentClass :: a:Assignment -> {Class | _v == assignmentClass a}
 
 {- Scores -}
 type ScoreStudent = User

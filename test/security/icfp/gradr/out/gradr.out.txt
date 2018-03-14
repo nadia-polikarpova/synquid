@@ -47,10 +47,108 @@ unauthProfileView = \w .
     content
 
 scoresForAssignmentView :: arg1:World -> arg0:Assignment -> World
-gradr.sq:94: Error:
-  Cannot synthesize guard of type {Bool|_v <==> sessionUser w == (classInstructor w)[[assignmentClass assn]]}
-    for branch
-    getScore w student assn ::
-    Tagged Score <_1 == sessionUser _0 && _0 == w>
-    Probable cause: missing components to implement guard
+scoresForAssignmentView = \w .
+  \assn . 
+    let u = getSessionUser w in
+    
+    let students =
+      getStudentsWhoDidAssignment w
+        assn in
+    
+    let scores = mapM (\student .
+                     bind (downgrade (bind u (\x9 .
+                                          bind (getClassInstructor w
+                                                  (getAssignmentClass assn))
+                                            (\x8 . return (eq x9 x8)))))
+                       (\g0 . bind (downgrade (bind u
+                                                 (\x13 . return (eq student
+                                                                   x13))))
+                                (\g1 . 
+                                  if g0 || g1
+                                    then getScore w student assn
+                                    else return defaultScore)))
+                   students in
+    print w u (liftM show scores)
 
+scoresForStudentView :: arg1:World -> arg0:User -> World
+scoresForStudentView = \w .
+  \student . 
+    let u = getSessionUser w in
+    
+    let assns =
+      getAssignmentsForStudent w
+        student in
+    
+    let scores = mapM (\assn . bind
+                                 (downgrade (bind u (\x9 . bind
+                                                             (getClassInstructor
+                                                                w
+                                                                (getAssignmentClass
+                                                                   assn)) (\x8 .
+                                                               return (eq x9
+                                                                         x8)))))
+                                 (\g0 . bind (downgrade (bind u
+                                                           (\x13 . return (eq
+                                                                             student
+                                                                             x13))))
+                                          (\g1 . 
+                                            if g0 || g1
+                                              then getScore w student assn
+                                              else return defaultScore)))
+                   assns in
+    print w u (liftM show scores)
+
+userFromUserAndScore :: arg0:UserAndScore -> User
+userFromUserAndScore = \x . 
+  match x with
+    UserAndScore u i -> u
+
+getTopScoreForAssignmentView :: arg1:World -> arg0:Assignment -> World
+getTopScoreForAssignmentView =
+\w . \assn . 
+    let u = getSessionUser w in
+    
+    let students =
+      getStudentsWhoDidAssignment w
+        assn in
+    
+    let scores = mapM (\student .
+                     bind (bind (downgrade (bind u
+                                              (\x9 . bind (getClassInstructor
+                                                             w
+                                                             (getAssignmentClass
+                                                                assn)) (\x8 .
+                                                         return (eq x9 x8)))))
+                             (\g0 . bind (downgrade (bind u
+                                                       (\x13 . return (eq
+                                                                         student
+                                                                         x13))))
+                                      (\g1 . 
+                                        if g0 || g1
+                                          then getScore w student assn
+                                          else return defaultScore)))
+                       (\sc . return (UserAndScore
+                                        student (scorePoints sc))))
+                   students in
+    
+    let topScoreUser = bind scores
+                         (\s . return
+                                 (userFromUserAndScore (maxScore
+                                                          s))) in
+    print w u (liftM show scores)
+
+(Goals: 10)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("gradr.sq",29),("models.sq.preprocessed",116)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+homePage              &        12  &        12  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getClassesStdByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getClassesInsByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getProfileClassInfo   &        29  &        29  &             0.02s  &      0.00s  &      0.00s  &        0.02s  \\
+profileView           &        23  &        23  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+unauthProfileView     &        25  &        50  &             0.00s  &      0.03s  &      0.00s  &        0.04s  \\
+scoresForAssignmentView  &        36  &        92  &             0.01s  &      0.29s  &      0.03s  &        0.34s  \\
+scoresForStudentView  &        36  &        92  &             0.01s  &      0.27s  &      0.02s  &        0.31s  \\
+userFromUserAndScore  &         4  &         4  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getTopScoreForAssignmentView  &        62  &       118  &             0.01s  &      0.28s  &      0.02s  &        0.32s  \\
+Totals                &       253  &       446  &             0.09s  &      0.88s  &      0.10s  &        1.08s  \\
