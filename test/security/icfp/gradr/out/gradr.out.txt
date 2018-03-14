@@ -13,16 +13,15 @@ getClassesInsByUser = \w . \u .
     filterM (teachesClass w u)
       (getClasses w)
 
-getProfileClassInfo :: arg1:World -> u:User -> Tagged String <_1 == u>
+getProfileClassInfo :: arg1:World -> u:User -> Tagged ClassInfo <_1 == u>
 getProfileClassInfo = \w . \u . 
     let teachingClasses =
       getClassesInsByUser w u in
     
     let takingClasses =
       getClassesStdByUser w u in
-    liftM2 strcat (liftM show
-                     teachingClasses) (liftM show
-                                         takingClasses)
+    liftM2 ClassInfo teachingClasses
+      takingClasses
 
 profileView :: arg0:World -> World
 profileView = \w . 
@@ -30,7 +29,7 @@ profileView = \w .
   
   let content = bind u (\user .
                     getProfileClassInfo w user) in
-  print w u content
+  print w u (liftM show content)
 
 unauthProfileView :: arg0:World -> World
 unauthProfileView = \w . 
@@ -38,13 +37,15 @@ unauthProfileView = \w .
   
   let content = bind u (\user .
                     bind (downgrade (bind
-                                       (getArbitraryUser w) (\x5 .
-                                         return (eq user x5)))) (\g0 . 
+                                       (getArbitraryUser w) (\x19 .
+                                         return (eq user x19)))) (\g0 . 
                         if g0
                           then getProfileClassInfo w user
-                          else return emptyString)) in
+                          else redactClassInfo
+                                 (getProfileClassInfo w user)))
+    in
   print w (getArbitraryUser w)
-    content
+    (liftM show content)
 
 scoresForAssignmentView :: arg1:World -> arg0:Assignment -> World
 scoresForAssignmentView = \w .
@@ -144,11 +145,11 @@ Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repai
 homePage              &        12  &        12  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 getClassesStdByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 getClassesInsByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-getProfileClassInfo   &        29  &        29  &             0.02s  &      0.00s  &      0.00s  &        0.02s  \\
-profileView           &        23  &        23  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-unauthProfileView     &        25  &        50  &             0.00s  &      0.02s  &      0.00s  &        0.04s  \\
-scoresForAssignmentView  &        36  &        92  &             0.00s  &      0.27s  &      0.02s  &        0.31s  \\
-scoresForStudentView  &        36  &        92  &             0.00s  &      0.27s  &      0.02s  &        0.31s  \\
+getProfileClassInfo   &        21  &        21  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+profileView           &        27  &        27  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+unauthProfileView     &        29  &        58  &             0.01s  &      0.02s  &      0.01s  &        0.05s  \\
+scoresForAssignmentView  &        36  &        92  &             0.01s  &      0.27s  &      0.03s  &        0.31s  \\
+scoresForStudentView  &        36  &        92  &             0.00s  &      0.27s  &      0.03s  &        0.31s  \\
 userFromUserAndScore  &         4  &         4  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-getTopScoreForAssignmentView  &        62  &       118  &             0.01s  &      0.26s  &      0.03s  &        0.30s  \\
-Totals                &       253  &       446  &             0.08s  &      0.84s  &      0.09s  &        1.02s  \\
+getTopScoreForAssignmentView  &        62  &       118  &             0.01s  &      0.26s  &      0.02s  &        0.30s  \\
+Totals                &       253  &       450  &             0.07s  &      0.85s  &      0.10s  &        1.02s  \\
