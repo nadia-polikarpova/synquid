@@ -100,7 +100,12 @@ submitReviewViewPost :: World -> PaperId -> Review -> World
 submitReviewViewPost = \w . \pid . \rev .
   let u = getSessionUser w in
   let rid = getFreshReviewId w in
-  let rauth = bind u (\u' . return (ReviewerEntry 1 u')) in   -- TODO change 1 to # reviews
+  let allRids = getAllReviews w in
+  let existingRids =
+    filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
+  let rauth = do u' <- u
+                 l <- existingRids
+                 return (ReviewerEntry (length l) u') in
   let w1 = setReviewAuthor w rid rauth in
   let w2 = setReviewPaper w1 rid (return pid) in
   let w3 = setReview w2 rid (return rev) in

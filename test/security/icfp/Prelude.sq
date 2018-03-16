@@ -73,3 +73,4 @@ show :: a -> String
 strcat :: String -> String -> String
 unwords :: List String -> String
 unlines :: List String -> String
+length :: [a] -> Int
