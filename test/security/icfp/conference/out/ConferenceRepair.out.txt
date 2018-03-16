@@ -166,32 +166,62 @@ reviewsView = \w . \pid .
                                    return (p == pid))) allRids in
     print w u (liftM show (bind rids
                              (\rids' . mapM (\rid . bind
-                                                      (downgrade (bind u (\x32 .
-                                                                      bind
-                                                                        (getReviewPaper
-                                                                           w
-                                                                           rid)
-                                                                        (\x31 .
-                                                                          bind
-                                                                            (getPaperAuthors
-                                                                               w
-                                                                               x31)
-                                                                            (\x30 .
-                                                                              return
-                                                                                (elem
-                                                                                   x32
-                                                                                   x30))))))
-                                                      (\g0 . 
-                                                        if g0
-                                                          then getReview w rid
-                                                          else return
-                                                                 (ReviewEntry
-                                                                    emptyString
-                                                                    emptyString
-                                                                    (ReviewScoresEntry
-                                                                       zero zero
-                                                                       zero
-                                                                       zero))))
+                                                      (bind (downgrade (bind u
+                                                                          (\x29 .
+                                                                            bind
+                                                                              (getPaperAuthors
+                                                                                 w
+                                                                                 pid)
+                                                                              (\x28 .
+                                                                                return
+                                                                                  (elem
+                                                                                     x29
+                                                                                     x28)))))
+                                                         (\g0 . 
+                                                           if g0
+                                                             then getReview w
+                                                                    rid
+                                                             else return
+                                                                    (ReviewEntry
+                                                                       emptyString
+                                                                       emptyString
+                                                                       (ReviewScoresEntry
+                                                                          zero
+                                                                          zero
+                                                                          zero
+                                                                          zero))))
+                                                      (\rev . bind (bind
+                                                                      (downgrade
+                                                                         (bind
+                                                                            (getChair
+                                                                               w)
+                                                                            (\x51 .
+                                                                              bind
+                                                                                u
+                                                                                (\x50 .
+                                                                                  return
+                                                                                    (eq
+                                                                                       x51
+                                                                                       x50)))))
+                                                                      (\g1 . 
+                                                                        if g1
+                                                                          then
+                                                                            getReviewAuthor
+                                                                              w
+                                                                              rid
+                                                                          else
+                                                                            anonymousReviewer
+                                                                              (getReviewAuthor
+                                                                                 w
+                                                                                 rid)))
+                                                                (\auth . return
+                                                                           (Cons
+                                                                              (show
+                                                                                 rev)
+                                                                              (Cons
+                                                                                 (show
+                                                                                    auth)
+                                                                                 Nil)))))
                                          rids')))
 
 profileViewGet :: arg0:World -> World
@@ -233,8 +263,20 @@ submitReviewViewPost = \w .
       
       let rid = getFreshReviewId w in
       
-      let w1 = setReviewAuthor w rid u
-        in
+      let allRids = getAllReviews w in
+      
+      let existingRids = filterM
+                           (\rid . bind (getReviewPaper w
+                                           rid) (\p . return (p == pid)))
+                           allRids in
+      
+      let rauth = bind u (\u' . bind
+                                  existingRids (\l . return
+                                                       (ReviewerEntry (length l)
+                                                          u'))) in
+      
+      let w1 = setReviewAuthor w rid
+                 rauth in
       
       let w2 = setReviewPaper w1 rid
                  (return pid) in
@@ -255,17 +297,17 @@ assignReviewersView = \w .
                                                                 l))))) w allPids
 
 (Goals: 10)
-(Measures: 4)
-(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",108),("Conference.sq",345),("ConferenceRepair.sq",0)])
+(Measures: 5)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("Conference.sq",345),("ConferenceRepair.sq",0)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
 registerUser          &        10  &        10  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-usersView             &        20  &        50  &             0.01s  &      0.39s  &      0.00s  &        0.41s  \\
+usersView             &        20  &        50  &             0.02s  &      0.08s  &      0.01s  &        0.11s  \\
 submitForm            &        45  &        45  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-searchForm            &        77  &       171  &             0.03s  &      2.74s  &      0.03s  &        2.81s  \\
-paperView             &        53  &       153  &             0.04s  &      2.28s  &      0.03s  &        2.36s  \\
-reviewsView           &        57  &       112  &             0.03s  &      1.37s  &      0.01s  &        1.42s  \\
+searchForm            &        77  &       171  &             0.04s  &      1.34s  &      0.03s  &        1.42s  \\
+paperView             &        53  &       153  &             0.04s  &      1.42s  &      0.03s  &        1.50s  \\
+reviewsView           &        85  &       165  &             0.08s  &      0.15s  &      0.03s  &        0.26s  \\
 profileViewGet        &        66  &        66  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
 profileViewPost       &        17  &        17  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-submitReviewViewPost  &        40  &        40  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+submitReviewViewPost  &        86  &        86  &             0.02s  &      0.00s  &      0.00s  &        0.02s  \\
 assignReviewersView   &        47  &        47  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
-Totals                &       432  &       711  &             0.15s  &      6.79s  &      0.09s  &        7.04s  \\
+Totals                &       506  &       810  &             0.23s  &      3.00s  &      0.11s  &        3.35s  \\
