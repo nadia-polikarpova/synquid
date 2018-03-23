@@ -23,14 +23,12 @@ showSession = \w . \client .
                   if st == Accepted
                     then do
                            ses <- getPaperSession w p
-                           return (unwords (Cons t (Cons
-                                                      (show auts) (Cons ses
-                                                                     Nil))))
+                           return (unwords [t, show
+                                                 auts, ses])
                     else do
                            ses <- return emptyString
-                           return (unwords (Cons t (Cons
-                                                      (show auts) (Cons ses
-                                                                     Nil)))) in
+                           return (unwords [t, show
+                                                 auts, ses]) in
       print w (return client) row
 
 (Goals: 1)

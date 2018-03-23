@@ -30,5 +30,5 @@ follow = \w . \client .
 (Measures: 4)
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("11-Instagram.sq",62)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-follow                &        73  &        98  &             0.02s  &      3.17s  &      0.00s  &        3.20s  \\
-Totals                &        73  &        98  &             0.02s  &      3.17s  &      0.00s  &        3.20s  \\
+follow                &        73  &        98  &             0.01s  &      3.24s  &      0.00s  &        3.27s  \\
+Totals                &        73  &        98  &             0.01s  &      3.24s  &      0.00s  &        3.27s  \\

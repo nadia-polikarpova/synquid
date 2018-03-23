@@ -26,19 +26,17 @@ showSession = \w . \client .
                   if st == Accepted
                     then do
                            ses <- getPaperSession w p
-                           return (unwords (Cons t (Cons
-                                                      (show auts) (Cons ses
-                                                                     Nil))))
+                           return (unwords [t, show
+                                                 auts, ses])
                     else do
                            ses <- return emptyString
-                           return (unwords (Cons t (Cons
-                                                      (show auts) (Cons ses
-                                                                     Nil)))) in
+                           return (unwords [t, show
+                                                 auts, ses]) in
       print w (return client) row
 
 (Goals: 1)
 (Measures: 4)
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("03-SelfRef.sq",32)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showSession           &       100  &       176  &             0.02s  &      0.28s  &      0.02s  &        0.32s  \\
-Totals                &       100  &       176  &             0.02s  &      0.28s  &      0.02s  &        0.32s  \\
+showSession           &       100  &       176  &             0.02s  &      0.25s  &      0.02s  &        0.29s  \\
+Totals                &       100  &       176  &             0.02s  &      0.25s  &      0.02s  &        0.29s  \\

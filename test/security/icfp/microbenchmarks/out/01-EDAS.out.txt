@@ -15,17 +15,15 @@ showSession = \w . \client .
                   if st == Accepted
                     then do
                            ses <- getPaperSession w p
-                           return (unwords (Cons t (Cons
-                                                      ses Nil)))
+                           return (unwords [t, ses])
                     else do
                            ses <- return emptyString
-                           return (unwords (Cons t (Cons
-                                                      ses Nil))) in
+                           return (unwords [t, ses]) in
       print w (return client) row
 
 (Goals: 1)
 (Measures: 4)
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("01-EDAS.sq",8)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-showSession           &        79  &       104  &             0.06s  &      0.07s  &      0.00s  &        0.14s  \\
-Totals                &        79  &       104  &             0.06s  &      0.07s  &      0.00s  &        0.14s  \\
+showSession           &        79  &       104  &             0.01s  &      0.06s  &      0.00s  &        0.08s  \\
+Totals                &        79  &       104  &             0.01s  &      0.06s  &      0.00s  &        0.08s  \\
