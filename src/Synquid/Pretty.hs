@@ -318,21 +318,27 @@ prettyProgram (Program p typ) = case p of
     PSymbol s -> case asInteger s of 
                   Nothing -> if s == valueVarName then special s else text s
                   Just n -> intLiteral n
-    PApp f x -> let
-      optParens p = case p of
-        Program (PSymbol _) _ -> prettyProgram p
-        Program PHole _ -> prettyProgram p
-        _ -> hlParens (prettyProgram p)
-      prefix = hang tab $ prettyProgram f </> optParens x
+    PApp f x -> 
+      let
+        optParens p = case p of
+                        Program (PSymbol _) _ -> prettyProgram p
+                        Program PHole _ -> prettyProgram p
+                        _ -> hlParens (prettyProgram p)
+        prefix = hang tab $ prettyProgram f </> optParens x
       in case content f of
           PSymbol name -> if name `elem` Map.elems unOpTokens
                             then hang tab $ operator name <+> optParens x
                             else prefix
-          PApp g y -> case content g of
-            PSymbol name -> if name `elem` Map.elems binOpTokens
-                              then hang tab $ optParens y </> operator name </> optParens x -- Binary operator: use infix notation
-                              else prefix
-            _ -> prefix
+          PApp g y -> 
+            case content g of
+              PSymbol name -> if name `elem` Map.elems binOpTokens
+                                then hang tab $ optParens y </> operator name </> optParens x -- Binary operator: use infix notation
+                                -- else prefix
+                                else let (doDefs, doBody) = redo (Program p typ) in
+                                     if null doDefs 
+                                      then prefix
+                                      else prettyDoBlock doDefs doBody
+              _ -> prefix
           _ -> prefix
     PFun x e -> nest 2 $ operator "\\" <> text x <+> operator "." </> prettyProgram e
     PIf c t e -> linebreak <> (hang tab $ keyword "if" <+> prettyProgram c $+$ (hang tab (keyword "then" </> prettyProgram t)) $+$ (hang tab (keyword "else" </> prettyProgram e)))
@@ -343,6 +349,12 @@ prettyProgram (Program p typ) = case p of
     PErr -> keyword "error"
   where
     withType doc t = doc -- <> text ":" <+> pretty t
+    prettyDoBlock defs body = hang tab $ keyword "do" $+$ vsep (map prettyDoDef defs) $+$ prettyProgram body
+    prettyDoDef (x, e) = text x <+> operator "<-" <+> prettyProgram e
+    
+redo (Program (PApp ((Program (PApp (Program (PSymbol name) _) def) _)) (Program (PFun x body) _)) _) 
+  | name == "bind" = let (defs, e) = redo body in ((x, def):defs, e)
+redo p = ([], p)
 
 instance (Pretty (TypeSkeleton r)) => Pretty (Program (TypeSkeleton r)) where
   pretty = prettyProgram

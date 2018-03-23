@@ -1,30 +1,26 @@
 showMyAcceptedPapers :: arg1:World -> arg0:User -> World
 showMyAcceptedPapers = \w .
   \client . 
-    let isMyAccepted = \p . bind
-                              (getPaperAuthors w p) (\auts .
-                                bind (bind (downgrade (bind
-                                                         (getPhase w) (\x5 .
-                                                           return (eq Done
-                                                                     x5))))
-                                        (\g0 . 
-                                          if g0
-                                            then getPaperStatus w p
-                                            else return NoDecision)) (\st .
-                                    return ((elem client auts) &&
-                                              (st == Accepted)))) in
+    let isMyAccepted = \p . do
+                              auts <- getPaperAuthors w p
+                              st <- do
+                                      g0 <- downgrade (do
+                                                         x5 <- getPhase w
+                                                         return (eq Done x5))
+                                      
+                                      if g0
+                                        then getPaperStatus w p
+                                        else return NoDecision
+                              return ((elem client auts) &&
+                                        (st == Accepted)) in
     
-    let out = bind (getAllPaperIds
-                      w) (\allPaperIDs . bind (filterM
-                                                 isMyAccepted allPaperIDs)
-                                           (\paperIDs . bind (mapM (\p .
-                                                                  getPaperTitle
-                                                                    w p)
-                                                                paperIDs)
-                                                          (\titles . return
-                                                                       (unlines
-                                                                          titles))))
-      in
+    let out = do
+                allPaperIDs <- getAllPaperIds w
+                paperIDs <- filterM isMyAccepted
+                              allPaperIDs
+                titles <- mapM (\p .
+                              getPaperTitle w p) paperIDs
+                return (unlines titles) in
     print w (return client) out
 
 (Goals: 1)

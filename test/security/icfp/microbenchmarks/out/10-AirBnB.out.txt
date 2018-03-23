@@ -1,42 +1,28 @@
 viewInbox :: arg1:World -> arg0:User -> World
 viewInbox = \w . \client . 
-    let isMyMessage = \m . bind
-                             (getRecipient w m) (\to . return
-                                                         (to == client)) in
+    let isMyMessage = \m . do
+                             to <- getRecipient w m
+                             return (to == client) in
     
-    let inbox = bind (filterM
-                        isMyMessage (getAllMessageIDs
-                                       w)) (\myMIDs . bind (mapM (\m .
-                                                                bind (downgrade
-                                                                        (bind
-                                                                           (getAdmin
-                                                                              w)
-                                                                           (\x29 .
-                                                                             return
-                                                                               (eq
-                                                                                  client
-                                                                                  x29))))
-                                                                  (\g0 . 
-                                                                    if g0
-                                                                      then
-                                                                        getText
-                                                                          w m
-                                                                      else
-                                                                        scrapePhoneNumbers
-                                                                          m
-                                                                          (getText
-                                                                             w
-                                                                             m)))
-                                                              myMIDs)
-                                                        (\messages . return
-                                                                       (unlines
-                                                                          messages)))
-      in
+    let inbox = do
+                  myMIDs <- filterM isMyMessage
+                              (getAllMessageIDs w)
+                  messages <- mapM (\m . do
+                                           g0 <- downgrade (do
+                                                              x29 <- getAdmin w
+                                                              return (eq client
+                                                                        x29))
+                                           
+                                           if g0
+                                             then getText w m
+                                             else scrapePhoneNumbers m
+                                                    (getText w m)) myMIDs
+                  return (unlines messages) in
     print w (return client) inbox
 
 (Goals: 1)
 (Measures: 4)
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("10-AirBnB.sq",70)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-viewInbox             &        60  &        91  &             0.01s  &      0.02s  &      0.00s  &        0.05s  \\
-Totals                &        60  &        91  &             0.01s  &      0.02s  &      0.00s  &        0.05s  \\
+viewInbox             &        60  &        91  &             0.02s  &      0.02s  &      0.00s  &        0.05s  \\
+Totals                &        60  &        91  &             0.02s  &      0.02s  &      0.00s  &        0.05s  \\
