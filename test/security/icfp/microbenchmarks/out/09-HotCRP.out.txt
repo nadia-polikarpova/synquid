@@ -3,15 +3,16 @@ sendPasswordReminder = \w . \u .
     
     let preview = liftM2 strcat
                     (getUserName w u) (liftM show
-                                         (bind (downgrade (bind (getChair
-                                                                   w) (\x19 .
+                                         (do
+                                            g0 <- downgrade (do
+                                                               x19 <- getChair w
                                                                return (eq u
-                                                                         x19))))
-                                            (\g0 . 
-                                              if g0
-                                                then getUserPassword w u
-                                                else mask (getUserPassword w
-                                                             u)))) in
+                                                                         x19))
+                                            
+                                            if g0
+                                              then getUserPassword w u
+                                              else mask (getUserPassword w
+                                                           u))) in
     
     let message = liftM2 strcat
                     (getUserName w u) (liftM show
@@ -25,5 +26,5 @@ sendPasswordReminder = \w . \u .
 (Measures: 4)
 (Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("09-HotCRP.sq",7)])
 Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
-sendPasswordReminder  &        61  &        90  &             0.02s  &      0.01s  &      0.00s  &        0.05s  \\
-Totals                &        61  &        90  &             0.02s  &      0.01s  &      0.00s  &        0.05s  \\
+sendPasswordReminder  &        61  &        90  &             0.03s  &      0.01s  &      0.00s  &        0.05s  \\
+Totals                &        61  &        90  &             0.03s  &      0.01s  &      0.00s  &        0.05s  \\

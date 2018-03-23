@@ -1,11 +1,13 @@
 notifyAuthors :: w:World -> p:PaperId -> World
 notifyAuthors = \w . \p . 
-    let status = bind (downgrade
-                         (bind (getPhase w) (\x5 . return
-                                                     (eq Done x5)))) (\g0 . 
-                     if g0
-                       then getPaperStatus w p
-                       else return NoDecision) in
+    let status = do
+                   g0 <- downgrade (do
+                                      x5 <- getPhase w
+                                      return (eq Done x5))
+                   
+                   if g0
+                     then getPaperStatus w p
+                     else return NoDecision in
     
     let authors = getPaperAuthors w
                     p in
