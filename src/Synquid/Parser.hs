@@ -409,7 +409,7 @@ parseDo = do
       PIf c t e -> untyped $ PIf c (mkBindOrIf (x, t) rest) (mkBindOrIf (x, e) rest)
       otherwise -> mkBind (x, term) rest
 
-    mkBind (x, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "bind") term) (untyped $ PFun x rest)
+    mkBind (x, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol bindName) term) (untyped $ PFun x rest)
 
 parseMatch = do
     reserved "match"
@@ -459,8 +459,8 @@ parseList = do
   elems <- brackets (commaSep parseImpl)
   return $ foldr cons nil elems
   where 
-    cons x xs = untyped $ PApp (untyped $ PApp (untyped $ PSymbol "Cons") x) xs
-    nil = untyped $ PSymbol "Nil"
+    cons x xs = untyped $ PApp (untyped $ PApp (untyped $ PSymbol consName) x) xs
+    nil = untyped $ PSymbol nilName
 
 withOptionalType p = do
   (Program content _) <- p

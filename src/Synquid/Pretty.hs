@@ -323,7 +323,9 @@ prettyProgram (Program p typ) = case p of
         optParens p = case p of
                         Program (PSymbol _) _ -> prettyProgram p
                         Program PHole _ -> prettyProgram p
-                        _ -> hlParens (prettyProgram p)
+                        _ -> case relist p of
+                              Nothing -> hlParens (prettyProgram p)
+                              Just xs -> hlBrackets $ commaSep $ map prettyProgram xs
         prefix = hang tab $ prettyProgram f </> optParens x
       in case content f of
           PSymbol name -> if name `elem` Map.elems unOpTokens
@@ -333,11 +335,12 @@ prettyProgram (Program p typ) = case p of
             case content g of
               PSymbol name -> if name `elem` Map.elems binOpTokens
                                 then hang tab $ optParens y </> operator name </> optParens x -- Binary operator: use infix notation
-                                -- else prefix
-                                else let (doDefs, doBody) = redo (Program p typ) in
-                                     if null doDefs 
-                                      then prefix
-                                      else prettyDoBlock doDefs doBody
+                                else case relist (Program p typ) of -- Resugar into manifest list?
+                                      Just xs -> hlBrackets $ commaSep $ map prettyProgram xs
+                                      Nothing -> let (doDefs, doBody) = redo (Program p typ) in -- Resugar into do notation?
+                                                   if null doDefs 
+                                                    then prefix
+                                                    else prettyDoBlock doDefs doBody
               _ -> prefix
           _ -> prefix
     PFun x e -> nest 2 $ operator "\\" <> text x <+> operator "." </> prettyProgram e
@@ -353,8 +356,17 @@ prettyProgram (Program p typ) = case p of
     prettyDoDef (x, e) = text x <+> operator "<-" <+> prettyProgram e
     
 redo (Program (PApp ((Program (PApp (Program (PSymbol name) _) def) _)) (Program (PFun x body) _)) _) 
-  | name == "bind" = let (defs, e) = redo body in ((x, def):defs, e)
+  | name == bindName = let (defs, e) = redo body in ((x, def):defs, e)
 redo p = ([], p)
+
+relist (Program (PApp ((Program (PApp (Program (PSymbol name) _) x) _)) tail) _) 
+  | name == consName = do
+                        xs <- relist tail
+                        return $ x : xs
+relist (Program (PSymbol name) _)
+  | name == nilName = Just []
+relist _ = Nothing
+
 
 instance (Pretty (TypeSkeleton r)) => Pretty (Program (TypeSkeleton r)) where
   pretty = prettyProgram
