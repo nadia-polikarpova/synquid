@@ -126,7 +126,7 @@ resolveDeclaration d@(DataDecl dtName tParams pVarParams ctors) = do
   mapM_ (\(ConstructorSig name typ) -> addNewSignature name $ addPreds typ) ctors
 resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermination) = do
   env <- use environment
-  addNewSignature measureName (generateSchema env measureName inSort outSort post)
+  addNewSignature measureName (generateSchema env measureName [inSort] outSort post)
   -- Resolve measure signature:
   resolveSort inSort
   resolveSort outSort
@@ -152,6 +152,8 @@ resolveDeclaration (MeasureDecl measureName inSort outSort post defCases isTermi
 resolveDeclaration (PredDecl (PredSig name argSorts resSort)) = do
   ifM (Map.member name <$> use (environment . globalPredicates)) (throwResError (text "Duplicate declaration of predicate" <+> text name)) (return ())
   mapM_ resolveSort (resSort : argSorts)
+  env <- use environment
+  addNewSignature name (generateSchema env name argSorts resSort ftrue) 
   environment %= addGlobalPredicate name resSort argSorts
 resolveDeclaration (SynthesisGoal name impl) = do
   syms <- uses environment allSymbols

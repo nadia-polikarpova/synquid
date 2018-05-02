@@ -230,7 +230,7 @@ reconstructE' env typ PHole = do
   generateEUpTo env typ d
 reconstructE' env typ (PSymbol name) =
   case lookupSymbol name (arity typ) (hasSet typ) env of
-    Nothing -> throwErrorWithDescription $ text "Not in scope:" </> text name
+    Nothing -> traceShow (_globalPredicates env) $ throwErrorWithDescription $ text "Not in scope:" </> text name
     Just sch -> do
       t <- symbolType env name sch
       let p = Program (PSymbol name) t

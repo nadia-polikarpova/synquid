@@ -1,0 +1,51 @@
+
+
+insert :: x:a -> t:BST a -> {BST a|keys _v == keys t + [x]}
+insert = \x . \t . 
+    match t with
+      Empty -> Node x Empty Empty
+      Node x7 x8 x9 -> 
+        if (x <= x7) && (x7 <= x)
+          then t
+          else 
+            if x7 <= x
+              then Node x7 x8 (insert x x9)
+              else Node x7 (insert x x8) x9
+
+absolutes :: arg0:List Int -> List Nat
+absolutes = \xs . map (\x . 
+                      if 0 <= x
+                        then x
+                        else neg x) xs
+
+
+replicate :: n:Nat -> x:a -> {List a|len _v == n}
+replicate = \n . \x . 
+    if n <= 0
+      then Nil
+      else Cons x (replicate (dec n)
+                     x)
+
+
+snoc :: <r :: a -> a -> Bool> . x:a -> xs:List {a|r _v x} <r> -> {List a <r>|len _v == len xs + 1}
+snoc = \x . \xs . 
+    match xs with
+      Nil -> Cons x Nil
+      Cons x5 x6 -> Cons x5 (snoc x
+                               x6)
+
+reverse :: <r :: a -> a -> Bool> . xs:List a <r> -> {List a <r _1 _0>|len _v == len xs}
+reverse = \xs . 
+  match xs with
+    Nil -> Nil
+    Cons x3 x4 -> snoc x3 (reverse
+                             x4)
+
+
+./NNF.sq:47: Error:
+  Not in scope: store
+
+
+
+sort :: xs:List a -> {IncList a|elems _v == elems xs && len _v == len xs}
+synquid: Map.!: given key is not an element in the map
