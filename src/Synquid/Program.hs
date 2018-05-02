@@ -525,7 +525,7 @@ filterEnv e m = Lens.set measures (Map.filterWithKey (\k _ -> k == m) (e ^. meas
 -- Transform a resolved measure into a program
 measureProg :: Id -> MeasureDef -> UProgram
 measureProg name (MeasureDef inSort outSort defs post) = Program {
-  typeOf = t, content = PFun "THIS" Program{ content = PMatch Program{ content = PSymbol "THIS", typeOf = t } (map mCase defs), typeOf = t} }
+  typeOf = t, content = PFun "arg0" Program{ content = PMatch Program{ content = PSymbol "arg0", typeOf = t } (map mCase defs), typeOf = t} }
   where
     t   = AnyT
 
@@ -534,39 +534,45 @@ mCase :: MeasureCase -> Case RType
 mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToUProgram body}
 
 -- Transform type signature into a synthesis/typechecking schema
-generateSchema :: Environment -> Id -> Sort -> Sort -> Formula -> RSchema
---generateSchema e name (DataS inS sorts) outSort post = typePolymorphic (getTypeParams e inS) (getPredParams e inS) name (DataS inS sorts) outSort post
+generateSchema :: Environment -> Id -> [Sort] -> Sort -> Formula -> RSchema
+-- generateSchema e name inSorts outSort post = typePolymorphic allTypeParams allPredParams name inSorts outSort post
 -- predicate polymorphic only:
-generateSchema e name (DataS inS sorts) outSort post = predPolymorphic (getPredParams e inS) [] name (DataS inS sorts) outSort post
+generateSchema e name inSorts outSort post = predPolymorphic allPredParams [] name inSorts outSort post
+  where
+    allPredParams = concat $ fmap (getPredParams e) inSorts
+    allTypeParams = concat $ fmap (getTypeParams e) inSorts
 
-getTypeParams :: Environment -> Id -> [Id]
-getTypeParams e name = case Map.lookup name (e ^. datatypes) of
+getTypeParams :: Environment -> Sort -> [Id]
+getTypeParams e (DataS name _) = case Map.lookup name (e ^. datatypes) of
   Just d -> d ^. typeParams
   Nothing -> []
+getTypeParams e _              = []
 
-getPredParams :: Environment -> Id -> [PredSig]
-getPredParams e name = case Map.lookup name (e ^. datatypes) of
+getPredParams :: Environment -> Sort -> [PredSig]
+getPredParams e (DataS name _) = case Map.lookup name (e ^. datatypes) of
   Just d -> d ^. predParams
   Nothing -> []
+getPredParams e _              = []
 
 -- Wrap function in appropriate type-polymorphic Schema skeleton
-typePolymorphic :: [Id] -> [PredSig] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-typePolymorphic [] ps name inSort outSort f = predPolymorphic ps [] name inSort outSort f
-typePolymorphic (x:xs) ps name inSort outSort f = ForallT x (typePolymorphic xs ps name inSort outSort f)
+typePolymorphic :: [Id] -> [PredSig] -> Id -> [Sort] -> Sort -> Formula -> SchemaSkeleton Formula
+typePolymorphic [] ps name inSorts outSort f = predPolymorphic ps [] name inSorts outSort f
+typePolymorphic (x:xs) ps name inSorts outSort f = ForallT x (typePolymorphic xs ps name inSorts outSort f)
 
 -- Wrap function in appropriate predicate-polymorphic SchemaSkeleton
-predPolymorphic :: [PredSig] -> [Id] -> Id -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-predPolymorphic [] ps name inSort outSort f = genSkeleton name ps inSort outSort f
-predPolymorphic (x:xs) ps name inSort outSort f = ForallP x (predPolymorphic xs  ((predSigName x) : ps) name inSort outSort f)
+predPolymorphic :: [PredSig] -> [Id] -> Id -> [Sort] -> Sort -> Formula -> SchemaSkeleton Formula
+predPolymorphic [] ps name inSorts outSort f = genSkeleton name ps inSorts outSort f
+predPolymorphic (x:xs) ps name inSorts outSort f = ForallP x (predPolymorphic xs  ((predSigName x) : ps) name inSorts outSort f)
 
 -- Generate non-polymorphic core of schema
--- TODO: don't hard code qs
-genSkeleton :: Id -> [Id] -> Sort -> Sort -> Formula -> SchemaSkeleton Formula
-genSkeleton name preds inSort outSort post = Monotype (FunctionT "THIS" (ScalarT inType ftrue) (ScalarT outType post))
+genSkeleton :: Id -> [Id] -> [Sort] -> Sort -> Formula -> SchemaSkeleton Formula
+genSkeleton name preds inSorts outSort post = Monotype $ uncurry 0 inSorts 
   where
-    inType  = case inSort of
+    uncurry n (x:xs) = FunctionT ("arg" ++ show n) (ScalarT (toType x) ftrue) (uncurry (n + 1) xs)
+    uncurry _ [] = ScalarT outType post
+    toType s = case s of
       (DataS name args) -> DatatypeT name (map fromSort args) pforms
-      _ -> (baseTypeOf . fromSort) inSort
+      _ -> (baseTypeOf . fromSort) s 
     outType = (baseTypeOf . fromSort) outSort
     pforms = fmap predform preds
     predform x = Pred AnyS x []

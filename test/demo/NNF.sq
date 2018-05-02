@@ -1,0 +1,70 @@
+------------------------------------------------------------------
+-- In this example we use Synquid to translate a propositional  --
+-- formula into negation normal form (NNF), i.e. a form where   --
+-- negation is only applied to variables, and only other        --
+-- Boolean connectives are conjunction and disjunction.         --
+------------------------------------------------------------------
+
+------------------------------------------------------------------
+-- First we define two data types to represent unrestricted     -- 
+-- formulas (Expr) and formulas in NNF (NExpr)                  --
+------------------------------------------------------------------
+
+-- Variable identifiers (abstract type)
+data Id
+
+-- Propositional formulas
+data Expr where
+  Var :: x: Id -> Expr
+  Not :: e : Expr -> Expr
+  And :: lhs: Expr -> rhs: Expr -> Expr
+  Or :: lhs: Expr -> rhs: Expr -> Expr  
+  Implies :: lhs: Expr -> rhs: Expr -> Expr
+  
+-- Formulas is NNF  
+data NExpr where
+  NAtom :: x: Id -> neg: Bool -> NExpr        -- Possibly negated variable
+  NAnd :: lhs : NExpr -> rhs : NExpr -> NExpr -- Conjunction
+  NOr :: lhs : NExpr -> rhs : NExpr -> NExpr  -- Disjunction  
+  
+-- Formula size (required for termination)
+termination measure size :: Expr -> {Int | _v > 0} where
+  Var x -> 1
+  Not e -> 1 + size e
+  And lhs rhs -> 1 + size lhs + size rhs
+  Or lhs rhs -> 1 + size lhs + size rhs
+  Implies lhs rhs -> 1 + size lhs + size rhs  
+  
+--------------------------------------------------------------------
+-- Next we define what it means to evaluate each kind of formulas --
+-- given a variable assignment                                    --
+--------------------------------------------------------------------  
+  
+-- We use an uninterpreted predicate to represent the variable assignment  
+predicate store :: Id -> Bool  
+
+-- Evaluate a formula, given assignment in `store`
+measure eval :: Expr -> Bool where
+  Var x -> store x
+  Not e -> !(eval e)
+  And lhs rhs -> eval lhs && eval rhs
+  Or lhs rhs -> eval lhs || eval rhs
+  Implies lhs rhs -> eval lhs ==> eval rhs  
+  
+-- Evaluate an NNF formula, given assignment in `store`
+measure neval :: NExpr -> Bool where
+  NAtom x neg -> if neg then !(store x) else store x 
+  NAnd lhs rhs -> neval lhs && neval rhs
+  NOr lhs rhs -> neval lhs || neval rhs
+  
+--------------------------------------------------------------------
+-- Here is our synthesis goal!                                    --
+--------------------------------------------------------------------  
+
+-- Find a formula in NNF that always evaluates to the same value
+toNNF :: e: Expr -> {NExpr | neval _v == eval e} 
+toNNF = ??
+
+-- Components: constants true and false
+true :: {Bool | _v}  
+false :: {Bool | !_v}

@@ -134,6 +134,15 @@ CHECKING_BENCHMARKS = [
     ('AVL',                 []),
 ]
 
+DEMO_BENCHMARKS = [
+    ('BST-Insert',          []),
+    ('Holes',               []),
+    ('List-Replicate',      []),
+    ('List-Reverse',        []),
+    ('NNF',                 []),
+    ('Sort-Fold',           ['-m 1', '-a 2', '-e']),
+]
+
 class SynthesisResult:
     def __init__(self, name, time):
         self.name = name
@@ -150,6 +159,7 @@ def cmdline():
     a.add_argument('--check', action='store_true', help='run type checking tests')
     a.add_argument('--synt', action='store_true', help='run synthesis tests')
     a.add_argument('--sections', nargs="*", choices=SECTIONS + ['all'], default=['all'], help=('which synthesis tests to run'))
+    a.add_argument('--demo', action='store_true', help='run demo tests')
     return a.parse_args()
 
 def printerr(str):
@@ -242,7 +252,7 @@ if __name__ == '__main__':
         synquid_path = SYNQUID_PATH_WINDOWS
 
     # By default enable all tests:
-    if not (a.unit or a.check or a.synt):
+    if not (a.unit or a.check or a.synt or a.demo):
       a.unit = True
       a.check = True
       a.synt = True
@@ -273,6 +283,16 @@ if __name__ == '__main__':
         fail = check_diff()
         os.chdir('..')
 
+    if not fail and a.demo:
+        # Test online demos
+        os.chdir('demo') 
+        if os.path.isfile(LOGFILE_NAME):
+            os.remove(LOGFILE_NAME)
+        for (name, args) in DEMO_BENCHMARKS:
+            run_benchmark(name, args)
+        fail = check_diff()
+        os.chdir('..')
+
     if not fail and a.synt:
         # Run synthesis benchmarks in 'current' directory
         os.chdir('current')
@@ -290,3 +310,5 @@ if __name__ == '__main__':
             write_times(sum(BENCHMARKS.values(), []))
             check_diff()
         os.chdir('..')
+
+
