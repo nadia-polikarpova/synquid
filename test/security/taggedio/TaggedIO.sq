@@ -1,0 +1,23 @@
+{- TaggedIO -}
+
+data TaggedIO a <visibleTo :: User -> Bool>-
+
+returnIO :: <p :: User -> Bool> .
+    x:a ->
+    TaggedIO {a | _v == x} <p>
+
+bindIO :: <p :: User -> Bool> . <q :: User -> Bool> .
+    TaggedIO a <p> ->
+    (a -> TaggedIO b <q>) ->
+    TaggedIO b <{p _0 && q _0}>
+
+ifIO :: <b :: Bool> . <notb :: Bool> . <bc :: User -> Bool> . <pc0 :: User -> Bool> . <pc1 :: User -> Bool> .
+    cond: Tagged {Bool | (_v ==> b) && (!_v ==> notb)} <{b && bc _0}> ->
+    TaggedIO a <pc0> ->
+    TaggedIO a <pc1> ->
+    TaggedIO a <{(b ==> pc0 _0) && (notb ==> pc1 _0) && bc _0}>
+
+print :: <pp :: User -> Bool> .
+    Tagged {User | pp _v} <pp> ->
+    Tagged String <pp> ->
+    TaggedIO Unit <pp>
