@@ -19,3 +19,25 @@ showRecordByIdView = \rid .
     (print (return u) (bind record (\r . return (show r))))
     (returnIO Unit)
   ))
+
+-- (print ...) :: TaggedIO Unit {a}
+-- record :: Tagged Record {b}
+-- (ifIO ...) :: TaggedIO Ubit {c}
+
+-- True ==> c(_0)
+
+-- c(_0) ==> t(_0)
+
+-- (u == author (record rid)) ==> b
+-- t(_0) and b ==> a(_0)
+
+-- u == _v ==> pp(_v)
+-- a(_0) ==> pp(_0)
+
+-- pp(_0) ==> b(_0)
+
+-- b(_0) ==> True
+
+-- for some reason we get error message
+-- (u == author (record rid)) || _0 == u
+-- why OR instead of AND?
