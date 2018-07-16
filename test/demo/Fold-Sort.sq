@@ -1,0 +1,45 @@
+-------------------------------------------------------------------------
+-- This example illustrates discovery of recursive auxiliary functions --
+-------------------------------------------------------------------------
+
+-- We define a list parametrized with a relation between any element and all subsequent elements,
+-- and two standard measures over it:
+data RList a <r :: a -> a -> Bool> where
+  Nil :: RList a <r>
+  Cons :: x: a -> xs: RList {a | r x _v} <r> -> RList a <r>
+  
+termination measure len :: RList a -> {Int | _v >= 0} where
+  Nil -> 0
+  Cons x xs -> 1 + len xs  
+
+measure elems :: RList a -> Set a where
+  Nil -> []
+  Cons x xs -> [x] + elems xs  
+  
+-- We define two instances of the generic list type: unconstrained list and increasing list: 
+type List a = RList a <{True}>
+type IncList a = RList a <{_0 <= _1}>  
+  
+-- Inequalities can come in handy when dealing with increasing lists: 
+leq :: x: a -> y: a -> {Bool | _v == (x <= y)}
+neq :: x: a -> y: a -> {Bool | _v == (x != y)}
+  
+-- As the only components, we provide a generic fold function, 
+-- which is parametrized by the invariant 'p' it establishes between the list and the result: 
+foldr :: <p :: RList a -> b -> Bool> .
+    f: (xs: List a -> 
+        x: a -> 
+        acc: {b | p xs _v} -> 
+        {b | p (Cons x xs) _v}) -> -- Given a function that re-establishes 'p' with a longer list
+    seed: {b | p Nil _v} ->        -- and a seed that satisfies 'p' with an empty list
+    ys: List a ->                  -- and a list,
+    {b | p ys _v}                  -- return a result that satisfies 'p' with that list
+
+-- Now we simply ask Synquid to sort a list;
+-- it discovers that folding can do the job if 'b' is instantiated with 'IncList a' 
+-- and the invariant 'p' with 'elems _0 == elems _1 && len _0 == len _1';
+-- this translates into a specification for the auxiliary function 'f', 
+-- which has to insert 'x' into an increasing list 'acc'.
+-- Thus Synquid discovers insertion sort given no intuition apart form a generic iteration scheme
+sort :: xs: List a -> {IncList a | elems _v == elems xs && len _v == len xs}
+sort = ??

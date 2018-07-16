@@ -42,10 +42,39 @@ reverse = \xs .
                              x4)
 
 
-./NNF.sq:47: Error:
-  Not in scope: store
+
+
+toNNF :: e:Expr -> {NExpr|neval _v == eval e}
+toNNF = \e . 
+  match e with
+    Var x2 -> NAtom x2 false
+    Not x6 -> 
+      match x6 with
+        Var x8 -> NAtom x8 true
+        Not x12 -> toNNF x12
+        And x16 x17 -> NOr (toNNF (Not
+                                     x16)) (toNNF (Not x17))
+        Or x26 x27 -> NAnd (toNNF (Not
+                                     x26)) (toNNF (Not x27))
+        Implies x36 x37 -> NAnd (toNNF
+                                   x36) (toNNF (Not x37))
+    And x45 x46 -> NAnd (toNNF x45)
+                     (toNNF x46)
+    Or x53 x54 -> NOr (toNNF x53)
+                    (toNNF x54)
+    Implies x61 x62 -> NOr (toNNF
+                              x62) (toNNF (Not x61))
 
 
 
 sort :: xs:List a -> {IncList a|elems _v == elems xs && len _v == len xs}
-synquid: Map.!: given key is not an element in the map
+sort = \xs . 
+  let f0 = \x2 . \x3 . \x4 . 
+          match x4 with
+            Nil -> Cons x3 Nil
+            Cons x12 x13 -> 
+              if x3 <= x12
+                then Cons x3 (Cons x12 x13)
+                else Cons x12 (f0 x13 x3 x13) in
+  foldr f0 Nil xs
+
