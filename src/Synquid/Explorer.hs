@@ -333,7 +333,6 @@ generateMaybeMatchIf env t = (generateOneBranch >>= generateOtherBranches) `mplu
 generateE :: MonadHorn s => Environment -> RType -> Explorer s RProgram
 generateE env typ = do
   putMemo Map.empty                                     -- Starting E-term enumeration in a new environment: clear memoization store
-
   d <- asks . view $ _1 . eGuessDepth
   (Program pTerm pTyp) <- generateEUpTo env typ d                            -- Generate the E-term
   runInSolver $ isFinal .= True >> solveTypeConstraints >> isFinal .= False  -- Final type checking pass that eliminates all free type variables
@@ -465,7 +464,7 @@ enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s RProgram
 enumerateAt env typ 0 = do
     let symbols = Map.toList $ symbolsOfArity (arity typ) env
     useCounts <- use symbolUseCount
-    let symbols' = if arity typ == 0
+    let symbols' = filter (\(x, _) -> notElem x setConstructors) $ if arity typ == 0
                       then sortBy (mappedCompare (\(x, _) -> (Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
                       else sortBy (mappedCompare (\(x, _) -> (not $ Set.member x (env ^. constants), Map.findWithDefault 0 x useCounts))) symbols
     msum $ map pickSymbol symbols'

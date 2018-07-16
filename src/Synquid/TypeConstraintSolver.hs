@@ -270,6 +270,7 @@ simplifyConstraint' _ _ c@(Subtype _ AnyT _ _ _) = return ()
 simplifyConstraint' _ _ c@(WellFormed _ AnyT) = return ()
 -- Any datatype: drop only if lhs is a datatype
 simplifyConstraint' _ _ (Subtype _ (ScalarT (DatatypeT _ _ _) _) t _ _) | t == anyDatatype = return ()
+--simplifyConstraint' _ _ (Subtype _ (ScalarT (TypeVarT _ _) _) t _ _) | t == anyDatatype = return ()
 -- Well-formedness of a known predicate drop
 simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass = return ()
 

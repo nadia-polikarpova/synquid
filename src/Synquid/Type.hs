@@ -313,3 +313,4 @@ singletonCtor = "Singleton"
 insertSetCtor = "Insert"
 setTypeName = "DSet"
 setTypeVar = "setTypeVar"
+setConstructors = [emptySetCtor, singletonCtor, insertSetCtor]
