@@ -4,10 +4,13 @@ data Record
 getSessionUser :: TaggedIO User <{True}>
 
 predicate record :: RecordId -> Record
-getRecord :: rid:RecordId -> TaggedIO (Tagged {Record | _v == record rid} <{_0 == author (record rid)}>) <{True}>
+getRecord :: rid:RecordId -> TaggedIO (Tagged {Record | _v == record rid} <{True}>) <{True}>
 
 predicate author :: Record -> User
 getAuthor :: r:Record -> Tagged {User | _v == author r} <{True}>
+
+predicate title :: Record -> String
+getTitle :: r:Record -> Tagged {String | _v == title r} <{_0 == author r}>
 
 showRecordByIdView :: rid:RecordId -> TaggedIO Unit <{True}>
 showRecordByIdView = \rid .
@@ -15,8 +18,9 @@ showRecordByIdView = \rid .
   bindIO (getRecord rid) (\record .
   let author {- Tagged User -} = bind record (\r . getAuthor r) in
   let isOk {- Tagged Bool -} = bind author (\a . return (u == a)) in
-  ifIO isOk
-    (print (return u) (bind record (\r . return (show r))))
+  let title {- Tagged String -} = bind record (\r . getTitle r) in
+  ifIO_ isOk
+    (print (return u) title)
     (returnIO Unit)
   ))
 
@@ -36,8 +40,7 @@ showRecordByIdView = \rid .
 
 -- pp(_0) ==> b(_0)
 
--- b(_0) ==> True
+-- b(_0) ==> (_0 == author (record rid))
 
--- for some reason we get error message
+-- error message
 -- (u == author (record rid)) || _0 == u
--- why OR instead of AND?
