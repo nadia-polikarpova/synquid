@@ -1,24 +1,36 @@
 {- TaggedIO -}
 
-data TaggedIO a <visibleTo :: User -> Bool>-
+data TaggedIO a <visibleTo :: User -> Bool>
 
-returnIO :: <p :: User -> Bool> .
-    x:a ->
-    TaggedIO {a | _v == x} <p>
+returnIO :: x:a -> TaggedIO {a | _v == x} <{False}>
 
-bindIO :: <p :: User -> Bool> . <q :: User -> Bool> .
+bindIO :: <p :: User -> Bool> .
     TaggedIO a <p> ->
-    (a -> TaggedIO b <q>) ->
-    TaggedIO b <{p _0 && q _0}>
+    (a -> TaggedIO b <p>) ->
+    TaggedIO b <p>
 
--- dunno why this one doesn't work
+bind2 :: <p :: User -> Bool> .
+    x : Tagged a <p> ->
+    ({a | _v == content x} -> TaggedIO b <p>) ->
+    TaggedIO (Tagged b <p>) <p>
 
+ifIO :: <b :: Bool> . <t :: User -> Bool> . <bc :: User -> Bool> .
+    cond: Tagged {Bool | (_v ==> b)} <bc> ->
+    TaggedIO (Tagged a <bc>) <{t _0 && b && bc _0}> ->
+    TaggedIO (Tagged a <bc>) <{t _0 && bc _0}> ->
+    TaggedIO (Tagged a <bc>) <t>
 
-ifIO :: <b :: Bool> . <t :: User -> Bool> .
-    cond: Tagged {Bool | (_v ==> b)} <{b && t _0}> ->
-    TaggedIO a <{t _0 && b}> ->
-    TaggedIO a <t> ->
-    TaggedIO a <t>
+ifIO_ :: <b :: Bool> . <t :: User -> Bool> . <bc :: User -> Bool> .
+    cond: Tagged {Bool | (_v ==> b)} <bc> ->
+    TaggedIO a <{t _0 && b && bc _0}> ->
+    TaggedIO a2 <{t _0 && bc _0}> ->
+    TaggedIO Unit <t>
+ifIO_ = \cond . \a . \b .
+    bindIO (
+      ifIO cond
+        (bindIO a (\blah . returnIO (return Unit)))
+        (bindIO b (\blah . returnIO (return Unit)))
+    ) (\blah . returnIO (return Unit))
 
 {-
 ifIO :: <b :: Bool> . <t :: User -> Bool> .
@@ -37,7 +49,7 @@ ifIO :: <b :: Bool> . <t :: User -> Bool> . <notb :: Bool> .
     TaggedIO a <t>
 -}
 
--- what I want the complete version to look like
+-- what I want the sound version to look like
 
 {-
 ifIO :: <b :: Bool> . <t :: User -> Bool> . <r :: User -> Bool>
