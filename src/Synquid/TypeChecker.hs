@@ -42,7 +42,7 @@ reconstruct eParams tParams goal = do
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos s) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos s)
 reconstructTopLevel (Goal funName env (ForallP sig sch) impl depth pos s) = reconstructTopLevel (Goal funName (addBoundPredicate sig env) sch impl depth pos s)
-reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _ synth) = local (set (_1 . auxDepth) depth) $ reconstructFix
+reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl depth _ synth) = local (set (_1 . auxDepth) depth) reconstructFix
   where
     reconstructFix = do
       let typ' = renameAsImpl (isBound env) impl typ
@@ -54,7 +54,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
       let predGeneralized sch = if predPolymorphic then foldr ForallP sch pvs else sch -- Version of @t'@ generalized in bound predicate variables of the enclosing function
       let typeGeneralized sch = if polymorphic then foldr ForallT sch tvs else sch -- Version of @t'@ generalized in bound type variables of the enclosing function
       let env' = foldr (\(f, t) -> addPolyVariable f (typeGeneralized . predGeneralized . Monotype $ t) . (shapeConstraints %~ Map.insert f (shape typ'))) env recCalls
-      let ctx = \p -> if null recCalls then p else Program (PFix (map fst recCalls) p) typ'
+      let ctx p = if null recCalls then p else Program (PFix (map fst recCalls) p) typ'
       p <- inContext ctx  $ reconstructI env' typ' impl
       return $ ctx p
 
