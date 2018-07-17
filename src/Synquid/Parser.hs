@@ -127,17 +127,28 @@ parseConstructorSig = do
   ctorType <- parseType
   return $ ConstructorSig ctorName ctorType
 
+parseMeasureConstantArgs :: Parser MeasureDefaults
+parseMeasureConstantArgs = many argWithName
+  where 
+    argWithName = do 
+      name <- parseIdentifier
+      reservedOp ":"
+      sort <- parseSort
+      reservedOp "->"
+      return (name, sort)
+
 parseMeasureDecl :: Parser BareDeclaration
 parseMeasureDecl = do
   isTermination <- option False (reserved "termination" >> return True)
   reserved "measure"
   measureName <- parseIdentifier
   reservedOp "::"
+  args <- parseMeasureConstantArgs
   inSort <- parseSort
   reservedOp "->"
   (outSort, post) <- parseRefinedSort <|> ((, ftrue) <$> parseSort)
   cases <- option [] (reserved "where" >> indented >> block parseDefCase)
-  return $ MeasureDecl measureName inSort outSort post cases isTermination
+  return $ MeasureDecl measureName inSort outSort post cases args isTermination
   where
     parseDefCase = do
       ctor <- parseTypeName

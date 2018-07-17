@@ -1,0 +1,34 @@
+data List a where 
+  Nil :: List a 
+  Cons :: x: a -> xs: List a -> List a 
+
+termination measure len :: List a -> { Int | _v >= 0 } where 
+  Nil -> 0
+  Cons x xs -> 1 + len xs
+
+measure numeq :: x: a -> List a -> { Int | _v >= 0 }  where 
+  Nil -> 0
+  Cons y ys -> 
+    if x == y
+      then 1 + numeq x ys
+      else numeq x ys
+
+-- Verification test
+copies :: x: a -> xs: List a -> { Int | _v == numeq x xs } 
+copies = \x. \xs. 
+  match xs with 
+    Nil -> 0
+    Cons y ys -> 
+      if y == x 
+        then 1 + copies x ys
+        else copies x ys
+
+-- Failing verification test
+copies' :: x: a -> xs: List a -> { Int | _v == numeq x xs }
+copies' = \x. \xs. 
+  match xs with 
+    Nil -> 0 
+    Cons y ys -> 
+      if x == y 
+        then 1 - copies' x ys 
+        else copies' x ys

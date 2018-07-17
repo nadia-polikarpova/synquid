@@ -323,7 +323,7 @@ instance Pretty MeasureCase where
   pretty (MeasureCase cons args def) = text cons <+> hsep (map text args) <+> text "->" <+> pretty def
 
 instance Pretty MeasureDef where
-  pretty (MeasureDef inSort outSort defs post) = nest 2 (pretty inSort <+> text "->" <+> pretty outSort <+> braces (pretty post) $+$ vsep (map pretty defs))
+  pretty (MeasureDef inSort outSort defs constArgs post) = nest 2 (prettyMeasureDefaults constArgs <+> pretty inSort <+> text "->" <+> pretty outSort <+> braces (pretty post) $+$ vsep (map pretty defs))
 
 prettyBinding (name, typ) = text name <+> operator "::" <+> pretty typ
 
@@ -380,14 +380,21 @@ instance Pretty BareDeclaration where
   pretty (DataDecl name tParams pParams ctors) = hang tab $
     keyword "data" <+> text name <+> hsep (map text tParams) <+> hsep (map prettyVarianceParam pParams) <+> keyword "where"
     $+$ vsep (map pretty ctors)
-  pretty (MeasureDecl name inSort outSort post cases isTermination) = hang tab $
+  pretty (MeasureDecl name inSort outSort post cases args isTermination) = hang tab $
     if isTermination then keyword "termination" else empty
-    <+> keyword "measure" <+> text name <+> operator "::" <+> pretty inSort <+> operator "->"
+    <+> keyword "measure" <+> text name <+> operator "::" <+> prettyMeasureDefaults args <+> pretty inSort <+> operator "->"
     <+> if post == ftrue then pretty outSort else hlBraces (pretty outSort <+> operator "|" <+> pretty post) <+> keyword "where"
     $+$ vsep (map pretty cases)
   pretty (SynthesisGoal name impl) = text name <+> operator "=" <+> pretty impl
   pretty (MutualDecl names) = keyword "mutual" <+> commaSep (map text names)
   pretty (InlineDecl name args body) = keyword "inline" <+> text name <+> hsep (map text args) <+> operator "=" <+> pretty body
+
+prettyMeasureDefaults args = punctuateEnd (operator "->") $ map formatPair args
+  where 
+    formatPair (v, s) = text v <+> operator ":" <+> pretty s 
+    punctuateEnd op [] = empty 
+    punctuateEnd op [d] = d <+> op 
+    punctuateEnd op (d:ds) = d <+> op <+> punctuateEnd op ds
 
 instance Pretty a => Pretty (Pos a) where
   pretty (Pos _ x) = pretty x
