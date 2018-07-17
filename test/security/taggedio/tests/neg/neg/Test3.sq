@@ -1,0 +1,35 @@
+data RecordId
+data Record
+
+getSessionUser :: TaggedIO User <{True}>
+
+predicate record :: RecordId -> Record
+getRecord :: rid:RecordId -> TaggedIO (Tagged {Record | _v == record rid} <{True}>) <{True}>
+
+predicate isAuthorPublic :: Record -> Bool
+getIsAuthorPublic :: r:Record -> Tagged {Bool | _v == isAuthorPublic r} <{True}>
+
+predicate author :: Record -> User
+getAuthor :: r:Record -> Tagged {User | _v == author r} <{isAuthorPublic r}>
+
+predicate title :: Record -> String
+getTitle :: r:Record -> Tagged {String | _v == title r} <{True}>
+
+showRecordByIdView :: rid:RecordId -> TaggedIO Unit <{True}>
+showRecordByIdView = \rid .
+  bindIO (getSessionUser) (\u .
+  bindIO (getRecord rid) (\record .
+  let author {- Tagged User -} = bind record (\r . getAuthor r) in
+  let isAuthorSame {- Tagged Bool -} = bind author (\a . return (u == a)) in
+  let title {- Tagged String -} = bind record (\r . getTitle r) in
+  let isAuthorPublic {- Tagged Bool -} = bind record (\r . getIsAuthorPublic r) in
+    bindIO (
+      bind2 isAuthorPublic (\cond . if True then (
+            ifIO_ isAuthorSame
+                  (print (return u) title)
+                  (returnIO Unit)
+      ) else (
+            returnIO Unit
+      ))
+    ) (\blah . returnIO Unit)
+  ))
