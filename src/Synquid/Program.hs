@@ -124,7 +124,7 @@ fmlToProgram fml@(Binary op e1 e2) = let
     opRes
       | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
       | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
-fmlToProgram fml@(Pred s x (f:fs)) = Program (PApp fn (curriedApp (fmlToProgram f) fs)) AnyT --(addRefinement (fromSort s) (varRefinement x s))
+fmlToProgram fml@(Pred s x fs) = curriedApp fn fs --(addRefinement (fromSort s) (varRefinement x s))
   where
     fn = Program (PSymbol x) (FunctionT x AnyT AnyT {-(fromSort s)-})
     curriedApp :: RProgram -> [Formula] -> RProgram
@@ -146,7 +146,7 @@ fmlToUProgram fml@(Binary op e1 e2) = let
     fun1 = Program (PSymbol $ binOpTokens Map.! op) AnyT
     fun2 = Program (PApp fun1 p1) AnyT
   in Program (PApp fun2 p2) AnyT
-fmlToUProgram fml@(Pred _ x (f:fs)) = Program (PApp fn (curriedApp (fmlToUProgram f) fs)) AnyT
+fmlToUProgram fml@(Pred _ x fs) = curriedApp fn fs
   where
     fn = Program (PSymbol x) AnyT
     curriedApp :: RProgram -> [Formula] -> RProgram
@@ -157,7 +157,7 @@ fmlToUProgram (Ite gf f1 f2) = Program (PIf gp p1 p2) AnyT
     gp = fmlToUProgram gf
     p1 = fmlToUProgram f1
     p2 = fmlToUProgram f2
-fmlToUProgram (Cons _ x (f:fs)) = Program (PApp fn (curriedApp (fmlToUProgram f) fs)) AnyT
+fmlToUProgram (Cons _ x fs) = curriedApp fn fs 
   where
     fn = Program (PSymbol x) AnyT
     curriedApp :: RProgram -> [Formula] -> RProgram
@@ -199,11 +199,14 @@ makeLenses ''DatatypeDef
 data MeasureCase = MeasureCase Id [Id] Formula
   deriving (Show, Eq, Ord)
 
+type MeasureDefaults = [(Id, Sort)]
+
 -- | User-defined measure function representation
 data MeasureDef = MeasureDef {
   _inSort :: Sort,
   _outSort :: Sort,
   _definitions :: [MeasureCase],
+  _constantArgs :: MeasureDefaults,
   _postcondition :: Formula
 } deriving (Show, Eq, Ord)
 
@@ -406,7 +409,7 @@ addScrutinee p = usedScrutinees %~ (p :)
 allPredicates env = Map.fromList (map (\(PredSig pName argSorts resSort) -> (pName, resSort:argSorts)) (env ^. boundPredicates)) `Map.union` (env ^. globalPredicates)
 
 -- | 'allMeasuresOf' @dtName env@ : all measure of datatype with name @dtName@ in @env@
-allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _) -> dtName == sName) $ env ^. measures
+allMeasuresOf dtName env = Map.filter (\(MeasureDef (DataS sName _) _ _ _ _) -> dtName == sName) $ env ^. measures
 
 -- | 'allMeasurePostconditions' @baseT env@ : all nontrivial postconditions of measures of @baseT@ in case it is a datatype
 allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env =
@@ -417,12 +420,12 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                    if isAbstract then map contentProperties allMeasures else [] ++
                    if includeQuanitifed then map elemProperties allMeasures else []
   where
-    extractPost (mName, MeasureDef _ outSort _ fml) =
+    extractPost (mName, MeasureDef _ outSort _ _ fml) =
       if fml == ftrue
         then Nothing
         else Just $ substitute (Map.singleton valueVarName (Pred outSort mName [Var (toSort baseT) valueVarName])) fml
 
-    contentProperties (mName, MeasureDef (DataS _ vars) a _ _) = case elemIndex a vars of
+    contentProperties (mName, MeasureDef (DataS _ vars) a _ _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ "returns" one of datatype's parameters: transfer the refinement onto the value of the measure
                 in let
@@ -431,7 +434,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                    in Just $ substitute (Map.singleton valueVarName measureApp) fml
     contentProperties (mName, MeasureDef {}) = Nothing
 
-    elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _) = case elemIndex a vars of
+    elemProperties (mName, MeasureDef (DataS _ vars) (SetS a) _ _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ is a set of datatype "elements": add an axiom that every element of the set has that property
                 in if fml == ftrue || fml == ffalse || not (Set.null $ unknownsOf fml)
@@ -480,7 +483,7 @@ data BareDeclaration =
   TypeDecl Id [Id] RType |                                  -- ^ Type name, variables, and definition
   FuncDecl Id RSchema |                                     -- ^ Function name and signature
   DataDecl Id [Id] [(PredSig, Bool)] [ConstructorSig] |     -- ^ Datatype name, type parameters, predicate parameters, and constructor definitions
-  MeasureDecl Id Sort Sort Formula [MeasureCase] Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
+  MeasureDecl Id Sort Sort Formula [MeasureCase] MeasureDefaults Bool |     -- ^ Measure name, input sort, output sort, postcondition, definition cases, and whether this is a termination metric
   PredDecl PredSig |                                        -- ^ Module-level predicate
   QualifierDecl [Formula] |                                 -- ^ Qualifiers
   MutualDecl [Id] |                                         -- ^ Mutual recursion group
@@ -524,23 +527,27 @@ filterEnv e m = Lens.set measures (Map.filterWithKey (\k _ -> k == m) (e ^. meas
 
 -- Transform a resolved measure into a program
 measureProg :: Id -> MeasureDef -> UProgram
-measureProg name (MeasureDef inSort outSort defs post) = Program {
+measureProg name (MeasureDef inSort outSort defs [] post) = Program {
   typeOf = t, content = PFun "arg0" Program{ content = PMatch Program{ content = PSymbol "arg0", typeOf = t } (map mCase defs), typeOf = t} }
   where
     t   = AnyT
+measureProg name (MeasureDef inSort outSort defs (x:xs) post) = Program {
+  typeOf = AnyT, content = PFun (fst x) (measureProg name (MeasureDef inSort outSort defs xs post))
+}
+
 
 -- Transform between case types
 mCase :: MeasureCase -> Case RType
 mCase (MeasureCase con args body) = Case{constructor = con, argNames = args, expr = fmlToUProgram body}
 
--- Transform type signature into a synthesis/typechecking schema
-generateSchema :: Environment -> Id -> [Sort] -> Sort -> Formula -> RSchema
+-- Transform measure or predicate's sort signature into a synthesis/typechecking schema
+generateSchema :: Environment -> Id -> [(Maybe Id, Sort)] -> Sort -> Formula -> RSchema
 -- generateSchema e name inSorts outSort post = typePolymorphic allTypeParams allPredParams name inSorts outSort post
 -- predicate polymorphic only:
 generateSchema e name inSorts outSort post = predPolymorphic allPredParams [] name inSorts outSort post
   where
-    allPredParams = concat $ fmap (getPredParams e) inSorts
-    allTypeParams = concat $ fmap (getTypeParams e) inSorts
+    allPredParams = concat $ fmap ((getPredParams e) . snd) inSorts
+    allTypeParams = concat $ fmap ((getTypeParams e) . snd) inSorts
 
 getTypeParams :: Environment -> Sort -> [Id]
 getTypeParams e (DataS name _) = case Map.lookup name (e ^. datatypes) of
@@ -555,20 +562,20 @@ getPredParams e (DataS name _) = case Map.lookup name (e ^. datatypes) of
 getPredParams e _              = []
 
 -- Wrap function in appropriate type-polymorphic Schema skeleton
-typePolymorphic :: [Id] -> [PredSig] -> Id -> [Sort] -> Sort -> Formula -> SchemaSkeleton Formula
+typePolymorphic :: [Id] -> [PredSig] -> Id -> [(Maybe Id, Sort)] -> Sort -> Formula -> SchemaSkeleton Formula
 typePolymorphic [] ps name inSorts outSort f = predPolymorphic ps [] name inSorts outSort f
 typePolymorphic (x:xs) ps name inSorts outSort f = ForallT x (typePolymorphic xs ps name inSorts outSort f)
 
 -- Wrap function in appropriate predicate-polymorphic SchemaSkeleton
-predPolymorphic :: [PredSig] -> [Id] -> Id -> [Sort] -> Sort -> Formula -> SchemaSkeleton Formula
+predPolymorphic :: [PredSig] -> [Id] -> Id -> [(Maybe Id, Sort)] -> Sort -> Formula -> SchemaSkeleton Formula
 predPolymorphic [] ps name inSorts outSort f = genSkeleton name ps inSorts outSort f
 predPolymorphic (x:xs) ps name inSorts outSort f = ForallP x (predPolymorphic xs  ((predSigName x) : ps) name inSorts outSort f)
 
 -- Generate non-polymorphic core of schema
-genSkeleton :: Id -> [Id] -> [Sort] -> Sort -> Formula -> SchemaSkeleton Formula
+genSkeleton :: Id -> [Id] -> [(Maybe Id, Sort)] -> Sort -> Formula -> SchemaSkeleton Formula
 genSkeleton name preds inSorts outSort post = Monotype $ uncurry 0 inSorts 
   where
-    uncurry n (x:xs) = FunctionT ("arg" ++ show n) (ScalarT (toType x) ftrue) (uncurry (n + 1) xs)
+    uncurry n (x:xs) = FunctionT (fromMaybe ("arg" ++ show n) (fst x)) (ScalarT (toType (snd x)) ftrue) (uncurry (n + 1) xs)
     uncurry _ [] = ScalarT outType post
     toType s = case s of
       (DataS name args) -> DatatypeT name (map fromSort args) pforms

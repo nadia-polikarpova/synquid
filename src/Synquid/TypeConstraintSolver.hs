@@ -270,6 +270,7 @@ simplifyConstraint' _ _ c@(Subtype _ AnyT _ _ _) = return ()
 simplifyConstraint' _ _ c@(WellFormed _ AnyT) = return ()
 -- Any datatype: drop only if lhs is a datatype
 simplifyConstraint' _ _ (Subtype _ (ScalarT (DatatypeT _ _ _) _) t _ _) | t == anyDatatype = return ()
+--simplifyConstraint' _ _ (Subtype _ (ScalarT (TypeVarT _ _) _) t _ _) | t == anyDatatype = return ()
 -- Well-formedness of a known predicate drop
 simplifyConstraint' _ pass c@(WellFormedPredicate _ _ p) | p `Map.member` pass = return ()
 
@@ -559,6 +560,16 @@ freshVar env prefix = do
     then freshVar env prefix
     else return x
 
+-- | 'somewhatFreshVar' @env prefix sort@ : A variable of sort @sort@ not bound in @env@
+-- Exists to generate fresh variables for multi-argument measures without making all of the constructor axiom instantiation code monadic
+somewhatFreshVar :: Environment -> String -> Sort -> Formula
+somewhatFreshVar env prefix s = Var s name 
+  where 
+    name = unbound 0 (prefix ++ show 0)
+    unbound n v = if Map.member v (allSymbols env)
+                    then unbound (n + 1) (v ++ show n)
+                    else v
+
 -- | 'fresh' @t@ : a type with the same shape as @t@ but fresh type variables, fresh predicate variables, and fresh unknowns as refinements
 fresh :: Monad s => Environment -> RType -> TCSolver s RType
 fresh env (ScalarT (TypeVarT vSubst a) _) | not (isBound env a) = do
@@ -637,17 +648,20 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     Pred _ p args -> Set.unions $ map inst args
     _ -> Set.empty
   where
-    measureAxiom resS ctor args (MeasureDef inSort _ defs _) =
+    measureAxiom resS ctor args (MeasureDef inSort _ defs constantArgs _) =
       let
         MeasureCase _ vars body = head $ filter (\(MeasureCase c _ _) -> c == ctor) defs
         sParams = map varSortName (sortArgsOf inSort) -- sort parameters in the datatype declaration
         sArgs = sortArgsOf resS -- actual sort argument in the constructor application
         body' = noncaptureSortSubstFml sParams sArgs body -- measure definition with actual sorts for all subexpressions
-        newValue = case mVal of
-                      Nothing -> Cons resS ctor args
-                      Just val -> val
-        subst = Map.fromList $ (valueVarName, newValue) : zip vars args -- substitute formals for actuals and constructor application or provided value for _v
-      in substitute subst body'
+        newValue = fromMaybe (Cons resS ctor args) mVal
+        constArgNames = fmap fst constantArgs
+        prefixes = fmap (++ "D") constArgNames 
+        constVars = zipWith (somewhatFreshVar env) prefixes (fmap snd constantArgs)
+        subst = Map.fromList $ (valueVarName, newValue) : zip vars args ++ zip constArgNames constVars-- substitute formals for actuals and constructor application or provided value for _v
+        wrapForall xs f = foldl (flip All) f xs
+        qBody = wrapForall constVars body'
+      in substitute subst qBody
 
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d'
