@@ -13,7 +13,8 @@ data World
 getWorld :: TaggedIO World <{True}>
    
 -- | Current session user
-getSessionUser :: TaggedIO (Tagged User <{True}>) <{True}>
+predicate sessionUser :: User      
+getSessionUser :: TaggedIO (Tagged {User | _v == sessionUser} <{True}>) <{True}>
 
 -- | PC chair (public)
 predicate chair :: World -> User
@@ -39,3 +40,19 @@ showPaper = \pid .
   print u out
 	)
 	)
+
+-- repair should look like:
+{-
+showPaper :: pid: PaperId -> TaggedIO Unit <{True}>
+showPaper = \pid .
+	bindIO getWorld (\w .
+	bindIO getSessionUser (\u .
+  let title = getPaperTitle w pid in
+  let authors = liftM show (bind (liftM2 eq (getChair w) u) (\c . if c then
+                                (getPaperAuthors w pid) else
+                                (return Nil))) in
+  let out = liftM2 strcat title authors in
+  print u out
+	)
+	)
+-}
