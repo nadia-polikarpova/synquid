@@ -8,14 +8,20 @@ returnIO :: x:a -> TaggedIO {a | _v == x} <{False}>
 joinIO :: <p :: User -> Bool> . TaggedIO (TaggedIO a <p>) <p> -> TaggedIO a <p>
 mapIO :: <p :: User -> Bool> . (a -> b) -> TaggedIO a <p> -> TaggedIO b <p>
 
-flip :: <p :: User -> Bool> . Tagged (TaggedIO a <p>) <p> -> TaggedIO (Tagged a <p>) <p>
+flip :: <p :: User -> Bool> . <q :: User -> Bool> .
+    Tagged (TaggedIO a <p>) <{p _0 && q _0}> ->
+    TaggedIO (Tagged a <q>) <p>
+
+-- TODO can this be implemented with the existing Tagged stuff?
+splitTagged :: <p :: User -> Bool> . <q :: User -> Bool> .
+    Tagged a <{p _0 && q _0}> -> Tagged (Tagged a <p>) <q>
 
 -- non-primitives
 
-bind2 :: <p :: User -> Bool> .
-    Tagged a <p> ->
+bind2 :: <p :: User -> Bool> . <q :: User -> Bool> .
+    Tagged a <{p _0 && q _0}> ->
     (a -> TaggedIO b <p>) ->
-    TaggedIO (Tagged b <p>) <p>
+    TaggedIO (Tagged b <q>) <p>
 bind2 = \a . \f . flip (bind a (\t . return (f t)))
 
 bindIO :: <p :: User -> Bool> .
@@ -24,12 +30,15 @@ bindIO :: <p :: User -> Bool> .
     TaggedIO b <p>
 bindIO = \a . \f . joinIO (mapIO f a)
 
+joinInner :: <p :: User -> Bool> . <q :: User -> Bool> . TaggedIO (Tagged (Tagged a <p>) <p>) <q> -> TaggedIO (Tagged a <p>) <q>
+joinInner = \x . mapIO (\tt . bind tt (\y . y)  ) x
+
 ifIO :: <b :: Bool> . <t :: User -> Bool> . <bc :: User -> Bool> .
     cond: Tagged {Bool | (_v ==> b)} <bc> ->
     TaggedIO (Tagged a <bc>) <{t _0 && b && bc _0}> ->
     TaggedIO (Tagged a <bc>) <{t _0 && bc _0}> ->
     TaggedIO (Tagged a <bc>) <t>
-ifIO = \cond . \a . \b . (bind2 cond (\c . (if c then a else b)))
+ifIO = \cond . \a . \b . joinInner (bind2 cond (\c . (if c then a else b)))
 
 ifIO_ :: <b :: Bool> . <t :: User -> Bool> . <bc :: User -> Bool> .
     cond: Tagged {Bool | (_v ==> b)} <bc> ->
@@ -41,7 +50,14 @@ ifIO_ = \cond . \a . \b .
       ifIO cond
         (bindIO a (\blah . returnIO (return Unit)))
         (bindIO b (\blah . returnIO (return Unit)))
-    ) (\blah . returnIO (return Unit))
+    ) (\blah . returnIO Unit)
+
+liftFnIO :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <x :: User -> Bool> .
+    ((Tagged a <p>) -> TaggedIO (Tagged b <q>) <{r _0 && x _0}>) ->
+    (Tagged a <{p _0 && x _0}>) ->
+    TaggedIO (Tagged b <{q _0 && x _0}>) <{r _0}>
+liftFnIO = \fn . \x .
+  joinInner (flip (bind (splitTagged x) (\t . return (fn t))))
 
 {-
 ifIO :: <b :: Bool> . <t :: User -> Bool> .
