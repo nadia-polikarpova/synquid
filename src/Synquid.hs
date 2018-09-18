@@ -2,15 +2,15 @@
 
 module Main where
 
-import Synquid.Logic
-import Synquid.Type
-import Synquid.Program
+import Language.Synquid.Logic
+import Language.Synquid.Type
+import Language.Synquid.Program
 import Language.Synquid.Error
 import Language.Synquid.Pretty
 import Synquid.Parser
 import Synquid.Resolver (resolveDecls)
-import Synquid.SolverMonad
-import Synquid.HornSolver
+import Language.Synquid.SolverMonad
+import Language.Synquid.HornSolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.Synthesizer

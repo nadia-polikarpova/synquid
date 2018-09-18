@@ -3,12 +3,12 @@
 -- | The parser for Synquid's program specification DSL.
 module Synquid.Parser (parseFromFile, parseProgram, toErrorMessage) where
 
-import Synquid.Logic
-import Synquid.Type
-import Synquid.Program
+import Language.Synquid.Logic
+import Language.Synquid.Type
+import Language.Synquid.Program
 import Language.Synquid.Error
-import Synquid.Tokens
-import Synquid.Util
+import Language.Synquid.Tokens
+import Language.Synquid.Util
 
 import Data.List
 import qualified Data.Map as Map
@@ -129,8 +129,8 @@ parseConstructorSig = do
 
 parseMeasureConstantArgs :: Parser MeasureDefaults
 parseMeasureConstantArgs = many argWithName
-  where 
-    argWithName = do 
+  where
+    argWithName = do
       name <- parseIdentifier
       reservedOp ":"
       sort <- parseSort
