@@ -24,8 +24,8 @@ import Synquid.Type
 import Synquid.Program
 import Synquid.Logic hiding (Var)
 import Synquid.Tokens
-import Synquid.Error
-import qualified Synquid.Pretty
+import Language.Synquid.Error
+import qualified Language.Synquid.Pretty
 
 
 (|>) x y = y x

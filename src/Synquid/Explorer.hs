@@ -6,12 +6,12 @@ module Synquid.Explorer where
 import Synquid.Logic
 import Synquid.Type hiding (set)
 import Synquid.Program
-import Synquid.Error
+import Language.Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import qualified Synquid.TypeConstraintSolver as TCSolver (freshId, freshVar)
 import Synquid.Util
-import Synquid.Pretty
+import Language.Synquid.Pretty
 import Synquid.Tokens
 
 import Data.Maybe
@@ -631,7 +631,7 @@ instantiate env sch top argNames = do
               then do
                 p' <- freshId (map toUpper p)
                 addConstraint $ WellFormedPredicate env argSorts' p'
-                return $ Pred BoolS p' (zipWith Var argSorts' deBrujns)
+                return $ Func BoolS p' (zipWith Var argSorts' deBrujns)
               else return ffalse
       instantiate' subst (Map.insert p fml pSubst) sch
     instantiate' subst pSubst (Monotype t) = go subst pSubst argNames t

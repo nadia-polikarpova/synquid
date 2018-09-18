@@ -4,7 +4,7 @@ import Data.Map hiding (map)
 import Data.Time.Clock
 import Data.Fixed
 
-import Synquid.Pretty
+import Language.Synquid.Pretty
 
 
 {- Time Measurement -}

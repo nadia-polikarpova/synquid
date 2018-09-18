@@ -7,7 +7,7 @@ import Synquid.Logic
 import Synquid.Type as Type
 import Synquid.Tokens
 import Synquid.Util
-import Synquid.Error
+import Language.Synquid.Error
 
 import Data.Maybe
 import Data.Either
@@ -124,7 +124,7 @@ fmlToProgram fml@(Binary op e1 e2) = let
     opRes
       | op == Times || op == Times || op == Times = int $ valInt |=| Binary op (intVar "x") (intVar "y")
       | otherwise                                 = bool $ valBool |=| Binary op (intVar "x") (intVar "y")
-fmlToProgram fml@(Pred s x fs) = curriedApp fn fs --(addRefinement (fromSort s) (varRefinement x s))
+fmlToProgram fml@(Func s x fs) = curriedApp fn fs --(addRefinement (fromSort s) (varRefinement x s))
   where
     fn = Program (PSymbol x) (FunctionT x AnyT AnyT {-(fromSort s)-})
     curriedApp :: RProgram -> [Formula] -> RProgram
@@ -146,7 +146,7 @@ fmlToUProgram fml@(Binary op e1 e2) = let
     fun1 = Program (PSymbol $ binOpTokens Map.! op) AnyT
     fun2 = Program (PApp fun1 p1) AnyT
   in Program (PApp fun2 p2) AnyT
-fmlToUProgram fml@(Pred _ x fs) = curriedApp fn fs
+fmlToUProgram fml@(Func _ x fs) = curriedApp fn fs
   where
     fn = Program (PSymbol x) AnyT
     curriedApp :: RProgram -> [Formula] -> RProgram
@@ -423,14 +423,14 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
     extractPost (mName, MeasureDef _ outSort _ _ fml) =
       if fml == ftrue
         then Nothing
-        else Just $ substitute (Map.singleton valueVarName (Pred outSort mName [Var (toSort baseT) valueVarName])) fml
+        else Just $ substitute (Map.singleton valueVarName (Func outSort mName [Var (toSort baseT) valueVarName])) fml
 
     contentProperties (mName, MeasureDef (DataS _ vars) a _ _ _) = case elemIndex a vars of
       Nothing -> Nothing
       Just i -> let (ScalarT elemT fml) = tArgs !! i -- @mName@ "returns" one of datatype's parameters: transfer the refinement onto the value of the measure
                 in let
                     elemSort = toSort elemT
-                    measureApp = Pred elemSort mName [Var (toSort baseT) valueVarName]
+                    measureApp = Func elemSort mName [Var (toSort baseT) valueVarName]
                    in Just $ substitute (Map.singleton valueVarName measureApp) fml
     contentProperties (mName, MeasureDef {}) = Nothing
 
@@ -442,7 +442,7 @@ allMeasurePostconditions includeQuanitifed baseT@(DatatypeT dtName tArgs _) env 
                     else  let
                             elemSort = toSort elemT
                             scopedVar = Var elemSort "_x"
-                            setVal = Pred (SetS elemSort) mName [Var (toSort baseT) valueVarName]
+                            setVal = Func (SetS elemSort) mName [Var (toSort baseT) valueVarName]
                           in Just $ All scopedVar (fin scopedVar setVal |=>| substitute (Map.singleton valueVarName scopedVar) fml)
     elemProperties (mName, MeasureDef {}) = Nothing
 
@@ -582,7 +582,7 @@ genSkeleton name preds inSorts outSort post = Monotype $ uncurry 0 inSorts
       _ -> (baseTypeOf . fromSort) s 
     outType = (baseTypeOf . fromSort) outSort
     pforms = fmap predform preds
-    predform x = Pred AnyS x []
+    predform x = Func AnyS x []
 
 -- Default set implementation -- Needed to typecheck measures involving sets
 defaultSetType :: BareDeclaration
