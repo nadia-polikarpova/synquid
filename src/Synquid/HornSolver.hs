@@ -13,7 +13,7 @@ module Synquid.HornSolver (
 import Synquid.Logic
 import Synquid.SolverMonad
 import Synquid.Util
-import Synquid.Pretty
+import Language.Synquid.Pretty
 
 import Data.Function
 import Data.List

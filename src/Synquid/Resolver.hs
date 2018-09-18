@@ -6,8 +6,8 @@ module Synquid.Resolver (resolveDecls, resolveRefinement, resolveRefinedType, ad
 import Synquid.Logic
 import Synquid.Type
 import Synquid.Program
-import Synquid.Error
-import Synquid.Pretty
+import Language.Synquid.Error
+import Language.Synquid.Pretty
 import Synquid.Util
 import Control.Applicative
 import Control.Monad.Except
@@ -244,7 +244,7 @@ resolveSignatures (MeasureDecl measureName _ _ post defCases args _) = do
             else do
               let ctorParams = allArgs consT
               let subst = Map.fromList $ cSub ++ zip binders ctorParams
-              let fml = Pred AnyS measureName (map snd cSub ++ [Var AnyS valueVarName]) |=| substitute subst body
+              let fml = Func AnyS measureName (map snd cSub ++ [Var AnyS valueVarName]) |=| substitute subst body
               fml' <- withLocalEnv $ do
                 environment  . boundTypeVars .= boundVarsOf consSch
                 environment %= addAllVariables ctorParams
@@ -269,7 +269,7 @@ checkMeasureCase measure constArgs (Ite f g h) = do
   checkMeasureCase measure constArgs h
 checkMeasureCase measure constArgs (Cons _ _ fs) = 
   mapM_ (checkMeasureCase measure constArgs) fs
-checkMeasureCase measure constArgs p@(Pred s x args) =
+checkMeasureCase measure constArgs p@(Func s x args) =
   if x == measure
     then do 
       let args' = take numArgs args
@@ -352,7 +352,7 @@ resolveType s@(ScalarT (DatatypeT name tArgs pArgs) fml) = do
       let vars = zipWith Var argSorts' deBrujns
       environment %= addAllVariables vars
       case fml of
-        Pred _ p [] -> resolveTypeRefinement AnyS (Pred BoolS p vars)
+        Func _ p [] -> resolveTypeRefinement AnyS (Func BoolS p vars)
         _ -> resolveTypeRefinement AnyS fml
 
 resolveType (ScalarT baseT fml) = ScalarT baseT <$> resolveTypeRefinement (toSort baseT) fml
@@ -427,13 +427,13 @@ resolveMeasureFormula (Ite f1 f2 f3) = do
   f2' <- resolveMeasureFormula f2
   f3' <- resolveMeasureFormula f3
   return $ Ite f1' f2' f3'
-resolveMeasureFormula (Pred s name f) = do
+resolveMeasureFormula (Func s name f) = do
   inlineMb <- uses inlines (Map.lookup name)
   case inlineMb of
     Just (args, body) -> resolveMeasureFormula (substitute (Map.fromList $ zip args f) body)
     Nothing -> do
       f' <- mapM resolveMeasureFormula f
-      return $ Pred s name f'
+      return $ Func s name f'
 resolveMeasureFormula (Cons s x f) = do
   f' <- mapM resolveMeasureFormula f
   return $ Cons s x f'
@@ -454,7 +454,7 @@ resolveFormula (Var _ x) = do
           let s' = toSort baseType
           return $ Var s' x
         _ -> error $ unwords ["resolveFormula: encountered non-scalar variable", x, "in a formula"]
-    Nothing -> resolveFormula (Pred AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
+    Nothing -> resolveFormula (Func AnyS x []) `catchError` -- Maybe it's a zero-argument predicate?
                const (throwResError $ text "Variable" <+> text x <+> text "is not in scope")      -- but if not, throw this error to avoid confusion
 
 resolveFormula (SetLit _ elems) = do
@@ -522,7 +522,7 @@ resolveFormula (Ite cond l r) = do
   enforceSame (sortOf l') (sortOf r')
   return $ Ite cond' l' r'
 
-resolveFormula (Pred _ name argFmls) = do
+resolveFormula (Func _ name argFmls) = do
   inlineMb <- uses inlines (Map.lookup name)
   case inlineMb of
     Just (args, body) -> resolveFormula (substitute (Map.fromList $ zip args argFmls) body)
@@ -538,7 +538,7 @@ resolveFormula (Pred _ name argFmls) = do
           else do
             argFmls' <- mapM resolveFormula argFmls
             zipWithM_ enforceSame (map sortOf argFmls') argSorts
-            return $ Pred resSort name argFmls'
+            return $ Func resSort name argFmls'
 
 resolveFormula (Cons _ name argFmls) = do
   syms <- uses environment allSymbols
@@ -614,7 +614,7 @@ normalizeProgram p@Program{content = (PLet var val body)} =
 normalizeProgram p = p
 
 
-nominalPredApp (PredSig pName argSorts resSort) = Pred resSort pName (zipWith Var argSorts deBrujns)
+nominalPredApp (PredSig pName argSorts resSort) = Func resSort pName (zipWith Var argSorts deBrujns)
 
 solveSortConstraints :: Resolver SortSubstitution
 solveSortConstraints = do

@@ -5,8 +5,8 @@ module Main where
 import Synquid.Logic
 import Synquid.Type
 import Synquid.Program
-import Synquid.Error
-import Synquid.Pretty
+import Language.Synquid.Error
+import Language.Synquid.Pretty
 import Synquid.Parser
 import Synquid.Resolver (resolveDecls)
 import Synquid.SolverMonad

@@ -8,7 +8,7 @@ import Synquid.Program
 import Synquid.SolverMonad
 import Synquid.HornSolver
 import Synquid.Z3
-import Synquid.Pretty
+import Language.Synquid.Pretty
 import Synquid.Resolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
@@ -229,7 +229,7 @@ allPredApps env actuals n =
       (pName, sorts) <- Map.toList (env ^. globalPredicates)
       let (resSort:argSorts) = instantiateSorts sorts
       let formals = zipWith Var argSorts deBrujns
-      let app = Pred resSort pName formals
+      let app = Func resSort pName formals
       allRawSubstitutions env app formals actuals [] []
 
 -- | 'allSubstitutions' @env qual nonsubstActuals formals actuals@:

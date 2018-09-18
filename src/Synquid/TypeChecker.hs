@@ -4,12 +4,12 @@ module Synquid.TypeChecker (reconstruct, reconstructTopLevel) where
 import Synquid.Logic
 import Synquid.Type hiding (set)
 import Synquid.Program
-import Synquid.Error
+import Language.Synquid.Error
 import Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import Synquid.Explorer
 import Synquid.Util
-import Synquid.Pretty
+import Language.Synquid.Pretty
 import Synquid.Resolver
 
 import qualified Data.Set as Set
@@ -103,7 +103,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
     terminationRefinement argName (ScalarT dt@(DatatypeT name _ _) fml) = case env ^. datatypes . to (Map.! name) . wfMetric of
       Nothing -> Nothing
       Just mName -> let
-                      metric x = Pred IntS mName [x]
+                      metric x = Func IntS mName [x]
                       argSort = toSort dt
                     in Just ( metric (Var argSort valueVarName) |>=| IntLit 0  |&| metric (Var argSort valueVarName) |<| metric (Var argSort argName),
                               metric (Var argSort valueVarName) |>=| IntLit 0  |&| metric (Var argSort valueVarName) |<=| metric (Var argSort argName))

@@ -37,8 +37,8 @@ module Synquid.TypeConstraintSolver (
 import Synquid.Logic
 import Synquid.Type hiding (set)
 import Synquid.Program
-import Synquid.Error
-import Synquid.Pretty
+import Language.Synquid.Error
+import Language.Synquid.Pretty
 import Synquid.SolverMonad
 import Synquid.Util
 import Synquid.Resolver (addAllVariables)
@@ -198,7 +198,7 @@ processAllPredicates = do
   mapM_ processPredicate tcs
 
   pass <- use predAssignment
-  writeLog 3 (text "Pred assignment" $+$ vMapDoc text pretty pass)
+  writeLog 3 (text "Func assignment" $+$ vMapDoc text pretty pass)
 
 -- | Eliminate type and predicate variables, generate qualifier maps
 processAllConstraints :: MonadHorn s => TCSolver s ()
@@ -598,7 +598,7 @@ freshPred env sorts = do
   p' <- freshId "P"
   modify $ addTypingConstraint (WellFormedPredicate env sorts p')
   let args = zipWith Var sorts deBrujns
-  return $ Pred BoolS p' args
+  return $ Func BoolS p' args
 
 addTypeAssignment tv t = typeAssignment %= Map.insert tv t
 addPredAssignment p fml = predAssignment %= Map.insert p fml
@@ -645,7 +645,7 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
     Ite e0 e1 e2 -> inst e0 `Set.union` inst e1 `Set.union` inst e2
     SetLit _ elems -> Set.unions (map inst elems)
-    Pred _ p args -> Set.unions $ map inst args
+    Func _ p args -> Set.unions $ map inst args
     _ -> Set.empty
   where
     measureAxiom resS ctor args (MeasureDef inSort _ defs constantArgs _) =
@@ -668,7 +668,7 @@ matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (Datat
   = do
       writeLog 3 $ text "Matching constructor type" $+$ pretty formal $+$ text "with scrutinee" $+$ pretty actual
       zipWithM_ (\(ScalarT (TypeVarT _ a) (BoolLit True)) t -> addTypeAssignment a t) vars args
-      zipWithM_ (\(Pred BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
+      zipWithM_ (\(Func BoolS p _) fml -> addPredAssignment p fml) pVars pArgs
 matchConsType t t' = error $ show $ text "matchConsType: cannot match" <+> pretty t <+> text "against" <+> pretty t'
 
 currentAssignment :: Monad s => RType -> TCSolver s RType

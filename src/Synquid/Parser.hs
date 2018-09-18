@@ -6,7 +6,7 @@ module Synquid.Parser (parseFromFile, parseProgram, toErrorMessage) where
 import Synquid.Logic
 import Synquid.Type
 import Synquid.Program
-import Synquid.Error
+import Language.Synquid.Error
 import Synquid.Tokens
 import Synquid.Util
 
@@ -248,7 +248,7 @@ parseUnrefTypeWithArgs = do
   predArgs <- many (sameOrIndented >> angles parsePredArg)
   return $ ScalarT (DatatypeT name typeArgs predArgs) ftrue
 
-parsePredArg = braces parseFormula <|> (flip (Pred AnyS) [] <$> parseIdentifier)
+parsePredArg = braces parseFormula <|> (flip (Func AnyS) [] <$> parseIdentifier)
 
 parseScalarUnrefType = parseUnrefTypeWithArgs <|> parseUnrefTypeNoArgs
 
@@ -344,7 +344,7 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
     parsePredApp = do
       name <- parseIdentifier
       args <- many1 (sameOrIndented >> parseAtomTerm)
-      return $ Pred AnyS name args
+      return $ Func AnyS name args
 
 {- Implementations -}
 
