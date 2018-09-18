@@ -1,14 +1,14 @@
 -- | Refinement type reconstruction for programs with holes
 module Synquid.TypeChecker (reconstruct, reconstructTopLevel) where
 
-import Synquid.Logic
-import Synquid.Type hiding (set)
-import Synquid.Program
+import Language.Synquid.Logic
+import Language.Synquid.Type hiding (set)
+import Language.Synquid.Program
 import Language.Synquid.Error
-import Synquid.SolverMonad
+import Language.Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import Synquid.Explorer
-import Synquid.Util
+import Language.Synquid.Util
 import Language.Synquid.Pretty
 import Synquid.Resolver
 

@@ -6,10 +6,12 @@ packages:
 resolver: lts-6.21
 extra-deps:
   - z3-4.3.1
-  - ../musfix
-
-  # - git: https://github.com/connerirwin/musfix.git
-  #   commit: e575bcf0b9d8e98b5daf7eebae3ad7a3bc637181
+  - git: https://github.com/connerirwin/musfix.git
+    commit: cfb8e18cf52e1f65602e1f950fe91e5ce197ab3b
+  # required for musfix, it should be possible to remove them
+  - optparse-applicative-0.14.2.0
+  - git: https://github.com/connerirwin/atto-lisp.git
+    commit: 39f336ae75d25ee1f8114fab370ad8581bf225dc
 # extra-include-dirs:
 #  - <z3-home>/src/api
 # extra-lib-dirs:

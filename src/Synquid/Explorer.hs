@@ -3,16 +3,16 @@
 -- | Generating synthesis constraints from specifications, qualifiers, and program templates
 module Synquid.Explorer where
 
-import Synquid.Logic
-import Synquid.Type hiding (set)
-import Synquid.Program
+import Language.Synquid.Logic
+import Language.Synquid.Type hiding (set)
+import Language.Synquid.Program
 import Language.Synquid.Error
-import Synquid.SolverMonad
+import Language.Synquid.SolverMonad
 import Synquid.TypeConstraintSolver hiding (freshId, freshVar)
 import qualified Synquid.TypeConstraintSolver as TCSolver (freshId, freshVar)
-import Synquid.Util
+import Language.Synquid.Util
 import Language.Synquid.Pretty
-import Synquid.Tokens
+import Language.Synquid.Tokens
 
 import Data.Maybe
 import Data.List

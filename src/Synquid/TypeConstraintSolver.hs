@@ -34,13 +34,13 @@ module Synquid.TypeConstraintSolver (
   condQualsGen
 ) where
 
-import Synquid.Logic
-import Synquid.Type hiding (set)
-import Synquid.Program
+import Language.Synquid.Logic
+import Language.Synquid.Type hiding (set)
+import Language.Synquid.Program
 import Language.Synquid.Error
 import Language.Synquid.Pretty
-import Synquid.SolverMonad
-import Synquid.Util
+import Language.Synquid.SolverMonad
+import Language.Synquid.Util
 import Synquid.Resolver (addAllVariables)
 
 import Data.Maybe
@@ -100,7 +100,7 @@ runTCSolver params st go = runExceptT $ runReaderT (runStateT go st) params
 -- | Initial typing state in the initial environment @env@
 initTypingState :: MonadHorn s => Environment -> s TypingState
 initTypingState env = do
-  initCand <- initHornSolver env
+  initCand <- initHornSolver env emptyPreamble
   return $ TypingState {
     _typingConstraints = [],
     _typeAssignment = Map.empty,
@@ -563,8 +563,8 @@ freshVar env prefix = do
 -- | 'somewhatFreshVar' @env prefix sort@ : A variable of sort @sort@ not bound in @env@
 -- Exists to generate fresh variables for multi-argument measures without making all of the constructor axiom instantiation code monadic
 somewhatFreshVar :: Environment -> String -> Sort -> Formula
-somewhatFreshVar env prefix s = Var s name 
-  where 
+somewhatFreshVar env prefix s = Var s name
+  where
     name = unbound 0 (prefix ++ show 0)
     unbound n v = if Map.member v (allSymbols env)
                     then unbound (n + 1) (v ++ show n)
@@ -656,7 +656,7 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
         body' = noncaptureSortSubstFml sParams sArgs body -- measure definition with actual sorts for all subexpressions
         newValue = fromMaybe (Cons resS ctor args) mVal
         constArgNames = fmap fst constantArgs
-        prefixes = fmap (++ "D") constArgNames 
+        prefixes = fmap (++ "D") constArgNames
         constVars = zipWith (somewhatFreshVar env) prefixes (fmap snd constantArgs)
         subst = Map.fromList $ (valueVarName, newValue) : zip vars args ++ zip constArgNames constVars-- substitute formals for actuals and constructor application or provided value for _v
         wrapForall xs f = foldl (flip All) f xs

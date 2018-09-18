@@ -19,11 +19,11 @@ import Language.Haskell.Exts.Syntax hiding (Case, PApp, DataDecl)
 import qualified Language.Haskell.Exts.Syntax as Hs
 import Language.Haskell.Exts.Pretty
 
-import Synquid.Util
-import Synquid.Type
-import Synquid.Program
-import Synquid.Logic hiding (Var)
-import Synquid.Tokens
+import Language.Synquid.Util
+import Language.Synquid.Type
+import Language.Synquid.Program
+import Language.Synquid.Logic hiding (Var)
+import Language.Synquid.Tokens
 import Language.Synquid.Error
 import qualified Language.Synquid.Pretty
 

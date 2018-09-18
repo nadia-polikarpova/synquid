@@ -1,13 +1,13 @@
 -- | Top-level synthesizer interface
 module Synquid.Synthesizer (synthesize, SynthPhase(..)) where
 
-import Synquid.Util
-import Synquid.Logic
-import Synquid.Type
-import Synquid.Program
-import Synquid.SolverMonad
-import Synquid.HornSolver
-import Synquid.Z3
+import Language.Synquid.Util
+import Language.Synquid.Logic
+import Language.Synquid.Type
+import Language.Synquid.Program
+import Language.Synquid.SolverMonad
+import Language.Synquid.HornSolver
+import Language.Synquid.Z3
 import Language.Synquid.Pretty
 import Synquid.Resolver
 import Synquid.TypeConstraintSolver
