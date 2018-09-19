@@ -1,7 +1,7 @@
 
 
 all :: <p :: a -> Bool> . arg1:(x:a -> {Bool|_v == p x}) -> arg0:List {a|p _v} -> {Bool|_v}
-all = \f . \xs .
+all = \f . \xs . 
     match xs with
       Nil -> True
       Cons y ys -> and (f y) (all f
@@ -30,45 +30,69 @@ clientBad :: xs:List Int -> ys:List Nat -> List {Int|_v == 0}
   List {Int|_v >= 0} in
   \xs . \ys . filterLE1 0 xs ??
 
+./CheckMeasures.sq:6: Error:
+  Cannot find sufficiently strong refinements
+  when checking 1 + (len xs) ::
+  {Int|_v < 0} in
+  \arg0 . 
+    match arg0 with
+      Cons x xs -> 1 + (len xs)
+
 
 ./Instantiation.sq:12: Resolution Error:
   Constructor Zero must return type Natural n, got Natural Z
 
-./Measure.sq:6: Error:
+
+
+copies :: x:a -> xs:List a -> {Int|_v == numeq x xs}
+copies = \x . \xs . 
+    match xs with
+      Nil -> 0
+      Cons y ys -> 
+        if y == x
+          then 1 + (copies x ys)
+          else copies x ys
+
+copies' :: x:a -> xs:List a -> {Int|_v == numeq x xs}
+./MultiArgMeasures.sq:28: Error:
   Cannot find sufficiently strong refinements
-  when checking 1 + (len xs) ::
-  {Int|_v < 0} in
-  \THIS .
-    match THIS with
-      Cons x xs -> 1 + (len xs)
+  when checking 1 - (copies' x ys)
+  :: {Int|_v == numeq x xs} in
+  \x . \xs . 
+      match xs with
+        Cons y ys -> 
+          if x == y
+            then 1 - (copies' x ys)
+            else
+              (?? :: {Int|_v == numeq x xs})
 
 
 map1 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map1 = \f . \xs .
+map1 = \f . \xs . 
     match xs with
       Nil -> Nil
       Cons x3 x4 -> Cons (f x3) (map1
                                    f x4)
 
 map2 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map2 = \f . \xs .
+map2 = \f . \xs . 
     match xs with
       Nil -> Nil
       Cons x3 x4 -> Cons (f x3) (map2
                                    f x4)
 
 map3 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map3 = \f . \xs .
+map3 = \f . \xs . 
     match xs with
       Nil -> Nil
-      Cons x3 x4 ->
+      Cons x3 x4 -> 
         let f0 = f in
         Cons (f x3) (map3 f0 x4)
 
 map4 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
-map4 = \f . \xs .
+map4 = \f . \xs . 
     let f0 = f in
-
+    
     match xs with
       Nil -> Nil
       Cons x3 x4 -> Cons (f x3) (map4
@@ -77,3 +101,4 @@ map4 = \f . \xs .
 map5 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
 ./HOChecking.sq:40: Error:
   Not in scope: f
+
