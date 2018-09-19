@@ -128,7 +128,7 @@ BENCHMARKS = {
 # ]
 
 CHECKING_BENCHMARKS = [
-    ('List-Append',         []),
+    ('List-Append-Bad',     []),
     ('List-Replicate',      []),
     ('List-ToNat',          []),
     ('AVL',                 []),
@@ -184,7 +184,8 @@ def run_benchmark(name, opts, path='.'):
       t = end - start
       print ('{0:0.2f}'.format(t)),
       total_time = total_time + t
-      if return_code:
+      bad_flag = name.endswith("-Bad")
+      if (bool(return_code) ^ bad_flag):
           printerr("FAIL")
       else:
           printok("OK")
