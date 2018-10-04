@@ -29,7 +29,7 @@ import Debug.Trace
 -- return a type error if that is impossible
 reconstruct :: MonadHorn s => ExplorerParams -> TypingParams -> Goal -> s (Either ErrorMessage RProgram)
 reconstruct eParams tParams goal = do
-    initTS <- initTypingState $ gEnvironment goal
+    initTS <- initTypingState (gEnvironment goal) (gSpec goal)
     runExplorer (eParams { _sourcePos = gSourcePos goal }) tParams (Reconstructor reconstructTopLevel) initTS go
   where
     go = do
