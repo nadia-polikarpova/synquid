@@ -1,5 +1,6 @@
+
 append :: xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
-./List-Append.sq:10: Error:
+./List-Append-Bad.sq:10: Error:
   Found inconsistent refinements
   when checking consistency of type annotation
   {List a|len _v > len xs} with
@@ -11,6 +12,7 @@ append :: xs:List a -> ys:List a -> {List a|len _v == len xs + len ys}
                                (?? :: {List a|len _v > len xs})
                                ??)
 
+
 replicate :: n1:Nat -> x:a -> {List a|len _v == n1}
 replicate = \n . \x . 
     let n' = n - 1 in
@@ -19,6 +21,7 @@ replicate = \n . \x .
       then Nil
       else Cons x (replicate n' x)
 
+
 toNat :: xs:List Int -> {List Nat|len _v == len xs}
 toNat = 
 let f = \x . 
@@ -26,6 +29,9 @@ let f = \x .
       then - x
       else x in
 \xs . map f xs
+
+
+
 
 empty :: {AVL a|height _v == 0 && keys _v == []}
 empty = Leaf
