@@ -306,6 +306,17 @@ typeApplySolution sol (FunctionT x tArg tRes) = FunctionT x (typeApplySolution s
 typeApplySolution sol (LetT x tDef tBody) = LetT x (typeApplySolution sol tDef) (typeApplySolution sol tBody)
 typeApplySolution _ AnyT = AnyT
 
+typeFromSchema :: RSchema -> RType
+typeFromSchema (Monotype t) = t
+typeFromSchema (ForallT _ t) = typeFromSchema t
+typeFromSchema (ForallP _ t) = typeFromSchema t 
+
+allRefinementsOf :: RSchema -> [Formula]
+allRefinementsOf sch = allRefinementsOf' $ typeFromSchema sch
+
+allRefinementsOf' (ScalarT _ ref) = [ref]
+allRefinementsOf' (FunctionT _ argT resT) = allRefinementsOf' argT ++ allRefinementsOf' resT
+allRefinementsOf' _ = error "allRefinementsOf called on contextual or any type"
 
 -- Set strings: used for "fake" set type for typechecking measures
 emptySetCtor = "Emptyset"
