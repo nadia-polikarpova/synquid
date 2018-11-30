@@ -328,13 +328,20 @@ parseTerm = parseIte <|> try parseAppTerm <|> parseAtomTerm
         parens parseFormula
       , parseBoolLit
       , parseIntLit
-      , parseSetLit
+      , parseSetLitOrComp
       , parseNullaryCons
       , parseVariable
       ]
     parseBoolLit = (reserved "False" >> return ffalse) <|> (reserved "True" >> return ftrue)
     parseIntLit = IntLit <$> natural
-    parseSetLit = brackets $ SetLit AnyS <$> commaSep parseFormula
+    parseSetLitOrComp = brackets (try parseSetComp <|> parseSetLit) 
+    parseSetComp = do 
+      name <- parseIdentifier
+      reservedOp "|"
+      e <- parseFormula
+      pos <- getPosition
+      error $ show pos ++ " error: Set comprehension syntax no longer supported"
+    parseSetLit = SetLit AnyS <$> commaSep parseFormula
     parseNullaryCons = flip (Cons AnyS) [] <$> parseTypeName
     parseVariable = Var AnyS <$> parseIdentifier
     parseConsApp = do
