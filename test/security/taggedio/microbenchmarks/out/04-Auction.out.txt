@@ -1,0 +1,44 @@
+showBids :: arg1:World -> arg0:User -> World
+showBids = \w . \client . 
+    let showParticipant = \p . do
+                                 mB <- do
+                                         g1 <- downgrade (return (eq p
+                                                                    client))
+                                         g2 <- downgrade (do
+                                                            x50 <- getPhase w
+                                                            return (eq Done
+                                                                      x50))
+                                         
+                                         if g1 || g2
+                                           then getBid w p
+                                           else do
+                                                  g0 <- downgrade (do
+                                                                     x44 <- getBid
+                                                                              w
+                                                                              client
+                                                                     return
+                                                                       (isJust
+                                                                          x44))
+                                                  
+                                                  if g0
+                                                    then do
+                                                           x4 <- getBid w p
+                                                           return (fmap x4
+                                                                     (\x2 .
+                                                                       return
+                                                                         zero))
+                                                    else return Nothing
+                                 maybe (return emptyString) (\x .
+                                     liftM show x) mB in
+    
+    let out = liftM unlines (mapM
+                               showParticipant
+                               (getAllParticipants w)) in
+    print w (return client) out
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("04-Auction.sq",32)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showBids              &        48  &       131  &             0.04s  &      0.51s  &      0.12s  &        0.68s  \\
+Totals                &        48  &       131  &             0.04s  &      0.51s  &      0.12s  &        0.68s  \\
