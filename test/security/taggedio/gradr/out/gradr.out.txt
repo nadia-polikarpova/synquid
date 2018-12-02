@@ -1,0 +1,155 @@
+homePage :: arg0:World -> World
+homePage = \w . 
+  let u = getSessionUser w in
+  print w u homePageString
+
+getClassesStdByUser :: w:World -> u:User -> Tagged List {Class|u in (classStudents w)[[_v]]} <_1 == u>
+getClassesStdByUser = \w . \u .
+    filterM (isStudentInClass w u)
+      (getClasses w)
+
+getClassesInsByUser :: w:World -> u:User -> Tagged List {Class|u in (classTeachers w)[[_v]] || u == (classInstructor w)[[_v]]} <True>
+getClassesInsByUser = \w . \u .
+    filterM (teachesClass w u)
+      (getClasses w)
+
+getProfileClassInfo :: arg1:World -> u:User -> Tagged ClassInfo <_1 == u>
+getProfileClassInfo = \w . \u . 
+    let teachingClasses =
+      getClassesInsByUser w u in
+    
+    let takingClasses =
+      getClassesStdByUser w u in
+    liftM2 ClassInfo teachingClasses
+      takingClasses
+
+profileView :: arg0:World -> World
+profileView = \w . 
+  let u = getSessionUser w in
+  
+  let content = bind u (\user .
+                    getProfileClassInfo w user) in
+  print w u (liftM show content)
+
+unauthProfileView :: arg0:World -> World
+unauthProfileView = \w . 
+  let u = getSessionUser w in
+  
+  let content = bind u (\user .
+                    bind (downgrade (bind
+                                       (getArbitraryUser w) (\x19 .
+                                         return (eq user x19)))) (\g0 . 
+                        if g0
+                          then getProfileClassInfo w user
+                          else redactClassInfo
+                                 (getProfileClassInfo w user)))
+    in
+  print w (getArbitraryUser w)
+    (liftM show content)
+
+scoresForAssignmentView :: arg1:World -> arg0:Assignment -> World
+scoresForAssignmentView = \w .
+  \assn . 
+    let u = getSessionUser w in
+    
+    let students =
+      getStudentsWhoDidAssignment w
+        assn in
+    
+    let scores = mapM (\student .
+                     bind (downgrade (bind u (\x9 .
+                                          bind (getClassInstructor w
+                                                  (getAssignmentClass assn))
+                                            (\x8 . return (eq x9 x8)))))
+                       (\g0 . bind (downgrade (bind u
+                                                 (\x13 . return (eq student
+                                                                   x13))))
+                                (\g1 . 
+                                  if g0 || g1
+                                    then getScore w student assn
+                                    else return defaultScore)))
+                   students in
+    print w u (liftM show scores)
+
+scoresForStudentView :: arg1:World -> arg0:User -> World
+scoresForStudentView = \w .
+  \student . 
+    let u = getSessionUser w in
+    
+    let assns =
+      getAssignmentsForStudent w
+        student in
+    
+    let scores = mapM (\assn . bind
+                                 (downgrade (bind u (\x9 . bind
+                                                             (getClassInstructor
+                                                                w
+                                                                (getAssignmentClass
+                                                                   assn)) (\x8 .
+                                                               return (eq x9
+                                                                         x8)))))
+                                 (\g0 . bind (downgrade (bind u
+                                                           (\x13 . return (eq
+                                                                             student
+                                                                             x13))))
+                                          (\g1 . 
+                                            if g0 || g1
+                                              then getScore w student assn
+                                              else return defaultScore)))
+                   assns in
+    print w u (liftM show scores)
+
+userFromUserAndScore :: arg0:UserAndScore -> User
+userFromUserAndScore = \x . 
+  match x with
+    UserAndScore u i -> u
+
+getTopScoreForAssignmentView :: arg1:World -> arg0:Assignment -> World
+getTopScoreForAssignmentView =
+\w . \assn . 
+    let u = getSessionUser w in
+    
+    let students =
+      getStudentsWhoDidAssignment w
+        assn in
+    
+    let scores = mapM (\student .
+                     bind (bind (downgrade (bind u
+                                              (\x9 . bind (getClassInstructor
+                                                             w
+                                                             (getAssignmentClass
+                                                                assn)) (\x8 .
+                                                         return (eq x9 x8)))))
+                             (\g0 . bind (downgrade (bind u
+                                                       (\x13 . return (eq
+                                                                         student
+                                                                         x13))))
+                                      (\g1 . 
+                                        if g0 || g1
+                                          then getScore w student assn
+                                          else return defaultScore)))
+                       (\sc . return (UserAndScore
+                                        student (scorePoints sc))))
+                   students in
+    
+    let topScoreUser = bind scores
+                         (\s . return
+                                 (userFromUserAndScore (maxScore
+                                                          s))) in
+    print w u (liftM show scores)
+
+(Goals: 10)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("gradr.sq",29),("models.sq",116)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+homePage              &        12  &        12  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getClassesStdByUser   &        13  &        13  &             0.05s  &      0.00s  &      0.00s  &        0.05s  \\
+getClassesInsByUser   &        13  &        13  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getProfileClassInfo   &        21  &        21  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+profileView           &        27  &        27  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+unauthProfileView     &        29  &        58  &             0.01s  &      0.02s  &      0.00s  &        0.04s  \\
+scoresForAssignmentView  &        36  &        92  &             0.00s  &      0.27s  &      0.02s  &        0.30s  \\
+scoresForStudentView  &        36  &        92  &             0.00s  &      0.26s  &      0.02s  &        0.30s  \\
+userFromUserAndScore  &         4  &         4  &             0.00s  &      0.00s  &      0.00s  &        0.00s  \\
+getTopScoreForAssignmentView  &        62  &       118  &             0.01s  &      0.27s  &      0.02s  &        0.31s  \\
+Totals                &       253  &       450  &             0.12s  &      0.84s  &      0.08s  &        1.04s  \\

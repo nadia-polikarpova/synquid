@@ -1,0 +1,34 @@
+follow :: w:World -> client:User -> newFriend:{User|isPublic w _v} -> World
+follow = \w . \client .
+    \newFriend . 
+      let w' = setIsFollowing w client
+                 newFriend (return true) in
+      
+      let shouldRecommend = \u . 
+          if u == client
+            then return false
+            else do
+                   g0 <- downgrade (do
+                                      x5 <- getIsPrivate w u
+                                      return (not x5))
+                   
+                   if g0
+                     then getIsFollowing w' newFriend
+                            u
+                     else return false in
+      
+      let recommendation = do
+                             uids <- filterM shouldRecommend
+                                       (getAllUsers w')
+                             names <- mapM (\u . getName w'
+                                                   u) uids
+                             return (unlines names) in
+      print w' (return client)
+        recommendation
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("11-Instagram.sq",62)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+follow                &        73  &        98  &             0.01s  &      3.24s  &      0.00s  &        3.27s  \\
+Totals                &        73  &        98  &             0.01s  &      3.24s  &      0.00s  &        3.27s  \\

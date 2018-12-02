@@ -1,0 +1,42 @@
+showSession :: arg2:World -> arg1:User -> arg0:PaperId -> World
+showSession = \w . \client .
+    \p . 
+      let row = do
+                  t <- getPaperTitle w p
+                  auts <- do
+                            g0 <- downgrade (do
+                                               x5 <- getPhase w
+                                               return (eq Done x5))
+                            g1 <- downgrade (do
+                                               x10 <- getPaperAuthors w p
+                                               return (elem client x10))
+                            
+                            if g0 || g1
+                              then getPaperAuthors w p
+                              else return Nil
+                  st <- do
+                          g2 <- downgrade (do
+                                             x16 <- getPhase w
+                                             return (eq Done x16))
+                          
+                          if g2
+                            then getPaperStatus w p
+                            else return NoDecision
+                  
+                  if st == Accepted
+                    then do
+                           ses <- getPaperSession w p
+                           return (unwords [t, show
+                                                 auts, ses])
+                    else do
+                           ses <- return emptyString
+                           return (unwords [t, show
+                                                 auts, ses]) in
+      print w (return client) row
+
+(Goals: 1)
+(Measures: 4)
+(Policy size: fromList [("../Prelude.sq",46),("../Tagged.sq",110),("03-SelfRef.sq",32)])
+Goal                  &     Templ  &  Solution  &   Time: Typecheck  &     Repair  &    Recheck  &  Total Synth  \\
+showSession           &       100  &       176  &             0.02s  &      0.25s  &      0.02s  &        0.29s  \\
+Totals                &       100  &       176  &             0.02s  &      0.25s  &      0.02s  &        0.29s  \\

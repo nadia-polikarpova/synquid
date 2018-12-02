@@ -1,0 +1,11 @@
+
+-- | Principals
+data Principal where
+  User :: UId -> Principal
+
+-- | Is principal authenticated?
+predicate isAuth :: Principal -> Bool
+
+-- | Constructor for @isAuth@: checks @pw@ validity and authenticates @p@
+login :: p: Principal -> pw: Password -> { Bool | _v == isAuth p }
+
