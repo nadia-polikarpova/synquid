@@ -1,0 +1,61 @@
+{- Multiple Leaks -}
+
+{- Datatypes -}
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Rebuttal :: Phase
+  Done :: Phase
+  
+guard {Submission, Review, Rebuttal, Done}
+
+data Status where
+  Accepted :: Status
+  Rejected :: Status
+  NoDecision :: Status
+  
+guard {Accepted, Rejected, NoDecision}
+
+{- Sensitive data and policies -}
+
+-- | Conference phase (public)
+predicate phase :: World -> Phase
+getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
+
+-- | Paper title (public)
+getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- | Paper authors (only visible when phase is done)
+getPaperAuthors :: w: World -> p: PaperId -> TIO [User] <{phase w == Done}> <{False}>
+
+-- | Paper status (only visible when phase is done)
+getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
+
+-- | Paper session (public)
+getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- redact {NoDecision}  
+
+{- Client code -}
+  
+-- | Show data for paper `p` to `client`
+-- | Repair: for getPaperAuthors, check that phase is done, otherwise return Nil
+--           for getPaperStatus, check that phase is Done, otherwise return NoDecision
+showSession :: World -> User -> PaperId -> TIO Unit <{False}> <{True}>
+showSession = \w . \client . \p .
+  do t <- getPaperTitle w p
+     ph <- getPhase w
+     auts <- if ph == Done
+               then getPaperAuthors w p
+               else return Nil
+     st   <- if ph == Done
+               then getPaperStatus w p
+               else return NoDecision
+     ses  <- if st == Accepted 
+               then getPaperSession w p 
+               else return emptyString
+     print client (unwords [t, show auts, ses])
+  

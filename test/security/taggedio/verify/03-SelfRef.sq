@@ -1,0 +1,70 @@
+{- Self-Referential Policy -}
+
+{- Datatypes -}
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Rebuttal :: Phase
+  Done :: Phase
+  
+guard {Submission, Review, Rebuttal, Done}
+
+data Status where
+  Accepted :: Status
+  Rejected :: Status
+  NoDecision :: Status
+  
+guard {Accepted, Rejected, NoDecision}
+
+{- Sensitive data and policies -}
+   
+-- | Conference phase (public)
+predicate phase :: World -> Phase
+getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
+
+-- | Paper title (public)
+getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- | Paper authors (only visible to themselves or when phase is done)
+predicate paperAuthors :: World -> Map PaperId (Set User)
+getPaperAuthors :: w: World -> p: PaperId -> 
+  TIO {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
+    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>
+
+-- | Paper status (only visible when phase is done)
+getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
+
+-- | Paper session (public)
+getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- redact {NoDecision}  
+
+{- Client code -}
+
+alice :: User
+  
+-- | Show data for paper `p` to `client`
+-- | Repair: for getPaperAuthors, check that phase is done or client is author, otherwise return Nil
+--           for getPaperStatus, check that phase is Done, otherwise return NoDecision
+showSession :: World -> User -> PaperId -> TIO Unit <{False}> <{True}>
+showSession = \w . \client . \p .
+  do 
+     t <- getPaperTitle w p
+     ph <- getPhase w
+     inAuts <- do 
+                 as <- getPaperAuthors w p
+                 return (elem client as)
+     auts <- if (inAuts || ph == Done)
+               then getPaperAuthors w p
+               else return Nil
+     st <-   if ph == Done
+               then getPaperStatus w p
+               else return NoDecision
+     ses <-  if st == Accepted 
+               then getPaperSession w p 
+               else return emptyString
+     print client (unwords [t, show auts, ses])  
+     
