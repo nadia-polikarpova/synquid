@@ -89,13 +89,14 @@ preprocess (Binary Implies lhs rhs) = ifM (asks isLeastFixpoint) (return preproc
         (noUnknowns, withUnknowns) = Set.partition (Set.null . unknownsOf) rDisjuncts
       in if Set.size withUnknowns > 1
         then error $ unwords ["Least fixpoint solver got a disjunctive right-hand-side:", show rhs]
-        else -- Only one disjuncts with unknowns: split into all conjuncts with unknowns into separate constraints
+        else -- Only one disjunct with unknowns: split into all conjuncts with unknowns into separate constraints
           let
             lhs' = conjunction $ Set.insert lhs (Set.map fnot noUnknowns)
             rConjuncts = conjunctsOf (disjunction withUnknowns)
             (conjNoUnknowns, conjWithUnknowns) = Set.partition (Set.null . unknownsOf) rConjuncts
             rhss = (if Set.null conjNoUnknowns then [] else [conjunction conjNoUnknowns]) ++ Set.toList conjWithUnknowns
-          in map (lhs' |=>|) rhss
+            noRhsConjuncts = map (lhs' |=>|) rhss
+          in concatMap (\(Binary Implies lhs rhs) -> map (|=>| rhs) (uDNF lhs)) noRhsConjuncts
 
     preprocessGFP = map (|=>| rhs) (uDNF lhs) -- Remove disjunctions of unknowns on the left
     

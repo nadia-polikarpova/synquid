@@ -395,21 +395,25 @@ parseDo = do
   return $ foldr mkBindOrIf lastLine lines
   where
     parseDoLines = withPos $ do
-      rs <- many (checkIndent >> try parseDoLine)
-      rlast <- (checkIndent >> parseImpl)
-      return (rs, rlast)
+      lines <- many (checkIndent >> (try parseBinding <|> parseNoBinding))
+      return (init lines, snd $ last lines)
   
-    parseDoLine = do
+    parseBinding = do
       x <- parseIdentifierOrBlank
       reservedOp "<-"
       term <- parseImpl
-      return (x, term)
+      return (Just x, term)
+      
+    parseNoBinding = do
+      term <- parseImpl
+      return (Nothing, term)      
       
     mkBindOrIf (x, term) rest = case content term of
       PIf c t e -> untyped $ PIf c (mkBindOrIf (x, t) rest) (mkBindOrIf (x, e) rest)
       otherwise -> mkBind (x, term) rest
 
-    mkBind (x, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol bindName) term) (untyped $ PFun x rest)
+    mkBind (Just x, term) rest  = untyped $ PApp (untyped $ PApp (untyped $ PSymbol bindName) term) (untyped $ PFun x rest)
+    mkBind (Nothing, term) rest = untyped $ PApp (untyped $ PApp (untyped $ PSymbol seqName) term) rest
 
 parseMatch = do
     reserved "match"

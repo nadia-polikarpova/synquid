@@ -15,10 +15,21 @@ return :: x: a -> TIO a <{True}> <{False}>
   -- -> (u: a -> TIO b <r> <p>) 
   -- -> TIO b <{p _0 && r _0}> <{q _0 || p _0}>
   
+-- | (>>=)  
 bind :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: User -> Bool> . 
   x: TIO a <p> <q> 
   -> (u: a -> TIO b <r> <{p _0 && s _0}>) 
   -> TIO b <{p _0 && r _0}> <{q _0 || (p _0 && s _0)}>  
+  
+-- | (>>)  
+seq :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: User -> Bool> . 
+  x: TIO a <p> <q> 
+  -> TIO b <r> <s>
+  -> TIO b <r> <{q _0 || s _0}>
+  
+-- -- | A computation that returns a Unit cannot leak anything  
+-- downgrade :: <q :: User -> Bool> . x: TIO Unit <{False}> <q> -> TIO Unit <{True}> <q>
+  
   
 -- peel :: x: Tagged a <{True}> -> a
 
@@ -105,7 +116,7 @@ bind :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: 
 
 {- Output -}      
 
-print :: w: World -> viewer: User -> msg: String -> TIO World <{True}> <{_0 == viewer}>
+print :: viewer: User -> msg: String -> TIO Unit <{True}> <{_0 == viewer}>
 
 {- Guards, redaction functions, and qualifiers -}
 

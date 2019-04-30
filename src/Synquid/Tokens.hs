@@ -65,3 +65,4 @@ isIdentifier str = isLower $ head str
 nilName = "Nil"
 consName = "Cons"
 bindName = "bind"
+seqName = "seq"
