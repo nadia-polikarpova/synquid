@@ -33,8 +33,8 @@ seq :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: U
   
 -- peel :: x: Tagged a <{True}> -> a
 
--- downgrade :: <bp :: World -> User -> Bool> . <bc :: Bool> .
-  -- x: Tagged {Bool | _v ==> bc} <{bp _0 _1 && bc}> -> Tagged {Bool | _v ==> bc} <bp>    
+downgrade :: <bp :: User -> Bool> . <bc :: Bool> . <bq :: User -> Bool> .
+  x: TIO {Bool | _v ==> bc} <{bp _0 && bc}> <bq> -> TIO {Bool | _v ==> bc} <bp> <bq>   
 
 -- ifM :: <ip :: World -> User -> Bool> . <ic :: Bool> .
   -- cond: Tagged {Bool | _v ==> ic} <{ic && ip _0 _1}> 
