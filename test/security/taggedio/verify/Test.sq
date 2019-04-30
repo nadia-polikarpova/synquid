@@ -1,0 +1,77 @@
+alice :: User
+bob :: User
+charlie :: User
+
+-- | My SSN is only visible to me
+-- Clearance False means that this function doesn't output anything
+getSSN :: w: World -> u: User -> TIO Int <{_0 == u}> <{False}>
+
+-- | Wedding date only visible to Alice and Bob
+getWeddingDate :: w: World -> TIO String <{_0 == alice || _0 == bob}> <{False}>
+
+-- | OK: print Alice's SSN to Alice
+good :: w: World -> TIO Unit <{False}> <{True}>
+good = \w .
+  do
+    a <- getSSN w alice
+    print alice (show a)    
+    
+-- | Print to all viewers
+printAll :: viewers: List User -> msg: String -> TIO Unit <{True}> <{_0 in elems viewers}>
+printAll = \viewers . \msg .
+  match viewers with
+    Nil -> return Unit
+    Cons v vs -> 
+      do
+        _ <- print v msg    
+        printAll vs msg
+                
+-- | This is fine: both Alice and Bob can see their wedding date
+good1 :: w: World -> TIO Unit <{False}> <{True}>
+good1 = \w .
+  do
+    d <- getWeddingDate w
+    printAll [alice, bob] d
+
+-- | Nothing bad happens here, but this is not allowed by the type system
+-- because a is still in scope when we print to Bob
+bad1 :: w: World -> TIO Unit <{False}> <{True}>
+bad1 = \w .
+  do
+    a <- getSSN w alice
+    print alice (show a)
+    b <- getSSN w bob
+    print bob (show b)
+    
+-- | This is how you have to write it instead
+good2 :: w: World -> TIO Unit <{False}> <{True}>
+good2 = \w .
+  do
+    do 
+      a <- getSSN w alice
+      print alice (show a)
+    b <- getSSN w bob
+    print bob (show b) -- a not in scope here!
+
+-- | This is an implicit flow: Bob will get a message or not
+-- depending on Alice's SSN
+bad2 :: w: World -> TIO Unit <{False}> <{True}>
+bad2 = \w .
+  do
+    a <- getSSN w alice
+    if a == 0
+      then print alice emptyString
+      else print bob emptyString
+      
+-- | This is okay: we branch on a sensitive value,
+-- but only print to the person who can see it
+good3 :: w: World -> TIO Unit <{False}> <{True}>
+good3 = \w .
+  do
+    a <- getSSN w alice
+    if a == 0
+      then print alice emptyString
+      else print alice (show a)
+      
+    
+  
