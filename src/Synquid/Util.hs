@@ -14,8 +14,6 @@ import Control.Applicative
 import Control.Monad
 import Control.Lens hiding (both)
 
-import Debug.Trace
-
 -- | Identifiers
 type Id = String
 
@@ -154,11 +152,3 @@ pairGetter g1 g2 = to (\x -> (view g1 x, view g2 x))
 
 asInteger :: String -> Maybe Integer
 asInteger s = if all isDigit s then Just $ read s else Nothing
-
-{- Debug output -}
-
--- | 'debugOutLevel' : Level above which debug output is ignored
-debugOutLevel = 1
-
--- | 'debug' @level msg@ : output @msg@ at level @level@ 
-debug level msg = if level <= debugOutLevel then traceShow msg else id
