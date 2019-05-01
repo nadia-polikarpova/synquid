@@ -32,7 +32,7 @@ getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> p: PaperId -> 
   TIO {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
-    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>
+    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>    
 
 -- | Paper status (only visible when phase is done)
 getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
@@ -54,9 +54,9 @@ showSession = \w . \client . \p .
   do 
      t <- getPaperTitle w p
      ph <- getPhase w
-     inAuts <- do 
-                 as <- getPaperAuthors w p
-                 return (elem client as)
+     inAuts <- downgrade (do 
+                           as <- getPaperAuthors w p
+                           return (elem client as))
      auts <- if (inAuts || ph == Done)
                then getPaperAuthors w p
                else return Nil
@@ -66,5 +66,5 @@ showSession = \w . \client . \p .
      ses <-  if st == Accepted 
                then getPaperSession w p 
                else return emptyString
-     print client (unwords [t, show auts, ses])  
+     print client (unwords [t, show auts, ses])
      
