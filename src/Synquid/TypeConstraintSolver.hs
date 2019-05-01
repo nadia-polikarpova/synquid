@@ -872,7 +872,8 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
     MapSel m k -> inst m `Set.union` inst k
     MapUpd m k v -> inst m `Set.union` inst k `Set.union` inst v
     Pred _ p args -> Set.unions $ map inst args
-    Quant Exists v e -> Set.singleton (Quant Exists v (conjunction (Set.insert e $ inst e)))
+    -- Why was this here? It's unsound in the presence of disjunctions
+    -- Quant Exists v e -> Set.singleton (Quant Exists v (conjunction (Set.insert e $ inst e)))
     _ -> Set.empty  
   where
     measureAxiom resS ctor args (MeasureDef inSort _ defs _) = 

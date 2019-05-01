@@ -50,7 +50,9 @@ module Synquid.Pretty (
   errorDoc,
   -- * Counting
   typeNodeCount,
-  programNodeCount
+  programNodeCount,
+  -- * Debug output
+  debug
 ) where
 
 import Synquid.Logic
@@ -69,6 +71,8 @@ import Data.Map (Map, (!))
 import Data.List
 
 import Control.Lens
+
+import Debug.Trace
 
 infixr 5 $+$
 infixr 6 <+>
@@ -548,3 +552,12 @@ lfill w d        = case renderCompact d of
  where
   spaces n | n <= 0    = empty
            | otherwise = text $ replicate n ' '
+           
+{- Debug output -}
+
+-- | 'debugOutLevel' : Level above which debug output is ignored
+debugOutLevel = 0
+
+-- | 'debug' @level msg@ : output @msg@ at level @level@ 
+debug level msg = if level <= debugOutLevel then traceShow (plain msg) else id
+           
