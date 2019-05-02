@@ -2,6 +2,9 @@
 
 {- Datatypes -}
 
+-- | Database
+data World
+
 data PaperId
 
 data Phase where

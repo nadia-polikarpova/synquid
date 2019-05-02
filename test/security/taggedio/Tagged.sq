@@ -2,11 +2,8 @@
 
 data User
 
-data World 
-
 -- | Computation with a label and clearance
 data TIO a <label :: User -> Bool>- <clear :: User -> Bool>
-measure content :: TIO a -> a
 
 return :: x: a -> TIO a <{True}> <{False}>
 
@@ -27,92 +24,9 @@ seq :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: U
   -> TIO b <r> <s>
   -> TIO b <r> <{q _0 || s _0}>
   
--- -- | A computation that returns a Unit cannot leak anything  
--- downgrade :: <q :: User -> Bool> . x: TIO Unit <{False}> <q> -> TIO Unit <{True}> <q>
-  
-  
--- peel :: x: Tagged a <{True}> -> a
-
+-- | Allow someone to see a boolean that is always false whenever they cannot see it
 downgrade :: <bp :: User -> Bool> . <bc :: Bool> . <bq :: User -> Bool> .
   x: TIO {Bool | _v ==> bc} <{bp _0 && bc}> <bq> -> TIO {Bool | _v ==> bc} <bp> <bq>   
-
--- ifM :: <ip :: World -> User -> Bool> . <ic :: Bool> .
-  -- cond: Tagged {Bool | _v ==> ic} <{ic && ip _0 _1}> 
-    -- -> thn: Tagged a <{ic && ip _0 _1}> 
-    -- -> els: Tagged a <ip> 
-    -- -> Tagged a <ip>
--- ifM = \cond . \thn . \els . bind (downgrade cond) (\c . if c then thn else els)
-
--- liftM :: <l1p :: World -> User -> Bool> . <l1f :: a -> b -> Bool> . 
-  -- f: (u: a -> {b | l1f u _v}) ->
-  -- x: Tagged a <l1p> ->
-  -- Tagged {b | l1f (content x) _v} <l1p>
--- liftM = \f . \x . bind x (\x' . return (f x'))    
-
--- liftM2 :: <l2p :: World -> User -> Bool> . <l2f :: a -> b -> c -> Bool> . 
-  -- f: (u: a -> v: b -> {c | l2f u v _v}) ->
-  -- x: Tagged a <l2p> ->
-  -- y: Tagged b <l2p> ->
-  -- Tagged {c | l2f (content x) (content y) _v} <l2p>
--- liftM2 = \f . \x . \y . bind x (\x' . bind y (\y' . return (f x' y')))  
-  
--- andM :: <ap :: World -> User -> Bool> . 
-  -- x: Tagged Bool <ap> ->
-  -- y: Tagged Bool <ap> ->
-  -- Tagged {Bool | _v == (content x && content y)} <ap>
--- andM = \x . \y . liftM2 (\u . \v . u && v) x y
-  
--- map :: <mp :: World -> User -> Bool> .
-  -- (a -> Tagged b <mp>) -> xs: List a -> List (Tagged b <mp>)
--- map = \f . \xs .
-  -- match xs with 
-    -- Nil -> Nil
-    -- Cons y ys -> Cons (f y) (map f ys)
-    
--- sequence :: <seqp :: World -> User -> Bool> . xs: List (Tagged a <seqp>) -> Tagged (List a) <seqp>
--- sequence = \xs .
-  -- match xs with
-    -- Nil -> return Nil
-    -- Cons y ys -> liftM2 Cons y (sequence ys)    
-    
--- mapM :: <mp :: World -> User -> Bool> . (a -> Tagged b <mp>) -> xs: List a -> Tagged (List b) <mp>
--- mapM = \f . \xs . sequence (map f xs)
-  
--- filterM :: <fp :: World -> User -> Bool> . <fc :: a -> Bool> .
-  -- (x: a -> Tagged {Bool | _v ==> fc x} <{fc x && fp _0 _1}>) -> xs: List a -> Tagged (List {a | fc _v}) <fp>
--- filterM = \f . \xs .
-  -- match xs with
-    -- Nil -> return Nil
-    -- Cons y ys -> ifM (f y) 
-                    -- (liftM2 Cons (return y) (filterM f ys)) 
-                    -- (filterM f ys) 
-    
--- foldM :: <fp :: World -> User -> Bool> . 
-  -- (a -> b -> Tagged a <fp>) -> a: a -> xs: List b -> Tagged a <fp>
--- foldM = \f . \a . \xs .
-    -- match xs with 
-      -- Nil -> return a
-      -- Cons y ys -> bind (f a y) (\fay . foldM f fay ys)
-
--- {- auxiliary function for sortByM (below) -}
--- insertM :: <inp :: World -> User -> Bool> . 
-  -- (a -> a -> Tagged Bool <inp>) -> x: a -> xs: List a -> 
-            -- Tagged {List a | elems _v == elems xs + [x]} <inp>
--- insertM = \leq . \x . \xs .
-  -- match xs with
-    -- Nil -> return (Cons x Nil)
-    -- Cons y ys -> bind (leq x y) (\c . 
-      -- if c
-        -- then return (Cons x xs)
-        -- else bind (insertM leq x ys) (\rec . return (Cons y rec))
-    -- )
-    
--- sortByM :: <sop :: World -> User -> Bool> .
-  -- (a -> a -> Tagged Bool <sop>) -> xs: List a -> Tagged {List a | elems _v == elems xs} <sop>
--- sortByM = \leq . \xs .  
-  -- match xs with
-    -- Nil -> return Nil
-    -- Cons y ys -> bind (sortByM leq ys) (\rec . insertM leq y rec) 
 
 {- Output -}      
 
