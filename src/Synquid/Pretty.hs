@@ -304,7 +304,7 @@ instance Pretty SSchema where
   pretty = prettySchema
 
 instance Show SSchema where
- show = show . pretty
+  show = show . pretty
 
 instance Pretty RSchema where
   pretty = prettySchema
@@ -342,9 +342,9 @@ prettyProgram (Program p typ) = case p of
                                 else case relist (Program p typ) of -- Resugar into manifest list?
                                       Just xs -> hlBrackets $ commaSep $ map prettyProgram xs
                                       Nothing -> let (doDefs, doBody) = redo (Program p typ) in -- Resugar into do notation?
-                                                   if null doDefs 
-                                                    then prefix
-                                                    else prettyDoBlock doDefs doBody
+                                                 if null doDefs 
+                                                  then prefix
+                                                  else prettyDoBlock doDefs doBody
               _ -> prefix
           _ -> prefix
     PFun x e -> nest 2 $ operator "\\" <> text x <+> operator "." </> prettyProgram e
@@ -357,10 +357,15 @@ prettyProgram (Program p typ) = case p of
   where
     withType doc t = doc -- <> text ":" <+> pretty t
     prettyDoBlock defs body = hang tab $ keyword "do" $+$ vsep (map prettyDoDef defs) $+$ prettyProgram body
-    prettyDoDef (x, e) = text x <+> operator "<-" <+> prettyProgram e
+    prettyDoDef (Just x, e)  = align $ hang tab (text x <+> operator "<-" </> prettyProgram e)
+    prettyDoDef (Nothing, e) = prettyProgram e
     
 redo (Program (PApp ((Program (PApp (Program (PSymbol name) _) def) _)) (Program (PFun x body) _)) _) 
-  | name == bindName = let (defs, e) = redo body in ((x, def):defs, e)
+  | name == bindName = let (defs, e) = redo body in ((Just x, def):defs, e)
+redo (Program (PApp ((Program (PApp (Program (PSymbol name) _) def) _)) (Program (PFix _ (Program (PFun x body) _)) _)) _) 
+  | name == bindName = let (defs, e) = redo body in ((Just x, def):defs, e)
+redo (Program (PApp ((Program (PApp (Program (PSymbol name) _) def) _)) body) _)
+  | name == seqName  = let (defs, e) = redo body in ((Nothing, def):defs, e)
 redo p = ([], p)
 
 relist (Program (PApp ((Program (PApp (Program (PSymbol name) _) x) _)) tail) _) 
