@@ -63,6 +63,10 @@ uHole = untyped PHole
 isHole (Program PHole _) = True
 isHole _ = False
 
+isETerm (Program (PSymbol _) _) = True
+isETerm (Program (PApp _ _) _)  = True
+isETerm _                       = False
+
 eraseTypes :: RProgram -> UProgram
 eraseTypes = fmap (const AnyT)
 

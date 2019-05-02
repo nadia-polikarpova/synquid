@@ -361,11 +361,18 @@ localizeE' env typ (PApp iFun iArg) = do
       _ -> do -- Lambda-abstraction: check against tArg
             let tArg' = renameAsImpl (isBound env) iArg tArg
             writeLog 2 $ text "Checking lambda argument" <+> pretty iArg <+> text "::" <+> pretty tArg' <+> text "in" $+$ pretty (ctx (untyped PHole))
-            inContext ctx $ localizeI env tArg' iArg
-      
+            inContext ctx $ localizeI env tArg' iArg            
 localizeE' env typ impl = do
-  throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
-                                          text "and got" </> squotes (pretty $ untyped impl)
+  -- If we expect an application term, but get an I-term instead, just check it against a fresh type variable
+  g <- freshId "G"
+  let newGoal = vart g ftrue
+  addConstraint $ WellFormed env newGoal
+  when (not $ hasAny typ) (addConstraint $ Subtype env newGoal typ False g)
+  writeLog 2 $ text "Checking I-term" <+> pretty (untyped impl) <+> text "::" <+> pretty newGoal
+  localizeI env newGoal (untyped impl)
+-- localizeE' env typ impl = do
+  -- throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
+                                          -- text "and got" </> squotes (pretty $ untyped impl)
                                           
 checkSymbol :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkSymbol env typ p@(Program (PSymbol name) pTyp) = do
@@ -763,14 +770,13 @@ anfE prefix (Program (PApp pFun pArg) t) varRequired = do
       tmp <- freshId prefix
       return (defsFun ++ defsArg ++ [(tmp, Program (PApp xFun xArg) t)], (Program (PSymbol tmp) t))
     else return (defsFun ++ defsArg, (Program (PApp xFun xArg) t))
-anfE prefix p@(Program (PFun _ _) t) varRequired = do -- A case for abstraction, which can appear in applications and let-bindings
+anfE prefix p@(Program _ t) varRequired = do -- Non-application term
   p' <- aNormalForm prefix p
   if varRequired
     then do
       tmp <- freshId prefix
       return ([(tmp, p')], (Program (PSymbol tmp) t))
     else return ([], p')    
-anfE _ p _ = error $ unwords ["anfE: not an E-term or abstraction", show p]
 
 deANF :: RProgram -> RProgram
 deANF p = deANF' Map.empty Map.empty p
