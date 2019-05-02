@@ -223,11 +223,11 @@ localizeI env t (Program p _) = localizeI' env t p
 
 localizeI' env t PErr = generateError env
 localizeI' env t PHole = error "Holes not supported when checking policies"
-localizeI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
-  lambdaLets %= Map.insert x (env, iDef)
-  pBody <- inContext (\p -> Program (PLet x uHole p) t) $ localizeI env t iBody
-  (_, pDef) <- uses lambdaLets (Map.! x)
-  return $ Program (PLet x pDef pBody) t
+-- localizeI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
+  -- lambdaLets %= Map.insert x (env, iDef)
+  -- pBody <- inContext (\p -> Program (PLet x uHole p) t) $ localizeI env t iBody
+  -- (_, pDef) <- uses lambdaLets (Map.! x)
+  -- return $ Program (PLet x pDef pBody) t
 localizeI' env t@(FunctionT _ tArg tRes) impl = case impl of 
   PFix _ impl -> localizeI env t impl
   PFun y impl -> do
@@ -347,21 +347,31 @@ localizeE' env typ (PApp iFun iArg) = do
     return $ Program (PApp pFun pArg) (appType env pArg x tRes)
   where
     generateHOArg env ctx tArg iArg = case content iArg of
-      PSymbol f -> do
-        lets <- use lambdaLets
-        case Map.lookup f lets of
-          Nothing -> -- This is a function from the environment, with a known type: check symbol against tArg                      
-            localizeETopLevel env tArg iArg 
-          Just (env', def) -> do -- This is a locally defined function: check it against tArg as a fixpoint
-            lambdaLets %= Map.delete f -- Remove from lambda-lets in case of recursive call
-            writeLog 2 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
-            def' <- inContext ctx $ localizeTopLevel (Goal f env' (Monotype tArg) def 0 noPos)
-            lambdaLets %= Map.insert f (env', def')
-            return iArg
+      PSymbol f -> localizeETopLevel env tArg iArg  -- This is a function from the environment, with a known type: check symbol against tArg                     
+      -- do
+        -- lets <- use lambdaLets
+        -- case Map.lookup f lets of
+          -- Nothing -> -- This is a function from the environment, with a known type: check symbol against tArg                      
+            -- localizeETopLevel env tArg iArg 
+          -- Just (env', def) -> do -- This is a locally defined function: check it against tArg as a fixpoint
+            -- lambdaLets %= Map.delete f -- Remove from lambda-lets in case of recursive call
+            -- writeLog 2 $ text "Checking lambda-let argument" <+> pretty iArg <+> text "::" <+> pretty tArg <+> text "in" $+$ pretty (ctx (untyped PHole))
+            -- def' <- inContext ctx $ localizeTopLevel (Goal f env' (Monotype tArg) def 0 noPos)
+            -- lambdaLets %= Map.insert f (env', def')
+            -- return iArg
       _ -> do -- Lambda-abstraction: check against tArg
             let tArg' = renameAsImpl (isBound env) iArg tArg
             writeLog 2 $ text "Checking lambda argument" <+> pretty iArg <+> text "::" <+> pretty tArg' <+> text "in" $+$ pretty (ctx (untyped PHole))
-            inContext ctx $ localizeI env tArg' iArg            
+            inContext ctx $ localizeI env tArg' iArg
+localizeE' env AnyT (PFun y impl) = do
+  -- Since we don't have lambda-lets anymore
+  f <- freshId "F"
+  let tArg = vart f ftrue
+  addConstraint $ WellFormed env tArg
+  let ctx = \p -> untyped (PFun y p)
+  pBody <- inContext ctx $ localizeE (unfoldAllVariables $ addVariable y tArg $ env) AnyT impl
+  writeLog 2 $ text "Inferred function type" <+> pretty (FunctionT y tArg (typeOf pBody)) <+> text "for" <+> pretty (untyped (PFun y impl))
+  return $ Program (PFun y pBody) (FunctionT y tArg (typeOf pBody))
 localizeE' env typ impl = do
   -- If we expect an application term, but get an I-term instead, just check it against a fresh type variable
   g <- freshId "G"
@@ -369,10 +379,9 @@ localizeE' env typ impl = do
   addConstraint $ WellFormed env newGoal
   when (not $ hasAny typ) (addConstraint $ Subtype env newGoal typ False g)
   writeLog 2 $ text "Checking I-term" <+> pretty (untyped impl) <+> text "::" <+> pretty newGoal
-  localizeI env newGoal (untyped impl)
+  localizeI env newGoal (untyped impl)    
 -- localizeE' env typ impl = do
-  -- throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
-                                          -- text "and got" </> squotes (pretty $ untyped impl)
+  -- throwErrorWithDescription $ text "localizeE' got an unexpected term" </> squotes (pretty $ untyped impl)
                                           
 checkSymbol :: MonadHorn s => Environment -> RType -> RProgram -> Explorer s ()
 checkSymbol env typ p@(Program (PSymbol name) pTyp) = do

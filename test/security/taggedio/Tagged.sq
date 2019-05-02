@@ -26,7 +26,55 @@ seq :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: U
   
 -- | Allow someone to see a boolean that is always false whenever they cannot see it
 downgrade :: <bp :: User -> Bool> . <bc :: Bool> . <bq :: User -> Bool> .
-  x: TIO {Bool | _v ==> bc} <{bp _0 && bc}> <bq> -> TIO {Bool | _v ==> bc} <bp> <bq>   
+  x: TIO {Bool | _v ==> bc} <{bp _0 && bc}> <bq> -> TIO {Bool | _v ==> bc} <bp> <bq>
+  
+{- Standard monadic helper functions -}
+
+-- | For simplicity these are defined over TIOs with no write effects
+-- but this can be easily changed
+liftM :: <lp :: User -> Bool> . (a -> b) -> TIO a <lp> <{False}> -> TIO b <lp> <{False}>
+liftM = \f . \t .
+  do
+    x <- t
+    return (f x)
+    
+liftM2 :: <lp :: User -> Bool> . 
+  (a -> b -> c) -> TIO a <lp> <{False}> -> TIO b <lp> <{False}> -> TIO c <lp> <{False}>
+liftM2 = \f . \t1 . \t2 .
+  do
+    x <- t1
+    y <- t2
+    return (f x y)
+    
+map :: <mp :: User -> Bool> . 
+  (a -> TIO b <mp> <{False}>) -> xs: [a] -> [TIO b <mp> <{False}>]
+map = \f . \xs .
+  match xs with 
+    Nil -> Nil
+    Cons y ys -> Cons (f y) (map f ys)
+    
+sequence :: <seqp :: User -> Bool> . xs: [TIO a <seqp> <{False}>] -> TIO [a] <seqp> <{False}>
+sequence = \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> liftM2 Cons y (sequence ys)    
+    
+mapM :: <mp :: User -> Bool> . 
+  (a -> TIO b <mp> <{False}>) -> xs: [a] -> TIO [b] <mp> <{False}>
+mapM = \f . \xs . sequence (map f xs)
+
+filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
+  (x: a -> TIO {Bool | _v ==> fc x} <{fc x && fp _0}> <{False}>) -> xs: [a] -> TIO [{a | fc _v}] <fp> <{False}>
+filterM = \f . \xs .
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> do    
+                   c <- downgrade (f y)
+                   if c
+                      then liftM2 Cons (return y) (filterM f ys)
+                      else filterM f ys
+
+
 
 {- Output -}      
 
