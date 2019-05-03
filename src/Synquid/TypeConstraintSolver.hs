@@ -327,7 +327,6 @@ unfoldClauses = do
       let uVars = (quals Map.! u) ^. variables -- Scope variables of `u`
       let rhsVars = Set.map (substitute subst) uVars -- Variables of the RHS, i.e. variables of `u` renamed according to `subst`
       let elimVars = varsOf lhs Set.\\ rhsVars -- Variables that have to be eliminated from LHS
-      -- writeLog 2 (text "UVARS" <+> pretty uVars)
       let reverseSubst = Set.fold (\uvar rsub -> maybe rsub (\(Var _ name) -> Map.insert name uvar rsub) (Map.lookup (varName uvar) subst)) Map.empty uVars
       
       let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs      
@@ -561,10 +560,16 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
   = if isScalarType tArg1
       then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True label)
       else simplifyConstraint (Subtype env tRes1 tRes2 True label)
-simplifyConstraint' _ _ c@(WellFormed env (ScalarT (DatatypeT name tArgs _) fml))
+simplifyConstraint' tass _ c@(WellFormed env t@(ScalarT (DatatypeT _ _ _) _))
   = do
-      mapM_ (simplifyConstraint . WellFormed env) tArgs
-      simpleConstraints %= (c :)
+      let t' = typeSubstitute tass t
+      if any (not . isBound env) (typeVarsOf t')
+        then -- Free type vars waiting to be instantiated: put it back
+          modify $ addTypingConstraint c
+        else do -- No free type variables: it's a simple constraint
+          let (ScalarT (DatatypeT _ tArgs _) _) = t'
+          mapM_ (simplifyConstraint . WellFormed env) tArgs
+          simpleConstraints %= (WellFormed env t' :)
 simplifyConstraint' _ _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)

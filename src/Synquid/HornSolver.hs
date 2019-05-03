@@ -203,8 +203,8 @@ greatestFixPoint quals extractAssumptions candidates = do
         
 hornApplySolution extractAssumptions sol (Binary Implies lhs rhs) = 
     let
-     lhs' = applySolution sol lhs
-     rhs' = applySolution sol rhs
+     lhs' = eliminateExists $ applySolution sol lhs     
+     rhs' = applySolution sol rhs     
      assumptions = extractAssumptions lhs' `Set.union` extractAssumptions rhs'
     in Binary Implies (lhs' `andClean` conjunction assumptions) rhs'
     

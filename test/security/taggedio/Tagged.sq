@@ -74,7 +74,28 @@ filterM = \f . \xs .
                       then liftM2 Cons (return y) (filterM f ys)
                       else filterM f ys
 
-
+{- auxiliary function for sortByM (below) -}
+insertM :: <inp :: User -> Bool> . (a -> a -> TIO Bool <inp> <{False}>) -> x: a -> xs: List a -> TIO {List a | elems _v == elems xs + [x]} <inp> <{False}>
+insertM = \leq . \x . \xs .
+  match xs with
+    Nil -> return [x]
+    Cons y ys -> 
+      do
+        c <- leq x y 
+        if c
+          then return (Cons x xs)
+          else do
+                rec <- insertM leq x ys
+                return (Cons y rec)
+    
+sortByM :: <sop :: User -> Bool> .
+  (a -> a -> TIO Bool <sop> <{False}>) -> xs: [a] -> TIO {List a | elems _v == elems xs} <sop> <{False}>
+sortByM = \leq . \xs .  
+  match xs with
+    Nil -> return Nil
+    Cons y ys -> do 
+                   rec <- sortByM leq ys
+                   insertM leq y rec
 
 {- Output -}      
 
