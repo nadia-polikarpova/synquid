@@ -19,17 +19,7 @@ good = \w .
   do
     a <- getSSN w alice
     print alice (show a)    
-    
--- | Print to all viewers
-printAll :: viewers: List User -> msg: String -> TIO Unit <{True}> <{_0 in elems viewers}>
-printAll = \viewers . \msg .
-  match viewers with
-    Nil -> return Unit
-    Cons v vs -> 
-      do
-        print v msg    
-        printAll vs msg
-                
+                    
 -- | This is fine: both Alice and Bob can see their wedding date
 good1 :: w: World -> TIO Unit <{False}> <{True}>
 good1 = \w .
