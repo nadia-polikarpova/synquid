@@ -101,6 +101,16 @@ sortByM = \leq . \xs .
 
 print :: viewer: User -> msg: String -> TIO Unit <{True}> <{_0 == viewer}>
 
+-- | Print to all viewers
+printAll :: viewers: List User -> msg: String -> TIO Unit <{True}> <{_0 in elems viewers}>
+printAll = \viewers . \msg .
+  match viewers with
+    Nil -> return Unit
+    Cons v vs -> 
+      do
+        print v msg    
+        printAll vs msg
+
 {- Guards, redaction functions, and qualifiers -}
 
 redact {false, zero, Nil, Nothing, fmap, emptyString}
