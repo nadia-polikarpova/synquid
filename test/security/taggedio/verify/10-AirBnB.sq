@@ -1,0 +1,60 @@
+{- 
+  AirBnB bug: they scrape phone numbers from user messages, but forgot to do so in the preview.
+  This example features a custom redaction function that makes a message text visible to the recipient,
+  but not completely public.
+  It also showcases expressive functional reasoning with higher-order functions,
+  since correctness depends on the argument of filterM.
+-}
+
+{- Datatypes -}
+
+data World
+
+data MessageId
+
+{- Sensitive data and policies -}
+
+getAllMessageIDs :: w: World -> [MessageId]
+
+-- | AirBnB admin
+predicate admin :: World -> User
+getAdmin :: w: World -> TIO {User | _v == admin w} <{True}> <{False}>
+
+-- | Message sender
+predicate sender :: World -> Map MessageId User
+getSender :: w: World -> m: MessageId -> TIO {User | _v == (sender w)[[m]] && _v != (recipient w)[[m]]} <{True}> <{False}>
+
+-- | Message recipient
+predicate recipient :: World -> Map MessageId User
+getRecipient :: w: World -> m: MessageId -> TIO {User | _v == (recipient w)[[m]] && _v != (sender w)[[m]]} <{True}> <{False}>
+
+-- | Message text (only visible to the admin and the sender)
+getText :: w: World -> m: MessageId -> TIO String <{_0 == admin w || _0 == (sender w)[[m]]}> <{False}>
+
+-- | Scrape phone numbers from the message, making it visible to the recipient
+scrapePhoneNumbers :: w: World -> m: MessageId 
+                                   -> TIO String <{_0 == admin w || _0 == (sender w)[[m]]}> <{False}>
+                                   -> TIO String <{_0 == admin w || _0 == (sender w)[[m]] || _0 == (recipient w)[[m]]}> <{False}>
+
+redact {scrapePhoneNumbers}
+
+{- Client code -}
+  
+-- | View all client's messages.
+-- | Repair: inside the first argument of mapM, check if client is admin (client cannot be sender as per refinement on getRecipient),
+--           and otherwise scrape the message.
+--           To determine that scraping the message is enough, we need to know that client is recipient for all messages in myMIDs,
+--           which we infer from the type of filterM
+viewInbox :: World -> User -> TIO Unit <{False}> <{True}>
+viewInbox = \w . \client .
+  let isMyMessage = \m .
+        do to <- getRecipient w m
+           return (to == client) in
+  let showMessage = \m . 
+        do a <- getAdmin w
+           if client == a
+             then getText w m
+             else scrapePhoneNumbers w m (getText w m) in
+  do myMIDs <- filterM isMyMessage (getAllMessageIDs w) 
+     messages <- mapM showMessage myMIDs 
+     print client (unlines messages)  
