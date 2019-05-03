@@ -14,6 +14,7 @@ import Data.Map (Map)
 
 import Control.Lens hiding (both)
 import Control.Monad
+import Control.Monad.State
 
 {- Sorts -}
 
@@ -451,6 +452,23 @@ eliminateComp (Binary op l r) |
   op `elem` [And, Or, Implies, Iff]  = Binary op (eliminateComp l) (eliminateComp r)
 eliminateComp (Unary Not e) = Unary Not (eliminateComp e)
 eliminateComp fml = fml
+
+-- | Make all existentially quantified variables free
+eliminateExists :: Formula -> Formula
+eliminateExists fml = evalState (eliminateExists' fml) 0
+  where
+    eliminateExists' :: Formula -> State Integer Formula
+    eliminateExists' (Quant Exists (Var s name) body) = do
+      varCount <- get
+      modify (+ 1)
+      let body' = substitute (Map.singleton name (Var s (name ++ show varCount))) body      
+      eliminateExists' body'
+    eliminateExists' (Binary op l r) |
+      op `elem` [And, Or] = do
+                              l' <- eliminateExists' l
+                              r' <- eliminateExists' r
+                              return $ Binary op l' r'
+    eliminateExists' fml = return fml
 
 hasComp :: Formula -> Bool
 hasComp (SetComp _ _) = True
