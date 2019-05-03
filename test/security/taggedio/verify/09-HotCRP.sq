@@ -1,0 +1,37 @@
+{- HotCRP password leak: chair could see other people's passwords in message preview -}
+
+data World
+
+data Password
+
+-- | Mask a password
+mask :: TIO Password <{False}> <{False}> -> TIO Password <{True}> <{False}>
+
+{- Sensitive data and policies -}
+
+-- | User name (public)
+getUserName :: w: World -> u: User -> TIO String <{True}> <{False}>
+   
+getUserPassword :: w: World -> u: User -> TIO Password <{_0 == u}> <{False}>
+-- | User password (only visible to the user)
+
+-- | PC chair (public)
+predicate chair :: World -> User
+getChair :: w: World -> TIO {User | _v == chair w} <{True}> <{False}>
+
+redact {mask}
+
+{- Client code -}
+  
+-- | Send `u` a reminder of their password on behalf on the chair
+-- | Repair: in preview, check if u is chair, and otherwise mask the password
+sendPasswordReminder :: World -> User -> TIO Unit <{False}> <{True}>
+sendPasswordReminder = \w . \u .
+  do
+    ch <- getChair w
+    preview <- liftM2 strcat (getUserName w u) (liftM show (mask (getUserPassword w u)))
+    print ch preview
+    
+    message <- liftM2 strcat (getUserName w u) (liftM show (getUserPassword w u))
+    print u message
+  
