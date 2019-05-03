@@ -50,8 +50,10 @@ showSession = \w . \client . \p .
      st <- if ph == Done
              then getPaperStatus w p
              else return NoDecision
-     ses <- if st == Accepted 
-              then getPaperSession w p 
-              else return emptyString
-     print client (unwords [t, ses])
+     if st == Accepted 
+       then do
+              ses <- getPaperSession w p
+              print client (unwords [t, ses])
+       else print client emptyString
+     
   
