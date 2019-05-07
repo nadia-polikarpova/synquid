@@ -560,16 +560,10 @@ simplifyConstraint' _ _ (Subtype env (FunctionT x tArg1 tRes1) (FunctionT y tArg
   = if isScalarType tArg1
       then simplifyConstraint (Subtype (addVariable x tArg1 env) tRes1 tRes2 True label)
       else simplifyConstraint (Subtype env tRes1 tRes2 True label)
-simplifyConstraint' tass _ c@(WellFormed env t@(ScalarT (DatatypeT _ _ _) _))
+simplifyConstraint' tass _ c@(WellFormed env (ScalarT (DatatypeT _ tArgs _) _))
   = do
-      let t' = typeSubstitute tass t
-      if any (not . isBound env) (typeVarsOf t')
-        then -- Free type vars waiting to be instantiated: put it back
-          modify $ addTypingConstraint c
-        else do -- No free type variables: it's a simple constraint
-          let (ScalarT (DatatypeT _ tArgs _) _) = t'
-          mapM_ (simplifyConstraint . WellFormed env) tArgs
-          simpleConstraints %= (WellFormed env t' :)
+      mapM_ (simplifyConstraint . WellFormed env) tArgs
+      simpleConstraints %= (c :)
 simplifyConstraint' _ _ (WellFormed env (FunctionT x tArg tRes))
   = do
       simplifyConstraint (WellFormed env tArg)
@@ -679,8 +673,10 @@ processConstraint (WellFormed env t@(ScalarT baseT fml))
         tq <- asks _typeQualsGen
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
         let env' = typeSubstituteEnv tass env
-        let env'' = addVariable valueVarName t env'
-        when (not $ Map.member u qmap) $ addQuals u (tq env'' (Var (toSort baseT) valueVarName) (allScalars env'))
+        -- TODO: some type vars might still be free! /should add this constraint (and corresponding subtyping) back to typing constraints
+        let t' = typeSubstitute tass t
+        let env'' = addVariable valueVarName t' env'
+        when (not $ Map.member u qmap) $ addQuals u (tq env'' (Var (toSort $ baseTypeOf t') valueVarName) (allScalars env'))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
