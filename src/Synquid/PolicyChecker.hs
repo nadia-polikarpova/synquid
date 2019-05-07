@@ -118,14 +118,14 @@ recheck eParams tParams p (goal : goals) = do
 
 getPrefix = "get"
 isDBGetter name = take (length getPrefix) name == getPrefix
-getterOf field = getPrefix ++ (toUpper (head field) : tail field)
+-- getterOf field = getPrefix ++ (toUpper (head field) : tail field)
 
-mkTagged a policy = DatatypeT "Tagged" [a] [policy]
+mkTagged a policy = DatatypeT "TIO" [a] [policy, ffalse]
 
-stringType = DatatypeT "String" [] []
-worldType = DatatypeT "World" [] []
+-- stringType = DatatypeT "String" [] []
+-- worldType = DatatypeT "World" [] []
 
-isTagged (ScalarT (DatatypeT dtName _ _) _) | dtName == "Tagged" = True
+isTagged (ScalarT (DatatypeT dtName _ _) _) | dtName == "TIO" = True
 isTagged t = False
 
 stripTags t@(ScalarT (DatatypeT dtName [dtArg] _) _) 
@@ -426,12 +426,16 @@ replaceViolations env p@(Program (PLet x def body) t) = do
             Nothing -> do
                           (def', gs) <- replaceViolations env def
                           return ([], def', gs)
-            Just ts -> if length ts == 1
-                          then generateRepair env (head ts) def
+            Just [t] -> if isTagged t
+                          then generateRepair env t def
                           else throwErrorWithDescription $ hang 2 $ 
-                                text "Binder" <+> squotes (text x) <+> text "violates multiple requirements:" $+$ vsep (map pretty ts) $+$
-                                text "Probable causes: binder flows into multiple sinks or is itself a sink with a self-denying policy" $+$
-                                text "when checking" $+$ pretty p
+                                  text "Binder" <+> squotes (text x) <+> text "violates functional specification:" $+$ pretty t
+                                  $+$ text "when checking" $+$ pretty p                                  
+            Just ts -> throwErrorWithDescription $ hang 2 $ 
+                        text "Binder" <+> squotes (text x) <+> text "violates multiple requirements:" $+$ vsep (map pretty ts) $+$
+                        text "Probable causes: binder flows into multiple sinks or is itself a sink with a self-denying policy" $+$
+                        text "when checking" $+$ pretty p
+                                
   (body', gs2) <- replaceViolations (addLetBound x (typeOf def') env) body
   return (foldDefs (newDefs ++ [(x, def')]) body' t, gs1 ++ gs2)
 replaceViolations env (Program (PApp fun arg) t) = do
