@@ -1,21 +1,23 @@
 {- HotCRP password leak: chair could see other people's passwords in message preview -}
 
+data World
+
 data Password
 
 -- | Mask a password
-mask :: Tagged Password <{False}> -> Tagged Password <{True}>
+mask :: TIO Password <{False}> <{False}> -> TIO Password <{True}> <{False}>
 
 {- Sensitive data and policies -}
 
 -- | User name (public)
-getUserName :: w: World -> u: User -> Tagged String <{True}>
+getUserName :: w: World -> u: User -> TIO String <{True}> <{False}>
    
+getUserPassword :: w: World -> u: User -> TIO Password <{_0 == u}> <{False}>
 -- | User password (only visible to the user)
-getUserPassword :: w: World -> u: User -> Tagged Password <{_1 == u}>
 
 -- | PC chair (public)
 predicate chair :: World -> User
-getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+getChair :: w: World -> TIO {User | _v == chair w} <{True}> <{False}>
 
 redact {mask}
 
@@ -23,10 +25,12 @@ redact {mask}
   
 -- | Send `u` a reminder of their password on behalf on the chair
 -- | Repair: in preview, check if u is chair, and otherwise mask the password
-sendPasswordReminder :: World -> User -> World
+sendPasswordReminder :: World -> User -> TIO Unit <{False}> <{True}>
 sendPasswordReminder = \w . \u .
-  let preview = liftM2 strcat (getUserName w u) (liftM show (getUserPassword w u)) in
-  let message = liftM2 strcat (getUserName w u) (liftM show (getUserPassword w u)) in
-  let w' = print w (getChair w) preview in
-  print w' (return u) message
-  
+  do
+    ch <- getChair w
+    preview <- liftM2 strcat (getUserName w u) (liftM show (getUserPassword w u))
+    print ch preview
+    
+    message <- liftM2 strcat (getUserName w u) (liftM show (getUserPassword w u))
+    print u message  
