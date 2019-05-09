@@ -2,27 +2,28 @@
   The James Comey Instagram leak: the follow-relationships of private accounts leaks through recommendation algorithms
 -}
 
+{- Datatypes -}
+
+data World
+
 {- Sensitive data and policies -}
 
 getAllUsers :: w: World -> [User]
 
 -- | User name (visible to all)
 predicate name :: World -> Map User String
-getName :: w: World -> u: User -> Tagged {String | _v == (name w)[[u]]} <{True}>
+getName :: w: World -> u: User -> TIO {String | _v == (name w)[[u]]} <{True}> <{False}>
 
 -- | Is user's account private? (visible to all)
 predicate isPrivate :: World -> Map User Bool
-getIsPrivate :: w: World -> u: User -> Tagged {Bool | _v == (isPrivate w)[[u]]} <{True}>
+getIsPrivate :: w: World -> u: User -> TIO {Bool | _v == (isPrivate w)[[u]]} <{True}> <{False}>
 
 -- | Who this user follows (for private accounts: only visible to followers)
 predicate following :: World -> Map User (Set User)
 getIsFollowing :: w: World -> who: User -> whom: User ->
-  Tagged {Bool | _v == (whom in (following w)[[who]])} <{canSee _0 _1 who && canSee _0 _1 whom}>    
-setIsFollowing :: w: World -> who: User -> whom: User ->
-  val: Tagged Bool <{canSee _0 _1 who && canSee _0 _1 whom}> ->
-  {World | (whom in (following _v)[[who]]) == content val &&
-            name _v == name w &&
-            isPrivate _v == isPrivate w}
+  TIO {Bool | _v == (whom in (following w)[[who]])} <{canSee w _0 who && canSee w _0 whom}> <{False}>
+setIsFollowing :: w: World -> who: User -> whom: User -> val: Bool ->
+  TIO {World | (whom in (following _v)[[who]]) == val && name _v == name w && isPrivate _v == isPrivate w} <{True}> <{canSee w _0 who && canSee w _0 whom}>
   
 -- | Is account u public? Yes if it's not private    
 inline isPublic w u = !(isPrivate w)[[u]]    
@@ -32,16 +33,15 @@ inline canSee w x y  =  x == y || isPublic w y || y in (following w)[[x]]
 {- Client code -}
   
 -- | Show to client who friend is following
-follow :: w: World -> client: User -> newFriend: {User | isPublic w _v} -> World
+-- Repair: inside shouldRecommend, check if u is public or client is following them, otherwise return false
+follow :: w: World -> client: User -> newFriend: {User | isPublic w _v && _v in (following w)[[client]]} -> TIO Unit <{False}> <{True}>
 follow = \w . \client . \newFriend .
-  let w' = setIsFollowing w client newFriend (return true) in
-  let shouldRecommend = \u.
-        if u == client
-          then return false -- Do not recommend following myself
-          else getIsFollowing w' newFriend u -- Recommend following everyone newFriend follows
-      in
-  let recommendation = 
-        do uids <- filterM shouldRecommend (getAllUsers w')
-           names <- mapM (\u . getName w' u) uids
-           return (unlines names) in
-  print w' (return client) recommendation  
+  do
+    -- w' <- setIsFollowing w client newFriend true
+    uids <- let shouldRecommend = \u1.
+              if u1 == client
+                then return false -- Do not recommend following myself
+                else getIsFollowing w newFriend u1 -- Recommend following everyone newFriend follows
+            in filterM (\u. shouldRecommend u) (getAllUsers w)    
+    names <- mapM (\u . getName w u) uids
+    print client (unlines names)
