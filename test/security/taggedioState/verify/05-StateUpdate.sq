@@ -1,0 +1,58 @@
+{- Auction with state update between retrieval and print -}
+
+{- Datatypes -}
+
+data World
+
+data Phase where
+  Bidding :: Phase
+  Done :: Phase  
+guard {Bidding, Done}
+
+{- Sensitive data and policies -}   
+
+data World
+
+data Phase where
+  Bidding :: Phase
+  Done :: Phase  
+guard {Bidding, Done}
+
+{- Sensitive data and policies -}   
+
+getAllParticipants :: w: World -> [User]
+
+-- | Auction phase (public)
+predicate phase :: World -> Phase
+getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
+
+-- | User bid (fully visible to the user themselves and once the phase is done; partially visible to all users who have bid)
+predicate hasBid :: World -> Map User Bool
+getBid :: w: World -> u: User -> 
+  TIO { Maybe (TIO Int <{ phase w == Done || _0 == u }> <{False}>) | just _v == (hasBid w)[[u]] } 
+    <{ phase w == Done || _0 == u || (hasBid w)[[_0]]}> <{False}>    
+setBid :: w: World -> u: User 
+   -> b: Maybe Int
+   -> TIO {World | (hasBid _v)[[u]] == just b && phase _v == phase w} <{True}> <{}>
+    
+  
+{- Client code -}
+
+setIfNothing :: <p :: World -> User -> Bool> . x:Int -> m:Maybe (Tagged Int <p>) -> {Maybe (Tagged Int <p>) | just _v}
+setIfNothing = \x . \m . maybe (Just (return x)) (\y . Just y) m
+  
+-- | Place `client`s bid and then show them all bids
+-- | Repair: for getBid, check that phase is done or client is p,
+--           otherwise then apply `fmap (const 0)`, since we already know that client has bid
+placeBid :: World -> User -> Int -> World
+placeBid = \w . \client . \b .
+  let showParticipant = \p . 
+    do mB <- getBid w p
+       maybe (return emptyString) (\x . liftM show x) mB in
+  let out = liftM unlines (mapM showParticipant (getAllParticipants w)) in
+  let newBid = do
+                mB <- getBid w client
+                return (setIfNothing b mB) in
+  let w' = setBid w client newBid in
+  print w' (return client) out  
+  
