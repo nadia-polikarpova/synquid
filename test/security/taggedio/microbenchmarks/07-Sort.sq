@@ -2,38 +2,38 @@
 
 {- Datatypes -}
 
+data World
+
 data PaperId
 
 {- Sensitive data and policies -}
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
+getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper conflicts (public)
 predicate paperConflicts :: World -> Map PaperId (Set User)
 getPaperConflicts :: w: World -> pid: PaperId 
-                        -> Tagged {List User | elems _v == (paperConflicts w)[[pid]]} <{!(_1 in (paperConflicts _0)[[pid]])}>
+                        -> TIO {List User | elems _v == (paperConflicts w)[[pid]]} <{!(_0 in (paperConflicts w)[[pid]])}> <{False}>
 
 -- | Paper score (only visible if not in conflict)
-getPaperScore :: w: World -> pid: PaperId -> Tagged Int <{!(_1 in (paperConflicts _0)[[pid]])}>
+getPaperScore :: w: World -> pid: PaperId -> TIO Int <{!(_0 in (paperConflicts w)[[pid]])}> <{False}>
 
 -- | All papers in the conference
-getAllPaperIds :: w: World -> Tagged [PaperId] <{True}>  
+getAllPaperIds :: w: World -> TIO [PaperId] <{True}> <{False}>
 
 {- Client code -}
   
 -- | Sort papers by their score.
--- | Repair: inside cmpScore, check that u is not conflicted with pid1/2
-sortPapersByScore :: World -> User -> World
+-- | Repair: inside cmpScore, check that client is not conflicted with pid1/2
+sortPapersByScore :: World -> User -> TIO Unit <{False}> <{True}>
 sortPapersByScore = \w . \client .
   let cmpScore = \pid1. \pid2.
-                  do x1 <- getPaperScore w pid1
+                  do 
+                     x1 <- getPaperScore w pid1                     
                      x2 <- getPaperScore w pid2
-                     return (x1 <= x2)
-                  in
-  let out = do pids <- getAllPaperIds w
-               sortedPids <- sortByM cmpScore pids
-               titles <- mapM (getPaperTitle w) sortedPids
-               return (unlines titles)
-            in
-  print w (return client) out  
+                     return (x1 <= x2) in
+  do pids <- getAllPaperIds w
+     sortedPids <- sortByM cmpScore pids
+     titles <- mapM (getPaperTitle w) sortedPids
+     print client (unlines titles)
