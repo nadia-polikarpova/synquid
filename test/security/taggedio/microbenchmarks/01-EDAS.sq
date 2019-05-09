@@ -2,6 +2,9 @@
 
 {- Datatypes -}
 
+-- | Database
+data World 
+
 data PaperId
 
 data Phase where
@@ -23,30 +26,31 @@ guard {Accepted, Rejected, NoDecision}
    
 -- | Conference phase (public)
 predicate phase :: World -> Phase
-getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
+getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
+getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{phase _0 == Done}>
+getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
 
 -- | Paper session (public)
-getPaperSession :: w: World -> p: PaperId -> Tagged String <{True}>
+getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 
-redact {NoDecision}  
+redact {NoDecision}
 
 {- Client code -}
   
 -- | Show data for paper `p` to `client`
 -- | Repair: for getPaperStatus, check that phase is Done, otherwise return NoDecision
-showSession :: World -> User -> PaperId -> World
+showSession :: World -> User -> PaperId -> TIO Unit <{False}> <{True}>
 showSession = \w . \client . \p .
-  let row = do t <- getPaperTitle w p
-               st <- getPaperStatus w p
-               ses <- if st == Accepted 
-                        then getPaperSession w p 
-                        else return emptyString
-               return (unwords [t, ses])
-  in print w (return client) row
+  do t <- getPaperTitle w p
+     st <- getPaperStatus w p
+     if st == Accepted 
+       then do
+              ses <- getPaperSession w p
+              print client (unwords [t, ses])
+       else print client emptyString
+     
   
