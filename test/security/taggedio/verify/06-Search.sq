@@ -46,13 +46,6 @@ getAllPaperIds :: w: World -> TIO [PaperId] <{True}> <{False}>
 redact {NoDecision}  
 
 {- Client code -}
-
--- isMyAccepted :: World -> c: User -> PaperId -> TIO Bool <{_0 == c}> <{True}>
--- isMyAccepted = \w . \client . \p .
-    -- downgrade (
-      -- do auts <- getPaperAuthors w p
-         -- return (elem client auts)
-      -- )
   
 -- | Show `client` all their accepted papers
 -- | Repair: for `getPaperStatus` inside `isMyAccepted` check that phase is Done, otherwise return NoDecision;
