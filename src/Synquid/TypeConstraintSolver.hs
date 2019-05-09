@@ -230,12 +230,14 @@ stripTrivialClauses = do
   setSolution $ Map.fromList (zip topUnknowns (repeat Set.empty))  
   
   -- Strip clauses with trivial bodies
-  let (trivialBodies, nontrivial) = strip isTrivialBody [] nontrivialHeads
+  -- Note: have to also consider the ones with trivial heads:
+  -- otherwise the unknowns in their bodies that do no appear anywhere else will not have a solution!
+  let (trivialBodies, nontrivialBodies) = strip isTrivialBody [] clauses
   let botUnknowns = Set.toList $ Set.unions $ map (negUnknowns . fst) trivialBodies
   setSolution $ Map.fromList (zip botUnknowns (repeat $ Set.singleton ffalse))  
   
-  let trivial = trivialHeads ++ trivialBodies
-  hornClauses .= nontrivial
+  let trivial = nub $ trivialHeads ++ trivialBodies
+  hornClauses .= nontrivialHeads `intersect` nontrivialBodies 
   writeLog 2 (nest 2 $ text "Stripped trivial clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) trivial))        
   
   where
