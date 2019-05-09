@@ -2,6 +2,8 @@
 
 {- Datatypes -}
 
+data World
+
 data PaperId
 
 data Phase where
@@ -23,22 +25,22 @@ guard {Accepted, Rejected, NoDecision}
    
 -- | Conference phase (public)
 predicate phase :: World -> Phase
-getPhase :: w: World -> Tagged {Phase | _v == phase w} <{True}>
+getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> Tagged String <{True}>
+getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper authors (only visible to themselves or when phase is done)
 predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> p: PaperId -> 
-  Tagged {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
-    <{_1 in (paperAuthors _0)[[p]] || phase _0 == Done}>
+  TIO {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
+    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: w: World -> p: PaperId -> Tagged Status <{_1 in (paperAuthors _0)[[p]] && phase _0 == Done}>
+getPaperStatus :: w: World -> p: PaperId -> TIO Status <{_0 in (paperAuthors w)[[p]] && phase w == Done}> <{False}>
 
 -- | All papers in the conference
-getAllPaperIds :: w: World -> Tagged [PaperId] <{True}>
+getAllPaperIds :: w: World -> TIO [PaperId] <{True}> <{False}>
 
 redact {NoDecision}  
 
@@ -46,9 +48,9 @@ redact {NoDecision}
   
 -- | Send status notification to authors
 -- | Repair: check that phase is Done (we already know viewer is an author)
-notifyAuthors :: w: World -> p: PaperId -> World
+notifyAuthors :: w: World -> p: PaperId -> TIO Unit <{False}> <{True}>
 notifyAuthors = \w . \p .
-  let status = getPaperStatus w p in
-  let authors = getPaperAuthors w p in
-  printAll w authors (liftM show status)
-  
+  do
+    status <- getPaperStatus w p
+    authors <- getPaperAuthors w p
+    printAll authors (show status)
