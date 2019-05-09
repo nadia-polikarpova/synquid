@@ -52,8 +52,10 @@ showSession = \w . \client . \p .
   do t <- getPaperTitle w p
      auts <- getPaperAuthors w p
      st   <- getPaperStatus w p
-     ses  <- if st == Accepted 
-               then getPaperSession w p 
-               else return emptyString
-     print client (unwords [t, show auts, ses])
+     if st == Accepted 
+       then do
+              ses <- getPaperSession w p
+              print client (unwords [t, show auts, ses])
+       else print client (unwords [t, show auts, emptyString])
+     
   

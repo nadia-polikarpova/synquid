@@ -51,6 +51,6 @@ showSession = \w . \client . \p .
        then do
               ses <- getPaperSession w p
               print client (unwords [t, ses])
-       else print client emptyString
+       else print client (unwords [t, emptyString])
      
   

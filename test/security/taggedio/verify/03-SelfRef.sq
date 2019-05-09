@@ -46,8 +46,6 @@ getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 -- redact {NoDecision}  
 
 {- Client code -}
-
-alice :: User
   
 -- | Show data for paper `p` to `client`
 -- | Repair: for getPaperAuthors, check that phase is done or client is author, otherwise return Nil
