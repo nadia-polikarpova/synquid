@@ -30,7 +30,7 @@ data Reviewer where
 measure ruser :: Reviewer -> User where
   ReviewerEntry i u -> u
 
-anonymousReviewer :: Tagged Reviewer <{False}> -> Tagged Reviewer <{True}>
+anonymousReviewer :: TIO Reviewer <{False}> <{False}> -> TIO Reviewer <{True}> <{False}>
 redact {anonymousReviewer}
 
 data Review where
@@ -46,13 +46,13 @@ redact {UserProfileRecord}
 data Token
 
 predicate users :: World -> Set User
-getUsers :: w: World -> Tagged {List {User | _v in users w} | elems _v == users w} <{_1 == chair _0}>
+getUsers :: w: World -> TIO {List {User | _v in users w} | elems _v == users w} <{_0 == chair w}> <{False}>
 
 predicate passwords :: World -> Map User String
-getPassword :: w: World -> u: User -> Tagged {String | _v == (passwords w)[[u]]} <{_1 == u}>
-setPassword :: w: World -> u: User -> pw: Tagged String <{_1 == u}> -> 
-  {World | users _v == users w &&
-           passwords _v == (passwords w) [[u := content pw]]}
+getPassword :: w: World -> u: User -> TIO {String | _v == (passwords w)[[u]]} <{_0 == u}> <{False}>
+setPassword :: w: World -> u: User -> pw: String  -> 
+  TIO {World | users _v == users w &&
+           passwords _v == (passwords w) [[u := content pw]]} <{True}> <{_0 == u}>
 
 addUser :: w: World -> u: User -> pw: String -> 
   {World | users _v == users w + [u] && 
