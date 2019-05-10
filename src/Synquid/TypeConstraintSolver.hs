@@ -750,24 +750,26 @@ embedding env vars includeQuantified = do
     qmap <- use qualifierMap
     let ass = Set.map (substitutePredicate pass) $ (env ^. assumptions)
     let allVars = vars `Set.union` potentialVars qmap (conjunction ass)
-    return $ addBindings env tass pass qmap ass allVars    
+    return $ addBindings env tass pass qmap ass allVars Set.empty   
   where
-    addBindings env tass pass qmap fmls vars = 
+    addBindings env tass pass qmap fmls vars addedVars =
       if Set.null vars
         then fmls
         else let (x, rest) = Set.deleteFindMin vars in
+             let addedVars' = Set.insert x addedVars in
               case Map.lookup x (allSymbols env) of
-                Nothing -> addBindings env tass pass qmap fmls rest -- Variable not found (useful to ignore value variables)
+                Nothing -> addBindings env tass pass qmap fmls rest addedVars' -- Variable not found (useful to ignore value variables)
                 Just (Monotype t) -> case typeSubstitute tass t of
                   ScalarT baseT fml -> 
                     let fmls' = Set.fromList $ map (substitute (Map.singleton valueVarName (Var (toSort baseT) x)) . substitutePredicate pass)
                                           (fml : allMeasurePostconditions includeQuantified baseT env) in
                     let newVars = Set.delete x $ setConcatMap (potentialVars qmap) fmls' in
-                    addBindings env tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` newVars)
-                  LetT y tDef tBody -> addBindings (addVariable x tBody . addVariable y tDef . removeVariable x $ env) tass pass qmap fmls vars
+                    addBindings env tass pass qmap (fmls `Set.union` fmls') (rest `Set.union` (newVars Set.\\ addedVars')) addedVars'
+                  LetT y tDef tBody -> 
+                    addBindings (addVariable x tBody . addVariable y tDef . removeVariable x $ env) tass pass qmap fmls vars addedVars
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
-                Just sch -> addBindings env tass pass qmap fmls rest -- TODO: why did this work before?
+                Just sch -> addBindings env tass pass qmap fmls rest addedVars' -- TODO: why did this work before?
     allSymbols env = symbolsOfArity 0 env
 
 -- -- | 'potentialVars' @qmap fml@ : variables of @fml@ if all unknowns get strongest valuation according to @quals@    
