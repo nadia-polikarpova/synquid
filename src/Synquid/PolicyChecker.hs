@@ -230,10 +230,14 @@ localizeI' env t PHole = error "Holes not supported when checking policies"
   -- return $ Program (PLet x pDef pBody) t
 localizeI' env t@(FunctionT _ tArg tRes) impl = case impl of 
   PFix _ impl -> localizeI env t impl
-  PFun y impl -> do
-    let ctx = \p -> Program (PFun y p) t
-    pBody <- inContext ctx $ localizeI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
-    return $ ctx pBody
+  PFun y impl -> 
+    case Map.lookup y (allSymbols env) of
+      Just _ -> throwErrorWithDescription $ text "Variable" </> text y </>
+                    text "shadows a variable with the same name in" </> squotes (pretty impl)
+      Nothing -> do
+        let ctx = \p -> Program (PFun y p) t
+        pBody <- inContext ctx $ localizeI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
+        return $ ctx pBody
   PSymbol f -> localizeETopLevel env t (untyped impl)
   _ -> throwErrorWithDescription $ text "Cannot assign function type" </> squotes (pretty t) </>
                     text "to non-lambda term" </> squotes (pretty $ untyped impl)
@@ -363,15 +367,19 @@ localizeE' env typ (PApp iFun iArg) = do
             let tArg' = renameAsImpl (isBound env) iArg tArg
             writeLog 2 $ text "Checking lambda argument" <+> pretty iArg <+> text "::" <+> pretty tArg' <+> text "in" $+$ pretty (ctx (untyped PHole))
             inContext ctx $ localizeI env tArg' iArg
-localizeE' env AnyT (PFun y impl) = do
-  -- Since we don't have lambda-lets anymore
-  f <- freshId "F"
-  let tArg = vart f ftrue
-  addConstraint $ WellFormed env tArg
-  let ctx = \p -> untyped (PFun y p)
-  pBody <- inContext ctx $ localizeE (unfoldAllVariables $ addVariable y tArg $ env) AnyT impl
-  writeLog 2 $ text "Inferred function type" <+> pretty (FunctionT y tArg (typeOf pBody)) <+> text "for" <+> pretty (untyped (PFun y impl))
-  return $ Program (PFun y pBody) (FunctionT y tArg (typeOf pBody))
+localizeE' env AnyT (PFun y impl) = 
+  case Map.lookup y (allSymbols env) of
+      Just _ -> throwErrorWithDescription $ text "Variable" </> text y </>
+                    text "shadows a variable with the same name in" </> squotes (pretty impl)
+      Nothing -> do
+        -- Since we don't have lambda-lets anymore
+        f <- freshId "F"
+        let tArg = vart f ftrue
+        addConstraint $ WellFormed env tArg
+        let ctx = \p -> untyped (PFun y p)
+        pBody <- inContext ctx $ localizeE (unfoldAllVariables $ addVariable y tArg $ env) AnyT impl
+        writeLog 2 $ text "Inferred function type" <+> pretty (FunctionT y tArg (typeOf pBody)) <+> text "for" <+> pretty (untyped (PFun y impl))
+        return $ Program (PFun y pBody) (FunctionT y tArg (typeOf pBody))
 localizeE' env typ impl = do
   -- If we expect an application term, but get an I-term instead, just check it against a fresh type variable
   g <- freshId "G"
