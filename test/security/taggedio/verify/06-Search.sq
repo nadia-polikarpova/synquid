@@ -33,9 +33,8 @@ getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 -- | Paper authors (only visible to themselves or when phase is done)
 predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> p: PaperId -> 
-  TIO {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
-    -- <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>
-    <{_0 in (paperAuthors w)[[p]]}> <{False}>
+  TIO {List User | elems _v == (paperAuthors w)[[p]]} 
+    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>
 
 -- | Paper status (only visible when phase is done)
 getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
