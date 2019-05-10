@@ -80,7 +80,8 @@ initialSolution :: MonadSMT s => QMap -> FixPointSolver s Solution
 initialSolution qmap = ifM (asks isLeastFixpoint) (return $ botSolution qmap) (return $ topSolution qmap)  
 
 preprocess :: MonadSMT s => Formula -> FixPointSolver s [Formula]
-preprocess (Binary Implies lhs rhs) = ifM (asks isLeastFixpoint) (return preprocessLFP) (return preprocessGFP)
+preprocess (Binary Implies lhs rhs) = return preprocessLFP
+-- ifM (asks isLeastFixpoint) (return preprocessLFP) (return preprocessGFP)
   where
     preprocessLFP = 
       -- ToDo: split conjuncts
