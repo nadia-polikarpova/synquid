@@ -181,9 +181,10 @@ getViolatingLabels = do
   if unfoldingEnabled
     then do
       -- First try to solve as many clauses as possible syntactically via unfolding:
-      stripTrivialClauses -- Remove clauses with head U, which does not occur in any bodies
-      removeCyclic        -- Set solution for cyclic unknowns to true: dangerous!
-      unfoldClauses       -- Prolog-style unfolding
+      preprocessForUnfolding  -- Put in the form suitable for unfolding
+      stripTrivialClauses     -- Remove clauses with head U, which does not occur in any bodies
+      removeCyclic            -- Set solution for cyclic unknowns to true: dangerous!
+      unfoldClauses           -- Prolog-style unfolding
     else return ()
 
   clauses' <- use hornClauses
@@ -217,6 +218,31 @@ getViolatingLabels = do
     isInvalid cand extractAssumptions (fml,_) = do
       cands' <- lift . lift . lift $ checkCandidates False [fml] extractAssumptions [cand]
       return $ null cands'
+      
+-- | Pre-process horn clauses for unfolding:
+-- remove LHS disjunctions and RHS conjunctions of unknowns;
+-- fails is RHS disjunctions of unknowns are present
+preprocessForUnfolding :: MonadHorn s => TCSolver s ()
+preprocessForUnfolding = do
+  clauses <- use hornClauses
+  hornClauses .= concatMap (\(c, l) -> zip (preprocess c) (repeat l)) clauses
+  where  
+    preprocess :: Formula -> [Formula]
+    preprocess (Binary Implies lhs rhs) = 
+          let 
+            rDisjuncts = Set.fromList $ uDNF rhs
+            (noUnknowns, withUnknowns) = Set.partition (Set.null . unknownsOf) rDisjuncts
+            nDisjunctsWithUnknowns = Set.size withUnknowns
+          in if nDisjunctsWithUnknowns > 1
+            then error $ unwords ["Unfolding encountered a disjunctive right-hand-side:", show rhs]
+            else -- Only one disjunct with unknowns: split into all conjuncts with unknowns into separate constraints        
+              let
+                lhs' = negationNF $ conjunction $ Set.insert lhs (Set.map fnot noUnknowns)
+                rConjuncts = conjunctsOf (disjunction withUnknowns)
+                (conjNoUnknowns, conjWithUnknowns) = Set.partition (Set.null . unknownsOf) rConjuncts
+                rhss = (if Set.null conjNoUnknowns then [] else [conjunction conjNoUnknowns]) ++ Set.toList conjWithUnknowns
+                noRhsConjuncts = map (lhs' |=>|) rhss
+              in concatMap (\(Binary Implies lhs rhs) -> map (|=>| rhs) (uDNF lhs)) noRhsConjuncts
       
 -- | Remove clauses with head U, which does not occur in any bodies
 -- | or clauses where U occurs in the body but does not occur in any heads
@@ -340,8 +366,9 @@ unfoldClauses = do
       
       -- Add equalities implied by the substitution:
       let varPairs = [(v, v') | v <- Set.toList uVars, varName v `Map.member` subst, v' <- [subst Map.! varName v], v' `Set.member` uVars]
-      let val = (if Set.null existentialConjuncts then id else Set.insert existential)
-                  plainConjuncts `Set.union` (Set.fromList $ map (uncurry (|=|)) varPairs)
+      let val = Set.map negationNF $
+                  (if Set.null existentialConjuncts then id else Set.insert existential)
+                    plainConjuncts `Set.union` (Set.fromList $ map (uncurry (|=|)) varPairs)
       
       return (u, val)
       
@@ -375,7 +402,7 @@ unfoldClauses = do
       Set.fold (\c (cs, ds) -> if all (Set.member c) ds then (Set.insert c cs, map (Set.delete c) ds) else (cs, ds)) (Set.empty, disjuncts) d
       
     applyToClause sol (Binary Implies lhs rhs) =
-      let lhs' = conjunction $ conjunctsOf $ applySolution sol lhs -- nub conjuncts
+      let lhs' = conjunction $ conjunctsOf $ negationNF $ applySolution sol lhs -- nub conjuncts
       in Binary Implies lhs' rhs      
             
     substitutePredApp from to fml = case fml of
@@ -388,7 +415,7 @@ unfoldClauses = do
       Pred b name args -> if fml == from then to else Pred b name $ map (substitutePredApp from to) args
       Cons b name args -> Cons b name $ map (substitutePredApp from to) args  
       Quant q v@(Var _ x) e -> if v `Set.member` varsOf from
-                                then error $ unwords ["Scoped variable clashes with substitution variable", x]
+                                then error $ unwords ["Scoped variable clashes with substitution variable", x, "in substitutePredApp"]
                                 else Quant q v (substitutePredApp from to e)
       otherwise -> fml
       
@@ -701,7 +728,7 @@ generateHornClauses c@(Subtype env (ScalarT baseTL l) (ScalarT baseTR r) False l
       let relevantVars = potentialVars qmap (l |&| r)
       emb <- embedding env relevantVars True
       clauses <- lift . lift . lift $ preprocessConstraint (conjunction (Set.insert l emb) |=>| r)
-      hornClauses %= (zip clauses (repeat label) ++)
+      hornClauses %= ((conjunction (Set.insert l emb) |=>| r, label) :)
 generateHornClauses (Subtype env (ScalarT baseTL l) (ScalarT baseTR r) True _) | baseTL == baseTR
   = do
       qmap <- use qualifierMap

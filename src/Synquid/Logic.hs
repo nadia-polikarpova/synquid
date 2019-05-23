@@ -179,6 +179,7 @@ fnot = Unary Not
 (|=>|) = Binary Implies
 (|<=>|) = Binary Iff
 
+notClean f = if f == ftrue then ffalse else (if f == ffalse then ftrue else fnot f)
 andClean l r = if l == ftrue then r else (if r == ftrue then l else (if l == ffalse || r == ffalse then ffalse else l |&| r))    
 orClean l r = if l == ffalse then r else (if r == ffalse then l else (if l == ftrue || r == ftrue then ftrue else l ||| r))    
 conjunction fmls = foldr andClean ftrue (Set.toList fmls)
@@ -328,7 +329,7 @@ substitute subst fml = case fml of
   Cons b name args -> Cons b name $ map (substitute subst) args  
   Quant q v@(Var _ x) e -> if x `Map.member` subst
                             then error $ unwords ["Scoped variable clashes with substitution variable", x]
-                            else Quant q v (substitute subst e)
+                            else Quant q v (substitute subst e)                            
   otherwise -> fml
 
 -- | Compose substitutions
@@ -382,17 +383,19 @@ negationNF :: Formula -> Formula
 negationNF fml = case fml of
   Unary Not e -> case e of
     Unary Not e' -> negationNF e'
-    Binary And e1 e2 -> negationNF (fnot e1) ||| negationNF (fnot e2)
-    Binary Or e1 e2 -> negationNF (fnot e1) |&| negationNF (fnot e2)
-    Binary Implies e1 e2 -> negationNF e1 |&| negationNF (fnot e2)
-    Binary Iff e1 e2 -> (negationNF e1 |&| negationNF (fnot e2)) ||| (negationNF (fnot e1) |&| negationNF e2)
-    _ -> fml
-  Binary Implies e1 e2 -> negationNF (fnot e1) ||| negationNF e2
-  Binary Iff e1 e2 -> (negationNF e1 |&| negationNF e2) ||| (negationNF (fnot e1) |&| negationNF (fnot e2))
-  Binary op e1 e2 
-    | op == And || op == Or -> Binary op (negationNF e1) (negationNF e2)
-    | otherwise -> fml
-  Ite cond e1 e2 -> (negationNF cond |&| negationNF e1) ||| (negationNF (fnot cond) |&| negationNF e2)
+    Binary And e1 e2 -> negationNF (fnot e1) `orClean` negationNF (fnot e2)
+    Binary Or e1 e2 -> negationNF (fnot e1) `andClean` negationNF (fnot e2)
+    Binary Implies e1 e2 -> negationNF e1 `andClean` negationNF (fnot e2)
+    Binary Iff e1 e2 -> (negationNF e1 `andClean` negationNF (fnot e2)) `orClean` (negationNF (fnot e1) `andClean` negationNF e2)
+    _ -> notClean e
+  Binary Implies e1 e2 -> negationNF (fnot e1) `orClean` negationNF e2
+  Binary Iff e1 e2 -> (negationNF e1 `andClean` negationNF e2) `orClean` (negationNF (fnot e1) `andClean` negationNF (fnot e2))
+  Binary Eq e1 e2
+    | sortOf e1 == BoolS -> negationNF (Binary Iff e1 e2)
+  Binary And e1 e2 -> (negationNF e1) `andClean` (negationNF e2)
+  Binary Or e1 e2 -> (negationNF e1) `orClean` (negationNF e2)
+  Ite cond e1 e2 -> (negationNF cond `andClean` negationNF e1) `orClean` (negationNF (fnot cond) `andClean` negationNF e2)
+  Quant q v e -> Quant q v (negationNF e)
   _ -> fml
 
 -- | Disjunctive normal form for unknowns (known predicates treated as atoms)
@@ -410,7 +413,7 @@ uDNF = dnf' . negationNF
       | hasComp fml && not (Set.null $ unknownsOf fml) =
           error "Encountered second-order unknown in set comprehension"
       | otherwise = [fml]
-    
+          
 atomsOf fml = atomsOf' (negationNF fml)
   where
     atomsOf' (Binary And l r) = atomsOf' l `Set.union` atomsOf' r
