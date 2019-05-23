@@ -80,17 +80,16 @@ initialSolution :: MonadSMT s => QMap -> FixPointSolver s Solution
 initialSolution qmap = ifM (asks isLeastFixpoint) (return $ botSolution qmap) (return $ topSolution qmap)  
 
 preprocess :: MonadSMT s => Formula -> FixPointSolver s [Formula]
-preprocess (Binary Implies lhs rhs) = return preprocessLFP
--- ifM (asks isLeastFixpoint) (return preprocessLFP) (return preprocessGFP)
+preprocess (Binary Implies lhs rhs) = ifM (asks isLeastFixpoint) (return preprocessLFP) (return preprocessGFP)
   where
     preprocessLFP = 
-      -- ToDo: split conjuncts
       let 
         rDisjuncts = Set.fromList $ uDNF rhs
         (noUnknowns, withUnknowns) = Set.partition (Set.null . unknownsOf) rDisjuncts
-      in if Set.size withUnknowns > 1
+        nDisjunctsWithUnknowns = Set.size withUnknowns
+      in if nDisjunctsWithUnknowns > 1
         then error $ unwords ["Least fixpoint solver got a disjunctive right-hand-side:", show rhs]
-        else -- Only one disjunct with unknowns: split into all conjuncts with unknowns into separate constraints
+        else -- Only one disjunct with unknowns: split into all conjuncts with unknowns into separate constraints        
           let
             lhs' = conjunction $ Set.insert lhs (Set.map fnot noUnknowns)
             rConjuncts = conjunctsOf (disjunction withUnknowns)
