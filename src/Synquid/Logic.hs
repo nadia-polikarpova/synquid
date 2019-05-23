@@ -378,7 +378,7 @@ substitutePredicate pSubst fml = case fml of
   _ -> fml
   
 -- | Negation normal form of a formula:
--- no negation above boolean connectives, no boolean connectives except @&&@ and @||@
+-- no negation above quantifiers and boolean connectives, no boolean connectives except @&&@ and @||@
 negationNF :: Formula -> Formula
 negationNF fml = case fml of
   Unary Not e -> case e of
@@ -387,6 +387,8 @@ negationNF fml = case fml of
     Binary Or e1 e2 -> negationNF (fnot e1) `andClean` negationNF (fnot e2)
     Binary Implies e1 e2 -> negationNF e1 `andClean` negationNF (fnot e2)
     Binary Iff e1 e2 -> (negationNF e1 `andClean` negationNF (fnot e2)) `orClean` (negationNF (fnot e1) `andClean` negationNF e2)
+    Quant Forall v e -> Quant Exists v $ negationNF (fnot e)
+    Quant Exists v e -> Quant Forall v $ negationNF (fnot e)
     _ -> notClean e
   Binary Implies e1 e2 -> negationNF (fnot e1) `orClean` negationNF e2
   Binary Iff e1 e2 -> (negationNF e1 `andClean` negationNF e2) `orClean` (negationNF (fnot e1) `andClean` negationNF (fnot e2))
@@ -397,6 +399,41 @@ negationNF fml = case fml of
   Ite cond e1 e2 -> (negationNF cond `andClean` negationNF e1) `orClean` (negationNF (fnot cond) `andClean` negationNF e2)
   Quant q v e -> Quant q v (negationNF e)
   _ -> fml
+  
+flattenQuants :: Formula -> ([(Quantifier, Formula)], Formula)
+flattenQuants (Quant q var body) = let (vars, res) = flattenQuants body in ((q, var):vars, res)
+flattenQuants fml = ([], fml)    
+  
+-- | Prenex normal form: negation normal form where all the quantifiers are pushed to the front
+prenexNF :: Formula -> Formula
+prenexNF = prenexNF' . negationNF
+  where    
+    prenexNF' fml = case fml of
+      Quant q v e -> Quant q v (prenexNF' e)
+      Binary op e1 e2 -> 
+        let 
+          (vars1, body1) = flattenQuants $ prenexNF' e1
+          (vars2, body2) = flattenQuants $ prenexNF' e2
+        in foldr (\(q, v) b -> Quant q v b) (Binary op body1 body2) (vars1 ++ vars2)
+      _ -> fml
+        
+-- | Move quantifiers as locally as possible through conjunctions
+-- (assuming only existential quantifiers!)    
+unprenex :: Formula -> Formula
+unprenex fml = let
+    (vars, body) = over _1 (map snd) (flattenQuants fml)
+    conjuncts = conjunctsOf body
+    conjVars = Set.map (\c -> (varsOf c `Set.intersection` Set.fromList vars, c)) conjuncts
+    groups = Set.fold partitionVars Set.empty conjVars
+    subFormulas = Set.map (\(vs, cs) -> Set.fold (Quant Exists) (conjunction cs) vs) groups
+  in conjunction subFormulas
+  where
+    partitionVars (vars, c) groups = 
+      let (noOverlap, overlap) = Set.partition (\(vs, _) -> vs `disjoint` vars) groups
+      in if Set.null overlap
+           then Set.insert (vars, Set.singleton c) groups -- disjoint set of variables: add new group 
+           else noOverlap `Set.union` (Set.map (\(vs, cs) -> (vs `Set.union` vars, Set.insert c cs)) overlap) -- overlap should be a singleton but whatever
+  
 
 -- | Disjunctive normal form for unknowns (known predicates treated as atoms)
 uDNF :: Formula -> [Formula]
@@ -457,21 +494,88 @@ eliminateComp (Unary Not e) = Unary Not (eliminateComp e)
 eliminateComp fml = fml
 
 -- | Make all existentially quantified variables free
-eliminateExists :: Formula -> Formula
-eliminateExists fml = evalState (eliminateExists' fml) 0
+implicitExists :: Formula -> Formula
+implicitExists fml = evalState (implicitExists' fml) 0
   where
-    eliminateExists' :: Formula -> State Integer Formula
-    eliminateExists' (Quant Exists (Var s name) body) = do
+    implicitExists' :: Formula -> State Integer Formula
+    implicitExists' (Quant Exists (Var s name) body) = do
       varCount <- get
       modify (+ 1)
       let body' = substitute (Map.singleton name (Var s (name ++ show varCount))) body      
-      eliminateExists' body'
-    eliminateExists' (Binary op l r) |
+      implicitExists' body'
+    implicitExists' (Binary op l r) |
       op `elem` [And, Or] = do
-                              l' <- eliminateExists' l
-                              r' <- eliminateExists' r
+                              l' <- implicitExists' l
+                              r' <- implicitExists' r
                               return $ Binary op l' r'
-    eliminateExists' fml = return fml
+    implicitExists' fml = return fml
+    
+-- | Eliminate existentials using one-point rule (if possible)
+-- assumes that the formula is in prenex normal form    
+eliminateExists :: Formula -> Formula
+eliminateExists fml = 
+  let 
+   (vars, body) = over _1 (map snd) (flattenQuants fml)
+   (body', vars') = fixEliminate body vars
+  in foldr (Quant Exists) body' vars'
+  where  
+    eliminate :: Formula -> Formula -> Formula
+    eliminate var body = 
+      let conjuncts = conjunctsOf body in
+      case findDef var (Set.toList $ conjunctsOf body) of
+        Nothing -> body
+        Just (c, def, Var _ _) -> negationNF . substitute (Map.singleton (varName var) def) $ conjunction $ Set.delete c conjuncts
+        Just (c, def, pred) -> negationNF . substitutePredApp pred def $ conjunction $ Set.delete c conjuncts
+        
+    -- Run eliminate until fixpoint
+    fixEliminate body vars = 
+      let 
+        body' = foldr eliminate body vars
+        vars' = filter (`Set.member` varsOf body') vars
+      in if body' == body
+           then (body', vars')
+           else fixEliminate body' vars'
+    
+    findDef :: Formula -> [Formula] -> Maybe (Formula, Formula, Formula)
+    findDef _ [] = Nothing
+    findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue, var)
+    findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse, var)
+    findDef var (c@(Binary Eq p fml) : cs) | isNestedPredApp var p = Just (c, fml, p)
+    findDef var (c@(Binary Eq fml p) : cs) | isNestedPredApp var p = Just (c, fml, p)
+    findDef var (c : cs) = findDef var cs
+    
+    isNestedPredApp var var'@(Var _ _)      = var' == var
+    isNestedPredApp var (Pred name _ [arg]) = isNestedPredApp var arg && isOnlyPred name arg fml
+    isNestedPredApp _ _                     = False
+    
+    isOnlyPred name arg p@(Pred name' _ es)
+      | name == name' && es == [arg]         = True
+      | otherwise                            = and $ map (isOnlyPred name arg) es
+    isOnlyPred name arg (SetLit _ elems) = and $ map (isOnlyPred name arg) elems
+    isOnlyPred name arg (SetComp _ e) = isOnlyPred name arg e
+    isOnlyPred name arg (MapSel m k) = and $ map (isOnlyPred name arg) [m, k]
+    isOnlyPred name arg (MapUpd m k v) = and $ map (isOnlyPred name arg) [m, k, v]
+    isOnlyPred name arg (Unary _ e) = isOnlyPred name arg e
+    isOnlyPred name arg (Binary _ e1 e2) = and $ map (isOnlyPred name arg) [e1, e2]
+    isOnlyPred name arg (Ite e0 e1 e2) = and $ map (isOnlyPred name arg) [e0, e1, e2]
+    isOnlyPred name arg (Quant _ _ e) = isOnlyPred name arg e
+    isOnlyPred name arg _ = True
+        
+    substitutePredApp from to fml = case fml of
+      SetLit b elems -> SetLit b $ map (substitutePredApp from to) elems
+      MapSel m k -> MapSel (substitutePredApp from to m) (substitutePredApp from to k)
+      MapUpd m k v -> MapUpd (substitutePredApp from to m) (substitutePredApp from to k) (substitutePredApp from to v)
+      Unary op e -> Unary op (substitutePredApp from to e)
+      Binary op e1 e2 -> Binary op (substitutePredApp from to e1) (substitutePredApp from to e2)
+      Ite e0 e1 e2 -> Ite (substitutePredApp from to e0) (substitutePredApp from to e1) (substitutePredApp from to e2)
+      Pred b name args -> if fml == from then to else Pred b name $ map (substitutePredApp from to) args
+      Cons b name args -> Cons b name $ map (substitutePredApp from to) args  
+      Quant q v@(Var _ x) e -> if v `Set.member` varsOf from
+                                then error $ unwords ["Scoped variable clashes with substitution variable", x, "in substitutePredApp"]
+                                else Quant q v (substitutePredApp from to e)
+      otherwise -> fml
+    
+
 
 hasComp :: Formula -> Bool
 hasComp (SetComp _ _) = True

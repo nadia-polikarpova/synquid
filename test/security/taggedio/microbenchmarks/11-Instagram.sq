@@ -37,11 +37,11 @@ inline canSee w x y  =  x == y || isPublic w y || y in (following w)[[x]]
 follow :: w: World -> client: User -> newFriend: {User | isPublic w _v && _v in (following w)[[client]]} -> TIO Unit <{False}> <{True}>
 follow = \w . \client . \newFriend .
   do
-    w' <- setIsFollowing w client newFriend true
+    -- w' <- setIsFollowing w client newFriend true
     uids <- let shouldRecommend = \u1.
               if u1 == client
                 then return false -- Do not recommend following myself
-                else getIsFollowing w' newFriend u1 -- Recommend following everyone newFriend follows
+                else getIsFollowing w newFriend u1 -- Recommend following everyone newFriend follows
             in filterM (\u. shouldRecommend u) (getAllUsers w')    
-    names <- mapM (\u . getName w' u) uids
+    names <- mapM (\u . getName w u) uids
     print client (unlines names)

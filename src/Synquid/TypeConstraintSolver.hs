@@ -221,7 +221,7 @@ getViolatingLabels = do
       
 -- | Pre-process horn clauses for unfolding:
 -- remove LHS disjunctions and RHS conjunctions of unknowns;
--- fails is RHS disjunctions of unknowns are present
+-- fails if RHS disjunctions of unknowns are present
 preprocessForUnfolding :: MonadHorn s => TCSolver s ()
 preprocessForUnfolding = do
   clauses <- use hornClauses
@@ -353,49 +353,30 @@ unfoldClauses = do
     unfold (Binary Implies lhs rhs@(Unknown subst u)) = do
       quals <- use qualifierMap
       let uVars = (quals Map.! u) ^. variables -- Scope variables of `u`
-      let rhsVars = Set.map (substitute subst) uVars -- Variables of the RHS, i.e. variables of `u` renamed according to `subst`
-      let elimVars = varsOf lhs Set.\\ rhsVars -- Variables that have to be eliminated from LHS
+      let rhsVars = Set.map (substitute subst) uVars -- Variables of the RHS, i.e. variables of `u` renamed according to `subst`      
       let reverseSubst = Set.fold (\uvar rsub -> maybe rsub (\(Var _ name) -> Map.insert name uvar rsub) (Map.lookup (varName uvar) subst)) Map.empty uVars
+      -- Equalities implied by the substitution:
+      let varPairs = [(v, v') | v <- Set.toList uVars, varName v `Map.member` subst, v' <- [subst Map.! varName v], v' `Set.member` uVars]      
+      -- New valuation for u, except possibly with out-of-scope variables
+      let preVal = conjunction $ Set.insert (substitute reverseSubst lhs) (Set.fromList $ map (uncurry (|=|)) varPairs)
       
-      let lhsConjuncts = conjunctsOf $ substitute reverseSubst lhs      
-      let (lhsConjuncts', elimVars') = Set.fold eliminate (lhsConjuncts, elimVars) elimVars -- Try to eliminate the existentials
-      
-      let (plainConjuncts, existentialConjuncts) = Set.partition (\c -> varsOf c `disjoint` elimVars') lhsConjuncts'
-      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars')
-      let existential = foldr (Quant Exists) (substitute freshElimVars $ conjunction existentialConjuncts) (Map.elems freshElimVars) -- Existentially quantify them away
-      
-      -- Add equalities implied by the substitution:
-      let varPairs = [(v, v') | v <- Set.toList uVars, varName v `Map.member` subst, v' <- [subst Map.! varName v], v' `Set.member` uVars]
-      let val = Set.map negationNF $
-                  (if Set.null existentialConjuncts then id else Set.insert existential)
-                    plainConjuncts `Set.union` (Set.fromList $ map (uncurry (|=|)) varPairs)
-      
+      -- Replace out-of-scope vars with existentials
+      let elimVars = varsOf lhs Set.\\ rhsVars -- Variables that have to be eliminated from LHS
+      let freshElimVars = Map.fromList $ map (\(Var s name) -> (name, Var s ("EE" ++ name))) (Set.toList elimVars)
+      let existential = foldr (Quant Exists) (substitute freshElimVars preVal) (Map.elems freshElimVars)
+
+      -- Try to eliminate existentials using one-point rule
+      writeLog 3 (text "existential" $+$ pretty existential)
+      let prenex = prenexNF existential
+      writeLog 3 (text "prenexNF" $+$ pretty prenex)
+      let elim = eliminateExists prenex
+      writeLog 3 (text "eliminate" $+$ pretty elim)
+      let unpre = unprenex elim
+      writeLog 3 (text "unprenex" $+$ pretty unpre)
+      let val = conjunctsOf $ unprenex $ eliminateExists $ prenexNF existential
+            
       return (u, val)
-      
-    eliminate :: Formula -> (Set Formula, Set Formula) -> (Set Formula, Set Formula)
-    eliminate var (conjuncts, vars) = 
-      case findDef var (map negationNF $ Set.toList conjuncts) of
-        Nothing -> (conjuncts, vars)
-        Just (c, def, Var _ _) -> (Set.map (substitute $ Map.singleton (varName var) def) (Set.delete c conjuncts), Set.delete var vars)
-        Just (c, def, pred) -> (Set.map (substitutePredApp pred def) (Set.delete c conjuncts), Set.delete var vars)
-        
-    findDef :: Formula -> [Formula] -> Maybe (Formula, Formula, Formula)
-    findDef _ [] = Nothing
-    -- findDef var (c@(Binary Eq var' fml) : cs) | var == var' = Just (c, fml, var)
-    -- findDef var (c@(Binary Eq fml var') : cs) | var == var' = Just (c, fml, var)
-    findDef var (c@(Var BoolS _) : cs) | var == c = Just (c, ftrue, var)
-    findDef var (c@(Unary Not v@(Var BoolS _)) : cs) | var == v = Just (c, ffalse, var)
-    
-    findDef var (c@(Binary Eq p fml) : cs) | isNestedPredApp var p  = Just (c, fml, p)
-    findDef var (c@(Binary Eq fml p) : cs) | isNestedPredApp var p = Just (c, fml, p)
-    
-    findDef var (c : cs) = findDef var cs
-    
-    isNestedPredApp var var'@(Var _ _)      = var' == var
-    isNestedPredApp var (Pred _ name [arg]) = isOnlyPred name && isNestedPredApp var arg
-    isNestedPredApp _ _                   = False
-    isOnlyPred name = name == "content" || name == "just"
-        
+              
     extractCommonConjuncts :: [Set Formula] -> (Set Formula, [Set Formula])
     extractCommonConjuncts disjuncts = 
       let d = head disjuncts in
@@ -404,20 +385,6 @@ unfoldClauses = do
     applyToClause sol (Binary Implies lhs rhs) =
       let lhs' = conjunction $ conjunctsOf $ negationNF $ applySolution sol lhs -- nub conjuncts
       in Binary Implies lhs' rhs      
-            
-    substitutePredApp from to fml = case fml of
-      SetLit b elems -> SetLit b $ map (substitutePredApp from to) elems
-      MapSel m k -> MapSel (substitutePredApp from to m) (substitutePredApp from to k)
-      MapUpd m k v -> MapUpd (substitutePredApp from to m) (substitutePredApp from to k) (substitutePredApp from to v)
-      Unary op e -> Unary op (substitutePredApp from to e)
-      Binary op e1 e2 -> Binary op (substitutePredApp from to e1) (substitutePredApp from to e2)
-      Ite e0 e1 e2 -> Ite (substitutePredApp from to e0) (substitutePredApp from to e1) (substitutePredApp from to e2)
-      Pred b name args -> if fml == from then to else Pred b name $ map (substitutePredApp from to) args
-      Cons b name args -> Cons b name $ map (substitutePredApp from to) args  
-      Quant q v@(Var _ x) e -> if v `Set.member` varsOf from
-                                then error $ unwords ["Scoped variable clashes with substitution variable", x, "in substitutePredApp"]
-                                else Quant q v (substitutePredApp from to e)
-      otherwise -> fml
       
       
 -- | Reset the solution for a subset of unknowns to `sol' in the current (sole) candidate      
