@@ -31,17 +31,26 @@ inline isPublic w u = !(isPrivate w)[[u]]
 inline canSee w x y  =  x == y || isPublic w y || y in (following w)[[x]]
 
 {- Client code -}
-  
+
 -- | Show to client who friend is following
--- Repair: inside shouldRecommend, check if u is public or client is following them, otherwise return false
-follow :: w: World -> client: User -> newFriend: {User | isPublic w _v && _v in (following w)[[client]]} -> TIO Unit <{False}> <{True}>
-follow = \w . \client . \newFriend .
+-- Repair: inside shouldRecommend, check if u is public or client is following them, otherwise return false    
+showRecommendations :: w: World -> client: User -> newFriend: {User | isPublic w _v && _v in (following w)[[client]]} -> TIO Unit <{False}> <{True}>
+showRecommendations = \w . \client . \newFriend .
   do
-    -- w' <- setIsFollowing w client newFriend true
     uids <- let shouldRecommend = \u1.
-              if u1 == client
-                then return false -- Do not recommend following myself
-                else getIsFollowing w newFriend u1 -- Recommend following everyone newFriend follows
-            in filterM (\u. shouldRecommend u) (getAllUsers w')    
+              do
+                alreadyFollowing <- downgrade (getIsFollowing w client u1)
+                if u1 == client || alreadyFollowing
+                  then return false -- Do not recommend following myself or people I already follow
+                  else getIsFollowing w newFriend u1 -- Recommend following everyone newFriend follows
+            in filterM (\u. shouldRecommend u) (getAllUsers w)    
     names <- mapM (\u . getName w u) uids
     print client (unlines names)
+  
+-- | Follow newFriend and suggest who else to follow  
+follow :: w: World -> client: User -> newFriend: {User | isPublic w _v} -> TIO Unit <{False}> <{True}>
+follow = \w . \client . \newFriend .
+  do
+    w' <- setIsFollowing w client newFriend true
+    showRecommendations w' client newFriend
+    
