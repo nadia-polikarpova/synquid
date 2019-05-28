@@ -7,12 +7,14 @@ data TIO a <label :: User -> Bool>- <clear :: User -> Bool>
 
 return :: x: a -> TIO a <{True}> <{False}>
 
+-- | Moral type of bind:
 -- bind :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . 
   -- x: TIO a <p> <q> 
   -- -> (u: a -> TIO b <r> <p>) 
   -- -> TIO b <{p _0 && r _0}> <{q _0 || p _0}>
   
--- | (>>=)  
+-- | (>>=)
+-- | Actual type of bind is its moral type + subtyping
 bind :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: User -> Bool> . 
   x: TIO a <p> <q> 
   -> (u: a -> TIO b <r> <{p _0 && s _0}>) 
@@ -45,14 +47,7 @@ liftM2 = \f . \t1 . \t2 .
     x <- t1
     y <- t2
     return (f x y)
-    
-map :: <mp :: User -> Bool> . 
-  (a -> TIO b <mp> <{False}>) -> xs: [a] -> [TIO b <mp> <{False}>]
-map = \f . \xs .
-  match xs with 
-    Nil -> Nil
-    Cons y ys -> Cons (f y) (map f ys)
-    
+
 sequence :: <seqp :: User -> Bool> . xs: [TIO a <seqp> <{False}>] -> TIO [a] <seqp> <{False}>
 sequence = \xs .
   match xs with
@@ -76,26 +71,26 @@ filterM = \f . \xs .
 
 {- auxiliary function for sortByM (below) -}
 insertM :: <inp :: User -> Bool> . (a -> a -> TIO Bool <inp> <{False}>) -> x: a -> xs: List a -> TIO {List a | elems _v == elems xs + [x]} <inp> <{False}>
-insertM = \leq . \x . \xs .
+insertM = \isLeq . \x . \xs .
   match xs with
     Nil -> return [x]
     Cons y ys -> 
       do
-        c <- leq x y 
+        c <- isLeq x y 
         if c
           then return (Cons x xs)
           else do
-                rec <- insertM leq x ys
+                rec <- insertM isLeq x ys
                 return (Cons y rec)
     
 sortByM :: <sop :: User -> Bool> .
   (a -> a -> TIO Bool <sop> <{False}>) -> xs: [a] -> TIO {List a | elems _v == elems xs} <sop> <{False}>
-sortByM = \leq . \xs .  
+sortByM = \isLeq . \xs .  
   match xs with
     Nil -> return Nil
     Cons y ys -> do 
-                   rec <- sortByM leq ys
-                   insertM leq y rec
+                   rec <- sortByM isLeq ys
+                   insertM isLeq y rec
 
 {- Output -}      
 

@@ -549,7 +549,7 @@ eliminateExists fml =
     isNestedPredApp _ _                     = False
     
     isOnlyPred name arg p@(Pred name' _ es)
-      | name == name' && es == [arg]         = True
+      | es == [arg]                          = name == name'
       | otherwise                            = and $ map (isOnlyPred name arg) es
     isOnlyPred name arg (SetLit _ elems) = and $ map (isOnlyPred name arg) elems
     isOnlyPred name arg (SetComp _ e) = isOnlyPred name arg e

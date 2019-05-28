@@ -27,13 +27,19 @@ measure elems :: List a -> Set a where
   Cons x xs -> [x] + elems xs
   
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
--- elem = \x . \xs . 
-  -- match xs with
-    -- Nil -> False
-    -- Cons y ys -> eq x y || elem x ys
+elem = \x . \xs . 
+  match xs with
+    Nil -> False
+    Cons y ys -> eq x y || elem x ys
     
 sameElems :: x: List a -> y: List a -> {Bool | _v == (elems x == elems y)}
 disjoint :: xs: List a -> ys: List a -> {Bool | _v <==> (elems xs * elems ys == [])}
+
+map :: (a -> b) -> xs: [a] -> [b]
+map = \f . \xs .
+  match xs with 
+    Nil -> Nil
+    Cons y ys -> Cons (f y) (map f ys)
 
 -- foldr :: <p :: List a -> b -> Bool> .
 		-- f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->
@@ -60,10 +66,10 @@ fmap :: Maybe a -> (a -> b) -> Maybe b
 isJust :: x:Maybe a -> {Bool | _v == just x}
 
 maybe :: b -> (a -> b) -> Maybe a -> b
--- maybe = \v . \f . \mX .
-  -- match mX with
-    -- Nothing -> v
-    -- Just x -> f x
+maybe = \v . \f . \mX .
+  match mX with
+    Nothing -> v
+    Just x -> f x
     
 {- Strings -}
 
@@ -71,6 +77,6 @@ data String
 emptyString :: String
 show :: a -> String
 strcat :: String -> String -> String
-unwords :: List String -> String
-unlines :: List String -> String
+unwords :: [String] -> String
+unlines :: [String] -> String
 length :: [a] -> Int

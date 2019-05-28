@@ -366,13 +366,13 @@ unfoldClauses = do
       let existential = foldr (Quant Exists) (substitute freshElimVars preVal) (Map.elems freshElimVars)
 
       -- Try to eliminate existentials using one-point rule
-      writeLog 3 (text "existential" $+$ pretty existential)
-      let prenex = prenexNF existential
-      writeLog 3 (text "prenexNF" $+$ pretty prenex)
-      let elim = eliminateExists prenex
-      writeLog 3 (text "eliminate" $+$ pretty elim)
-      let unpre = unprenex elim
-      writeLog 3 (text "unprenex" $+$ pretty unpre)
+      -- writeLog 3 (text "existential" $+$ pretty existential)
+      -- let prenex = prenexNF existential
+      -- writeLog 3 (text "prenexNF" $+$ pretty prenex)
+      -- let elim = eliminateExists prenex
+      -- writeLog 3 (text "eliminate" $+$ pretty elim)
+      -- let unpre = unprenex elim
+      -- writeLog 3 (text "unprenex" $+$ pretty unpre)
       let val = conjunctsOf $ unprenex $ eliminateExists $ prenexNF existential
             
       return (u, val)
