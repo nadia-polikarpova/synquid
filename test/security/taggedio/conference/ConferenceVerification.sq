@@ -1,122 +1,151 @@
 
 -- Strings
 
+s_success :: String
 s_colon :: String
 s_comma :: String
 s_paperNo :: String
 s_authors :: String
 s_qmark :: String
 
+-- | Create a user (open to all)
+registerUser :: w: World -> u: User -> pw: String -> TIO Unit <{False}> <{True}>
+registerUser = \w . \u . \pw . 
+  do
+    addUser w u pw
+    print u s_success
 
--- Create a user (open to all)
-registerUser :: w: World -> u: User -> pw: String -> World
-registerUser = \w . \u . \pw . addUser w u pw
-
--- Show all users (only pc chair can see!)
-usersView :: World -> World
+-- | Show all users (only pc chair can see!)
+usersView :: World -> TIO Unit <{False}> <{True}>
 usersView = \w .
-  let u = getSessionUser w in
-  let users = ifM (liftM2 eq u (getChair w)) 
-                (getUsers w) 
-                (return Nil) in
-  print w u (liftM show users)
+  do
+    u <- getSessionUser w
+    chair <- getChair w
+    users <- if u == chair then getUsers w else return []
+    print u (show users)
 
--- Submit paper
-submitForm :: w: World -> title: String -> [User] -> [User] -> World
+-- | Submit paper
+submitForm :: World -> String -> [User] -> [User] -> TIO Unit <{False}> <{True}>
 submitForm = \w . \title . \authors . \conflicts .
-  let pid = getFreshPaperId w in
-  let w1 = addPaper w pid in
-  let w2 = setPaperTitle w1 pid (return title) in
-  let w3 = setPaperAuthors w2 pid (return authors) in
-  let w4 = setPaperConflicts w3 pid (return conflicts) in
-  w4
+  do
+    pid <- getFreshPaperId w
+    w1 <- addPaper w pid
+    w2 <- setPaperTitle w1 pid title
+    w3 <- setPaperAuthors w2 pid authors
+    setPaperConflicts w3 pid conflicts
+    return Unit
+    
 
--- Search papers
+-- | Search papers
+searchForm :: World -> (User -> [User] -> Bool) -> Maybe User -> Maybe User -> TIO Unit <{False}> <{True}>
+searchForm = \w . \userFilter . \byAuthor . \byReviewer .
+  let authorFilter = \u . \pid . \author.
+        do
+          inAuts <- downgrade (
+            do 
+              as <- getPaperAuthors w pid
+              return (elem u as))
+          if inAuts
+            then do
+                  auts <- getPaperAuthors w pid
+                  return (userFilter author auts)
+            else return False in
+  let revFilter = \u . \pid . \rev .
+        do
+          noConflict <- downgrade (
+            do 
+              cs <- getPaperConflicts w pid
+              return (!(elem u cs))) 
+          pc <- getPC w
+          if elem u pc && noConflict
+            then do
+                  revs <- getPaperReviewers w pid
+                  return (userFilter rev revs)
+            else return False in                            
+  do
+    allPids <- getAllPapers w
+    u <- getSessionUser w
+    pids <- filterM (\pid . do
+                              b1 <- maybe (return True) (authorFilter u pid) byAuthor
+                              b2 <- maybe (return True) (revFilter u pid) byReviewer
+                              return (b1 && b2)) allPids
+    print u (unlines (map show pids))
 
-searchForm :: w: World -> byAuthor: Maybe String -> byReviewer: Maybe String -> World
-searchForm = \w . \byAuthor . \byReviewer .
-  let allPids = getAllPapers w in
-  let u = getSessionUser w in
-  let pids = 
-    filterM (\pid .
-     andM 
-       (ifJust byAuthor (\author . ifM (bind (getPaperAuthors w pid) (\cs. return (elem (peel u) cs))) (bind (getPaperAuthors w pid) (\cs. return (userFilter w author cs))) (return True)))
-       (ifJust byReviewer (\revr . ifM (bind (getPaperConflicts w pid) (\cs. return (not (elem (peel u) cs)))) (ifM (bind (getPaperConflicts w pid) (\cs. bind (getPC w) (\pc. return ((not (elem (peel u) cs)) && (elem (peel u) pc))))) (bind (getPaperReviewers w pid) (\cs. return (userFilter w revr cs))) (return True)) (return True)))
-     ) allPids in
-  print w u (liftM show pids)
-
-userFilter :: w: World -> s: String -> users: [User] -> Bool
-
--- Show paper record
-paperView :: World -> PaperId -> World
+-- | Show paper record
+paperView :: World -> PaperId -> TIO Unit <{False}> <{True}>
 paperView = \w. \pid .
-  let u = getSessionUser w in
-  let conflicts = getPaperConflicts w pid in
-  let noConflict = liftM not (liftM2 elem u conflicts) in
-  let title = ifM noConflict (getPaperTitle w pid) (return emptyString) in
-  let authors = getPaperAuthors w pid in
-  let authors' = ifM (liftM2 elem u authors) authors (return Nil) in
-  let conflicts' = ifM noConflict conflicts (return Nil) in
-  let out = liftM2 strcat title (liftM2 strcat (liftM show authors') (liftM show conflicts')) in
-  print w u out
+  do
+    u <- getSessionUser w
+    noConflict <- downgrade (
+      do 
+        cs <- getPaperConflicts w pid
+        return (!(elem u cs)))
+    title <- if noConflict then getPaperTitle w pid else return emptyString
+    inAuts <- downgrade (
+      do 
+        as <- getPaperAuthors w pid
+        return (elem u as))
+    authors <- if inAuts then getPaperAuthors w pid else return []
+    conflicts <- if noConflict then getPaperConflicts w pid else return []
+    print u (unwords [title, show authors, show conflicts])
   
-emptyReview :: Tagged Review <{True}>
-emptyReview = return (ReviewEntry emptyString emptyString (ReviewScoresEntry 0 0 0 0))  
+-- emptyReview :: Tagged Review <{True}>
+-- emptyReview = return (ReviewEntry emptyString emptyString (ReviewScoresEntry 0 0 0 0))  
 
-nobody :: Tagged Reviewer <{True}>
+-- nobody :: Tagged Reviewer <{True}>
 
--- Show reviews for paper
-reviewsView :: World -> PaperId -> World
-reviewsView = \w. \pid.
-  let u = getSessionUser w in
-  let allRids = getAllReviews w in
-  let rids =
-    filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
-  print w u (liftM show (bind rids (\rids'. (mapM (\rid .
-   bind (ifM (andM (bind (getReviewPaper w rid) (\x. return (pid == x)))
-                   (bind u (\u0. bind (getReviewPaper w rid) (\pid0. 
-                    bind (getPaperAuthors w pid)
-                       (\authors0. return (elem u0 authors0)))))) (getReview w rid) emptyReview) (\rev.
-   bind (ifM (bind u (\u0. bind (getChair w) (\ch. return (u0 == ch)))) (getReviewAuthor w rid) (anonymousReviewer (getReviewAuthor w rid))) (\auth. return [show rev, show auth]))) rids'))))
+-- -- Show reviews for paper
+-- reviewsView :: World -> PaperId -> World
+-- reviewsView = \w. \pid.
+  -- let u = getSessionUser w in
+  -- let allRids = getAllReviews w in
+  -- let rids =
+    -- filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
+  -- print w u (liftM show (bind rids (\rids'. (mapM (\rid .
+   -- bind (ifM (andM (bind (getReviewPaper w rid) (\x. return (pid == x)))
+                   -- (bind u (\u0. bind (getReviewPaper w rid) (\pid0. 
+                    -- bind (getPaperAuthors w pid)
+                       -- (\authors0. return (elem u0 authors0)))))) (getReview w rid) emptyReview) (\rev.
+   -- bind (ifM (bind u (\u0. bind (getChair w) (\ch. return (u0 == ch)))) (getReviewAuthor w rid) (anonymousReviewer (getReviewAuthor w rid))) (\auth. return [show rev, show auth]))) rids'))))
 
--- View/change profile
-profileViewGet :: World -> World
-profileViewGet = \w .
-  let u = getSessionUser w in
-  let profile = bind u (\u' . getUserProfile w u') in
-  let profile_str = 
-    bind profile (
-      \profile' . match profile' with
-                   UserProfileRecord nam aff acm email -> return (foldl1 strcat [nam, s_comma, aff, s_comma, acm, s_comma, email])) in
-  print w u profile_str
+-- -- View/change profile
+-- profileViewGet :: World -> World
+-- profileViewGet = \w .
+  -- let u = getSessionUser w in
+  -- let profile = bind u (\u' . getUserProfile w u') in
+  -- let profile_str = 
+    -- bind profile (
+      -- \profile' . match profile' with
+                   -- UserProfileRecord nam aff acm email -> return (foldl1 strcat [nam, s_comma, aff, s_comma, acm, s_comma, email])) in
+  -- print w u profile_str
 
-profileViewPost :: World -> UserProfile -> World
-profileViewPost = \w . \profile .
-  let u = getSessionUser w in
-  setUserProfile w (peel u) (return profile)
+-- profileViewPost :: World -> UserProfile -> World
+-- profileViewPost = \w . \profile .
+  -- let u = getSessionUser w in
+  -- setUserProfile w (peel u) (return profile)
 
--- Submit a review
-submitReviewViewPost :: World -> PaperId -> Review -> World
-submitReviewViewPost = \w . \pid . \rev .
-  let u = getSessionUser w in
-  let rid = getFreshReviewId w in
-  let allRids = getAllReviews w in
-  let existingRids =
-    filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
-  let rauth = do u' <- u
-                 l <- existingRids
-                 return (ReviewerEntry (length l) u') in
-  let w1 = setReviewAuthor w rid rauth in
-  let w2 = setReviewPaper w1 rid (return pid) in
-  let w3 = setReview w2 rid (return rev) in
-  w3
+-- -- Submit a review
+-- submitReviewViewPost :: World -> PaperId -> Review -> World
+-- submitReviewViewPost = \w . \pid . \rev .
+  -- let u = getSessionUser w in
+  -- let rid = getFreshReviewId w in
+  -- let allRids = getAllReviews w in
+  -- let existingRids =
+    -- filterM (\rid . bind (getReviewPaper w rid) (\p. return (p == pid))) allRids in
+  -- let rauth = do u' <- u
+                 -- l <- existingRids
+                 -- return (ReviewerEntry (length l) u') in
+  -- let w1 = setReviewAuthor w rid rauth in
+  -- let w2 = setReviewPaper w1 rid (return pid) in
+  -- let w3 = setReview w2 rid (return rev) in
+  -- w3
 
--- Assigns papers to a reviewer
-assignReviewersView :: World -> User -> [PaperId] -> World
-assignReviewersView = \w . \reviewer . \pids .
-  let allPids = getAllPapers w in
-  foldl (\w' . \pid . setPaperReviewers w' pid (bind (getPaperReviewers w' pid) (\l.
-    return (insertIf (elem pid pids) reviewer (remove reviewer l))))) w allPids
+-- -- Assigns papers to a reviewer
+-- assignReviewersView :: World -> User -> [PaperId] -> World
+-- assignReviewersView = \w . \reviewer . \pids .
+  -- let allPids = getAllPapers w in
+  -- foldl (\w' . \pid . setPaperReviewers w' pid (bind (getPaperReviewers w' pid) (\l.
+    -- return (insertIf (elem pid pids) reviewer (remove reviewer l))))) w allPids
 
 remove :: a -> List a -> List a
 
