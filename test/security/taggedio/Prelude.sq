@@ -47,6 +47,14 @@ map = \f . \xs .
     -- ys: List a ->    
 		-- {b | p ys _v}
     
+remove :: a -> [a] -> [a]
+remove = \x . \xs .
+  match xs with
+    Nil -> Nil
+    Cons y ys -> if x == y
+                   then remove x ys
+                   else Cons y (remove x ys)                   
+    
 {- Maybe -}
 
 data Maybe a where
@@ -58,10 +66,10 @@ measure just :: Maybe a -> Bool where
   Just x -> True
   
 fmap :: Maybe a -> (a -> b) -> Maybe b
--- fmap = \f . \mb . 
-  -- match mb with
-    -- Nothing -> Nothing
-    -- Just x -> Just (f x)  
+fmap = \mb . \f . 
+  match mb with
+    Nothing -> Nothing
+    Just x -> Just (f x)  
   
 isJust :: x:Maybe a -> {Bool | _v == just x}
 

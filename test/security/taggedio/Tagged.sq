@@ -32,31 +32,36 @@ downgrade :: <bp :: User -> Bool> . <bc :: Bool> . <bq :: User -> Bool> .
   
 {- Standard monadic helper functions -}
 
--- | For simplicity these are defined over TIOs with no write effects
--- but this can be easily changed
-liftM :: <lp :: User -> Bool> . (a -> b) -> TIO a <lp> <{False}> -> TIO b <lp> <{False}>
+liftM :: <lp :: User -> Bool> . <lq :: User -> Bool> . (a -> b) -> TIO a <lp> <lq> -> TIO b <lp> <lq>
 liftM = \f . \t .
   do
     x <- t
     return (f x)
     
-liftM2 :: <lp :: User -> Bool> . 
-  (a -> b -> c) -> TIO a <lp> <{False}> -> TIO b <lp> <{False}> -> TIO c <lp> <{False}>
+liftM2 :: <lp :: User -> Bool> . <lq :: User -> Bool> . <lr :: User -> Bool> . <ls :: User -> Bool> .
+  (a -> b -> c) -> TIO a <lp> <lq> -> TIO b <lr> <{lp _0 && ls _0}> -> TIO c <{lp _0 && lr _0}> <{lq _0 || (lp _0 && ls _0)}>
 liftM2 = \f . \t1 . \t2 .
   do
     x <- t1
     y <- t2
     return (f x y)
 
-sequence :: <seqp :: User -> Bool> . xs: [TIO a <seqp> <{False}>] -> TIO [a] <seqp> <{False}>
+sequence :: <seqp :: User -> Bool> . xs: [TIO a <seqp> <seqp>] -> TIO [a] <seqp> <seqp>
 sequence = \xs .
   match xs with
     Nil -> return Nil
     Cons y ys -> liftM2 Cons y (sequence ys)    
     
 mapM :: <mp :: User -> Bool> . 
-  (a -> TIO b <mp> <{False}>) -> xs: [a] -> TIO [b] <mp> <{False}>
+  (a -> TIO b <mp> <mp>) -> xs: [a] -> TIO [b] <mp> <mp>
 mapM = \f . \xs . sequence (map f xs)
+
+mapM_ :: <mq :: User -> Bool> . 
+  (a -> TIO b <{False}> <mq>) -> xs: [a] -> TIO Unit <{True}> <mq>
+mapM_ = \f . \xs .
+  match xs with
+    Nil -> return Unit
+    Cons y ys -> seq (f y) (mapM_ f ys)    
 
 filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
   (x: a -> TIO {Bool | _v ==> fc x} <{fc x && fp _0}> <{False}>) -> xs: [a] -> TIO [{a | fc _v}] <fp> <{False}>

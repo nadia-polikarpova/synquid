@@ -1,5 +1,7 @@
 -- Conference management
 
+data World
+
 data PaperId
 
 data Phase where
@@ -45,96 +47,92 @@ redact {UserProfileRecord}
 
 data Token
 
+getCurrentWorld :: TIO World <{True}> <{False}>
+
 predicate users :: World -> Set User
 getUsers :: w: World -> TIO {List {User | _v in users w} | elems _v == users w} <{_0 == chair w}> <{False}>
 
-predicate passwords :: World -> Map User String
-getPassword :: w: World -> u: User -> TIO {String | _v == (passwords w)[[u]]} <{_0 == u}> <{False}>
-setPassword :: w: World -> u: User -> pw: String  -> 
-  TIO {World | users _v == users w &&
-           passwords _v == (passwords w) [[u := content pw]]} <{True}> <{_0 == u}>
+getPassword :: w: World -> u: User -> TIO String <{_0 == u}> <{False}>
+setPassword :: w: World -> u: User -> pw: String -> TIO Unit <{True}> <{_0 == u}>
 
 addUser :: w: World -> u: User -> pw: String -> 
-  {World | users _v == users w + [u] && 
-           passwords _v == (passwords w) [[u := pw]]}
+  TIO World <{True}> <{True}>
 
 predicate userProfiles :: World -> Map User UserProfile
-getUserProfile :: w: World -> u: User -> Tagged {UserProfile | _v == (userProfiles w)[[u]]} <{_1 == u || _1 == chair _0}>
-setUserProfile :: w: World -> u: User -> Tagged UserProfile <{_1 == u || _1 == chair _0}> -> World
+getUserProfile :: w: World -> u: User -> TIO {UserProfile | _v == (userProfiles w)[[u]]} <{_0 == u || _0 == chair w}> <{False}>
+setUserProfile :: w: World -> u: User -> UserProfile -> TIO Unit <{True}> <{_0 == u || _0 == chair w}>
 
 predicate sessionUser :: World -> User
-getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+getSessionUser :: w: World -> TIO {User | _v == sessionUser w} <{True}> <{False}>
 
 predicate chair :: World -> User
-getChair :: w: World -> Tagged {User | _v == chair w} <{True}>
+getChair :: w: World -> TIO {User | _v == chair w} <{True}> <{False}>
 
 predicate pc :: World -> Set User
-getPC :: w: World -> Tagged {List {User | _v in pc w} | elems _v == pc w} <{True}>
+getPC :: w: World -> TIO {List {User | _v in pc w} | elems _v == pc w} <{True}> <{False}>
 
 predicate currentPhase :: World -> Phase
-getCurrentPhase :: w: World -> Tagged {Phase | _v == currentPhase w} <{True}>
+getCurrentPhase :: w: World -> TIO {Phase | _v == currentPhase w} <{True}> <{False}>
 
 predicate paperConflicts :: World -> PaperId -> Set User
 getPaperConflicts :: w: World -> pid: PaperId
-   -> Tagged {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_1 in paperConflicts _0 pid)}>
+   -> TIO {List {User | _v in paperConflicts w pid} | elems _v == paperConflicts w pid} <{!(_0 in paperConflicts w pid)}> <{False}>
 setPaperConflicts ::  w: World -> pid: PaperId
-   -> Tagged [User] <{!(_1 in paperConflicts _0 pid)}>
-   -> {World | users _v == users w && passwords _v == passwords w}
+   -> [User]
+   -> TIO Unit <{True}> <{!(_0 in paperConflicts w pid)}>
 
 getPaperTitle :: w: World -> pid: PaperId 
-   -> Tagged String <{ !(_1 in paperConflicts _0 pid) }>
+   -> TIO String <{ !(_0 in paperConflicts w pid) }> <{False}>
 setPaperTitle :: w: World -> pid: PaperId
-   -> Tagged String <{ !(_1 in paperConflicts _0 pid) }>
-   -> {World | users _v == users w && passwords _v == passwords w}
+   -> String
+   -> TIO Unit <{True}> <{!(_0 in paperConflicts w pid)}>
 
 predicate paperAuthors :: World -> Map PaperId (Set User)
 getPaperAuthors :: w: World -> pid: PaperId 
-   -> Tagged {List {User | (_v in (paperAuthors w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperAuthors w)[[pid]]} 
-             <{_1 in (paperAuthors _0)[[pid]] }>
+   -> TIO {List {User | (_v in (paperAuthors w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperAuthors w)[[pid]]} 
+             <{_0 in (paperAuthors w)[[pid]] }> <{False}>
 setPaperAuthors :: w: World ->  pid: PaperId 
-   -> Tagged [User] <{_1 in (paperAuthors _0)[[pid]] }>
-   -> {World | users _v == users w && passwords _v == passwords w}
+   -> [User]
+   -> TIO Unit <{True}> <{_0 in (paperAuthors w)[[pid]] }>
 
 
 predicate paperStatus :: World -> PaperId -> Status
-getPaperStatus :: w: World -> pid: PaperId -> Tagged {Status | _v == paperStatus w pid} <{_1 == chair w || (currentPhase _0 == Done && _1 in (paperAuthors _0)[[pid]] )}>
+getPaperStatus :: w: World -> pid: PaperId -> TIO {Status | _v == paperStatus w pid} <{_0 == chair w || (currentPhase w == Done && _0 in (paperAuthors w)[[pid]] )}> <{False}>
 
-getPaperSession :: w: World -> pid: PaperId -> Tagged String <{True}>
+getPaperSession :: w: World -> pid: PaperId -> TIO String <{True}> <{False}>
 
-getAllPapers :: w: World -> [PaperId]
+getAllPapers :: w: World -> TIO [PaperId] <{True}> <{False}>
 
-getFreshPaperId :: w: World -> PaperId
-addPaper :: w: World -> newId: PaperId ->
-  {World | users _v == users w &&  -- is it important that the new Id has been added to world? nahh...
-           passwords _v == passwords w}
+getFreshPaperId :: w: World -> TIO PaperId <{True}> <{False}>
+addPaper :: w: World -> newId: PaperId -> TIO Unit <{True}> <{True}>
 
 predicate paperReviewers :: World -> Map PaperId (Set User)
 getPaperReviewers :: w: World -> pid: PaperId 
-   -> Tagged {List {User | (_v in (paperReviewers w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperReviewers w)[[pid]]} 
-             <{_1 in pc _0 && !(_1 in (paperConflicts _0 pid)) }>
+   -> TIO {List {User | (_v in (paperReviewers w)[[pid]]) && !(_v in paperConflicts w pid)} | elems _v == (paperReviewers w)[[pid]]} 
+             <{_0 in pc w && !(_0 in (paperConflicts w pid)) }> <{False}>
 setPaperReviewers :: w: World ->  pid: PaperId 
-   -> Tagged [User] <{_1 in pc _0 && !(_1 in (paperConflicts _0 pid))}>
-   -> {World | users _v == users w && passwords _v == passwords w}
+   -> [User]
+   -> TIO Unit <{True}> <{_0 in pc w && !(_0 in (paperConflicts w pid)) }>
 
 
 predicate reviewAuthor :: World -> Map ReviewId Reviewer
-getReviewAuthor :: w: World -> rid: ReviewId -> Tagged {Reviewer | _v == (reviewAuthor w)[[rid]]} <{_1 == chair _0}>
+getReviewAuthor :: w: World -> rid: ReviewId -> TIO {Reviewer | _v == (reviewAuthor w)[[rid]]} <{_0 == chair w}> <{False}>
 --   I want this:   <{_1 == chair _0 || _1 == ruser ((reviewAuthor _0)[[rid]])}>
-setReviewAuthor :: w: World -> rid: ReviewId -> Tagged Reviewer <{_1 == chair _0}> -> World
+setReviewAuthor :: w: World -> rid: ReviewId -> Reviewer -> TIO Unit <{True}> <{_0 == chair w}>
 
 predicate reviewPaper :: World -> Map ReviewId PaperId
-getReviewPaper :: w: World -> rid: ReviewId -> Tagged {PaperId | _v == (reviewPaper w)[[rid]]} <{True}>
-setReviewPaper :: w: World -> rid: ReviewId -> pid: Tagged PaperId <{True}> -> World
+getReviewPaper :: w: World -> rid: ReviewId -> TIO {PaperId | _v == (reviewPaper w)[[rid]]} <{True}> <{False}>
+setReviewPaper :: w: World -> rid: ReviewId -> PaperId -> TIO Unit <{True}> <{True}>
 
 predicate reviews :: World -> Map ReviewId Review
-getReview :: w: World -> rid: ReviewId -> Tagged {Review | _v == (reviews w)[[rid]]} <{_1 in (paperAuthors _0)[[ (reviewPaper _0)[[rid]] ]]}>
-setReview :: w: World -> rid: ReviewId -> Tagged Review <{_1 in (paperAuthors _0)[[ (reviewPaper _0)[[rid]] ]]}> -> World
+getReview :: w: World -> rid: ReviewId -> TIO {Review | _v == (reviews w)[[rid]]} <{_0 in (paperAuthors w)[[ (reviewPaper w)[[rid]] ]]}> <{False}>
+setReview :: w: World -> rid: ReviewId -> Review -> TIO Unit <{True}> <{_0 in (paperAuthors w)[[ (reviewPaper w)[[rid]] ]]}>
 
-getAllReviews :: w: World -> [ReviewId]
+getAllReviews :: w: World -> TIO [ReviewId] <{True}> <{False}>
 
-getFreshReviewId :: w: World -> ReviewId
+getFreshReviewId :: w: World -> TIO ReviewId <{True}> <{False}>
 
-getPaperBidToken :: w: World -> pid: PaperId -> Tagged (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_1 in pc _0) && !(_1 in paperConflicts _0 pid) }>
+getPaperBidToken :: w: World -> pid: PaperId -> TIO (Maybe Token) <{ {- !(_1 in (paperAuthors _0)[[pid]]) && -} (_0 in pc w) && !(_0 in paperConflicts w pid) }> <{False}>
 
 {- Some Strings -}
 
@@ -145,12 +143,6 @@ s_regret :: String
 
 foldl :: (a -> b -> a) -> a -> (List b) -> a
 foldl1 :: f: (a -> a -> a) -> l: List a -> a
-
-forM :: <ap :: World -> User -> Bool> .
-   w: World -> l: Tagged (List a) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
-   
-forM_ :: <ap :: World -> User -> Bool> .
-   w: World -> l: Tagged (List (Tagged a <ap>)) <ap> -> f: (World -> (Tagged a <ap>) -> World) -> World
 
 ifJust :: (Maybe a) -> (a -> b) -> b
 
