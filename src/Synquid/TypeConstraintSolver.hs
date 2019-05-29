@@ -225,7 +225,9 @@ getViolatingLabels = do
 preprocessForUnfolding :: MonadHorn s => TCSolver s ()
 preprocessForUnfolding = do
   clauses <- use hornClauses
-  hornClauses .= concatMap (\(c, l) -> zip (preprocess c) (repeat l)) clauses
+  let clauses' = concatMap (\(c, l) -> zip (preprocess c) (repeat l)) clauses
+  writeLog 2 (nest 2 $ text "Preprocessed Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) clauses'))        
+  hornClauses .= clauses'
   where  
     preprocess :: Formula -> [Formula]
     preprocess (Binary Implies lhs rhs) = 
