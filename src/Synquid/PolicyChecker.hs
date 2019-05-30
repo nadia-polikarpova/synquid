@@ -600,17 +600,15 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
     -- | Synthesize a tagged Boolean program with value equivalent to @fml@
     generateDisjunct:: MonadHorn s => Formula -> Explorer s ([(Id, RProgram)], RProgram)
     generateDisjunct fml = do
-      let fml' = removeContent fml
-      let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml') Map.empty)) env
-      let allConjuncts = Set.toList $ conjunctsOf fml'
+      let strippedEnv = over symbols (Map.map (Map.foldlWithKey (updateSymbol fml) Map.empty)) env
+      let allConjuncts = Set.toList $ conjunctsOf fml
       conjuncts <- mapM (genPureConjunct strippedEnv) allConjuncts
-      writeLog 3 $ text "Generated pure disjunct for condition" <+> pretty fml' <+> pretty conjuncts
+      writeLog 3 $ text "Generated pure disjunct for condition" <+> pretty fml <+> pretty conjuncts
       lifted <- mapM (liftTerm env strippedEnv) conjuncts
       writeLog 3 $ text "Generated lifted disjunct" <+> vsep (map (\(defs, p, _) -> pretty defs $+$ pretty p) lifted)
       let defs = concatMap (view _1) lifted
       let conjuncts' = map (view _2) lifted
-      let liftAndSymb = untyped (PSymbol "andM")
-      let conjoin p1 p2 = untyped (PApp (untyped (PApp liftAndSymb p1)) p2)
+      let conjoin p1 p2 = ((usym "liftM2" `uapp` usym "and") `uapp` p1) `uapp` p2
       let pCond = foldl1 conjoin conjuncts'
       (defs', xCond) <- anfE "TT" pCond False
       return (defs ++ defs', xCond)
@@ -625,12 +623,10 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
           text "Probable cause: missing components to implement guard")
 
     -- | Strip tagged database accessors of their tags; only leave a symbol in the environment if it:
-    --    - comes from Prelude
+    --    - is designated as guard
     --    - is a DB getter
-    --    - is a variable that appears in target refinement
+    --    - is a local variable
     updateSymbol :: Formula -> Map Id RSchema -> Id -> RSchema -> Map Id RSchema
-    -- updateSymbol _ m name _ | -- This is a default value: remove
-      -- isDefaultValue name   = m
     updateSymbol targetRefinement m name (Monotype t) = 
       let 
         t' = stripTags t 
@@ -643,25 +639,13 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
                     (isDBGetter name && not (disjoint targetPreds getterPreds)) 
                     -- any (\pred -> name == getterOf pred) targetPreds
                    then Map.insert name (Monotype t') m -- Strip
-                   else m                  
-            else if name `elem` targetVars
-                  then Map.insert name (Monotype t') m -- Strip
-                  else m -- It's a variable that doesn't appear in the target refinement: remove
+                   else m
+            else Map.insert name (Monotype t') m -- Strip                 
     updateSymbol _ m name sch =
       if name `Set.member` (env ^. guards)
           then Map.insert name sch m
           else m
-          
-    removeContent (Pred s name args) = if name == "content"
-                                          then let [Var (DataS _ [varS]) v] = args
-                                               in Var varS v
-                                          else Pred s name (map removeContent args)
-    removeContent (Cons s name args) = Cons s name (map removeContent args)
-    removeContent (Unary op e) = Unary op (removeContent e)
-    removeContent (Binary op e1 e2) = Binary op (removeContent e1) (removeContent e2)
-    removeContent (Ite c t e) = Ite (removeContent c) (removeContent t) (removeContent e)
-    removeContent fml = fml    
-            
+
     mkCheck defs conds pThen pElse = do
       cTmps <- replicateM (length conds) (freshVar env "g") -- Binder for each guard      
       let mkOr p1 p2 = untyped $ PApp (untyped $ PApp (untyped $ PSymbol (binOpTokens Map.! Or)) p1) p2
@@ -737,17 +721,15 @@ liftTerm env strippedEnv p@(Program (PSymbol name) _) = do
     else return $ ([], p, Set.empty)
 
 mkReturn :: RProgram -> RProgram
-mkReturn p = untyped (PApp (untyped (PSymbol "return")) p)  
+mkReturn p = usym "return" `uapp` p  
   
 mkBind :: RProgram -> Id -> RProgram -> RProgram
 mkBind arg x body = 
-  let 
-    app = untyped (PApp (untyped (PSymbol "bind")) arg)
-    fun = untyped (PFun x body)
-  in untyped (PApp app fun)    
+  let fun = untyped (PFun x body)
+  in (usym "bind" `uapp` arg) `uapp` fun    
   
 mkDowngrade :: RProgram -> RProgram
-mkDowngrade p = untyped (PApp (untyped (PSymbol "downgrade")) p)    
+mkDowngrade p = usym "downgrade" `uapp` p    
 
 {- Misc -}  
                                             
