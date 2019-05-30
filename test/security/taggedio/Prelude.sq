@@ -3,6 +3,7 @@ true :: {Bool | _v}
 false :: {Bool | !_v}
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 not :: x: Bool -> {Bool | _v == !x}
+and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 
 zero :: {Int | _v == 0}
 leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
@@ -41,12 +42,12 @@ map = \f . \xs .
     Nil -> Nil
     Cons y ys -> Cons (f y) (map f ys)
 
--- foldr :: <p :: List a -> b -> Bool> .
-		-- f: (xs: List a -> x: a -> acc: {b | p xs _v} -> {b | p (Cons x xs) _v}) ->
-		-- seed: {b | p Nil _v} ->
-    -- ys: List a ->    
-		-- {b | p ys _v}
-    
+-- foldr :: (a -> b -> b) -> b -> [a] -> b
+-- foldr = \f . \z . \xs .
+  -- match xs with
+    -- Nil -> z
+    -- Cons y ys -> f y (foldr f z ys)
+
 remove :: a -> [a] -> [a]
 remove = \x . \xs .
   match xs with

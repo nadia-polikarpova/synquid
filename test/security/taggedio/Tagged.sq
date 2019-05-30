@@ -58,7 +58,7 @@ mapM = \f . \xs . sequence (map f xs)
 
 mapM_ :: <mq :: User -> Bool> . 
   (a -> TIO b <{False}> <mq>) -> xs: [a] -> TIO Unit <{True}> <mq>
-mapM_ = \f . \xs .
+mapM_ = \f . \xs . 
   match xs with
     Nil -> return Unit
     Cons y ys -> seq (f y) (mapM_ f ys)    

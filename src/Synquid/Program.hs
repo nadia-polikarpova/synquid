@@ -59,6 +59,8 @@ type UProgram = Program RType
 type RProgram = Program RType
 
 untyped c = Program c AnyT
+usym x = untyped $ PSymbol x
+uapp t1 t2 = untyped $ PApp t1 t2
 uHole = untyped PHole
 isHole (Program PHole _) = True
 isHole _ = False

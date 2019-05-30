@@ -89,9 +89,6 @@ paperView = \pid .
     conflicts <- if noConflict then getPaperConflicts w pid else return []
     print u (unwords [title, show authors, show conflicts])
   
-emptyReview :: Review
-emptyReview = ReviewEntry emptyString emptyString (ReviewScoresEntry 0 0 0 0)
-
 -- Show reviews for paper
 reviewsView :: PaperId -> TIO Unit <{False}> <{True}>
 reviewsView = \pid.
@@ -110,7 +107,7 @@ reviewsView = \pid.
                 return (elem u as))          
             rev <- if inAuts
                         then getReview w rid
-                        else return emptyReview
+                        else return (ReviewEntry emptyString emptyString (ReviewScoresEntry 0 0 0 0))
             ch <- getChair w
             auth <- if u == ch then getReviewAuthor w rid else anonymousReviewer (getReviewAuthor w rid)
             return (unwords [show rev, show auth])) rids
@@ -133,7 +130,6 @@ profileViewPost = \profile .
    w <- getCurrentWorld
    u <- getSessionUser w
    setUserProfile w u profile
-   return Unit
 
 -- Submit a review
 submitReviewViewPost :: PaperId -> Review -> TIO Unit <{False}> <{True}>
