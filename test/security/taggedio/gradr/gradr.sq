@@ -1,127 +1,114 @@
 -- See Model.sq for definitions
 
 {- Database API -}
--- | TODO: Fix me to add security
--- loadValue :: World ->  -> a
--- | TODO: Fix me, does this function even make sense?
--- storeValue :: World -> a -> Key a
--- Current environment (TODO: needed?)
 
--- predicate sessionUser :: World -> Maybe UserId
--- getSessionUser ::
---   w: World ->
---   Tagged {Maybe UserId | _v == sessionUser w} <{_0 == sessionUser w}>
+homePageString :: String
+naString :: String
 
--- type TagPred = World -> User -> Bool
+homePage :: TIO Unit <{False}> <{True}>
+homePage = 
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    print u homePageString
 
--- renderMs :: <pp :: TagPred> . x:(List (Tagged a <pp>)) -> Tagged {List a |}
-defaultPage :: String
--- defaultPage = render "Page could not be found or you are not authorized to see it"
-
--- display
---   :: <pp :: User -> Bool>
---   .  w:      World
---   -> viewer: Tagged {User | pp _v} <pp>
---   -> x:      Tagged Page <pp>
---   ->         World
-
--- public homepage
-homePageString :: Tagged String <{True}>
-
-homePage :: World -> World
-homePage = \w .
-  let u = getSessionUser w in
-  print w u homePageString
-
--- test if user is in class
--- testIfStdInClass :: w: World -> u:User -> c: Class -> Tagged Bool <{_0== u}>
--- testIfStdInClass = \w . \u . \c .
---   elem u (getClassStudents w c)
-
--- isUser :: u: User -> u2:Tagged User <{_0 }>
-
--- get list of classes the user is a student in
-getClassesStdByUser
-  :: w: World
-  -> u: User
-  -> Tagged (List {Class | u in (classStudents w)[[_v]]}) <{_1 == u}>
-getClassesStdByUser = \w . \u . filterM (isStudentInClass w u) (getClasses w)
-
--- get list of classes the user is an instructor/teacher for
-getClassesInsByUser
-  :: w: World
-  -> u: User
-  -> Tagged (List {Class | u in (classTeachers w)[[_v]] || u == (classInstructor w)[[_v]]}) <{True}>
-getClassesInsByUser = \w . \u . filterM (teachesClass w u) (getClasses w)
 
 -- Which classes a user is teaching, and which classes a user is in.
 data ClassInfo where
   ClassInfo :: List Class -> List Class -> ClassInfo
 
-redactClassInfo :: Tagged ClassInfo <{False}> -> Tagged ClassInfo <{True}>
-redact { redactClassInfo }
-
-getProfileClassInfo :: World -> u:User -> Tagged ClassInfo <{_1 == u}>
-getProfileClassInfo = \w . \u .
-  let teachingClasses = getClassesInsByUser w u in
-  let takingClasses = getClassesStdByUser w u in
-    liftM2 ClassInfo teachingClasses takingClasses
-
 -- View Student user profile
-profileView :: World -> World
-profileView = \w .
-  let u = getSessionUser w in
-  let content = bind u (\user . getProfileClassInfo w user) in
-  print w u (liftM show content)
+profileView :: TIO Unit <{False}> <{True}>
+profileView = 
+  let teachesClass = \w . \u . \c .
+        do
+          ins <- getClassInstructor w c
+          ts <- getClassTeachers w c
+          return (u == ins || elem u ts) 
+        in
+  let isStudentInClass = \w . \u . \c .
+        do
+          students <- getClassStudents w c
+          return (elem u students) 
+        in
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    allClasses <- getClasses w
+    teachingClasses <- filterM (\c . teachesClass w u c) allClasses
+    takingClasses <- filterM (\c . isStudentInClass w u c) allClasses
+    print u (show (ClassInfo teachingClasses takingClasses))
 
-predicate arbUser :: World -> User
-getArbitraryUser :: w:World -> Tagged {User | _v == arbUser w} <{True}>
-
--- qualifier {(_0 == arbUser w)}
-
-unauthProfileView :: World -> World
-unauthProfileView = \w .
-  let u = getSessionUser w in
-  let content = bind u (\user . getProfileClassInfo w user) in
-  print w ( (getArbitraryUser w)) (liftM show content)
-
--- View class: Instructor view
--- classInstructor :: World -> World
--- classInstructor = \w .
---   let u = getSessionUser w in
+unauthProfileView :: User -> TIO Unit <{False}> <{True}>
+unauthProfileView = \somebody .
+  let teachesClass = \w . \u . \c .
+        do
+          ins <- getClassInstructor w c
+          ts <- getClassTeachers w c
+          return (u == ins || elem u ts) 
+        in
+  let isStudentInClass = \w . \u . \c .
+        do
+          students <- getClassStudents w c
+          return (elem u students) 
+        in
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    allClasses <- getClasses w
+    teachingClasses <- filterM (\c . teachesClass w u c) allClasses
+    takingClasses <- filterM (\c . isStudentInClass w u c) allClasses
+    print somebody (show (ClassInfo teachingClasses takingClasses))
 
 -- For an assignment, see all the scores for that assignment
-scoresForAssignmentView :: World -> Assignment -> World
-scoresForAssignmentView = \w . \assn .
-  let u = getSessionUser w in
-  let students = getStudentsWhoDidAssignment w assn in
-  let scores = mapM (\student . getScore w student assn) students in
-  print w u (liftM show scores)
+scoresForAssignmentView :: Assignment -> TIO Unit <{False}> <{True}>
+scoresForAssignmentView = \assn .
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    class <- getAssignmentClass w assn
+    students <- getClassStudents w class
+    forM_ students (\student . 
+        do
+          name <- getUserName w student
+          score <- getScore w student assn
+          print u (unwords [name, show score]))
+                  
+-- For an assignment, see the top scoring student
+topScoreForAssignmentView :: Assignment -> TIO Unit <{False}> <{True}>
+topScoreForAssignmentView = \assn .
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    class <- getAssignmentClass w assn
+    students <- getClassStudents w class
+    if length students == 0
+      then print u naString
+      else do
+            sorted <- sortByM (\s1 . \s2 . 
+                        do
+                          score1 <- getScore w s1 assn
+                          score2 <- getScore w s2 assn
+                          return (score2 <= score1)) students
+            name <- getUserName w (head sorted)
+            print u name                  
 
 -- For a student, see all of their scores
-scoresForStudentView :: World -> User -> World
-scoresForStudentView = \w . \student .
-  let u = getSessionUser w in
-  let assns = getAssignmentsForStudent w student in
-  let scores = mapM (\assn . getScore w student assn) assns in
-  print w u (liftM show scores)
+scoresForStudentView :: User -> TIO Unit <{False}> <{True}>
+scoresForStudentView = \student .
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    allClasses <- getClasses w
+    classes <- filterM (\c . 
+                 do
+                    students <- getClassStudents w c
+                    return (elem student students)) allClasses
+    allAssigns <- getAssignments w
+    assigns <- filterM (\a . 
+                 do
+                    c <- getAssignmentClass w a
+                    return (elem c classes)) allAssigns
+    scores <- mapM (\a . getScore w student a) assigns
+    print u (show scores)
 
-data UserAndScore where
-  UserAndScore :: User -> Int -> UserAndScore
-
-userFromUserAndScore :: UserAndScore -> User
-userFromUserAndScore = \x .
-  match x with
-    UserAndScore u i -> u
-
-maxScore :: List UserAndScore -> UserAndScore
-
-getTopScoreForAssignmentView :: World -> Assignment -> World
-getTopScoreForAssignmentView = \w . \assn .
-  let u = getSessionUser w in
-  let students = getStudentsWhoDidAssignment w assn in
-  --let scores = mapM (\student . getScore w student assn) students in
-  --let scores2 = bind scores (\s . mapM (\score . return (UserAndScore (scoreStudent score) (scorePoints score))) s) in
-  let scores = mapM (\student . bind (getScore w student assn) (\sc . return (UserAndScore student (scorePoints sc)))) students in
-  let topScoreUser = bind scores (\s . return (userFromUserAndScore (maxScore s))) in
-  print w u (liftM show scores)
