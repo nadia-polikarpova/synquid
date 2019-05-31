@@ -27,6 +27,18 @@ measure elems :: List a -> Set a where
   Nil -> []
   Cons x xs -> [x] + elems xs
   
+head :: {List a | len _v > 0} -> a
+head = \xs .
+  match xs with
+    Nil -> error
+    Cons y ys -> y
+    
+length :: xs : [a] -> {Int | _v == len xs}
+length = \xs .
+  match xs with
+    Nil -> 0
+    Cons y ys -> 1 + length ys
+    
 elem :: x: a -> xs: List a -> {Bool | _v == (x in elems xs)}  
 elem = \x . \xs . 
   match xs with
@@ -88,4 +100,3 @@ show :: a -> String
 strcat :: String -> String -> String
 unwords :: [String] -> String
 unlines :: [String] -> String
-length :: [a] -> Int

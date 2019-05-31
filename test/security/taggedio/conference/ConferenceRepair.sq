@@ -131,4 +131,4 @@ assignReviewersView = \reviewer . \pids .
   do
     w <- getCurrentWorld
     allPids <- getAllPapers w
-    mapM_ assignPaper allPids
+    forM_ allPids assignPaper

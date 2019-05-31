@@ -56,12 +56,12 @@ mapM :: <mp :: User -> Bool> .
   (a -> TIO b <mp> <mp>) -> xs: [a] -> TIO [b] <mp> <mp>
 mapM = \f . \xs . sequence (map f xs)
 
-mapM_ :: <mq :: User -> Bool> . 
-  (a -> TIO b <{False}> <mq>) -> xs: [a] -> TIO Unit <{True}> <mq>
-mapM_ = \f . \xs . 
+forM_ :: <mq :: User -> Bool> . 
+  xs: [a] -> (a -> TIO b <{False}> <mq>) -> TIO Unit <{True}> <mq>
+forM_ = \xs . \f . 
   match xs with
     Nil -> return Unit
-    Cons y ys -> seq (f y) (mapM_ f ys)    
+    Cons y ys -> seq (f y) (forM_ ys f)
 
 filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
   (x: a -> TIO {Bool | _v ==> fc x} <{fc x && fp _0}> <{False}>) -> xs: [a] -> TIO [{a | fc _v}] <fp> <{False}>
@@ -89,7 +89,7 @@ insertM = \isLeq . \x . \xs .
                 return (Cons y rec)
     
 sortByM :: <sop :: User -> Bool> .
-  (a -> a -> TIO Bool <sop> <{False}>) -> xs: [a] -> TIO {List a | elems _v == elems xs} <sop> <{False}>
+  (a -> a -> TIO Bool <sop> <{False}>) -> xs: [a] -> TIO {List a | elems _v == elems xs && len _v == len xs} <sop> <{False}>
 sortByM = \isLeq . \xs .  
   match xs with
     Nil -> return Nil
