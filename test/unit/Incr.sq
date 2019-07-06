@@ -1,0 +1,8 @@
+-- Simple test from Anish (after finding a bug in the web demo)
+zero :: {Int | _v == 0}
+
+incr :: n: Int -> f: (m: Int -> {Int | _v == n}) -> {Int | _v == n + 1}
+incr = \n. \f. 1 + (f 0)
+
+f :: {Int | _v == 2}
+f = incr ?? (\x . 1)

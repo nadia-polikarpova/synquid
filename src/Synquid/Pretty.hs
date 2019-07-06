@@ -405,7 +405,7 @@ prettyError (ErrorMessage ParseError pos descr) = align $ hang tab $
 prettyError (ErrorMessage ResolutionError pos descr) = hang tab $
   errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Resolution Error"]) $+$
   pretty descr
-prettyError (ErrorMessage TypeError pos descr) = hang tab $
+prettyError (ErrorMessage _ pos descr) = hang tab $
   errorDoc (hcat $ map (<> colon) [text (sourceName pos), pretty (sourceLine pos), text " Error"]) $+$
   pretty descr
 
