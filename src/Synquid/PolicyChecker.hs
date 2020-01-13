@@ -608,7 +608,7 @@ combineBranches env typ (defs, els) ((branch, disjuncts) : bs) = do
       writeLog 3 $ text "Generated lifted disjunct" <+> vsep (map (\(defs, p, _) -> pretty defs $+$ pretty p) lifted)
       let defs = concatMap (view _1) lifted
       let conjuncts' = map (view _2) lifted
-      let conjoin p1 p2 = ((usym "liftM2" `uapp` usym "and") `uapp` p1) `uapp` p2
+      let conjoin p1 p2 = ((usym "liftM2" `uapp` usym (binOpTokens Map.! And)) `uapp` p1) `uapp` p2
       let pCond = foldl1 conjoin conjuncts'
       (defs', xCond) <- anfE "TT" pCond False
       return (defs ++ defs', xCond)

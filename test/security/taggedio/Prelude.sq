@@ -3,7 +3,6 @@ true :: {Bool | _v}
 false :: {Bool | !_v}
 eq :: x: a -> y: a -> {Bool | _v == (x == y)}
 not :: x: Bool -> {Bool | _v == !x}
-and :: x: Bool -> y: Bool -> {Bool | _v == (x && y)}
 
 zero :: {Int | _v == 0}
 leq :: x: Int -> y: Int -> {Bool | _v == (x <= y)}
