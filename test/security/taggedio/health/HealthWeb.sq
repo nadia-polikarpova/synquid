@@ -1,100 +1,108 @@
+data World
+
 data RecordId
-data Record
 
-predicate sessionUser :: World -> User      
-getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+getCurrentWorld :: TIO World <{True}> <{False}>
 
-predicate author :: Record -> User
-getAuthor :: r:Record -> Tagged {User | _v == author r} <{True}>
+{- Users table -}
 
-predicate isPatient :: World -> Map User Bool
-getIsPatient :: w:World -> u:User -> Tagged {Bool | _v == (isPatient w)[[u]]} <{True}>
+getUsers :: w: World -> TIO [User] <{True}> <{False}>
 
-predicate isDoctor :: World -> Map User Bool
-getIsDoctor :: w:World -> u:User -> Tagged {Bool | _v == (isDoctor w)[[u]]} <{True}>
+predicate sessionUser :: World -> User
+getSessionUser :: w: World -> TIO {User | _v == sessionUser w} <{True}> <{False}>
 
-predicate isPsychiatrist :: World -> Map User Bool
-getIsPsychiatrist :: w:World -> u:User -> Tagged {Bool | _v == (isPsychiatrist w)[[u]]} <{True}>
+-- predicate isPatient :: World -> User -> Bool
+-- getIsPatient :: w:World -> u:User -> TIO {Bool | _v == isPatient w u} <{True}> <{False}>
 
-predicate shouldWithhold :: User -> Record -> Bool
-getShouldWithhold :: u:User -> r:Record -> Tagged {Bool | _v == shouldWithhold u r} <{True}>
+predicate isDoctor :: World -> User -> Bool
+getIsDoctor :: w:World -> u:User -> TIO {Bool | _v == isDoctor w u} <{True}> <{False}>
 
-predicate patient :: Record -> User
-getPatient :: r:Record -> Tagged {User | _v == patient r} <{True}>
+-- predicate isPsychiatrist :: World -> User -> Bool
+-- getIsPsychiatrist :: w:World -> u:User -> TIO {Bool | _v == isPsychiatrist w u} <{True}> <{False}>
 
-predicate isTreating :: User -> User -> Bool
-getIsTreating :: u:User -> w:User -> Tagged {Bool | _v == isTreating u w} <{(isPsychiatrist _0)[[_1]] && _1 == u}>
+{- Treating table -}
 
-predicate isPsychiatricRecord :: Record -> Bool
-getIsPsychiatricRecord :: r:Record -> Tagged {Bool | _v == isPsychiatricRecord r} <{True}>
+predicate isTreating :: World -> User -> User -> Bool
+getIsTreating :: w: World -> doc: User -> patient: User -> TIO {Bool | _v == isTreating w doc patient} <{_0 == doc}> <{False}>
 
-predicate record :: World -> RecordId -> Record
+{- Withholding table -}
 
-getRecord :: w:World -> rid:RecordId -> Tagged {Record | _v == record w rid} <{
-  _1 == author (record _0 rid) ||
-  ((isPatient _0)[[_1]] && _1 == patient (record _0 rid) && !(shouldWithhold _1 (record _0 rid))) ||
-  ((isDoctor _0)[[_1]] && !(shouldWithhold _1 (record _0 rid))) ||
-  ((isPsychiatrist _0)[[_1]] && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
-}>
+predicate shouldWithhold :: World -> User -> RecordId -> Bool
+getShouldWithhold :: w: World -> u: User -> r: RecordId -> TIO {Bool | _v == shouldWithhold w u r} <{True}> <{False}>
 
--- defaultRecord :: Record
--- redact {defaultRecord}
+{- Record table -}
 
-removePersonalInfo :: Tagged Record <{False}> -> Tagged Record <{True}>
-redact {removePersonalInfo}
+predicate recordAuthor :: World -> RecordId -> User
+  
+getRecordAuthor :: w: World -> rid: RecordId -> TIO {User | _v == recordAuthor w rid} <{True}> <{False}>
+  
+predicate recordPatient :: World -> RecordId -> User
 
-getAllRecordIds :: World -> List RecordId
+inline recordPolicy w v rid = v == recordAuthor w rid || 
+  (!(shouldWithhold w v rid) && (v == recordPatient w rid || isDoctor w v || (isTreating w v (recordPatient w rid) && recordIsPsychiatric w rid)))
 
-getAuthoredRecordIds :: w:World -> u:User -> List {RecordId | u == author (record w _v)}
+getRecordPatient :: w: World -> rid: RecordId -> TIO {User | _v == recordPatient w rid} <{recordPolicy w _0 rid}> <{False}>
+    
+predicate recordIsPsychiatric :: World -> RecordId -> Bool
+  
+getRecordIsPsychiatric :: w: World -> rid: RecordId -> TIO {Bool | _v == recordIsPsychiatric w rid} <{recordPolicy w _0 rid}> <{False}>
 
-setRecord :: w:World -> rid:RecordId -> Tagged Record <{
-  _1 == author (record _0 rid) ||
-  ((isPatient _0)[[_1]] && _1 == patient (record _0 rid) && !(shouldWithhold _1 (record _0 rid))) ||
-  ((isDoctor _0)[[_1]] && !(shouldWithhold _1 (record _0 rid))) ||
-  ((isPsychiatrist _0)[[_1]] && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
-}> -> {World | sessionUser _v == sessionUser w}
+-- getAllRecordIds :: World -> List RecordId
 
-getPsychiatristPatients :: u:User -> Tagged (List User) <{(isPsychiatrist _0)[[_1]] && _1 == u}>
-getDoctorPatients :: u:User -> Tagged (List User) <{(isDoctor _0)[[_1]] && _1 == u}>
+-- getAuthoredRecordIds :: w:World -> u:User -> List {RecordId | u == author (record w _v)}
 
-showRecordByIdView :: w:World -> rid:RecordId -> World
-showRecordByIdView = \w . \rid .
-	let u = getSessionUser w in
-  let record = getRecord w rid in
-  print w u (liftM show record)
+-- setRecord :: w:World -> rid:RecordId -> Tagged Record <{
+  -- _1 == author (record _0 rid) ||
+  -- ((isPatient _0)[[_1]] && _1 == patient (record _0 rid) && !(shouldWithhold _1 (record _0 rid))) ||
+  -- ((isDoctor _0)[[_1]] && !(shouldWithhold _1 (record _0 rid))) ||
+  -- ((isPsychiatrist _0)[[_1]] && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
+-- }> -> {World | sessionUser _v == sessionUser w}
 
-showRecordsForPatientView :: w:World -> p:User -> World
-showRecordsForPatientView = \w . \patientToSearchFor .
-	let sessionUser = getSessionUser w in
-  let recordIds = getAllRecordIds w in
-  let records = sequence (map (\rid . getRecord w rid) recordIds) in
-  let recordsForPatient = bind records (filterM (\record . (bind (getPatient record) (\x . return (x == patientToSearchFor))))) in
-  print w sessionUser (liftM show recordsForPatient)
+-- getPsychiatristPatients :: u:User -> Tagged (List User) <{(isPsychiatrist _0)[[_1]] && _1 == u}>
+-- getDoctorPatients :: u:User -> Tagged (List User) <{(isDoctor _0)[[_1]] && _1 == u}>
 
--- no repair is needed here, because from getAuthoredRecordIds's type
--- you can tell that they are already ok
-showAuthoredRecordsView :: w:World -> World
-showAuthoredRecordsView = \w .
-	let sessionUser = getSessionUser w in
-	let recordIds = bind sessionUser (\user . return (getAuthoredRecordIds w user)) in
-	let records = bind recordIds (\rids . (mapM (\rid . getRecord w rid) rids)) in
-	print w sessionUser (liftM show records)
+showRecordByIdView :: rid:RecordId -> TIO Unit <{False}> <{True}>
+showRecordByIdView = \rid .
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    author <- getRecordAuthor w rid
+    patient <- getRecordPatient w rid
+    isPsych <- getRecordIsPsychiatric w rid 
+    print u (unlines [show author, show patient, show isPsych])
 
-updateRecordForm :: w:World -> rid:RecordId -> record:Record -> World
-updateRecordForm = \w . \rid . \record .
-  let w' = setRecord w rid (return record) in
-  showRecordByIdView w' rid
-  --let newRecord = getRecord w' rid in
-	--let u = getSessionUser w' in
-  --print w' u (liftM show newRecord)
+-- showRecordsForPatientView :: w:World -> p:User -> World
+-- showRecordsForPatientView = \w . \patientToSearchFor .
+	-- let sessionUser = getSessionUser w in
+  -- let recordIds = getAllRecordIds w in
+  -- let records = sequence (map (\rid . getRecord w rid) recordIds) in
+  -- let recordsForPatient = bind records (filterM (\record . (bind (getPatient record) (\x . return (x == patientToSearchFor))))) in
+  -- print w sessionUser (liftM show recordsForPatient)
 
-concat :: List User -> List User -> List User
+-- -- no repair is needed here, because from getAuthoredRecordIds's type
+-- -- you can tell that they are already ok
+-- showAuthoredRecordsView :: w:World -> World
+-- showAuthoredRecordsView = \w .
+	-- let sessionUser = getSessionUser w in
+	-- let recordIds = bind sessionUser (\user . return (getAuthoredRecordIds w user)) in
+	-- let records = bind recordIds (\rids . (mapM (\rid . getRecord w rid) rids)) in
+	-- print w sessionUser (liftM show records)
 
--- get the list of patients for a doctor or psychiatrist
-listOfPatientsView :: w:World -> World
-listOfPatientsView = \w .
-	let sessionUser = getSessionUser w in
-	let patients1 = bind sessionUser (\u . getPsychiatristPatients u) in
-	let patients2 = bind sessionUser (\u . getDoctorPatients u) in
-	let patients = bind patients1 (\p1 . bind patients2 (\p2 . return (concat p1 p2))) in
-	print w sessionUser (liftM show patients)
+-- updateRecordForm :: w:World -> rid:RecordId -> record:Record -> World
+-- updateRecordForm = \w . \rid . \record .
+  -- let w' = setRecord w rid (return record) in
+  -- showRecordByIdView w' rid
+  -- --let newRecord = getRecord w' rid in
+	-- --let u = getSessionUser w' in
+  -- --print w' u (liftM show newRecord)
+
+-- concat :: List User -> List User -> List User
+
+-- -- get the list of patients for a doctor or psychiatrist
+-- listOfPatientsView :: w:World -> World
+-- listOfPatientsView = \w .
+	-- let sessionUser = getSessionUser w in
+	-- let patients1 = bind sessionUser (\u . getPsychiatristPatients u) in
+	-- let patients2 = bind sessionUser (\u . getDoctorPatients u) in
+	-- let patients = bind patients1 (\p1 . bind patients2 (\p2 . return (concat p1 p2))) in
+	-- print w sessionUser (liftM show patients)

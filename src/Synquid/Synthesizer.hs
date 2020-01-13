@@ -233,7 +233,7 @@ isDataEq (Binary op e1 _)
 isDataEq _ = False
 
 isSetMapEq (Binary op e1 _)
-  | op == Eq || op == Neq = isSetS (sortOf e1) || isMapS (sortOf e1)
+  | op == Eq || op == Neq = isSetS (sortOf e1) || isMapS (sortOf e1) || (sortOf e1 == BoolS)
   | otherwise = False
 isSetMapEq _ = False
 
