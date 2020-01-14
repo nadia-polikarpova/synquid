@@ -194,7 +194,27 @@ evalZ3State f = do
 
 -- | Convert a first-order constraint to a Z3 AST.
 fmlToAST :: Formula -> Z3State AST
-fmlToAST = toAST
+fmlToAST = toAST . simplify
+  where
+    simplify expr = case expr of
+      SetLit el xs -> SetLit el (map simplify xs)
+      Unary op e -> Unary op (simplify e)
+      Binary op e1 e2 -> 
+        let e1' = simplify e1
+            e2' = simplify e2
+        in case sortOf e1' of
+             BoolS -> case op of
+                        Le -> e1' |=>| e2'
+                        Ge -> e2' |=>| e1'
+                        Lt -> fnot e1' |&| e2'
+                        Gt -> fnot e2' |&| e1'
+                        _  -> Binary op e1' e2' 
+             _ -> Binary op e1' e2'
+      Ite e0 e1 e2 -> Ite (simplify e0) (simplify e1) (simplify e2)
+      Pred s name args -> Pred s name (map simplify args)
+      Cons s name args -> Cons s name (map simplify args)
+      All v e -> All v (simplify e)
+      _ -> expr
 
 -- | Convert a Synquid refinement term to a Z3 AST
 toAST :: Formula -> Z3State AST
