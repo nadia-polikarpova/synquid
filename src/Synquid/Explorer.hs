@@ -92,9 +92,7 @@ instance Pretty MemoKey where
 -- | Memoization store
 type Memo = Map MemoKey [(RProgram, ExplorerState)]
 
-data PartialKey = PartialKey {
-    pKeyContext :: RProgram
-} deriving (Eq, Ord)
+newtype PartialKey = PartialKey { pKeyContext :: RProgram } deriving (Eq, Ord)
 
 type PartialMemo = Map PartialKey (Map RProgram (Int, Environment))
 -- | Persistent state accross explorations
@@ -120,10 +118,18 @@ runExplorer :: MonadHorn s => ExplorerParams -> TypingParams -> Reconstructor s 
 runExplorer eParams tParams topLevel initTS go = do
   (ress, (PersistentState _ _ errs)) <- runStateT (observeManyT 1 $ runReaderT (evalStateT go initExplorerState) (eParams, tParams, topLevel)) (PersistentState Map.empty Map.empty [])
   case ress of
-    [] -> return $ Left $ head errs
+    [] -> 
+      case errs of 
+        [] -> return $ Left impossible
+        (e:_) -> return $ Left e
     (res : _) -> return $ Right res
   where
     initExplorerState = ExplorerState initTS [] Map.empty Map.empty Map.empty Map.empty
+    impossible = ErrorMessage {
+        emKind = SynthesisError,
+        emPosition = _sourcePos eParams,
+        emDescription = text "Synthesis goal is impossible: components or search parameters are insufficient."
+      }
 
 -- | 'generateI' @env t@ : explore all terms that have refined type @t@ in environment @env@
 -- (top-down phase of bidirectional typechecking)
