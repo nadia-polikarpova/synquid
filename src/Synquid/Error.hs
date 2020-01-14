@@ -24,7 +24,7 @@ instance (Eq a) => Eq (Pos a) where
 -- | Dummy source position
 noPos = initialPos "<no file name>"
 
-data ErrorKind = ParseError | ResolutionError | TypeError
+data ErrorKind = ParseError | ResolutionError | TypeError | SynthesisError
 
 data ErrorMessage = ErrorMessage {
   emKind :: ErrorKind,
