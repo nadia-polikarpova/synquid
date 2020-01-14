@@ -318,7 +318,8 @@ filterSubsets check n = go [] [Set.empty]
 leastFixPoint :: MonadSMT s => ExtractAssumptions -> [Candidate] -> FixPointSolver s [Candidate]
 leastFixPoint _ [] = return []
 leastFixPoint extractAssumptions (cand@(Candidate sol _ _ _):rest) = do
-    fml@(Binary Implies lhs rhs) <- asks constraintPickStrategy >>= pickConstraint cand
+    fml <- asks constraintPickStrategy >>= pickConstraint cand
+    let (Binary Implies lhs rhs) = fml
     let lhs' = applySolution sol lhs
     let assumptions = extractAssumptions lhs' `Set.union` extractAssumptions (applySolution sol rhs)
     
