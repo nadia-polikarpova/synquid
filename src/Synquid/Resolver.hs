@@ -17,7 +17,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Maybe
-import Data.Either
+import Data.Either hiding (fromRight)
 import Data.List
 import qualified Data.Foldable as Foldable
 import qualified Data.Traversable as Traversable
@@ -205,7 +205,8 @@ resolveSignatures (DataDecl dtName tParams pParams ctors) = mapM_ resolveConstru
           environment %= addPolyConstant name sch''
         else throwResError (commaSep [text "Constructor" <+> text name <+> text "must return type" <+> pretty nominalType, text "got" <+> pretty returnType])
 resolveSignatures (MeasureDecl measureName _ _ post defCases args _) = do
-  (outSort : mArgs) <- uses (environment . globalPredicates) (Map.! measureName)
+  sorts <- uses (environment . globalPredicates) (Map.! measureName)
+  let (outSort : mArgs) = sorts
   case last mArgs of 
     inSort@(DataS dtName sArgs) -> do
       datatype <- uses (environment . datatypes) (Map.! dtName)
@@ -528,11 +529,12 @@ resolveFormula (Pred _ name argFmls) = do
     Just (args, body) -> resolveFormula (substitute (Map.fromList $ zip args argFmls) body)
     Nothing -> do
       ps <- uses environment allPredicates
-      (resSort : argSorts) <- case Map.lookup name ps of
-                                Nothing -> throwResError $ text "Predicate or measure" <+> text name <+> text "is undefined"
-                                Just sorts -> ifM (Map.member name <$> use (environment . globalPredicates))
-                                                (instantiate sorts) -- if global, treat type variables as free
-                                                (return sorts) -- otherwise, treat type variables as bound
+      sorts <- case Map.lookup name ps of
+                  Nothing -> throwResError $ text "Predicate or measure" <+> text name <+> text "is undefined"
+                  Just sorts -> ifM (Map.member name <$> use (environment . globalPredicates))
+                                  (instantiate sorts) -- if global, treat type variables as free
+                                  (return sorts) -- otherwise, treat type variables as bound
+      let (resSort : argSorts) = sorts
       if length argFmls /= length argSorts
           then throwResError $ text "Expected" <+> pretty (length argSorts) <+> text "arguments for predicate or measure" <+> text name <+> text "and got" <+> pretty (length argFmls)
           else do
@@ -546,7 +548,8 @@ resolveFormula (Cons _ name argFmls) = do
     Nothing -> throwResError $ text "Data constructor" <+> text name <+> text "is undefined"
     Just consSch -> do
       let consT = toMonotype consSch
-      (resSort : argSorts) <- instantiate $ map (toSort . baseTypeOf) $ lastType consT : allArgTypes consT
+      sorts <- instantiate $ map (toSort . baseTypeOf) $ lastType consT : allArgTypes consT
+      let (resSort : argSorts) = sorts
       if length argSorts /= length argFmls
         then throwResError $ text "Constructor" <+> text name <+> text "expected" <+> pretty (length argSorts) <+> text "arguments and got" <+> pretty (length argFmls)
         else do

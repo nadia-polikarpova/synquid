@@ -26,24 +26,24 @@ executable synquid
                     , TypeSynonymInstances
                     , FlexibleContexts
 
-  build-depends:      base >=4.6 && <4.9
-                    , containers >=0.5 && <0.6
-                    , mtl >=2.2 && <2.3
-                    , transformers >=0.3 && <0.5
-                    , transformers-compat ==0.4.*
+  build-depends:      base >=4.6
+                    , containers >=0.5
+                    , mtl >=2.2
+                    , transformers >=0.3
+                    , transformers-compat >=0.4
                     , lens >=3.7
-                    , ansi-wl-pprint >=0.6 && <0.7
+                    , ansi-wl-pprint >=0.6
                     , ansi-terminal >=0.6
-                    , html ==1.*
+                    , html >=1
                     , bimap >= 0.2
                     , z3 > 4.0
                     , logict >= 0.5
-                    , parsec == 3.1.*
-                    , indents == 0.3.*
-                    , cmdargs ==0.10.*
+                    , parsec >= 3.1
+                    , indents >= 0.3
+                    , cmdargs >=0.10
                     , filepath
                     , time
-                    , haskell-src-exts == 1.17.*
+                    , haskell-src-exts >= 1.17
                     , safe
                     , split
 

@@ -36,7 +36,8 @@ parseProgram = whiteSpace *> option [] (block parseDeclaration) <* eof
 parseFromFile :: Parser a -> String -> IO (Either ParseError a)
 parseFromFile aParser fname = do
   input <- readFile fname
-  return $ runIndent fname $ runParserT aParser () fname input
+  return $ runIndentParser aParser () fname input
+  -- return $ runIndent fname $ runParserT aParser () fname input
 
 toErrorMessage :: ParseError -> ErrorMessage
 toErrorMessage err = ErrorMessage ParseError (errorPos err)
@@ -53,7 +54,6 @@ opStart = nub (map head opNames)
 opLetter :: [Char]
 opLetter = nub (concatMap tail opNames)
 
-synquidDef :: Token.GenLanguageDef String st (State SourcePos)
 synquidDef = Token.LanguageDef
   commentStart
   commentEnd
@@ -67,7 +67,6 @@ synquidDef = Token.LanguageDef
   opNames
   True
 
-lexer :: Token.GenTokenParser String st (State SourcePos)
 lexer = Token.makeTokenParser synquidDef
 
 identifier = Token.identifier lexer
@@ -456,11 +455,6 @@ attachPosBefore :: Parser a -> Parser (Pos a)
 attachPosBefore = liftM2 Pos getPosition
 
 {- Debug -}
-
-printRefPos :: String -> Parser ()
-printRefPos msg = do
-  pos <- get
-  trace (msg ++ show pos) $ return ()
 
 printCurPos :: String -> Parser ()
 printCurPos msg = do
