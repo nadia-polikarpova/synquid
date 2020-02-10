@@ -3,6 +3,6 @@ flags:
     synquid: true
 packages:
   - '.'
-resolver: lts-6.21
+resolver: lts-13.11
 extra-deps:
-  - z3-4.1.0
+  - z3-4.3.1
