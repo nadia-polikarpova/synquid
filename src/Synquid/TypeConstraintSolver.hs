@@ -198,7 +198,8 @@ getViolatingLabels = do
     nest 2 $ text "Nonterminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) nontermClauses), 
     nest 2 $ text "QMap" $+$ pretty qmap])        
   
-  (newCand:[]) <- lift . lift . lift $ refineCandidates (map fst nontermClauses) qmap (instantiateConsAxioms env Nothing) cands    
+  newCands <- lift . lift . lift $ refineCandidates (map fst nontermClauses) qmap (instantiateConsAxioms env Nothing) cands
+  let newCand = head newCands
   candidates .= [newCand]
     
   invalidTerminals <- filterM (isInvalid newCand (instantiateConsAxioms env Nothing)) termClauses
@@ -844,7 +845,8 @@ addFixedUnknown name valuation = do
 setUnknownRecheck :: MonadHorn s => Id -> Set Formula -> Set Id -> TCSolver s ()
 setUnknownRecheck name valuation duals = do
   writeLog 3 $ text "Re-checking candidates after updating" <+> text name
-  cands@(cand:_) <- use candidates
+  cands <- use candidates
+  let cand = head cands
   let clauses = Set.filter (\fml -> name `Set.member` (Set.map unknownName (unknownsOf fml))) (validConstraints cand) -- First candidate cannot have invalid constraints
   let cands' = map (\c -> c { solution = Map.insert name valuation (solution c) }) cands
   env <- use initEnv
