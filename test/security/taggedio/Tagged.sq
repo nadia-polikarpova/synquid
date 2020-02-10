@@ -75,7 +75,7 @@ filterM = \f . \xs .
                       else filterM f ys
 
 {- auxiliary function for sortByM (below) -}
-insertM :: <inp :: User -> Bool> . (a -> a -> TIO Bool <inp> <{False}>) -> x: a -> xs: List a -> TIO {List a | elems _v == elems xs + [x]} <inp> <{False}>
+insertM :: <inp :: User -> Bool> . (a -> a -> TIO Bool <inp> <{False}>) -> x: a -> xs: List a -> TIO {List a | elems _v == elems xs + [x] && len _v == len xs + 1} <inp> <{False}>
 insertM = \isLeq . \x . \xs .
   match xs with
     Nil -> return [x]
