@@ -2,48 +2,48 @@
 
 {- Datatypes -}
 
-data World
+data Store
 
 data PaperId
 
 {- Sensitive data and policies -}
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper conflicts (public)
-predicate paperConflicts :: World -> Map PaperId (Set User)
-getPaperConflicts :: w: World -> pid: PaperId 
-                        -> TIO {List User | elems _v == (paperConflicts w)[[pid]]} <{!(_0 in (paperConflicts w)[[pid]])}> <{False}>
+predicate paperConflicts :: Store -> Map PaperId (Set User)
+getPaperConflicts :: ds: Store -> pid: PaperId 
+                        -> TIO {List User | elems _v == (paperConflicts ds)[[pid]]} <{!(_0 in (paperConflicts ds)[[pid]])}> <{False}>
 
 -- | Paper score (only visible if not in conflict)
-getPaperScore :: w: World -> pid: PaperId -> TIO Int <{!(_0 in (paperConflicts w)[[pid]])}> <{False}>
+getPaperScore :: ds: Store -> pid: PaperId -> TIO Int <{!(_0 in (paperConflicts ds)[[pid]])}> <{False}>
 
 -- | All papers in the conference
-getAllPaperIds :: w: World -> TIO [PaperId] <{True}> <{False}>
+getAllPaperIds :: ds: Store -> TIO [PaperId] <{True}> <{False}>
 
 {- Client code -}
   
 -- | Sort papers by their score.
 -- | Repair: inside cmpScore, check that client is not conflicted with pid1/2
-sortPapersByScore :: World -> User -> TIO Unit <{False}> <{True}>
-sortPapersByScore = \w . \client .
+sortPapersByScore :: Store -> User -> TIO Unit <{False}> <{True}>
+sortPapersByScore = \ds . \client .
   let notConflicted = \pid . downgrade (
                                do
-                                 cs <- getPaperConflicts w pid
+                                 cs <- getPaperConflicts ds pid
                                  return (not (elem client cs))) in
   let cmpScore = \pid1. \pid2.
                   do 
                      isConflicted1 <- notConflicted pid1
                      x1 <- if isConflicted1
-                            then getPaperScore w pid1
+                            then getPaperScore ds pid1
                             else return 0
                      isConflicted2 <- notConflicted pid2
                      x2 <- if isConflicted2
-                            then getPaperScore w pid2
+                            then getPaperScore ds pid2
                             else return 0
                      return (x1 <= x2) in
-  do pids <- getAllPaperIds w
+  do pids <- getAllPaperIds ds
      sortedPids <- sortByM cmpScore pids
-     titles <- mapM (getPaperTitle w) sortedPids
+     titles <- mapM (getPaperTitle ds) sortedPids
      print client (unlines titles)

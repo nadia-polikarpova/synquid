@@ -1,36 +1,34 @@
-{- Tagged -}
+{- TIO Primitives -}
 
 data User
 
--- | Computation with a label and clearance
-data TIO a <label :: User -> Bool>- <clear :: User -> Bool>
+-- | Computation with an input and an output label
+data TIO a <inl :: User -> Bool>- <outl :: User -> Bool>
 
 return :: x: a -> TIO a <{True}> <{False}>
-
--- | Moral type of bind:
--- bind :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . 
-  -- x: TIO a <p> <q> 
-  -- -> (u: a -> TIO b <r> <p>) 
-  -- -> TIO b <{p _0 && r _0}> <{q _0 || p _0}>
   
 -- | (>>=)
 -- | Actual type of bind is its moral type + subtyping
-bind :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: User -> Bool> . 
-  x: TIO a <p> <q> 
-  -> (u: a -> TIO b <r> <{p _0 && s _0}>) 
-  -> TIO b <{p _0 && r _0}> <{q _0 || (p _0 && s _0)}>  
-  
--- | (>>)  
-seq :: <p :: User -> Bool> . <q :: User -> Bool> . <r :: User -> Bool> . <s :: User -> Bool> . 
-  x: TIO a <p> <q> 
-  -> TIO b <r> <s>
-  -> TIO b <r> <{q _0 || s _0}>
-  
+bind :: <i :: User -> Bool> . <o :: User -> Bool> . <j :: User -> Bool> . <p :: User -> Bool> . 
+  TIO a <i> <o> 
+  -> (u: a -> TIO b <j> <{i _0 && p _0}>) 
+  -> TIO b <{i _0 && j _0}> <{o _0 || (i _0 && p _0)}>  
+    
 -- | Allow someone to see a boolean that is always false whenever they cannot see it
 downgrade :: <bp :: User -> Bool> . <bc :: Bool> . <bq :: User -> Bool> .
   x: TIO {Bool | _v ==> bc} <{bp _0 && bc}> <bq> -> TIO {Bool | _v ==> bc} <bp> <bq>
   
-{- Standard monadic helper functions -}
+{- TIO Auxiliary functions -}
+
+-- | (>>)  
+seq :: <si :: User -> Bool> . <so :: User -> Bool> . <sj :: User -> Bool> . <sp :: User -> Bool> . 
+  TIO a <si> <so> 
+  -> TIO b <sj> <sp>
+  -> TIO b <sj> <{so _0 || sp _0}>
+seq = \a1 . \a2 .
+  do
+    x <- downgrade (bind a1 (\y . return False))
+    a2
 
 liftM :: <lp :: User -> Bool> . <lq :: User -> Bool> . (a -> b) -> TIO a <lp> <lq> -> TIO b <lp> <lq>
 liftM = \f . \t .
