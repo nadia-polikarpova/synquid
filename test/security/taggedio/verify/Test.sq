@@ -29,7 +29,7 @@ bad1 =
 -- | Nothing bad happens here, but this is not allowed by the type system
 -- because a is still in scope when we print to Bob
 bad2 :: TIO Unit <{False}> <{True}>
-bad1 =
+bad2 =
   do
     a <- getSSN alice
     print alice (show a)
