@@ -8,33 +8,33 @@
 
 {- Datatypes -}
 
-data World
+data Store
 
 data MessageId
 
 {- Sensitive data and policies -}
 
-getAllMessageIDs :: w: World -> [MessageId]
+getAllMessageIDs :: ds: Store -> [MessageId]
 
 -- | AirBnB admin
-predicate admin :: World -> User
-getAdmin :: w: World -> TIO {User | _v == admin w} <{True}> <{False}>
+predicate admin :: Store -> User
+getAdmin :: ds: Store -> TIO {User | _v == admin ds} <{True}> <{False}>
 
 -- | Message sender
-predicate sender :: World -> Map MessageId User
-getSender :: w: World -> m: MessageId -> TIO {User | _v == (sender w)[[m]] && _v != (recipient w)[[m]]} <{True}> <{False}>
+predicate sender :: Store -> Map MessageId User
+getSender :: ds: Store -> m: MessageId -> TIO {User | _v == (sender ds)[[m]] && _v != (recipient ds)[[m]]} <{True}> <{False}>
 
 -- | Message recipient
-predicate recipient :: World -> Map MessageId User
-getRecipient :: w: World -> m: MessageId -> TIO {User | _v == (recipient w)[[m]] && _v != (sender w)[[m]]} <{True}> <{False}>
+predicate recipient :: Store -> Map MessageId User
+getRecipient :: ds: Store -> m: MessageId -> TIO {User | _v == (recipient ds)[[m]] && _v != (sender ds)[[m]]} <{True}> <{False}>
 
 -- | Message text (only visible to the admin and the sender)
-getText :: w: World -> m: MessageId -> TIO String <{_0 == admin w || _0 == (sender w)[[m]]}> <{False}>
+getText :: ds: Store -> m: MessageId -> TIO String <{_0 == admin ds || _0 == (sender ds)[[m]]}> <{False}>
 
 -- | Scrape phone numbers from the message, making it visible to the recipient
-scrapePhoneNumbers :: w: World -> m: MessageId 
-                                   -> TIO String <{_0 == admin w || _0 == (sender w)[[m]]}> <{False}>
-                                   -> TIO String <{_0 == admin w || _0 == (sender w)[[m]] || _0 == (recipient w)[[m]]}> <{False}>
+scrapePhoneNumbers :: ds: Store -> m: MessageId 
+                                   -> TIO String <{_0 == admin ds || _0 == (sender ds)[[m]]}> <{False}>
+                                   -> TIO String <{_0 == admin ds || _0 == (sender ds)[[m]] || _0 == (recipient ds)[[m]]}> <{False}>
 
 redact {scrapePhoneNumbers}
 
@@ -45,16 +45,16 @@ redact {scrapePhoneNumbers}
 --           and otherwise scrape the message.
 --           To determine that scraping the message is enough, we need to know that client is recipient for all messages in myMIDs,
 --           which we infer from the type of filterM
-viewInbox :: World -> User -> TIO Unit <{False}> <{True}>
-viewInbox = \w . \client .
+viewInbox :: Store -> User -> TIO Unit <{False}> <{True}>
+viewInbox = \ds . \client .
   let isMyMessage = \m .
-        do to <- getRecipient w m
+        do to <- getRecipient ds m
            return (to == client) in
   let showMessage = \m . 
-        do a <- getAdmin w
+        do a <- getAdmin ds
            if client == a
-             then getText w m
-             else scrapePhoneNumbers w m (getText w m) in
-  do myMIDs <- filterM isMyMessage (getAllMessageIDs w) 
+             then getText ds m
+             else scrapePhoneNumbers ds m (getText ds m) in
+  do myMIDs <- filterM isMyMessage (getAllMessageIDs ds) 
      messages <- mapM showMessage myMIDs 
      print client (unlines messages)  

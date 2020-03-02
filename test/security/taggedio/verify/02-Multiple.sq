@@ -3,7 +3,7 @@
 {- Datatypes -}
 
 -- | Database
-data World
+data Store
 
 data PaperId
 
@@ -25,20 +25,20 @@ guard {Accepted, Rejected, NoDecision}
 {- Sensitive data and policies -}
 
 -- | Conference phase (public)
-predicate phase :: World -> Phase
-getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
+predicate phase :: Store -> Phase
+getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper authors (only visible when phase is done)
-getPaperAuthors :: w: World -> p: PaperId -> TIO [User] <{phase w == Done}> <{False}>
+getPaperAuthors :: ds: Store -> p: PaperId -> TIO [User] <{phase ds == Done}> <{False}>
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
+getPaperStatus :: ds: Store -> p: PaperId -> TIO Status <{phase ds == Done}> <{False}>
 
 -- | Paper session (public)
-getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+getPaperSession :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- redact {NoDecision}  
 
@@ -47,18 +47,18 @@ getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
 -- | Show data for paper `p` to `client`
 -- | Repair: for getPaperAuthors, check that phase is done, otherwise return Nil
 --           for getPaperStatus, check that phase is Done, otherwise return NoDecision
-showSession :: World -> User -> PaperId -> TIO Unit <{False}> <{True}>
-showSession = \w . \client . \p .
-  do t <- getPaperTitle w p
-     ph <- getPhase w
+showSession :: Store -> User -> PaperId -> TIO Unit <{False}> <{True}>
+showSession = \ds . \client . \p .
+  do t <- getPaperTitle ds p
+     ph <- getPhase ds
      auts <- if ph == Done
-               then getPaperAuthors w p
+               then getPaperAuthors ds p
                else return Nil
      st   <- if ph == Done
-               then getPaperStatus w p
+               then getPaperStatus ds p
                else return NoDecision
      ses  <- if st == Accepted 
-               then getPaperSession w p 
+               then getPaperSession ds p 
                else return emptyString
      print client (unwords [t, show auts, ses])
   

@@ -2,7 +2,7 @@
 
 {- Datatypes -}
 
-data World
+data Store
 
 data PaperId
 
@@ -24,23 +24,23 @@ guard {Accepted, Rejected, NoDecision}
 {- Sensitive data and policies -}
    
 -- | Conference phase (public)
-predicate phase :: World -> Phase
-getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
+predicate phase :: Store -> Phase
+getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper authors (only visible to themselves or when phase is done)
-predicate paperAuthors :: World -> Map PaperId (Set User)
-getPaperAuthors :: w: World -> p: PaperId -> 
-  TIO {List User | elems _v == (paperAuthors w)[[p]]} 
-    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>
+predicate paperAuthors :: Store -> Map PaperId (Set User)
+getPaperAuthors :: ds: Store -> p: PaperId -> 
+  TIO {List User | elems _v == (paperAuthors ds)[[p]]} 
+    <{_0 in (paperAuthors ds)[[p]] || phase ds == Done}> <{False}>
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
+getPaperStatus :: ds: Store -> p: PaperId -> TIO Status <{phase ds == Done}> <{False}>
 
 -- | All papers in the conference
-getAllPaperIds :: w: World -> TIO [PaperId] <{True}> <{False}>
+getAllPaperIds :: ds: Store -> TIO [PaperId] <{True}> <{False}>
 
 redact {NoDecision}  
 
@@ -49,18 +49,17 @@ redact {NoDecision}
 -- | Show `client` all their accepted papers
 -- | Repair: for `getPaperStatus` inside `isMyAccepted` check that phase is Done, otherwise return NoDecision;
 --           note how Lifty can determine that the author check is okay.
-showMyAcceptedPapers :: World -> User -> TIO Unit <{False}> <{True}>
-showMyAcceptedPapers = \w . \client .
+showMyAcceptedPapers :: Store -> User -> TIO Unit <{False}> <{True}>
+showMyAcceptedPapers = \ds . \client .
   let isMyAccepted = \p .
-    downgrade (  
-      do auts <- getPaperAuthors w p
-         ph   <- getPhase w
+      do auts <- getPaperAuthors ds p
+         ph   <- getPhase ds
          st   <- if ph == Done
-                   then getPaperStatus w p
+                   then getPaperStatus ds p
                    else return NoDecision
-         return (elem client auts && st == Accepted)) in
-  do allPaperIDs <- getAllPaperIds w
+         return (elem client auts && st == Accepted) in
+  do allPaperIDs <- getAllPaperIds ds
      paperIDs <- filterM isMyAccepted allPaperIDs
-     titles <- mapM (\p . getPaperTitle w p) paperIDs
+     titles <- mapM (\p . getPaperTitle ds p) paperIDs
      print client (unlines titles)
   
