@@ -3,7 +3,7 @@
 {- Datatypes -}
 
 -- | Database
-data World
+data Store
 
 data PaperId
 
@@ -25,23 +25,23 @@ guard {Accepted, Rejected, NoDecision}
 {- Sensitive data and policies -}
    
 -- | Conference phase (public)
-predicate phase :: World -> Phase
-getPhase :: w: World -> TIO {Phase | _v == phase w} <{True}> <{False}>
+predicate phase :: Store -> Phase
+getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
 
 -- | Paper title (public)
-getPaperTitle :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
 -- | Paper authors (only visible to themselves or when phase is done)
-predicate paperAuthors :: World -> Map PaperId (Set User)
-getPaperAuthors :: w: World -> p: PaperId -> 
-  TIO {List {User | _v in (paperAuthors w)[[p]]} | elems _v == (paperAuthors w)[[p]]} 
-    <{_0 in (paperAuthors w)[[p]] || phase w == Done}> <{False}>    
+predicate paperAuthors :: Store -> Map PaperId (Set User)
+getPaperAuthors :: ds: Store -> p: PaperId -> 
+  TIO {List {User | _v in (paperAuthors ds)[[p]]} | elems _v == (paperAuthors ds)[[p]]} 
+    <{_0 in (paperAuthors ds)[[p]] || phase ds == Done}> <{False}>    
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: w: World -> p: PaperId -> TIO Status <{phase w == Done}> <{False}>
+getPaperStatus :: ds: Store -> p: PaperId -> TIO Status <{phase ds == Done}> <{False}>
 
 -- | Paper session (public)
-getPaperSession :: w: World -> p: PaperId -> TIO String <{True}> <{False}>
+getPaperSession :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
 redact {NoDecision}  
 
@@ -50,14 +50,14 @@ redact {NoDecision}
 -- | Show data for paper `p` to `client`
 -- | Repair: for getPaperAuthors, check that phase is done or client is author, otherwise return Nil
 --           for getPaperStatus, check that phase is Done, otherwise return NoDecision
-showSession :: World -> User -> PaperId -> TIO Unit <{False}> <{True}>
-showSession = \w . \client . \p .
+showSession :: Store -> User -> PaperId -> TIO Unit <{False}> <{True}>
+showSession = \ds . \client . \p .
   do 
-     t <- getPaperTitle w p
-     auts <- getPaperAuthors w p
-     st <- getPaperStatus w p
+     t <- getPaperTitle ds p
+     auts <- getPaperAuthors ds p
+     st <- getPaperStatus ds p
      if st == Accepted 
        then do
-              ses <- getPaperSession w p
+              ses <- getPaperSession ds p
               print client (unwords [t, show auts, ses])
        else print client (unwords [t, show auts, emptyString])     
