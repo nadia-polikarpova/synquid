@@ -1,23 +1,21 @@
 
 MICRO_METAPROGRAM = {
-  'columns':         ["num(key)", "micro(key)", "$1", "(#2-#1)", "$3", "sum_sec($4,$5)", "$6"],
-  'rows': ["01-EDAS.out:showSession",
-           "02-Multiple.out:showSession",
-           "03-SelfRef.out:showSession",
-           "04-Auction.out:showBids",
-           "05-StateUpdate.out:placeBid",
-           "06-Search.out:showMyAcceptedPapers",
-           "07-Sort.out:sortPapersByScore",
-           "08-Broadcast.out:notifyAuthors",
-           "09-HotCRP.out:sendPasswordReminder",
-           "10-AirBnB.out:viewInbox",
-           "11-Instagram.out:follow"
+  'columns':         ["num(key)", "micro(key)", "$1", "(#2-#1)", "sum_sec($3)", "sum_sec($4,$5)", "sum_sec($6)"],
+  'rows': ["01-EDAS.sq:showSession",
+           "02-Multiple.sq:showSession",
+           "03-SelfRef.sq:showSession",
+           "04-Search.sq:showMyAcceptedPapers",
+           "05-Sort.sq:sortPapersByScore",
+           "06-Broadcast.sq:notifyAuthors",
+           "07-HotCRP.sq:sendPasswordReminder",
+           "08-AirBnB.sq:viewInbox",
+           "09-Instagram.sq:showRecommendations"
            ],
-  'fmt': ["%-2s", " \\d%-20s", "%s", "%8s", "%8s", "%10s", "%s"],
+  'fmt': ["%-2s", " \\d%-20s", "%s", "%8s", "%8s", "%10s", "%10s"],
   'helpers': {
     'num': (lambda txt: int(txt.split('-')[0])),
     'micro': (lambda txt: "{micro%s}" % txt.split('-')[0]),
-    'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
+    'sum_sec': lambda *a: "%.1fs" % sum(secs(*a)),
   }
 }
 
@@ -72,24 +70,22 @@ HEALTH_METAPROGRAM.update({
              "Totals"]
 })
 
-MICRO_TABLES = ["icfp/microbenchmarks/out/01-EDAS.out.txt", 
-                "icfp/microbenchmarks/out/02-Multiple.out.txt", 
-                "icfp/microbenchmarks/out/03-SelfRef.out.txt", 
-                "icfp/microbenchmarks/out/04-Auction.out.txt", 
-                "icfp/microbenchmarks/out/05-StateUpdate.out.txt", 
-                "icfp/microbenchmarks/out/06-Search.out.txt",
-                "icfp/microbenchmarks/out/07-Sort.out.txt",
-                "icfp/microbenchmarks/out/08-Broadcast.out.txt",
-                "icfp/microbenchmarks/out/09-HotCRP.out.txt",
-                "icfp/microbenchmarks/out/10-AirBnB.out.txt",
-                "icfp/microbenchmarks/out/11-Instagram.out.txt"]
+MICRO_TABLES = ["taggedio/microbenchmarks/out/01-EDAS.sq.out",
+                "taggedio/microbenchmarks/out/02-Multiple.sq.out", 
+                "taggedio/microbenchmarks/out/03-SelfRef.sq.out", 
+                "taggedio/microbenchmarks/out/04-Search.sq.out",
+                "taggedio/microbenchmarks/out/05-Sort.sq.out",
+                "taggedio/microbenchmarks/out/06-Broadcast.sq.out",
+                "taggedio/microbenchmarks/out/07-HotCRP.sq.out",
+                "taggedio/microbenchmarks/out/08-AirBnB.sq.out",
+                "taggedio/microbenchmarks/out/09-Instagram.sq.out"]
 
-CONF_TABLES = ["icfp/conference/out/ConferenceRepair.out.txt", 
-               "icfp/conference/out/ConferenceVerification.out.txt"]
+CONF_TABLES = ["taggedio/conference/out/ConferenceRepair.sq.out", 
+               "taggedio/conference/out/ConferenceVerification.sq.out"]
 
-GRADR_TABLES = ["icfp/gradr/out/gradr.out.txt"]
+GRADR_TABLES = ["taggedio/gradr/out/gradr.sq.out"]
 
-HEALTH_TABLES = ["icfp/health/out/HealthWeb.out.txt"]
+HEALTH_TABLES = ["taggedio/health/out/HealthWeb.sq.out"]
 
 
 import re
@@ -103,8 +99,9 @@ def dictadd(*a):
 def secs(*b):
     """auxiliary for processing time entries"""
     for el in b:
-        assert el.endswith("s")
-        yield float(el[:-1])
+        idx = el.find('s')
+        assert idx > 0
+        yield float(el[:idx])
 
 def parse_table(fn):
     txt = open(fn).read()
@@ -173,19 +170,19 @@ if __name__ == '__main__':
     mp = Program(MICRO_METAPROGRAM)
     mp.fmt_output( mp.eval_meta(ctx) )
 
-    # Conference Management
-    print "% Conference Management"
-    ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
-    mp = Program(CONF_METAPROGRAM)
-    mp.fmt_output( mp.eval_meta(ctx) )
-    # Gradr
-    print "% Gradr"
-    ctx = [parse_table(fn) for fn in GRADR_TABLES]
-    mp = Program(GRADR_METAPROGRAM)
-    mp.fmt_output( mp.eval_meta(ctx) )
-    # HealthWeb
-    print "% HealthWeb"
-    ctx = [parse_table(fn) for fn in HEALTH_TABLES]
-    mp = Program(HEALTH_METAPROGRAM)
-    mp.fmt_output( mp.eval_meta(ctx) )
+    # # Conference Management
+    # print "% Conference Management"
+    # ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
+    # mp = Program(CONF_METAPROGRAM)
+    # mp.fmt_output( mp.eval_meta(ctx) )
+    # # Gradr
+    # print "% Gradr"
+    # ctx = [parse_table(fn) for fn in GRADR_TABLES]
+    # mp = Program(GRADR_METAPROGRAM)
+    # mp.fmt_output( mp.eval_meta(ctx) )
+    # # HealthWeb
+    # print "% HealthWeb"
+    # ctx = [parse_table(fn) for fn in HEALTH_TABLES]
+    # mp = Program(HEALTH_METAPROGRAM)
+    # mp.fmt_output( mp.eval_meta(ctx) )
 

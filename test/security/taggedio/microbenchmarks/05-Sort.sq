@@ -1,0 +1,39 @@
+{- Sorting by sensitive value + negative self-referential policies -}
+
+{- Datatypes -}
+
+data Store
+
+data PaperId
+
+{- Sensitive data and policies -}
+
+-- | Paper title (public)
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- | Paper conflicts (public)
+predicate paperConflicts :: Store -> Map PaperId (Set User)
+getPaperConflicts :: ds: Store -> pid: PaperId 
+                        -> TIO {List User | elems _v == (paperConflicts ds)[[pid]]} <{!(_0 in (paperConflicts ds)[[pid]])}> <{False}>
+
+-- | Paper score (only visible if not in conflict)
+getPaperScore :: ds: Store -> pid: PaperId -> TIO Int <{!(_0 in (paperConflicts ds)[[pid]])}> <{False}>
+
+-- | All papers in the conference
+getAllPaperIds :: ds: Store -> TIO [PaperId] <{True}> <{False}>
+
+{- Client code -}
+  
+-- | Sort papers by their score.
+-- | Repair: inside cmpScore, check that client is not conflicted with pid1/2
+sortPapersByScore :: Store -> User -> TIO Unit <{False}> <{True}>
+sortPapersByScore = \ds . \client .
+  let cmpScore = \pid1. \pid2.
+                  do 
+                     x1 <- getPaperScore ds pid1                     
+                     x2 <- getPaperScore ds pid2
+                     return (x1 <= x2) in
+  do pids <- getAllPaperIds ds
+     sortedPids <- sortByM cmpScore pids
+     titles <- mapM (getPaperTitle ds) sortedPids
+     print client (unlines titles)
