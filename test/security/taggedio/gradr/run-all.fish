@@ -1,0 +1,1 @@
+synquid lifty --print-stats --file=gradr.sq --libs=../Prelude.sq --libs=../Tagged.sq --libs=models.sq > out/gradr.sq.out 2>&1

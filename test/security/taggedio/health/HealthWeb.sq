@@ -11,14 +11,8 @@ getUsers :: w: World -> TIO [User] <{True}> <{False}>
 predicate sessionUser :: World -> User
 getSessionUser :: w: World -> TIO {User | _v == sessionUser w} <{True}> <{False}>
 
--- predicate isPatient :: World -> User -> Bool
--- getIsPatient :: w:World -> u:User -> TIO {Bool | _v == isPatient w u} <{True}> <{False}>
-
 predicate isDoctor :: World -> User -> Bool
 getIsDoctor :: w:World -> u:User -> TIO {Bool | _v == isDoctor w u} <{True}> <{False}>
-
--- predicate isPsychiatrist :: World -> User -> Bool
--- getIsPsychiatrist :: w:World -> u:User -> TIO {Bool | _v == isPsychiatrist w u} <{True}> <{False}>
 
 {- Treating table -}
 
@@ -27,8 +21,8 @@ getIsTreating :: w: World -> doc: User -> patient: User -> TIO {Bool | _v == isT
 
 {- Withholding table -}
 
-predicate shouldWithhold :: World -> User -> RecordId -> Bool
-getShouldWithhold :: w: World -> u: User -> r: RecordId -> TIO {Bool | _v == shouldWithhold w u r} <{True}> <{False}>
+predicate shouldWithhold :: World -> RecordId -> Bool
+getShouldWithhold :: w: World -> r: RecordId -> TIO {Bool | _v == shouldWithhold w r} <{True}> <{False}>
 
 {- Record table -}
 
@@ -38,71 +32,81 @@ getRecordAuthor :: w: World -> rid: RecordId -> TIO {User | _v == recordAuthor w
   
 predicate recordPatient :: World -> RecordId -> User
 
-inline recordPolicy w v rid = v == recordAuthor w rid || 
-  (!(shouldWithhold w v rid) && (v == recordPatient w rid || isDoctor w v || (isTreating w v (recordPatient w rid) && recordIsPsychiatric w rid)))
+inline recordPolicy w v rid = v == recordAuthor w rid || v == recordPatient w rid || 
+ (!shouldWithhold w rid && isDoctor w v && (isTreating w v (recordPatient w rid) || !(recordIsPsychiatric w rid)))   
 
 getRecordPatient :: w: World -> rid: RecordId -> TIO {User | _v == recordPatient w rid} <{recordPolicy w _0 rid}> <{False}>
+
+getRecordDoctor :: w: World -> rid: RecordId -> TIO {User | isTreating w _v (recordPatient w rid)} <{True}> <{False}> 
     
 predicate recordIsPsychiatric :: World -> RecordId -> Bool
   
 getRecordIsPsychiatric :: w: World -> rid: RecordId -> TIO {Bool | _v == recordIsPsychiatric w rid} <{recordPolicy w _0 rid}> <{False}>
 
--- getAllRecordIds :: World -> List RecordId
+getRecordText :: w: World -> rid: RecordId -> TIO String <{recordPolicy w _0 rid}> <{False}>
+setRecordText :: w: World -> rid: RecordId -> txt:String -> TIO Unit <{True}> <{recordPolicy w _0 rid}>
 
--- getAuthoredRecordIds :: w:World -> u:User -> List {RecordId | u == author (record w _v)}
+getAllRecordIds :: w: World -> TIO [RecordId] <{True}> <{False}>
 
--- setRecord :: w:World -> rid:RecordId -> Tagged Record <{
-  -- _1 == author (record _0 rid) ||
-  -- ((isPatient _0)[[_1]] && _1 == patient (record _0 rid) && !(shouldWithhold _1 (record _0 rid))) ||
-  -- ((isDoctor _0)[[_1]] && !(shouldWithhold _1 (record _0 rid))) ||
-  -- ((isPsychiatrist _0)[[_1]] && isTreating _1 (patient (record _0 rid)) && isPsychiatricRecord (record _0 rid) && !(shouldWithhold _1 (record _0 rid)))
--- }> -> {World | sessionUser _v == sessionUser w}
-
--- getPsychiatristPatients :: u:User -> Tagged (List User) <{(isPsychiatrist _0)[[_1]] && _1 == u}>
--- getDoctorPatients :: u:User -> Tagged (List User) <{(isDoctor _0)[[_1]] && _1 == u}>
-
+-- | Show the session user the text of record rid
 showRecordByIdView :: rid:RecordId -> TIO Unit <{False}> <{True}>
 showRecordByIdView = \rid .
   do
     w <- getCurrentWorld
     u <- getSessionUser w
-    author <- getRecordAuthor w rid
-    patient <- getRecordPatient w rid
-    isPsych <- getRecordIsPsychiatric w rid 
-    print u (unlines [show author, show patient, show isPsych])
+    record <- getRecordText w rid
+    print u record
 
--- showRecordsForPatientView :: w:World -> p:User -> World
--- showRecordsForPatientView = \w . \patientToSearchFor .
-	-- let sessionUser = getSessionUser w in
-  -- let recordIds = getAllRecordIds w in
-  -- let records = sequence (map (\rid . getRecord w rid) recordIds) in
-  -- let recordsForPatient = bind records (filterM (\record . (bind (getPatient record) (\x . return (x == patientToSearchFor))))) in
-  -- print w sessionUser (liftM show recordsForPatient)
+-- | Show the session user the text of all records of patientToSearchFor
+showRecordsForPatientView :: User -> TIO Unit <{False}> <{True}>
+showRecordsForPatientView = \patientToSearchFor .
+  let include = \w . \rid .
+      do patient <- getRecordPatient w rid
+         return (patient == patientToSearchFor) in
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    recordIds <- getAllRecordIds w
+    recordsForPatient <- filterM (\rid . include w rid) recordIds
+    records <- mapM (\rid . getRecordText w rid) recordsForPatient    
+    print u (unlines records)
 
--- -- no repair is needed here, because from getAuthoredRecordIds's type
--- -- you can tell that they are already ok
--- showAuthoredRecordsView :: w:World -> World
--- showAuthoredRecordsView = \w .
-	-- let sessionUser = getSessionUser w in
-	-- let recordIds = bind sessionUser (\user . return (getAuthoredRecordIds w user)) in
-	-- let records = bind recordIds (\rids . (mapM (\rid . getRecord w rid) rids)) in
-	-- print w sessionUser (liftM show records)
+-- | Show the session user the records they authored
+-- (no repair is needed here, because authored records are visible)
+showAuthoredRecordsView :: TIO Unit <{False}> <{True}>
+showAuthoredRecordsView = 
+  let include = \w . \u . \rid .
+      do a <- getRecordAuthor w rid
+         return (a == u) in
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    recordIds <- getAllRecordIds w
+    authoredRecords <- filterM (\rid . include w u rid) recordIds
+    records <- mapM (\rid . getRecordText w rid) authoredRecords    
+    print u (unlines records)
 
--- updateRecordForm :: w:World -> rid:RecordId -> record:Record -> World
--- updateRecordForm = \w . \rid . \record .
-  -- let w' = setRecord w rid (return record) in
-  -- showRecordByIdView w' rid
-  -- --let newRecord = getRecord w' rid in
-	-- --let u = getSessionUser w' in
-  -- --print w' u (liftM show newRecord)
+-- | Update record text with a pure function
+-- (no repair is needed since the session user never gets to see the record)
+updateRecordForm :: rid:RecordId -> upd:(String -> String) -> TIO Unit <{False}> <{True}>
+updateRecordForm = \rid . \upd .
+  do
+    w <- getCurrentWorld
+    txt <- getRecordText w rid
+    setRecordText w rid (upd txt)
 
--- concat :: List User -> List User -> List User
+-- | Get the list of patients for a doctor
+-- (we already know that u is treating the patient, so no need to check that)
+listOfPatientsView :: TIO Unit <{False}> <{True}>
+listOfPatientsView =
+  let include = \w . \u . \rid .
+      do doc <- getRecordDoctor w rid
+         return (doc == u) in
+  do
+    w <- getCurrentWorld
+    u <- getSessionUser w
+    recordIds <- getAllRecordIds w
+    treatingRecords <- filterM (\rid . include w u rid) recordIds
+    patients <- mapM (\rid . getRecordPatient w rid) treatingRecords    
+    print u (unlines (map show patients))
 
--- -- get the list of patients for a doctor or psychiatrist
--- listOfPatientsView :: w:World -> World
--- listOfPatientsView = \w .
-	-- let sessionUser = getSessionUser w in
-	-- let patients1 = bind sessionUser (\u . getPsychiatristPatients u) in
-	-- let patients2 = bind sessionUser (\u . getDoctorPatients u) in
-	-- let patients = bind patients1 (\p1 . bind patients2 (\p2 . return (concat p1 p2))) in
-	-- print w sessionUser (liftM show patients)

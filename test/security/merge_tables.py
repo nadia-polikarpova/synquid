@@ -20,7 +20,7 @@ MICRO_METAPROGRAM = {
 }
 
 CONF_METAPROGRAM = {
-  'columns':         ["braces(key)", "$1", "(#2'-#1)", "(#2-#1)", "$3'", "$3", "sum_sec($4,$5)", "$6"],
+  'columns':         ["braces(key)", "$1", "(#2'-#1)", "(#2-#1)", "sum_sec($3')", "sum_sec($3)", "sum_sec($4,$5)", "sum_sec($6)"],
   'rows': ["registerUser",
            "usersView",
            "submitForm",
@@ -32,30 +32,27 @@ CONF_METAPROGRAM = {
            "submitReviewViewPost",
            "assignReviewersView",
            "Totals"],
-  'fmt': ["%-30s", "%s", "%8s", "%8s", "%s", "%s", "%10s", "%s"],
+  'fmt': ["%-30s", "%s", "%8s", "%8s", "%10s", "%10s", "%10s", "%10s"],
   'helpers': {
     'nonneg': (lambda n: max(0, n)),
-    'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
+    'sum_sec': lambda *a: "%.1fs" % sum(secs(*a)),
     'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
   }
 }
 
 GRADR_METAPROGRAM = {
-  'columns':         ["braces(key)", "$1", "(#2-#1)", "$3", "sum_sec($4, $5)", "$6"],
+  'columns':         ["braces(key)", "$1", "(#2-#1)", "sum_sec($3)", "sum_sec($4, $5)", "sum_sec($6)"],
   'rows': ["homePage",
-           "getClassesStdByUser",
-           "getClassesInsByUser",
-           "getProfileClassInfo",
            "profileView",
            "unauthProfileView",
            "scoresForAssignmentView",
-           "scoresForStudentView",
-           "getTopScoreForAssignmentView",
+           "topScoreForAssignmentView",
+           "scoresForStudentView",           
            "Totals"],
-  'fmt': ["%-40s", "%s", "%8s", "%s", "%10s", "%s"],
+  'fmt': ["%-40s", "%s", "%8s", "%10s", "%10s", "%10s"],
   'helpers': {
     'nonneg': (lambda n: max(0, n)),
-    'sum_sec': lambda *a: "%.02fs" % sum(secs(*a)),
+    'sum_sec': lambda *a: "%.1fs" % sum(secs(*a)),
     'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
   }
 }
@@ -170,19 +167,19 @@ if __name__ == '__main__':
     mp = Program(MICRO_METAPROGRAM)
     mp.fmt_output( mp.eval_meta(ctx) )
 
-    # # Conference Management
-    # print "% Conference Management"
-    # ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
-    # mp = Program(CONF_METAPROGRAM)
-    # mp.fmt_output( mp.eval_meta(ctx) )
-    # # Gradr
-    # print "% Gradr"
-    # ctx = [parse_table(fn) for fn in GRADR_TABLES]
-    # mp = Program(GRADR_METAPROGRAM)
-    # mp.fmt_output( mp.eval_meta(ctx) )
-    # # HealthWeb
-    # print "% HealthWeb"
-    # ctx = [parse_table(fn) for fn in HEALTH_TABLES]
-    # mp = Program(HEALTH_METAPROGRAM)
-    # mp.fmt_output( mp.eval_meta(ctx) )
+    # Conference Management
+    print "% Conference Management"
+    ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
+    mp = Program(CONF_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+    # Gradr
+    print "% Gradr"
+    ctx = [parse_table(fn) for fn in GRADR_TABLES]
+    mp = Program(GRADR_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+    # HealthWeb
+    print "% HealthWeb"
+    ctx = [parse_table(fn) for fn in HEALTH_TABLES]
+    mp = Program(HEALTH_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
 
