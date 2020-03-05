@@ -14,10 +14,10 @@ data Phase where
   
 guard {Submission, Review, Rebuttal, Done}
 
-data Status where
-  Accepted :: Status
-  Rejected :: Status
-  NoDecision :: Status
+data Decision where
+  Accepted :: Decision
+  Rejected :: Decision
+  NoDecision :: Decision
   
 guard {Accepted, Rejected, NoDecision}
 
@@ -37,7 +37,7 @@ getPaperAuthors :: ds: Store -> p: PaperId ->
     <{_0 in (paperAuthors ds)[[p]] || phase ds == Done}> <{False}>
 
 -- | Paper status (only visible when phase is done)
-getPaperStatus :: ds: Store -> p: PaperId -> TIO Status <{_0 in (paperAuthors ds)[[p]] && phase ds == Done}> <{False}>
+getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{_0 in (paperAuthors ds)[[p]] && phase ds == Done}> <{False}>
 
 -- | All papers in the conference
 getAllPaperIds :: ds: Store -> TIO [PaperId] <{True}> <{False}>
@@ -51,6 +51,6 @@ redact {NoDecision}
 notifyAuthors :: ds: Store -> p: PaperId -> TIO Unit <{False}> <{True}>
 notifyAuthors = \ds . \p .
   do
-    status <- getPaperStatus ds p
+    status <- getPaperDecision ds p
     authors <- getPaperAuthors ds p
     printAll authors (show status)
