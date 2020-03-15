@@ -3,14 +3,13 @@
 Synquid synthesizes programs from refinement types.
 
 For example, given the following type as the specification:
-```
-#!haskell
+```haskell
 
 replicate :: n:Nat -> x:a -> {List a | len _v = n}
 ```
+
 and an appropriate set of components, Synquid will automatically generate a program:
-```
-#!haskell
+```haskell
 
 replicate = \n . \x .
   if n <= 0
