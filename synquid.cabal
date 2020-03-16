@@ -20,8 +20,7 @@ flag synquid
 executable synquid
   main-is:            Synquid.hs
   
-  other-modules:      Synquid.Codegen
-                    , Synquid.Error
+  other-modules:      Synquid.Error
                     , Synquid.HtmlOutput
                     , Synquid.Logic
                     , Synquid.Parser
@@ -31,7 +30,6 @@ executable synquid
                     , Synquid.SolverMonad
                     , Synquid.HornSolver
                     , Synquid.TypeConstraintSolver
-                    , Synquid.Stats
                     , Synquid.Explorer
                     , Synquid.Synthesizer
                     , Synquid.TypeChecker

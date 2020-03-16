@@ -15,8 +15,6 @@ import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.Synthesizer
 import Synquid.HtmlOutput
-import Synquid.Codegen
-import Synquid.Stats
 
 import Control.Monad
 import Control.Lens ((^.))
@@ -77,11 +75,7 @@ main = do
                     showSpec = print_spec,
                     showStats = print_stats
                   }
-                  let codegenParams = defaultCodegenParams {
-                    filename = out_file,
-                    module_ = out_module
-                  }
-                  runOnFile synquidParams explorerParams solverParams codegenParams file libs
+                  runOnFile synquidParams explorerParams solverParams file libs
 
 {- Command line arguments -}
 
@@ -215,7 +209,6 @@ data SynquidParams = SynquidParams {
   goalFilter :: Maybe [String],
   outputFormat :: OutputFormat,                -- ^ Output format
   resolveOnly :: Bool,                         -- ^ Stop after resolution step
-  repairPolicies :: Bool,
   verifyOnly :: Bool,
   showSpec :: Bool,                            -- ^ Print specification for every synthesis goal
   showStats :: Bool                            -- ^ Print specification and solution size
@@ -225,50 +218,15 @@ defaultSynquidParams = SynquidParams {
   goalFilter = Nothing,
   outputFormat = Plain,
   resolveOnly = False,
-  repairPolicies = False,
   verifyOnly = False,
   showSpec = True,
   showStats = False
 }
 
--- | Parameters for code extraction and Haskell output
-data CodegenParams = CodegenParams {
-  filename :: Maybe String,               -- ^ Output filename (of Haskell code)
-  module_ :: Maybe String,                -- ^ Generated module name
-  imports :: Map.Map String [Declaration] -- ^ Modules to depend on
-}
-
-defaultCodegenParams = CodegenParams {
-  filename = Nothing,
-  module_ = Nothing,
-  imports = Map.empty
-}
-
-fillinCodegenParams fn libs p = (fillinCodegenNames fn p) { imports = Map.mapKeys idfy libs }
-
--- | figures out output filename from module name or vise versa
-fillinCodegenNames f p@(CodegenParams (Just "") _ _) = fillinCodegenNames f $ p { filename = Just (f -<.> ".hs") }
-fillinCodegenNames _ p@(CodegenParams (Just "-") Nothing _) =                 p { module_ = Just "Synthed" }
-fillinCodegenNames _ p@(CodegenParams (Just filename) Nothing _) =            p { module_ = Just $ idfy filename }
-fillinCodegenNames _ p@(CodegenParams Nothing (Just module_) _) =             p { filename = Just (module_ <.> ".hs") }
-fillinCodegenNames _ p = p
-
--- | E.g., "out/User-Module.hs" ---> "UserModule"
-idfy = filter isAlphaNum . dropExtension . takeFileName
-
-codegen params results = case params of
-  CodegenParams {filename = Just filePath, module_ = Just moduleName, imports = imports} ->
-      extractModule filePath moduleName results imports
-  _ -> return ()
-
-collectLibDecls libs declsByFile =
-  Map.filterWithKey (\k _ -> k `elem` libs) $ Map.fromList declsByFile
-
-
 -- | Parse and resolve file, then synthesize the specified goals
-runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams -> CodegenParams
+runOnFile :: SynquidParams -> ExplorerParams -> HornSolverParams
                            -> String -> [String] -> IO ()
-runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
+runOnFile synquidParams explorerParams solverParams file libs = do
   declsByFile <- parseFromFiles (libs ++ [file])
   let decls = concat $ map snd declsByFile
   case resolveDecls decls of
@@ -276,9 +234,6 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
     Right (goals, cquals, tquals) -> when (not $ resolveOnly synquidParams) $ do
       results <- mapM (synthesizeGoal cquals tquals) (requested goals)
       when (not (null results) && showStats synquidParams) $ printStats results declsByFile
-      -- Generate output if requested
-      let libsWithDecls = collectLibDecls libs declsByFile
-      codegen (fillinCodegenParams file libsWithDecls codegenParams) (map fst results)
   where
     parseFromFiles [] = return []
     parseFromFiles (file:rest) = do
@@ -298,41 +253,20 @@ runOnFile synquidParams explorerParams solverParams codegenParams file libs = do
       -- print $ vMapDoc pretty pretty (allSymbols $ gEnvironment goal)
       -- print $ pretty (gSpec goal)
       -- print $ vMapDoc pretty pretty (_measures $ gEnvironment goal)
-      (mProg, stats) <- synthesize explorerParams solverParams goal cquals tquals
+      mProg <- synthesize explorerParams solverParams goal cquals tquals
       case mProg of
         Left typeErr -> pdoc (pretty typeErr) >> pdoc empty >> exitFailure
         Right prog -> do
           when (gSynthesize goal) $ pdoc (prettySolution goal prog) >> pdoc empty          
-          return ((goal, prog), stats)
+          return (goal, prog)
     printStats results declsByFile = do
-      let env = gEnvironment (fst $ fst $ head results)
+      let env = gEnvironment (fst $ head results)
       let measureCount = Map.size $ _measures $ env
-      let namesOfConstants decls = mapMaybe (\decl ->
-           case decl of
-             Pos { node = FuncDecl name _ } -> Just name
-             _ -> Nothing
-           ) decls
-      let totalSizeOf = sum . map (typeNodeCount . toMonotype .unresolvedType env)
-      let policySize = Map.fromList $ map (\(file, decls) -> (file, totalSizeOf $ namesOfConstants decls)) declsByFile
-      let getStatsFor ((goal, prog), stats) =
-             StatsRow
-             (gName goal)
-             (typeNodeCount $ toMonotype $ unresolvedSpec goal)
-             (programNodeCount $ gImpl goal)   -- size of implementation template (before synthesis/repair)
-             (programNodeCount prog)           -- size of generated solution
-             (stats ! TypeCheck) (stats ! Repair) (stats ! Recheck) (sum $ Map.elems stats)  -- time measurements
-      let perResult = map getStatsFor results
-      let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst . fst) results
-      let solutionSize = sum $ map (programNodeCount . snd . fst) results
+      let specSize = sum $ map (typeNodeCount . toMonotype . unresolvedSpec . fst) results
+      let solutionSize = sum $ map (programNodeCount . snd) results
       pdoc $ vsep $ [
                 parens (text "Goals:" <+> pretty (length results)),
-                parens (text "Measures:" <+> pretty measureCount)] ++
-              if repairPolicies synquidParams
-                then [
-                  parens (text "Policy size:" <+> (text $ show policySize)),
-                  statsTable perResult]
-                else [
-                  parens (text "Spec size:" <+> pretty specSize),
-                  parens (text "Solution size:" <+> pretty solutionSize)
-                ] ++
-              [empty]
+                parens (text "Measures:" <+> pretty measureCount),
+                parens (text "Spec size:" <+> pretty specSize),
+                parens (text "Solution size:" <+> pretty solutionSize),
+                empty]

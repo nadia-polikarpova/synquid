@@ -1,5 +1,5 @@
 -- | Top-level synthesizer interface
-module Synquid.Synthesizer (synthesize, SynthPhase(..)) where
+module Synquid.Synthesizer (synthesize) where
 
 import Synquid.Util
 import Synquid.Logic
@@ -13,7 +13,6 @@ import Synquid.Resolver
 import Synquid.TypeConstraintSolver
 import Synquid.Explorer
 import Synquid.TypeChecker
-import Synquid.Stats
 
 import Data.Maybe
 import Data.Either
@@ -39,11 +38,11 @@ type HornSolver = FixPointSolver Z3State
 -- in the typing environment @env@ and follows template @templ@,
 -- using conditional qualifiers @cquals@ and type qualifiers @tquals@,
 -- with parameters for template generation, constraint generation, and constraint solving @templGenParam@ @consGenParams@ @solverParams@ respectively
-synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram, TimeStats)
+synthesize :: ExplorerParams -> HornSolverParams -> Goal -> [Formula] -> [Formula] -> IO (Either ErrorMessage RProgram)
 synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFixPointSolver reconstruction solverParams
   where
     -- | Stream of programs that satisfy the specification or type error
-    reconstruction :: HornSolver (Either ErrorMessage RProgram, TimeStats)
+    reconstruction :: HornSolver (Either ErrorMessage RProgram)
     reconstruction = let
         typingParams = TypingParams {
                         _condQualsGen = condQuals,
@@ -53,9 +52,7 @@ synthesize explorerParams solverParams goal cquals tquals = evalZ3State $ evalFi
                         _tcSolverSplitMeasures = _splitMeasures explorerParams,
                         _tcSolverLogLevel = _explorerLogLevel explorerParams
                       }
-      in do cp0 <- lift $ lift startTiming  -- TODO time stats for this one as well?
-            x <- reconstruct explorerParams typingParams goal
-            return (x, snd cp0)
+      in reconstruct explorerParams typingParams goal
 
     -- | Qualifier generator for conditionals
     condQuals :: Environment -> [Formula] -> QSpace
