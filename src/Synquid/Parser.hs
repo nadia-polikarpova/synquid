@@ -300,8 +300,8 @@ exprTable mkUnary mkBinary withGhost = [
   [binary Implies AssocRight, binary Iff AssocRight]]
   where
     unary op = Prefix (reservedOp (unOpTokens Map.! op) >> return (mkUnary op))
-    binary op assoc = Infix (reservedOp (binOpTokens Map.! op) >> return (mkBinary op)) assoc
-    binaryWord op assoc = Infix (reserved (binOpTokens Map.! op) >> return (mkBinary op)) assoc
+    binary op = Infix (reservedOp (binOpTokens Map.! op) >> return (mkBinary op))
+    binaryWord op = Infix (reserved (binOpTokens Map.! op) >> return (mkBinary op))
 
 {-
  - | @Formula@ parsing is broken up into two functions: @parseFormula@ and @parseTerm@. @parseFormula's@ responsible

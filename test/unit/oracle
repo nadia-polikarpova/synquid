@@ -1,5 +1,3 @@
-
-
 all :: <p :: a -> Bool> . arg1:(x:a -> {Bool|_v == p x}) -> arg0:List {a|p _v} -> {Bool|_v}
 all = \f . \xs . 
     match xs with
@@ -17,8 +15,6 @@ notAllPos :: {Bool|_v}
   when checking x > 0 ::
   {Bool|_v == True} in
   \x . x > 0
-
-
 
 client :: xs:List Nat -> List {Int|_v == 0}
 client = \xs . filterLE 0 xs
@@ -38,11 +34,8 @@ clientBad :: xs:List Int -> ys:List Nat -> List {Int|_v == 0}
     match arg0 with
       Cons x xs -> 1 + (len xs)
 
-
 ./Instantiation.sq:12: Resolution Error:
   Constructor Zero must return type Natural n, got Natural Z
-
-
 
 copies :: x:a -> xs:List a -> {Int|_v == numeq x xs}
 copies = \x . \xs . 
@@ -65,7 +58,6 @@ copies' :: x:a -> xs:List a -> {Int|_v == numeq x xs}
             then 1 - (copies' x ys)
             else
               (?? :: {Int|_v == numeq x xs})
-
 
 map1 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
 map1 = \f . \xs . 
@@ -101,4 +93,11 @@ map4 = \f . \xs .
 map5 :: f:(arg0:a -> b) -> xs:List a -> {List b|len _v == len xs}
 ./HOChecking.sq:40: Error:
   Not in scope: f
+
+incr :: n:Int -> f:(m:Int -> {Int|_v == n}) -> {Int|_v == n + 1}
+incr = \n . \f . 1 + (f 0)
+
+f :: {Int|_v == 2}
+f = incr (incr zero (\x7 .
+              zero)) (\x . 1)
 

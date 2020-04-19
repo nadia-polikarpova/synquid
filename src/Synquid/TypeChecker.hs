@@ -37,8 +37,6 @@ reconstruct eParams tParams goal = do
       p <- flip insertAuxSolutions pMain <$> use solvedAuxGoals            -- Insert solutions for auxiliary goals stored in @solvedAuxGoals@
       runInSolver $ finalizeProgram p                                      -- Substitute all type/predicates variables and unknowns
 
-
-
 reconstructTopLevel :: MonadHorn s => Goal -> Explorer s RProgram
 reconstructTopLevel (Goal funName env (ForallT a sch) impl depth pos s) = reconstructTopLevel (Goal funName (addTypeVar a env) sch impl depth pos s)
 reconstructTopLevel (Goal funName env (ForallP sig sch) impl depth pos s) = reconstructTopLevel (Goal funName (addBoundPredicate sig env) sch impl depth pos s)
@@ -71,7 +69,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
     -- | 'recursiveTypeTuple' @t fml@: type of the recursive call to a function of type @t@ when a lexicographic tuple of all recursible arguments decreases;
     -- @fml@ denotes the disjunction @x1' < x1 || ... || xk' < xk@ of strict termination conditions on all previously seen recursible arguments to be added to the type of the last recursible argument;
     -- the function returns a tuple of the weakend type @t@ and a flag that indicates if the last recursible argument has already been encountered and modified
-    recursiveTypeTuple (FunctionT x tArg tRes) fml = do
+    recursiveTypeTuple (FunctionT x tArg tRes) fml =
       case terminationRefinement x tArg of
         Nothing -> do
           (tRes', seenLast) <- recursiveTypeTuple tRes fml
@@ -89,7 +87,7 @@ reconstructTopLevel (Goal funName env (Monotype typ@(FunctionT _ _ _)) impl dept
     recursiveTypeTuple t _ = return (t, False)
 
     -- | 'recursiveTypeFirst' @t fml@: type of the recursive call to a function of type @t@ when only the first recursible argument decreases
-    recursiveTypeFirst (FunctionT x tArg tRes) = do
+    recursiveTypeFirst (FunctionT x tArg tRes) =
       case terminationRefinement x tArg of
         Nothing -> FunctionT x tArg <$> recursiveTypeFirst tRes
         Just (argLt, _) -> do
@@ -123,14 +121,14 @@ reconstructI' env t PErr = generateError env
 reconstructI' env t PHole = generateError env `mplus` generateI env t
 reconstructI' env t (PLet x iDef@(Program (PFun _ _) _) iBody) = do -- lambda-let: remember and type-check on use
   lambdaLets %= Map.insert x (env, iDef)
-  let ctx = \p -> Program (PLet x uHole p) t
+  let ctx p = Program (PLet x uHole p) t
   pBody <- inContext ctx $ reconstructI env t iBody
   return $ ctx pBody
-reconstructI' env t@(LetT x tDef tBody) impl = 
+reconstructI' env t@(LetT x tDef tBody) impl =
   reconstructI' (addVariable x tDef env) tBody impl
 reconstructI' env t@(FunctionT _ tArg tRes) impl = case impl of
   PFun y impl -> do
-    let ctx = \p -> Program (PFun y p) t
+    let ctx p = Program (PFun y p) t
     pBody <- inContext ctx $ reconstructI (unfoldAllVariables $ addVariable y tArg $ env) tRes impl
     return $ ctx pBody
   PSymbol f -> do
@@ -271,7 +269,7 @@ reconstructE' env typ (PApp iFun iArg) = do
         return iArg
       _ -> enqueueGoal env tArg iArg d -- HO argument is an abstraction: enqueue a fresh goal
 
-reconstructE' env typ impl = do
+reconstructE' env typ impl =
   throwErrorWithDescription $ text "Expected application term of type" </> squotes (pretty typ) </>
                                           text "and got" </> squotes (pretty $ untyped impl)
 

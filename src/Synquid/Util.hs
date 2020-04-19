@@ -71,7 +71,7 @@ removeDomain keys m = snd $ partitionDomain keys m
 
 -- | 'partitionDomain' @keys m@ : map @m@ partitioned into two maps, restricted to @keys@ and the rest
 partitionDomain :: Ord k => Set k -> Map k a -> (Map k a, Map k a)
-partitionDomain keys m = Map.partitionWithKey (\k _ -> k `Set.member` keys) m
+partitionDomain keys = Map.partitionWithKey (\k _ -> k `Set.member` keys)
 
 -- | 'constMap' @keys val@ : map that maps each of @keys@ to @val@
 constMap :: Ord k => Set k -> a -> Map k a

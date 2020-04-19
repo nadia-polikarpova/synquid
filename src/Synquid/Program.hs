@@ -233,8 +233,7 @@ data Environment = Environment {
   _globalPredicates :: Map Id [Sort],      -- ^ Signatures (resSort:argSorts) of module-level logic functions (measures, predicates)
   _measures :: Map Id MeasureDef,          -- ^ Measure definitions
   _typeSynonyms :: Map Id ([Id], RType),   -- ^ Type synonym definitions
-  _unresolvedConstants :: Map Id RSchema,  -- ^ Unresolved types of components (used for reporting specifications with macros)
-  _measureConstArgs :: ArgMap              -- ^ Map from measure names to possible valuations of each constant argument in the measure
+  _unresolvedConstants :: Map Id RSchema   -- ^ Unresolved types of components (used for reporting specifications with macros)
 } deriving (Show)
 
 makeLenses ''Environment
@@ -260,8 +259,7 @@ emptyEnv = Environment {
   _datatypes = Map.empty,
   _measures = Map.empty,
   _typeSynonyms = Map.empty,
-  _unresolvedConstants = Map.empty,
-  _measureConstArgs = Map.empty
+  _unresolvedConstants = Map.empty
 }
 
 -- | 'symbolsOfArity' @n env@: all symbols of arity @n@ in @env@
@@ -587,32 +585,6 @@ genSkeleton name preds inSorts outSort post = Monotype $ uncurry 0 inSorts
     outType = (baseTypeOf . fromSort) outSort
     pforms = fmap predform preds
     predform x = Pred AnyS x []
-
--- Return a map from the IDs of multi-argument measures to a list of sets of possible 
---   instantiations of those constant arguments by scraping the schema annotations
-getAllCArgsFromSchema :: Environment -> RSchema -> ArgMap
-getAllCArgsFromSchema env sch = Map.filter (not . null) $
-  let allRefs = allRefinementsOf sch 
-      measures = Map.keys (_measures env)
-  in Map.unionsWith combineArgLists $ map (getAllCArgs measures) allRefs
-
-combineArgLists = zipWith Set.union
-
--- Given a set of all measure IDs, a map from measure IDs to a list of sets of possible 
---   arguments for each of its constant argument slots
-getAllCArgs :: [Id] -> Formula -> ArgMap
-getAllCArgs ms (Binary op l r) = Map.unionWith combineArgLists (getAllCArgs ms l) (getAllCArgs ms r)
-getAllCArgs ms (Unary _ f)     = getAllCArgs ms f
-getAllCArgs ms (Ite g t f)     = Map.unionsWith combineArgLists [(getAllCArgs ms g), (getAllCArgs ms t), (getAllCArgs ms f)]
-getAllCArgs ms (All _ f)       = getAllCArgs ms f -- Ignore quantifier
-getAllCArgs ms (Pred _ x fs)   = getCArgs ms x fs
-getAllCArgs _ _                = Map.empty
-
-getCArgs :: [Id] -> String -> [Formula] -> ArgMap
-getCArgs ms name fs = Map.singleton name $ map Set.singleton $
-  if elem name ms
-    then init fs
-    else []
 
 -- Default set implementation -- Needed to typecheck measures involving sets
 defaultSetType :: BareDeclaration

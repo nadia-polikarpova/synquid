@@ -110,7 +110,7 @@ convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
       recognizerName <- mkStringSymbol ("is" ++ cName)
       let args = allArgs $ toMonotype $ symbols Map.! cName
       z3ArgsMb <- mapM convertField args
-      if any isNothing (map (view _2) z3ArgsMb)
+      if any (isNothing . view _2) z3ArgsMb
         then return Nothing -- It's a recursive type: ignore
         else Just <$> mkConstructor z3CName recognizerName z3ArgsMb
 
@@ -317,7 +317,7 @@ toAST expr = case expr of
           -- return $ traceShow (text "DECLARE" <+> text name <+> pretty argTypes <+> pretty resT) decl
           return decl
 
-    constructor resT cName argTypes = do
+    constructor resT cName argTypes =
       case resT of
         DataS dtName [] ->
           ifM (uses storedDatatypes (Set.member dtName))

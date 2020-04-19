@@ -100,7 +100,6 @@ runTCSolver params st go = runExceptT $ runReaderT (runStateT go st) params
 -- | Initial typing state in the initial environment @env@
 initTypingState :: MonadHorn s => Environment -> RSchema -> s TypingState
 initTypingState env schema = do
-  let argmap = getAllCArgsFromSchema env schema
   initCand <- initHornSolver env
   return TypingState {
     _typingConstraints = [],
@@ -108,7 +107,7 @@ initTypingState env schema = do
     _predAssignment = Map.empty,
     _qualifierMap = Map.empty,
     _candidates = [initCand],
-    _initEnv = env { _measureConstArgs = argmap },
+    _initEnv = env,
     _idCount = Map.empty,
     _isFinal = False,
     _simpleConstraints = [],
@@ -445,7 +444,7 @@ processConstraint (WellFormed env t@(ScalarT baseT fml))
         -- Only add qualifiers if it's a new variable; multiple well-formedness constraints could have been added for constructors
         let env' = typeSubstituteEnv tass env
         let env'' = addVariable valueVarName t env'
-        when (not $ Map.member u qmap) $ addQuals u (tq env'' (Var (toSort baseT) valueVarName) (allScalars env'))
+        unless (Map.member u qmap) $ addQuals u (tq env'' (Var (toSort baseT) valueVarName) (allScalars env'))
       _ -> return ()
 processConstraint (WellFormedCond env (Unknown _ u))
   = do
@@ -480,7 +479,7 @@ generateHornClauses c = error $ show $ text "generateHornClauses: not a simple s
 
 -- | 'allScalars' @env@ : logic terms for all scalar symbols in @env@
 allScalars :: Environment -> [Formula]
-allScalars env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+allScalars env = mapMaybe toFormula $ Map.toList $ symbolsOfArity 0 env
   where
     toFormula (_, ForallT _ _) = Nothing
     toFormula (x, _) | x `Set.member` (env ^. letBound) = Nothing
@@ -494,11 +493,11 @@ allScalars env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
 
 -- | 'allPotentialScrutinees' @env@ : logic terms for all scalar symbols in @env@
 allPotentialScrutinees :: Environment -> [Formula]
-allPotentialScrutinees env = catMaybes $ map toFormula $ Map.toList $ symbolsOfArity 0 env
+allPotentialScrutinees env = mapMaybe toFormula $ Map.toList $ symbolsOfArity 0 env
   where
     toFormula (x, Monotype t) = case t of
       ScalarT b@(DatatypeT _ _ _) _ ->
-        if Set.member x (env ^. unfoldedVars) && not (Program (PSymbol x) t `elem` (env ^. usedScrutinees))
+        if Set.member x (env ^. unfoldedVars) && (Program (PSymbol x) t `notElem` (env ^. usedScrutinees))
           then Just $ Var (toSort b) x
           else Nothing
       _ -> Nothing
@@ -535,7 +534,7 @@ embedding env vars includeQuantified = do
                   AnyT -> Set.singleton ffalse
                   _ -> error $ unwords ["embedding: encountered non-scalar variable", x, "in 0-arity bucket"]
                 Just sch -> addBindings env tass pass qmap fmls rest -- TODO: why did this work before?
-    allSymbols env = symbolsOfArity 0 env
+    allSymbols = symbolsOfArity 0
 
 bottomValuation :: QMap -> Formula -> Formula
 bottomValuation qmap fml = applySolution bottomSolution fml
@@ -591,7 +590,7 @@ fresh env (ScalarT baseT _) = do
       pArgs' <- mapM (\sig -> freshPred env . map (noncaptureSortSubst tParams (map (toSort . baseTypeOf) tArgs')) . predSigArgSorts $ sig) pParams
       return $ DatatypeT name tArgs' pArgs'
     freshBase baseT = return baseT
-fresh env (FunctionT x tArg tFun) = do
+fresh env (FunctionT x tArg tFun) =
   liftM2 (FunctionT x) (fresh env tArg) (fresh env tFun)
 fresh env t = let (env', t') = embedContext env t in fresh env' t'
 
@@ -641,7 +640,7 @@ setUnknownRecheck name valuation duals = do
 instantiateConsAxioms :: Environment -> Maybe Formula -> Formula -> Set Formula
 instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal in
   case fml of
-    Cons resS@(DataS dtName _) ctor args -> Set.unions $ Set.unions (map (measureAxiom resS ctor args) (Map.assocs $ allMeasuresOf dtName env)) :
+    Cons resS@(DataS dtName _) ctor args -> Set.unions $ Set.fromList (map (measureAxiom resS ctor args) (Map.assocs $ allMeasuresOf dtName env)) :
                                                          map (instantiateConsAxioms env Nothing) args
     Unary op e -> inst e
     Binary op e1 e2 -> inst e1 `Set.union` inst e2
@@ -660,23 +659,7 @@ instantiateConsAxioms env mVal fml = let inst = instantiateConsAxioms env mVal i
         subst = Map.fromList $ (valueVarName, newValue) : zip vars args 
         -- Body of measure with constructor application (newValue) substituted for _v:
         vSubstBody = substitute subst body'
-      in if null constantArgs  
-        then Set.singleton vSubstBody -- All arguments are accounted for
-        else let -- Need to concretize constant arguments
-            -- For each constant argument in the measure definition,
-            --   assemble a list of tuples mapping the formal name to all possible variables in scope of the relevant sort
-            varsOfSort = Map.assocs $ symbolsOfArity 0 env 
-            constArgList = Map.lookup mname (_measureConstArgs env)
-          in 
-            case constArgList of 
-              Nothing -> Set.empty
-              Just constArgs -> 
-                let 
-                  possibleArgs = map Set.toList constArgs
-                  possibleSubsts = zipWith (\(x, s) vars -> zip (repeat x) vars) constantArgs possibleArgs  
-                  -- Nondeterministically choose one concrete argument from all lists of possible arguments
-                  allArgLists = sequence possibleSubsts
-                in Set.fromList $ map ((`substitute` vSubstBody) . Map.fromList) allArgLists
+      in foldr (\(x,s) fml -> All (Var s x) fml) vSubstBody constantArgs -- quantify over all the extra arguments of the measure
 
 -- | 'matchConsType' @formal@ @actual@ : unify constructor return type @formal@ with @actual@
 matchConsType formal@(ScalarT (DatatypeT d vars pVars) _) actual@(ScalarT (DatatypeT d' args pArgs) _) | d == d'
@@ -721,4 +704,4 @@ instance Ord TypingState where
 
 writeLog level msg = do
   maxLevel <- asks _tcSolverLogLevel
-  if level <= maxLevel then traceShow (plain msg) $ return () else return ()
+  when (level <= maxLevel) $ traceShow (plain msg) (return ())

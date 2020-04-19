@@ -238,7 +238,7 @@ instance Pretty SType where
 
 -- | Pretty-printed refinement type
 prettyType :: RType -> Doc
-prettyType t = prettyTypeAt 0 t
+prettyType = prettyTypeAt 0
 
 -- | Binding power of a type
 typePower :: RType -> Int

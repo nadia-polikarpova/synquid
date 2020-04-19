@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 
 -- | Solver for second-order constraints
 module Synquid.HornSolver (
@@ -372,7 +372,7 @@ weaken (Binary Implies lhs _) sol = return Nothing
 -- | 'pruneSolutions' @sols@: eliminate from @sols@ all solutions that are semantically stronger on all unknowns than another solution in @sols@ 
 pruneSolutions :: MonadSMT s => [Formula] -> [Solution] -> FixPointSolver s [Solution]
 pruneSolutions unknowns solutions = 
-  let isSubsumed sol sols = anyM (\s -> allM (\u -> isValidFml $ (conjunction $ valuation sol u) |=>| (conjunction $ valuation s u)) unknowns) sols
+  let isSubsumed sol = anyM (\s -> allM (\u -> isValidFml $ (conjunction $ valuation sol u) |=>| (conjunction $ valuation s u)) unknowns)
   in prune isSubsumed solutions
   
 -- | 'pruneValuations' @vals@: eliminate from @vals@ all valuations that are semantically stronger than another pValuation in @vals@   
@@ -385,12 +385,12 @@ pruneValuations assumption vals =
         res1 <- isValidFml $ (assumption |&| l) |=>| r
         res2 <- isValidFml $ (assumption |&| r) |=>| l
         return $ (res1 && (not res2 || (Set.size ls > Set.size rs)))
-      isSubsumed val vals = anyM (\v -> strictlyImplies val v) vals
+      isSubsumed val = anyM (\v -> strictlyImplies val v)
   in prune isSubsumed vals
   
 -- | 'pruneQualifiers' @quals@: eliminate logical duplicates from @quals@
 pruneQSpace :: MonadSMT s => QSpace -> FixPointSolver s QSpace 
-pruneQSpace qSpace = let isSubsumed qual quals = anyM (\q -> isValidFml $ qual |<=>| q) quals
+pruneQSpace qSpace = let isSubsumed qual = anyM (\q -> isValidFml $ qual |<=>| q)
   in do
     quals' <- filterM (\q -> ifM (isValidFml q) (return False) (not <$> isValidFml (fnot q))) (qSpace ^. qualifiers) 
     quals <- prune isSubsumed quals'
@@ -414,5 +414,5 @@ isSatFml = lift . isSat
 
 writeLog level msg = do
   maxLevel <- asks solverLogLevel
-  if level <= maxLevel then traceShow (plain msg) $ return () else return ()
+  when (level <= maxLevel) $ traceShow (plain msg) (return ())
 

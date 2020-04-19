@@ -10,7 +10,7 @@ import Text.Html
 
 -- | Render a document into an html object.
 docHtml :: PP.SimpleDoc -> Html
-docHtml doc = splitLines [] 0 (PP.SSGR []) doc
+docHtml = splitLines [] 0 (PP.SSGR [])
 
 -- | Render a document into a string that contains the html code.
 showDocHtml :: PP.SimpleDoc -> String

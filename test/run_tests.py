@@ -143,6 +143,19 @@ DEMO_BENCHMARKS = [
     ('Sort-Fold',           ['-m 1', '-a 2', '-e']),
 ]
 
+UNIT_TESTS = [
+    ('Constructors',         []),
+    ('Pairs',                []),
+    ('HigherOrder',          []),
+    ('TypeAbduction',        []),
+    ('CheckMeasures',        []),
+    ('Instantiation',        []),
+    ('MultiArgMeasures',     []),
+    ('HOChecking',           []),
+    ('Incr',                 []),
+]
+
+
 class SynthesisResult:
     def __init__(self, name, time):
         self.name = name
@@ -267,10 +280,13 @@ if __name__ == '__main__':
         if os.path.isfile(LOGFILE_NAME):
             os.remove(LOGFILE_NAME)
 
-        for name in os.listdir('.'):
-            filename, file_extension = os.path.splitext(name)
-            if file_extension == '.sq':
-                run_test(filename)
+        # for name in os.listdir('.'):
+            # filename, file_extension = os.path.splitext(name)
+            # if file_extension == '.sq':
+                # run_test(filename)
+        for (name, args) in UNIT_TESTS:
+            run_benchmark(name, args)                
+                
         fail = check_diff()
         os.chdir('..')
 

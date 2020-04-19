@@ -418,54 +418,6 @@ checkE env typ p@(Program pTerm pTyp) = do
   typingState . errorContext .= (pos, text "when checking" </> pretty p </> text "::" </> pretty fTyp </> text "in" $+$ pretty (ctx p))
   runInSolver solveTypeConstraints
   typingState . errorContext .= (noPos, empty)
-    -- where
-      -- unknownId :: Formula -> Maybe Id
-      -- unknownId (Unknown _ i) = Just i
-      -- unknownId _ = Nothing
-
-      -- checkSymmetry = do
-        -- ctx <- asks $ _context . fst
-        -- let fixedContext = ctx (untyped PHole)
-        -- if arity typ > 0
-          -- then do
-              -- let partialKey = PartialKey fixedContext
-              -- startPartials <- getPartials
-              -- let pastPartials = Map.findWithDefault Map.empty partialKey startPartials
-              -- let (myCount, _) = Map.findWithDefault (0, env) p pastPartials
-              -- let repeatPartials = filter (\(key, (count, _)) -> count > myCount) $ Map.toList pastPartials
-
-              -- -- Turn off all qualifiers that abduction might be performed on.
-              -- -- TODO: Find a better way to turn off abduction.
-              -- solverState <- get
-              -- let qmap = Map.map id $ solverState ^. typingState ^. qualifierMap
-              -- let qualifiersToBlock = map unknownId $ Set.toList (env ^. assumptions)
-              -- typingState . qualifierMap .= Map.mapWithKey (\key val -> if elem (Just key) qualifiersToBlock then QSpace [] 0 else val) qmap
-
-              -- writeLog 2 $ text "Checking" <+> pretty pTyp <+> text "doesn't match any of"
-              -- writeLog 2 $ pretty repeatPartials <+> text "where myCount is" <+> pretty myCount
-
-              -- -- Check that pTyp is not a supertype of any prior programs.
-              -- mapM_ (\(op@(Program _ oldTyp), (_, oldEnv)) ->
-                               -- ifte (solveLocally $ Subtype (combineEnv env oldEnv) oldTyp pTyp False)
-                               -- (\_ -> do
-                                    -- writeLog 2 $ text "Supertype as failed predecessor:" <+> pretty pTyp <+> text "with" <+> pretty oldTyp
-                                    -- writeLog 2 $ text "Current program:" <+> pretty p <+> text "Old program:" <+> pretty op
-                                    -- writeLog 2 $ text "Context:" <+> pretty fixedContext
-                                    -- typingState . qualifierMap .= qmap
-                                    -- mzero)
-                               -- (return ())) repeatPartials
-
-              -- let newCount = 1 + myCount
-              -- let newPartials = Map.insert p (newCount, env) pastPartials
-              -- let newPartialMap = Map.insert partialKey newPartials startPartials
-              -- putPartials newPartialMap
-
-              -- typingState . qualifierMap .= qmap
-          -- else return ()
-
-      -- combineEnv :: Environment -> Environment -> Environment
-      -- combineEnv env oldEnv =
-        -- env {_ghosts = Map.union (_ghosts env) (_ghosts oldEnv)}
 
 enumerateAt :: MonadHorn s => Environment -> RType -> Int -> Explorer s RProgram
 enumerateAt env typ 0 = do

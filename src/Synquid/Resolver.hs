@@ -319,7 +319,7 @@ resolveSchema sch = do
         environment %= addBoundPredicate sig
         resolveSchema' sch
       let extraTypeVars = (Set.unions (map typeVarsOfSort argSorts)) Set.\\ typeVarsOf (toMonotype sch')
-      when (not $ Set.null extraTypeVars) $
+      unless (Set.null extraTypeVars) $
         (throwResError $ text "Unbound variables" <+> (commaSep $ map pretty $ Set.toList extraTypeVars) <+> text "in sort of bound predicate" <+> text predName)
       return $ ForallP sig sch'
     resolveSchema' (Monotype t) = Monotype <$> resolveType t
@@ -366,7 +366,7 @@ resolveType (FunctionT x tArg tRes) =
       else do
         tArg' <- resolveType tArg
         tRes' <- withLocalEnv $ do
-          when (not $ isFunctionType tArg') (environment %= addVariable x tArg')
+          unless (isFunctionType tArg') (environment %= addVariable x tArg')
           resolveType tRes
         return $ FunctionT x tArg' tRes'
 

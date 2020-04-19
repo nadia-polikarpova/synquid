@@ -32,3 +32,22 @@ copies' = \x. \xs.
       if x == y 
         then 1 - copies' x ys 
         else copies' x ys
+
+data BST a where
+  Empty :: BST a
+  Node  :: x: a -> l: BST {a | _v < x} -> r: BST {a | x < _v} -> BST a
+  
+data SortedList a where
+  SNil :: SortedList a
+  SCons:: x: a -> xs:SortedList { a | _v < x } -> SortedList a
+  
+measure bstBoundsEl :: el:a -> BST a -> Bool where
+  Empty -> True
+  Node x l r -> (el < x) && bstBoundsEl el l
+
+-- Verification test from Jimmy
+helper:: t:BST a -> sl:SortedList { a | bstBoundsEl _v t } -> SortedList a
+helper  = \t. \sl.
+    match t with
+        Empty -> sl
+        Node x l r -> SCons x sl
