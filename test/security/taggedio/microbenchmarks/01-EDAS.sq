@@ -31,7 +31,7 @@ getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
 -- | Paper title (public)
 getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 
--- | Paper status (only visible when phase is done)
+-- | Paper decision (only visible when phase is done)
 getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{phase ds == Done}> <{False}>
 
 -- | Paper session (public)

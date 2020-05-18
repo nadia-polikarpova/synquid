@@ -36,7 +36,7 @@ getPaperAuthors :: ds: Store -> p: PaperId ->
   TIO {List {User | _v in (paperAuthors ds)[[p]]} | elems _v == (paperAuthors ds)[[p]]} 
     <{_0 in (paperAuthors ds)[[p]]}> <{False}>
 
--- | Paper status (only visible when phase is done)
+-- | Paper decision (only visible when phase is done)
 getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{phase ds == Done}> <{False}>
 
 -- | All papers in the conference

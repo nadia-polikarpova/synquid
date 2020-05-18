@@ -51,9 +51,8 @@ localize isRecheck eParams tParams goal = do
         then if Map.null reqs
               then return (deANF finalP, Map.empty)
               else throwErrorWithDescription $ 
-                    hang 2 (text "Re-verification of inserted checks failed with violations:" $+$ vMapDoc text pretty reqs $+$
-                      text "Probable causes: missing type qualifiers or policy incorrectly depends on another sensitive value"
-                    ) $+$ text "when checking" $+$ pretty p
+                    hang 2 (text "Verification failed with violations:" $+$ vMapDoc text pretty reqs) 
+                    $+$ text "when checking" $+$ pretty p
         else if Map.null reqs
               then return (deANF finalP, Map.empty)
               else return (finalP, reqs)

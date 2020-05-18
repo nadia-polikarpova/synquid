@@ -34,7 +34,7 @@ getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
 -- | Paper authors (only visible when phase is done)
 getPaperAuthors :: ds: Store -> p: PaperId -> TIO [User] <{phase ds == Done}> <{False}>
 
--- | Paper status (only visible when phase is done)
+-- | Paper decision (only visible when phase is done)
 getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{phase ds == Done}> <{False}>
 
 -- | Paper session (public)
