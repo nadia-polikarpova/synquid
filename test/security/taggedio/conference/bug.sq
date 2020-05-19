@@ -1,8 +1,0 @@
-data World
-data User
-data String
-
-predicate passwords :: World -> Map User String
-getPassword :: w: World -> u: User -> {String | (_v == passwords w)[[u]]}
-
-
