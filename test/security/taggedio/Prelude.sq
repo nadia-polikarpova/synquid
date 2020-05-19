@@ -53,12 +53,6 @@ map = \f . \xs .
     Nil -> Nil
     Cons y ys -> Cons (f y) (map f ys)
 
--- foldr :: (a -> b -> b) -> b -> [a] -> b
--- foldr = \f . \z . \xs .
-  -- match xs with
-    -- Nil -> z
-    -- Cons y ys -> f y (foldr f z ys)
-
 remove :: a -> [a] -> [a]
 remove = \x . \xs .
   match xs with

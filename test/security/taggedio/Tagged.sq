@@ -1,14 +1,14 @@
-{- TIO Primitives -}
+{- TIO Primitives (assumed correct) -}
 
 data User
 
 -- | Computation with an input and an output label
 data TIO a <inl :: User -> Bool>- <outl :: User -> Bool>
 
+-- | Embed a pure computation into TIO
 return :: x: a -> TIO a <{True}> <{False}>
   
--- | (>>=)
--- | Actual type of bind is its moral type + subtyping
+-- | Sequence two TIO computations
 bind :: <i :: User -> Bool> . <o :: User -> Bool> . <j :: User -> Bool> . <p :: User -> Bool> . 
   TIO a <i> <o> 
   -> (u: a -> TIO b <j> <{i _0 && p _0}>) 
@@ -18,9 +18,9 @@ bind :: <i :: User -> Bool> . <o :: User -> Bool> . <j :: User -> Bool> . <p :: 
 downgrade :: <bp :: User -> Bool> . <bc :: Bool> . <bq :: User -> Bool> .
   x: TIO {Bool | _v ==> bc} <{bp _0 && bc}> <bq> -> TIO {Bool | _v ==> bc} <bp> <bq>
   
-{- TIO Auxiliary functions -}
+{- TIO Auxiliary functions (verified) -}
 
--- | (>>)  
+-- | Sequence two TIO computations but ignore the result of the first one (>>)  
 seq :: <si :: User -> Bool> . <so :: User -> Bool> . <sj :: User -> Bool> . <sp :: User -> Bool> . 
   TIO a <si> <so> 
   -> TIO b <sj> <sp>
@@ -30,12 +30,14 @@ seq = \a1 . \a2 .
     x <- downgrade (bind a1 (\y . return False))
     a2
 
+-- | Lift one-arg pure function into TIO
 liftM :: <lp :: User -> Bool> . <lq :: User -> Bool> . (a -> b) -> TIO a <lp> <lq> -> TIO b <lp> <lq>
 liftM = \f . \t .
   do
     x <- t
     return (f x)
-    
+
+-- | Lift two-arg pure function into TIO    
 liftM2 :: <lp :: User -> Bool> . <lq :: User -> Bool> . <lr :: User -> Bool> . <ls :: User -> Bool> .
   (a -> b -> c) -> TIO a <lp> <lq> -> TIO b <lr> <{lp _0 && ls _0}> -> TIO c <{lp _0 && lr _0}> <{lq _0 || (lp _0 && ls _0)}>
 liftM2 = \f . \t1 . \t2 .
@@ -44,16 +46,19 @@ liftM2 = \f . \t1 . \t2 .
     y <- t2
     return (f x y)
 
+-- | Sequence a list of TIO computations
 sequence :: <seqp :: User -> Bool> . xs: [TIO a <seqp> <seqp>] -> TIO [a] <seqp> <seqp>
 sequence = \xs .
   match xs with
     Nil -> return Nil
     Cons y ys -> liftM2 Cons y (sequence ys)    
-    
+
+-- | Map a TIO computation over a list    
 mapM :: <mp :: User -> Bool> . 
   (a -> TIO b <mp> <mp>) -> xs: [a] -> TIO [b] <mp> <mp>
 mapM = \f . \xs . sequence (map f xs)
 
+-- | Same as mapM, but ignore results
 forM_ :: <mq :: User -> Bool> . 
   xs: [a] -> (a -> TIO b <{False}> <mq>) -> TIO Unit <{True}> <mq>
 forM_ = \xs . \f . 
@@ -61,6 +66,7 @@ forM_ = \xs . \f .
     Nil -> return Unit
     Cons y ys -> seq (f y) (forM_ ys f)
 
+-- | Filter a list based on a TIO computation
 filterM :: <fp :: User -> Bool> . <fc :: a -> Bool> .
   (x: a -> TIO {Bool | _v ==> fc x} <{fc x && fp _0}> <{False}>) -> xs: [a] -> TIO [{a | fc _v}] <fp> <{False}>
 filterM = \f . \xs .
@@ -86,6 +92,7 @@ insertM = \isLeq . \x . \xs .
                 rec <- insertM isLeq x ys
                 return (Cons y rec)
     
+-- | Sort based on a TIO computation
 sortByM :: <sop :: User -> Bool> .
   (a -> a -> TIO Bool <sop> <{False}>) -> xs: [a] -> TIO {List a | elems _v == elems xs && len _v == len xs} <sop> <{False}>
 sortByM = \isLeq . \xs .  
@@ -95,7 +102,7 @@ sortByM = \isLeq . \xs .
                    rec <- sortByM isLeq ys
                    insertM isLeq y rec
 
-{- Output -}      
+{- Output actions -}      
 
 print :: viewer: User -> msg: String -> TIO Unit <{True}> <{_0 == viewer}>
 
