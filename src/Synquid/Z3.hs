@@ -35,7 +35,7 @@ data Z3Data = Z3Data {
   _sorts :: Map Sort Z3.Sort,                 -- ^ Mapping from Synquid sorts to Z3 sorts
   _vars :: Map Id AST,                        -- ^ AST nodes for scalar variables
   _functions :: Map Id FuncDecl,              -- ^ Function declarations for measures, predicates, and constructors
-  _storedDatatypes :: Set Id,                 -- ^ Datatypes mapped directly to Z3 datatypes (monomorphic and non-recursive)
+  _storedDatatypes :: Set Id,                 -- ^ Datatypes mapped directly to Z3 datatypes (monomorphic only)
   _controlLiterals :: Bimap Formula AST,      -- ^ Control literals for computing UNSAT cores
   _auxEnv :: Z3Env,                           -- ^ Z3 environment for the auxiliary solver
   _boolSortAux :: Maybe Z3.Sort,              -- ^ Boolean sort in the auxiliary solver
@@ -93,14 +93,11 @@ convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
   ifM (uses storedDatatypes (Set.member dtName))
     (return ()) -- This datatype has already been processed as a dependency
     (do
-      z3ctorsMb <- mapM convertCtor ctors
-      if any isNothing z3ctorsMb
-        then return ()
-        else do
-          dtSymb <- mkStringSymbol dtName
-          z3dt <- mkDatatype dtSymb (map fromJust z3ctorsMb)
-          sorts %= Map.insert dataSort z3dt
-          storedDatatypes %= Set.insert dtName)
+      dtSymb <- mkStringSymbol dtName
+      z3ctors <- mapM convertCtor ctors      
+      z3dt <- mkDatatype dtSymb z3ctors
+      sorts %= Map.insert dataSort z3dt
+      storedDatatypes %= Set.insert dtName)
   convertDatatypes symbols rest
   where
     dataSort = DataS dtName []
@@ -109,17 +106,15 @@ convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
       z3CName <- mkStringSymbol cName
       recognizerName <- mkStringSymbol ("is" ++ cName)
       let args = allArgs $ toMonotype $ symbols Map.! cName
-      z3ArgsMb <- mapM convertField args
-      if any (isNothing . view _2) z3ArgsMb
-        then return Nothing -- It's a recursive type: ignore
-        else Just <$> mkConstructor z3CName recognizerName z3ArgsMb
+      z3Args <- mapM convertField args
+      mkConstructor z3CName recognizerName z3Args
 
     convertField (Var fSort fName) = do
       z3FName <- mkStringSymbol fName
       z3FSort <- case fSort of
                     DataS dtName' [] ->
                       if dtName' == dtName
-                        then return Nothing -- Recursive datatype, do not convert
+                        then return Nothing -- Recursive sort is denoted with Nothing
                         else case lookup dtName' rest of
                               Nothing -> Just <$> toZ3Sort fSort -- Datatype dtName' should have already been processed
                               Just dtDef -> do -- It is an eligible datatype yet to process; process it now instead
@@ -128,7 +123,7 @@ convertDatatypes symbols ((dtName, DatatypeDef [] _ _ ctors@(_:_) _):rest) = do
                     _ -> Just <$> toZ3Sort fSort
       return (z3FName, z3FSort, 0)
 
-convertDatatypes symbols (_:rest) = convertDatatypes symbols rest
+convertDatatypes symbols (_:rest) = convertDatatypes symbols rest -- Polymorphic datatype, do not convert
 
 -- | Get the literal in the auxiliary solver that corresponds to a given literal in the main solver
 litToAux :: AST -> Z3State AST
