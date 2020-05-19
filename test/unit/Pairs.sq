@@ -1,6 +1,0 @@
--- Anonymous function arguments, used to cause clashes
-data Pair a b where
-  P :: a -> b -> Pair a b
-  
-measure fst :: Pair a b -> a where
-  P x y -> x  
