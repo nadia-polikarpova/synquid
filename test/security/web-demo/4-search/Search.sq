@@ -1,0 +1,65 @@
+{-# lifty #-}
+
+{- Searching by sensitive value: self-referential policy inside a filter -}
+
+{- Datatypes -}
+
+data Store
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Rebuttal :: Phase
+  Done :: Phase
+  
+guard {Submission, Review, Rebuttal, Done}
+
+data Decision where
+  Accepted :: Decision
+  Rejected :: Decision
+  NoDecision :: Decision
+  
+guard {Accepted, Rejected, NoDecision}
+
+{- Sensitive data and policies -}
+   
+-- | Conference phase (public)
+predicate phase :: Store -> Phase
+getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
+
+-- | Paper title (public)
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- | Paper authors (only visible to themselves or when phase is done)
+predicate paperAuthors :: Store -> Map PaperId (Set User)
+getPaperAuthors :: ds: Store -> p: PaperId -> 
+  TIO {List {User | _v in (paperAuthors ds)[[p]]} | elems _v == (paperAuthors ds)[[p]]} 
+    <{_0 in (paperAuthors ds)[[p]]}> <{False}>
+
+-- | Paper decision (only visible when phase is done)
+getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{phase ds == Done}> <{False}>
+
+-- | All papers in the conference
+getAllPaperIds :: ds: Store -> TIO [PaperId] <{True}> <{False}>
+
+redact {NoDecision}  
+
+{- Client code -}
+  
+-- | Show `client` all their accepted papers
+-- | Repair: for `getPaperDecision` inside `isMyAccepted` check that phase is Done, otherwise return NoDecision;
+--           note how Lifty can determine that the author check is okay.
+showMyAcceptedPapers :: Store -> User -> TIO Unit <{False}> <{True}>
+showMyAcceptedPapers = \ds . \client .
+  let isMyAccepted = \p .
+    downgrade (  
+      do auts <- getPaperAuthors ds p
+         dec   <- getPaperDecision ds p
+         return (elem client auts && dec == Accepted)) in
+  do allPaperIDs <- getAllPaperIds ds
+     paperIDs <- filterM isMyAccepted allPaperIDs
+     titles <- mapM (\p . getPaperTitle ds p) paperIDs
+     print client (unlines titles)
+  

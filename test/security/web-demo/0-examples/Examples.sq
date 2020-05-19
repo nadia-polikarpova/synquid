@@ -1,0 +1,91 @@
+{-# lifty --verify #-} 
+
+-- | Some users
+alice :: User
+bob :: User
+charlie :: User
+
+-- | My SSN is only visible to me
+-- Output label False means that this function doesn't output anything
+getSSN :: u: User -> TIO Int <{_0 == u}> <{False}>
+
+-- | Wedding date only visible to Alice and Bob
+getSharedKey :: TIO String <{_0 == alice || _0 == bob}> <{False}>
+
+-- | This is fine: both Alice and Bob can see their shared key
+ok1 :: TIO Unit <{False}> <{True}>
+ok1 =
+  do
+    k <- getSharedKey
+    print bob k
+    print alice k
+    
+-- | Bad: print bob's SSN to alice
+bad1 :: TIO Unit <{False}> <{True}>
+bad1 =
+  do
+    b <- getSSN  bob
+    print bob (show b) 
+    print alice (show b)    
+    
+-- | Nothing bad happens here, but this is not allowed by the type system
+-- because a is still in scope when we print to Bob
+bad2 :: TIO Unit <{False}> <{True}>
+bad2 =
+  do
+    a <- getSSN alice
+    print alice (show a)
+    b <- getSSN  bob
+    print bob (show b)
+    
+-- | This is how you have to write it instead
+ok2 :: TIO Unit <{False}> <{True}>
+ok2 =
+  do
+    do 
+      a <- getSSN alice
+      print alice (show a)
+    b <- getSSN bob
+    print bob (show b) -- a not in scope here!
+
+-- | This is an implicit flow: Bob will get a message or not
+-- depending on Alice's SSN
+bad3 :: TIO Unit <{False}> <{True}>
+bad3 = 
+  do
+    a <- getSSN alice
+    if a == 0
+      then print alice emptyString
+      else print bob emptyString
+      
+-- | This is okay: we branch on a sensitive value,
+-- but only print to the person who can see it
+ok3 :: TIO Unit <{False}> <{True}>
+ok3 = 
+  do
+    a <- getSSN alice
+    if a == 0
+      then print alice emptyString
+      else print alice (show a)
+      
+-- | Downgrading example:
+-- this is okay because if you are not alice you will always see False
+ok4 :: User -> TIO Bool <{_0 == alice}><{False}>
+ok4 = \u . downgrade (
+  do
+    s <- getSSN u
+    return (s == 0 && u == alice)
+  )
+  
+-- | Downgrading example
+bad4 :: User -> TIO Bool <{_0 == alice}><{False}>
+bad4 = \u . downgrade (
+  do
+    s <- getSSN u
+    return (s == 0)
+  )    
+  
+      
+      
+    
+  

@@ -1,0 +1,58 @@
+{-# lifty #-}
+
+{- Sending a message to multiple viewers, viewers are sensitive -}
+
+{- Datatypes -}
+
+data Store
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Rebuttal :: Phase
+  Done :: Phase
+  
+guard {Submission, Review, Rebuttal, Done}
+
+data Decision where
+  Accepted :: Decision
+  Rejected :: Decision
+  NoDecision :: Decision
+  
+guard {Accepted, Rejected, NoDecision}
+
+{- Sensitive data and policies -}
+   
+-- | Conference phase (public)
+predicate phase :: Store -> Phase
+getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
+
+-- | Paper title (public)
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- | Paper authors (only visible to themselves or when phase is done)
+predicate paperAuthors :: Store -> Map PaperId (Set User)
+getPaperAuthors :: ds: Store -> p: PaperId -> 
+  TIO {List {User | _v in (paperAuthors ds)[[p]]} | elems _v == (paperAuthors ds)[[p]]} 
+    <{_0 in (paperAuthors ds)[[p]] || phase ds == Done}> <{False}>
+
+-- | Paper decision (only visible when phase is done)
+getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{_0 in (paperAuthors ds)[[p]] && phase ds == Done}> <{False}>
+
+-- | All papers in the conference
+getAllPaperIds :: ds: Store -> TIO [PaperId] <{True}> <{False}>
+
+redact {NoDecision}  
+
+{- Client code -}
+  
+-- | Send status notification to authors
+-- | Repair: check that phase is Done (we already know viewer is an author)
+notifyAuthors :: ds: Store -> p: PaperId -> TIO Unit <{False}> <{True}>
+notifyAuthors = \ds . \p .
+  do
+    status <- getPaperDecision ds p
+    authors <- getPaperAuthors ds p
+    printAll authors (show status)

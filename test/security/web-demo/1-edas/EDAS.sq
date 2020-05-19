@@ -1,0 +1,58 @@
+{-# lifty #-}
+
+{- EDAS -}
+
+{- Datatypes -}
+
+-- | Database
+data Store 
+
+data PaperId
+
+data Phase where
+  Submission :: Phase
+  Review :: Phase
+  Rebuttal :: Phase
+  Done :: Phase
+  
+guard {Submission, Review, Rebuttal, Done}
+
+data Decision where
+  Accepted :: Decision
+  Rejected :: Decision
+  NoDecision :: Decision
+  
+guard {Accepted, Rejected, NoDecision}
+
+{- Sensitive data and policies -}
+   
+-- | Conference phase (public)
+predicate phase :: Store -> Phase
+getPhase :: ds: Store -> TIO {Phase | _v == phase ds} <{True}> <{False}>
+
+-- | Paper title (public)
+getPaperTitle :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
+
+-- | Paper decision (only visible when phase is done)
+getPaperDecision :: ds: Store -> p: PaperId -> TIO Decision <{phase ds == Done}> <{False}>
+
+-- | Paper session (public)
+getPaperSession :: ds: Store -> p: PaperId -> TIO String <{True}> <{False}>
+
+redact {NoDecision}
+
+{- Client code -}
+  
+-- | Show data for paper `p` to `client`
+-- | Repair: for getPaperDecision, check that phase is Done, otherwise return NoDecision
+showSession :: Store -> User -> PaperId -> TIO Unit <{False}> <{True}>
+showSession = \ds . \client . \p .
+  do t <- getPaperTitle ds p
+     dec <- getPaperDecision ds p
+     if dec == Accepted 
+       then do
+              ses <- getPaperSession ds p
+              print client (unwords [t, ses])
+       else print client (unwords [t, emptyString])
+     
+  

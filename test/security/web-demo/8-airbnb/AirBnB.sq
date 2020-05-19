@@ -1,0 +1,57 @@
+{-# lifty #-}
+
+{- 
+  AirBnB bug: they scrape phone numbers from user messages, but forgot to do so in the preview.
+  This example features a custom redaction function that makes a message text visible to the recipient,
+  but not completely public.
+  It also showcases expressive functional reasoning with higher-order functions,
+  since correctness depends on the argument of filterM.
+-}
+
+{- Datatypes -}
+
+data Store
+
+data MessageId
+
+{- Sensitive data and policies -}
+
+getAllMessageIDs :: ds: Store -> [MessageId]
+
+-- | AirBnB admin
+predicate admin :: Store -> User
+getAdmin :: ds: Store -> TIO {User | _v == admin ds} <{True}> <{False}>
+
+-- | Message sender
+predicate sender :: Store -> Map MessageId User
+getSender :: ds: Store -> m: MessageId -> TIO {User | _v == (sender ds)[[m]] && _v != (recipient ds)[[m]]} <{True}> <{False}>
+
+-- | Message recipient
+predicate recipient :: Store -> Map MessageId User
+getRecipient :: ds: Store -> m: MessageId -> TIO {User | _v == (recipient ds)[[m]] && _v != (sender ds)[[m]]} <{True}> <{False}>
+
+-- | Message text (only visible to the admin and the sender)
+getText :: ds: Store -> m: MessageId -> TIO String <{_0 == admin ds || _0 == (sender ds)[[m]]}> <{False}>
+
+-- | Scrape phone numbers from the message, making it visible to the recipient
+scrapePhoneNumbers :: ds: Store -> m: MessageId 
+                                   -> TIO String <{_0 == admin ds || _0 == (sender ds)[[m]]}> <{False}>
+                                   -> TIO String <{_0 == admin ds || _0 == (sender ds)[[m]] || _0 == (recipient ds)[[m]]}> <{False}>
+
+redact {scrapePhoneNumbers}
+
+{- Client code -}
+  
+-- | View all client's messages.
+-- | Repair: inside the argument to mapM, check if client is admin (client cannot be sender as per refinement on getRecipient),
+--           and otherwise scrape the message.
+--           To determine that scraping the message is enough, we need to know that client is recipient for all messages in myMIDs,
+--           which we infer from the type of filterM
+viewInbox :: Store -> User -> TIO Unit <{False}> <{True}>
+viewInbox = \ds . \client .
+  let isMyMessage = \m .
+        do to <- getRecipient ds m
+           return (to == client) in
+  do myMIDs <- filterM isMyMessage (getAllMessageIDs ds) 
+     messages <- mapM (\m . getText ds m) myMIDs 
+     print client (unlines messages)    
