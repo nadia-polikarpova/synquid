@@ -9,258 +9,249 @@ from subprocess import call, check_output
 from colorama import init, Fore, Back, Style
 
 # Parameters
-SYNQUID_PATH_LINUX = 'synquid'
-SYNQUID_PATH_WINDOWS = 'Synquid.exe'
-BENCH_PATH = '.'
-LOGFILE_NAME = 'results.log'
-ORACLE_NAME = 'oracle'
-OUTFILE_NAME = 'results.csv'
-COMMON_OPTS = ['-z']
-TIMEOUT_COMMAND = 'timeout'
-TIMEOUT= '120'
 
-BENCHMARKS = [
-    # Integers
-    ('Int-Add',     []),
-    # Lists
-    ('List-Null',       []),
-    ('List-Elem',       []),
-    ('List-Stutter',    []),
-    ('List-Replicate',  []),
-    ('List-Append',     []),
-    ('List-Concat',     []),
-    ('List-Take',       []),
-    ('List-Drop',       []),
-    ('List-Delete',     []),
-    ('List-Map',        []),
-    ('List-ZipWith',    []),
-    ('List-Zip',        []),
-    ('List-ToNat',      ['-m 0']),
-    ('List-Product',    []),
-    ('List-ExtractMin',     ['-a=2', '-m 3']),
-    ('List-Intersection',   []),
-    ('List-Fold',           []),
-    ('List-Fold-Length',    ['-m=0']),
-    ('List-Fold-Append',    ['-m=0']),
-    ('List-Ith',            []),
-    ('List-ElemIndex',      []),
-    ('List-Snoc',           []),
-    ('List-Reverse',        []),
-    ('List-Range',          []),
-    # ('List-Filter',         ['-g=False']),
-    # Unique lists
-    ('UniqueList-Insert',   []),
-    ('UniqueList-Delete',   []),
-    ('UniqueList-Range',    []),
-    ('List-Nub',            []),
-    ('List-Compress',       []),
-    # Insertion sort
-    ('List-InsertSort',     []),
-    ('List-Fold-Sort',      ['-m=1', '-a=2', '-e']),
-    # Merge sort
-    ('List-Split',          ['-m=3']),
-    ('IncList-Merge',       ['-f=AllArguments']),
-    ('IncList-MergeSort',   ['-a=2', '-m=3']),
-    # Quick sort
-    ('List-Partition',      []),
-    ('IncList-PivotAppend', []),
-    ('IncList-QuickSort',   ['-a=2']),
-    # Trees
-    ('Tree-Elem',           []),
-    ('Tree-Flatten',        []),
-    # Binary search tree
-    ('BST-Member',          []),
-    ('BST-Insert',          []),
-    ('BST-ExtractMin',      ['-a=2', '-m=3']),
-    ('BST-Delete',          []),
-    ('BST-Sort',            []),
-    # Binary heap
-    ('BinHeap-Member',      []),
-    ('BinHeap-Insert',      []),
-    # User-defined datatypes
-    ('Evaluator',           []),
-    ('AddressBook-Make',    ['-a=2']),
-    ('AddressBook-Merge',   ['-a=2']),
-    # Synthesis from examples
-    ('Replicate-Examples',  []),
-]
+LIFTY       = ['synquid', 'lifty', '--print-stats']
+OUT_DIR     = 'out'
+PRELUDE_LIB = 'Prelude.sq'
+TIO_LIB     = 'Tagged.sq'
+CONF_LIB    = os.path.join('conference', 'Conference.sq')   
+GRADR_LIB   = os.path.join('gradr', 'Models.sq')
 
-SYGUS_BENCHMARKS = [
-    ('Int-Max2',    []),
-    ('Int-Max3',    []),
-    ('Int-Max4',    []),
-    ('Int-Max5',    []),
-    ('Array-Search-2', []),
-    ('Array-Search-3', []),
-    ('Array-Search-4', []),
-    ('Array-Search-5', []),
-    ('Array-Search-6', []),
-]
+MICRO_TABLES = [os.path.join(OUT_DIR, 'microbenchmarks', '01-EDAS.out'),
+                os.path.join(OUT_DIR, 'microbenchmarks', '02-Multiple.out'), 
+                os.path.join(OUT_DIR, 'microbenchmarks', '03-SelfRef.out'), 
+                os.path.join(OUT_DIR, 'microbenchmarks', '04-Search.out'),
+                os.path.join(OUT_DIR, 'microbenchmarks', '05-Sort.out'),
+                os.path.join(OUT_DIR, 'microbenchmarks', '06-Broadcast.out'),
+                os.path.join(OUT_DIR, 'microbenchmarks', '07-HotCRP.out'),
+                os.path.join(OUT_DIR, 'microbenchmarks', '08-AirBnB.out'),
+                os.path.join(OUT_DIR, 'microbenchmarks', '09-Instagram.out')]
+CONF_TABLES = [os.path.join(OUT_DIR, 'conference', 'ConferenceRepair.out'), 
+               os.path.join(OUT_DIR, 'conference', 'ConferenceVerification.out')]
+GRADR_TABLES = [os.path.join(OUT_DIR, 'gradr', 'Gradr.out')]
+HEALTH_TABLES = [os.path.join(OUT_DIR, 'health', 'HealthWeb.out')]
 
-AVL_BENCHMARKS = [
-    # AVL trees
-    ('AVL-BalL0',           ['-a 2']),
-    ('AVL-BalLL',           ['-a 2', '-u']),
-    ('AVL-BalLR',           ['-a 2', '-u']),
-    ('AVL-BalR0',           ['-a 2']),
-    ('AVL-BalRL',           ['-a 2', '-u']),
-    ('AVL-BalRR',           ['-a 2', '-u']),
-    ('AVL-Balance',         ['-a 2', '-e']),
-    ('AVL-Insert',          ['-a 2']),
-    ('AVL-ExtractMin',      ['-a 2']),
-    ('AVL-Delete',          ['-a 2', '-m 1']),
-]
+MICRO_METAPROGRAM = {
+  'columns':         ["num(key)", "micro(key)", "$1", "(#2-#1)", "sum_sec($3)", "sum_sec($4,$5)", "sum_sec($6)"],
+  'rows': ["01-EDAS:showSession",
+           "02-Multiple:showSession",
+           "03-SelfRef:showSession",
+           "04-Search:showMyAcceptedPapers",
+           "05-Sort:sortPapersByScore",
+           "06-Broadcast:notifyAuthors",
+           "07-HotCRP:sendPasswordReminder",
+           "08-AirBnB:viewInbox",
+           "09-Instagram:showRecommendations"
+           ],
+  'fmt': ["%-2s", " \\d%-20s", "%s", "%8s", "%8s", "%10s", "%10s"],
+  'helpers': {
+    'num': (lambda txt: int(txt.split('-')[0])),
+    'micro': (lambda txt: "{micro%s}" % txt.split('-')[0]),
+    'sum_sec': lambda *a: "%.1fs" % sum(secs(*a)),
+  }
+}
 
-RBT_BENCHMARKS = [
-    # Red-black trees
-    ('RBT-BalanceL',        ['-a 2', '-m 1', '-z']),
-    ('RBT-BalanceR',        ['-a 2', '-m 1', '-z']),
-    ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
-]
+CONF_METAPROGRAM = {
+  'columns':         ["braces(key)", "$1", "(#2'-#1)", "(#2-#1)", "sum_sec($3')", "sum_sec($3)", "sum_sec($4,$5)", "sum_sec($6)"],
+  'rows': ["registerUser",
+           "usersView",
+           "submitForm",
+           "searchForm",
+           "paperView",
+           "reviewsView",
+           "profileViewGet",
+           "profileViewPost",
+           "submitReviewViewPost",
+           "assignReviewersView",
+           "Totals"],
+  'fmt': ["%-30s", "%s", "%8s", "%8s", "%10s", "%10s", "%10s", "%10s"],
+  'helpers': {
+    'nonneg': (lambda n: max(0, n)),
+    'sum_sec': lambda *a: "%.1fs" % sum(secs(*a)),
+    'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
+  }
+}
 
-RBT1_BENCHMARKS = [
-    # Red-black trees
-    ('RBT-BalanceL',        ['-a 2', '-u', '-z']),
-    ('RBT-BalanceR',        ['-a 2', '-u', '-z']),
-    ('RBT-Insert',          ['-a 2', '-m 1', '-z']),
-]
+GRADR_METAPROGRAM = {
+  'columns':         ["braces(key)", "$1", "(#2-#1)", "sum_sec($3)", "sum_sec($4, $5)", "sum_sec($6)"],
+  'rows': ["homePage",
+           "profileView",
+           "unauthProfileView",
+           "scoresForAssignmentView",
+           "topScoreForAssignmentView",
+           "scoresForStudentView",           
+           "Totals"],
+  'fmt': ["%-40s", "%s", "%8s", "%10s", "%10s", "%10s"],
+  'helpers': {
+    'nonneg': (lambda n: max(0, n)),
+    'sum_sec': lambda *a: "%.1fs" % sum(secs(*a)),
+    'braces': (lambda txt: (r"%s\st" if txt == 'Totals' else r"\d{%s}") % txt)
+  }
+}
 
-CHECKING_BENCHMARKS = [
-    ('List-Append',         []),
-    ('List-Replicate',      []),
-    ('List-ToNat',          []),
-    ('AVL',                 []),
-]
+HEALTH_METAPROGRAM = GRADR_METAPROGRAM.copy()
+HEALTH_METAPROGRAM.update({
+    'rows': ["showRecordByIdView",
+             "showRecordsForPatientView",
+             "showAuthoredRecordsView",
+             "updateRecordForm",
+             "listOfPatientsView",
+             "Totals"]
+})   
 
-class SynthesisResult:
-    def __init__(self, name, time):
-        self.name = name
-        self.time = time
+# Running benchmarks
 
-    def str(self):
-        return self.name + ', ' + '{0:0.2f}'.format(self.time) + ', '
+def run_benchmark(path, name, opts, function=''):    
+    only = [] if function == '' else ['--only', function]
+    out_dir = os.path.join (OUT_DIR, path)
+    logfile_name = name if function == '' else function
+    if not os.path.exists(out_dir):
+      os.makedirs(out_dir)    
 
-def cmdline():
-    import argparse
-    a = argparse.ArgumentParser()
-    a.add_argument('--synquid', required=False)
-    a.add_argument('--unit', action='store_true')
-    a.add_argument('--checking', action='store_true')
-    a.add_argument('--sections', nargs="*", default=['all'])
-    return a.parse_args()
-
-def run_benchmark(name, opts, path='.'):
-    global total_time
-    print name,
-
-    with open(LOGFILE_NAME, 'a+') as logfile:          
+    with open(os.path.join (out_dir, logfile_name + '.out'), 'w') as logfile:      
+      # os.chdir(path)    
+      print name, function,
+      sys.stdout.flush()
       start = time.time()
-      logfile.seek(0, os.SEEK_END)
-      return_code = call([synquid_path] + COMMON_OPTS + opts + [os.path.join (path, name + '.sq')], stdout=logfile, stderr=logfile)
+      return_code = call(LIFTY + opts + ['--file', os.path.join (path, name + '.sq')] + only, stdout=logfile, stderr=logfile)
       end = time.time()
-
-      t = end - start
-      print '{0:0.2f}'.format(t),
-      total_time = total_time + t
+      
       if return_code:
-          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL
+          print Back.RED + Fore.RED + Style.BRIGHT + 'FAIL' + Style.RESET_ALL,
       else:
-          results [name] = SynthesisResult(name, t)
-          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL
+          print Back.GREEN + Fore.GREEN + Style.BRIGHT + 'OK' + Style.RESET_ALL,
+      print '{0:0.1f}'.format(end - start), 'sec'
+      
+# Extracting latex tables from output
+
+def dictadd(*a):
+    d = {}
+    for x in a: d.update(x)
+    return d
+
+def secs(*b):
+    """auxiliary for processing time entries"""
+    for el in b:
+        idx = el.find('s')
+        assert idx > 0
+        yield float(el[:idx])
+
+def parse_table(fn):
+    txt = open(fn).read()
+    # assume that the table is separated from the rest of the text (if any) by a blank line
+    txt = txt.split("\n\n")[-1]
+    return dictadd({'filename': fn},
+                   {s[0].strip(): s for s in [line.split("  &") for line in txt.splitlines()]})
+
+def concat_tables(tables):
+    d = {}
+    for t in tables:
+        try:
+            prefix = os.path.splitext(os.path.basename(t['filename']))[0]
+            d.update({(prefix+":"+k): v for k,v in t.iteritems()})
+        except KeyError:
+            d.update(t)
+    return d
+
+def eval_expr(expr, value, key=None, helpers={}):
+    expr = re.sub(r'\$(\d+)\'', lambda m: "_[1][%s]" % m.group(1), expr)
+    expr = re.sub(r'\$(\d+)',   lambda m: "_[0][%s]" % m.group(1), expr)
+    expr = re.sub(r'#(\d+)\'',  lambda m: "int(_[1][%s])" % m.group(1), expr)
+    expr = re.sub(r'#(\d+)',    lambda m: "int(_[0][%s])" % m.group(1), expr)
+    try:
+        return eval(expr, dictadd({'_': value, 'key': key}, helpers))
+    except:
+        import traceback
+        traceback.print_exc()
+        return "??"
+
+
+class Program(object):
+    
+    def __init__(self, metaprogram):
+        self.metaprogram = metaprogram
+
+    def eval_meta(self, tables):
+        out = []
+        for rowh in self.metaprogram['rows']:
+            row = [table.get(rowh, []) for table in tables]
+            out.append([eval_expr(e, row, rowh, self.metaprogram['helpers']) for e in self.metaprogram['columns']])
+            
+        return out
+    
+    def fmt_output(self, table):
+        fmt = "  &".join(self.metaprogram['fmt'])
+        def endslash(s):
+            if s.endswith("\\\\"): return s 
+            else: return s + "  \\\\"
+        for row in table:
+            print endslash(fmt % tuple(map(unicode, row)))
+            
+# Main
+
+def run_all_benchmarks():
+    if not os.path.exists(OUT_DIR):
+      os.makedirs(OUT_DIR)
+    
+    print 'Verifying Lifty standard library...'
+    run_benchmark('.', 'Prelude', ['--verify'])
+    run_benchmark('.', 'Tagged', ['--verify', '--libs', PRELUDE_LIB])
+    print
+    
+    print 'Running verification benchmarks...'
+    for fn in ['ok1', 'ok2', 'ok3', 'ok4', 'bad1', 'bad2', 'bad3', 'bad4']:
+      run_benchmark('verify', 'Test', ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB], fn)
+    for bench in os.listdir('verify'): 
+      if os.path.isfile(os.path.join('verify', bench)):
+        filename, file_extension = os.path.splitext(bench)
+        if file_extension == '.sq' and filename != 'Test':
+          run_benchmark('verify', filename, ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB])    
+    print
+    
+    print 'Running repair benchmarks...'
+    for bench in os.listdir('microbenchmarks'): 
+      if os.path.isfile(os.path.join('microbenchmarks', bench)):
+        filename, file_extension = os.path.splitext(bench)
+        if file_extension == '.sq':
+          run_benchmark('microbenchmarks', filename, ['--libs', PRELUDE_LIB, '--libs', TIO_LIB])
+    print          
+        
+    print 'Running case studies...'
+    run_benchmark('conference', 'ConferenceVerification', ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', CONF_LIB])
+    run_benchmark('conference', 'ConferenceRepair', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', CONF_LIB])
+    run_benchmark('gradr', 'Gradr', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', GRADR_LIB])
+    run_benchmark('health', 'HealthWeb', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB])
+    
+def gen_all_tables():
+    print "% Micro benchmarks"
+    ctx = [concat_tables(parse_table(fn) for fn in MICRO_TABLES)]  # "in sequence"
+    mp = Program(MICRO_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+
+    # Conference Management
+    print "% Conference Management"
+    ctx = [parse_table(fn) for fn in CONF_TABLES]  # "in parallel"
+    mp = Program(CONF_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+    # Gradr
+    print "% Gradr"
+    ctx = [parse_table(fn) for fn in GRADR_TABLES]
+    mp = Program(GRADR_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )
+    # HealthWeb
+    print "% HealthWeb"
+    ctx = [parse_table(fn) for fn in HEALTH_TABLES]
+    mp = Program(HEALTH_METAPROGRAM)
+    mp.fmt_output( mp.eval_meta(ctx) )    
+
           
-def run_test(name, path='.'):
-    print name
-
-    with open(LOGFILE_NAME, 'a+') as logfile:          
-      logfile.seek(0, os.SEEK_END)
-      call([synquid_path] + COMMON_OPTS + [os.path.join (path, name + '.sq')], stdout=logfile, stderr=logfile)
-
-def write_times(benchmarks):    
-    with open(OUTFILE_NAME, 'w') as outfile:
-        for (name, args) in benchmarks:
-            outfile.write (name + ',')
-            if name in results:
-                res = results [name]
-                outfile.write ('{0:0.2f}'.format(res.time))
-                outfile.write (',')                
-            outfile.write ('\n')
-
-def show_diff():            
-    if os.path.isfile(ORACLE_NAME):
-        fromlines = open(ORACLE_NAME).readlines()
-        tolines = open(LOGFILE_NAME, 'U').readlines()
-        diff = difflib.unified_diff(fromlines, tolines, n=0)
-        print
-        sys.stdout.writelines(diff)
-
 if __name__ == '__main__':
     init()
-    results = {}
-    total_time = 0
+    
+    run_all_benchmarks()
+    
+    print
+    
+    gen_all_tables()
 
-    a = cmdline()
-
-    if a.synquid:
-        synquid_path = a.synquid
-    elif platform.system() in ['Linux', 'Darwin']:
-        synquid_path = SYNQUID_PATH_LINUX
-    else:
-        synquid_path = SYNQUID_PATH_WINDOWS
-
-    sections = [s.lower() for s in a.sections]
-        
-    if not a.unit and not a.checking:
-        # Default: run synthesis benchmarks in 'current' directory, which must succeed; compare results with oracle
-        os.chdir('current')
-        if os.path.isfile(LOGFILE_NAME):
-            os.remove(LOGFILE_NAME)
-        
-        if 'base' in sections or 'all' in sections:
-            for (name, args) in BENCHMARKS:
-                run_benchmark(name, args)
-
-        if 'sygus' in sections or 'all' in sections:
-            for (name, args) in SYGUS_BENCHMARKS:
-                run_benchmark(name, args, 'sygus')
-            
-        # if 'rbt' in sections or 'all' in sections:
-            # for (name, args) in RBT_BENCHMARKS:
-                # run_benchmark(name, args, 'RBT')
-                
-        if 'rbt' in sections or 'all' in sections:
-            for (name, args) in RBT1_BENCHMARKS:
-                run_benchmark(name, args, 'RBT1')                
-
-        if 'avl' in sections or 'all' in sections:
-            for (name, args) in AVL_BENCHMARKS:
-                run_benchmark(name, args, 'AVL')
-                            
-        print 'TOTAL', '{0:0.2f}'.format(total_time)
-        
-        if sections == ['all']:
-            write_times(BENCHMARKS + SYGUS_BENCHMARKS + RBT_BENCHMARKS + AVL_BENCHMARKS)
-            show_diff()
-        
-    elif a.unit:
-        # Run unit tests 
-        os.chdir('unit')
-        if os.path.isfile(LOGFILE_NAME):
-            os.remove(LOGFILE_NAME)        
-        
-        for name in os.listdir('.'):
-            filename, file_extension = os.path.splitext(name)
-            if file_extension == '.sq':
-                run_test(filename)
-        
-        show_diff()
-        
-    else: 
-        # Run checking benchmarks
-        os.chdir('checking')
-        if os.path.isfile(LOGFILE_NAME):
-            os.remove(LOGFILE_NAME)
-        for (name, args) in CHECKING_BENCHMARKS:
-            run_benchmark(name, args)
-            
-            
         
