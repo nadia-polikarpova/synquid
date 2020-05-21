@@ -222,6 +222,12 @@ def run_all_benchmarks():
     run_benchmark('gradr', 'Gradr', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', GRADR_LIB])
     run_benchmark('health', 'HealthWeb', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB])
     
+    print 'Running scalability test...'
+    for n in range(16):
+      fn = 'oneFunc' + str(n + 1)
+      run_benchmark('scalability', 'OneFunc', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB], fn)
+    print
+    
 def gen_all_tables():
     print "% Micro benchmarks"
     ctx = [concat_tables(parse_table(fn) for fn in MICRO_TABLES)]  # "in sequence"

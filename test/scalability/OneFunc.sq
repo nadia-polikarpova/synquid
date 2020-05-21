@@ -1,282 +1,231 @@
 
-
 data Value
 
-predicate yourPrivilege :: World -> User -> Bool
-getYourPrivilege :: w:World -> u:User -> Tagged {Bool | _v == yourPrivilege w u} <{True}>
+data Store
 
-predicate sessionUser :: World -> User      
-getSessionUser :: w: World -> Tagged {User | _v == sessionUser w} <{True}>
+predicate yourPrivilege :: Store -> User -> Bool
+getYourPrivilege :: s:Store -> u:User -> TIO {Bool | _v == yourPrivilege s u} <{True}> <{False}>
 
-getPrivateValue :: w:World -> Tagged Value <{yourPrivilege _0 _1}>
-defaultPrivateValue :: Tagged Value <{True}>
-
-qualifier {yourPrivilege x y}
+getPrivateValue :: s:Store -> TIO Value <{yourPrivilege s _0}> <{False}>
+defaultValue :: Value
+redact {defaultValue}
 
 ----  AUTOGEN  ----
 
-oneFunc1 :: World -> World
-oneFunc1 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v = bind v0 (\b0. return [b0])
-  in
-     print w u (liftM show v)
+oneFunc1 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc1 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    print client (show [v0])
 
-oneFunc2 :: World -> World
-oneFunc2 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v = bind v1 (\b1. bind v0 (\b0. return [b0, b1]))
-  in
-     print w u (liftM show v)
+oneFunc2 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc2 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    print client (show [v0, v1])
 
-oneFunc3 :: World -> World
-oneFunc3 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v = bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2])))
-  in
-     print w u (liftM show v)
+oneFunc3 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc3 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    print client (show [v0, v1, v2])
 
-oneFunc4 :: World -> World
-oneFunc4 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v = bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3]))))
-  in
-     print w u (liftM show v)
+oneFunc4 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc4 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3])
 
-oneFunc5 :: World -> World
-oneFunc5 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v = bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4])))))
-  in
-     print w u (liftM show v)
+oneFunc5 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc5 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4])
 
-oneFunc6 :: World -> World
-oneFunc6 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v = bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5]))))))
-  in
-     print w u (liftM show v)
+oneFunc6 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc6 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5])
 
-oneFunc7 :: World -> World
-oneFunc7 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v = bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6])))))))
-  in
-     print w u (liftM show v)
+oneFunc7 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc7 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6])
 
-oneFunc8 :: World -> World
-oneFunc8 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v = bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7]))))))))
-  in
-     print w u (liftM show v)
+oneFunc8 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc8 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7])
 
-oneFunc9 :: World -> World
-oneFunc9 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v = bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8])))))))))
-  in
-     print w u (liftM show v)
+oneFunc9 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc9 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8])
 
-oneFunc10 :: World -> World
-oneFunc10 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v = bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9]))))))))))
-  in
-     print w u (liftM show v)
+oneFunc10 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc10 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9])
 
-oneFunc11 :: World -> World
-oneFunc11 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v10 = getPrivateValue w in
-  let v = bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10])))))))))))
-  in
-     print w u (liftM show v)
+oneFunc11 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc11 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    v10 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10])
 
-oneFunc12 :: World -> World
-oneFunc12 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v10 = getPrivateValue w in
-  let v11 = getPrivateValue w in
-  let v = bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11]))))))))))))
-  in
-     print w u (liftM show v)
+oneFunc12 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc12 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    v10 <- getPrivateValue ds
+    v11 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11])
 
-oneFunc13 :: World -> World
-oneFunc13 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v10 = getPrivateValue w in
-  let v11 = getPrivateValue w in
-  let v12 = getPrivateValue w in
-  let v = bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12])))))))))))))
-  in
-     print w u (liftM show v)
+oneFunc13 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc13 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    v10 <- getPrivateValue ds
+    v11 <- getPrivateValue ds
+    v12 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12])
 
-oneFunc14 :: World -> World
-oneFunc14 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v10 = getPrivateValue w in
-  let v11 = getPrivateValue w in
-  let v12 = getPrivateValue w in
-  let v13 = getPrivateValue w in
-  let v = bind v13 (\b13. bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13]))))))))))))))
-  in
-     print w u (liftM show v)
+oneFunc14 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc14 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    v10 <- getPrivateValue ds
+    v11 <- getPrivateValue ds
+    v12 <- getPrivateValue ds
+    v13 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13])
 
-oneFunc15 :: World -> World
-oneFunc15 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v10 = getPrivateValue w in
-  let v11 = getPrivateValue w in
-  let v12 = getPrivateValue w in
-  let v13 = getPrivateValue w in
-  let v14 = getPrivateValue w in
-  let v = bind v14 (\b14. bind v13 (\b13. bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14])))))))))))))))
-  in
-     print w u (liftM show v)
+oneFunc15 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc15 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    v10 <- getPrivateValue ds
+    v11 <- getPrivateValue ds
+    v12 <- getPrivateValue ds
+    v13 <- getPrivateValue ds
+    v14 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14])
 
-oneFunc16 :: World -> World
-oneFunc16 = \w.
-  let u = getSessionUser w in
-  
-  let v0 = getPrivateValue w in
-  let v1 = getPrivateValue w in
-  let v2 = getPrivateValue w in
-  let v3 = getPrivateValue w in
-  let v4 = getPrivateValue w in
-  let v5 = getPrivateValue w in
-  let v6 = getPrivateValue w in
-  let v7 = getPrivateValue w in
-  let v8 = getPrivateValue w in
-  let v9 = getPrivateValue w in
-  let v10 = getPrivateValue w in
-  let v11 = getPrivateValue w in
-  let v12 = getPrivateValue w in
-  let v13 = getPrivateValue w in
-  let v14 = getPrivateValue w in
-  let v15 = getPrivateValue w in
-  let v = bind v15 (\b15. bind v14 (\b14. bind v13 (\b13. bind v12 (\b12. bind v11 (\b11. bind v10 (\b10. bind v9 (\b9. bind v8 (\b8. bind v7 (\b7. bind v6 (\b6. bind v5 (\b5. bind v4 (\b4. bind v3 (\b3. bind v2 (\b2. bind v1 (\b1. bind v0 (\b0. return [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15]))))))))))))))))
-  in
-     print w u (liftM show v)
+oneFunc16 :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc16 = \ds . \client .
+  do
+    v0 <- getPrivateValue ds
+    v1 <- getPrivateValue ds
+    v2 <- getPrivateValue ds
+    v3 <- getPrivateValue ds
+    v4 <- getPrivateValue ds
+    v5 <- getPrivateValue ds
+    v6 <- getPrivateValue ds
+    v7 <- getPrivateValue ds
+    v8 <- getPrivateValue ds
+    v9 <- getPrivateValue ds
+    v10 <- getPrivateValue ds
+    v11 <- getPrivateValue ds
+    v12 <- getPrivateValue ds
+    v13 <- getPrivateValue ds
+    v14 <- getPrivateValue ds
+    v15 <- getPrivateValue ds
+    print client (show [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15])
 
 ----

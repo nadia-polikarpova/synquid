@@ -2,20 +2,15 @@ import re
 
 
 ONEFUNC = r"""
-oneFunc%(n)d :: World -> World
-oneFunc%(n)d = \w.
-  let u = getSessionUser w in
-  %(vlets)s
-  let v = %(listexpr)s
-  in
-     print w u (liftM show v)
+oneFunc%(n)d :: Store -> User -> TIO Unit <{False}> <{True}>
+oneFunc%(n)d = \ds . \client .
+  do%(vlets)s
+    print client (show %(listexpr)s)
 """
 
 VLET = r"""
-  let v%(i)d = getPrivateValue w in
+    v%(i)d <- getPrivateValue ds
 """
-
-LISTBIND = r"""bind v%(i)d (\b%(i)d. %(inner)s)"""
 
 INSERT_RE = re.compile(r"(----  AUTOGEN.*?\n).*?(\n----)", re.DOTALL)
 
@@ -24,12 +19,7 @@ def mk_vlets(n):
     return ''.join(VLET % {'i': i} for i in range(n))
 
 def mk_listexpr(n):
-    e = "return [%s]" % ", ".join("b%d" % i for i in range(n))
-
-    for i in range(n):
-        e = LISTBIND % {'i': i, 'inner': e}
-
-    return e
+    return "[%s]" % ", ".join("v%d" % i for i in range(n))
 
 def mk_oneFunc(n):
     return (ONEFUNC % {'n': n, 'vlets': mk_vlets(n), 'listexpr': mk_listexpr(n)})\
