@@ -189,24 +189,34 @@ class Program(object):
             
 # Main
 
+def cmdline():
+    import argparse
+    a = argparse.ArgumentParser()
+    a.add_argument('--repair', action='store_true', help='run only repair benchmarks')
+    a.add_argument('--all', action='store_true', help='run all benchmarks (verification, repair, and scalability)')
+    return a.parse_args()
+
+
 def run_all_benchmarks():
+    a = cmdline()
     if not os.path.exists(OUT_DIR):
       os.makedirs(OUT_DIR)
     
-    print 'Verifying Lifty standard library...'
-    run_benchmark('.', 'Prelude', ['--verify'])
-    run_benchmark('.', 'Tagged', ['--verify', '--libs', PRELUDE_LIB])
-    print
+    if not a.repair:
+      print 'Verifying Lifty standard library...'
+      run_benchmark('.', 'Prelude', ['--verify'])
+      run_benchmark('.', 'Tagged', ['--verify', '--libs', PRELUDE_LIB])
+      print
     
-    print 'Running verification benchmarks...'
-    for fn in ['ok1', 'ok2', 'ok3', 'ok4', 'bad1', 'bad2', 'bad3', 'bad4']:
-      run_benchmark('verify', 'Test', ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB], fn)
-    for bench in os.listdir('verify'): 
-      if os.path.isfile(os.path.join('verify', bench)):
-        filename, file_extension = os.path.splitext(bench)
-        if file_extension == '.sq' and filename != 'Test':
-          run_benchmark('verify', filename, ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB])    
-    print
+      print 'Running verification benchmarks...'
+      for fn in ['ok1', 'ok2', 'ok3', 'ok4', 'bad1', 'bad2', 'bad3', 'bad4']:
+        run_benchmark('verify', 'Test', ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB], fn)
+      for bench in os.listdir('verify'): 
+        if os.path.isfile(os.path.join('verify', bench)):
+          filename, file_extension = os.path.splitext(bench)
+          if file_extension == '.sq' and filename != 'Test':
+            run_benchmark('verify', filename, ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB])    
+      print
     
     print 'Running repair benchmarks...'
     for bench in os.listdir('microbenchmarks'): 
@@ -217,16 +227,18 @@ def run_all_benchmarks():
     print          
         
     print 'Running case studies...'
-    run_benchmark('conference', 'ConferenceVerification', ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', CONF_LIB])
+    if not a.repair:
+      run_benchmark('conference', 'ConferenceVerification', ['--verify', '--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', CONF_LIB])     
     run_benchmark('conference', 'ConferenceRepair', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', CONF_LIB])
     run_benchmark('gradr', 'Gradr', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB, '--libs', GRADR_LIB])
     run_benchmark('health', 'HealthWeb', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB])
     
-    print 'Running scalability test...'
-    for n in range(16):
-      fn = 'oneFunc' + str(n + 1)
-      run_benchmark('scalability', 'OneFunc', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB], fn)
-    print
+    if a.all:
+      print 'Running scalability test...'
+      for n in range(16):
+        fn = 'oneFunc' + str(n + 1)
+        run_benchmark('scalability', 'OneFunc', ['--libs', PRELUDE_LIB, '--libs', TIO_LIB], fn)
+      print
     
 def gen_all_tables():
     print "% Micro benchmarks"
