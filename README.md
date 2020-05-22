@@ -22,3 +22,5 @@ There are other minor changes throughout the code, such as support for maps in t
     - z3-home/bin  
 ```
 3. From the root of this repository, run `stack install`
+
+**Note:** You can also use newer versions of Z3, but you might need to change the value of `extra-deps` in `stack.yaml`. For example, changing it from `z3-4.3.1` to `z3-408.1` works with Z3 4.8.6.
