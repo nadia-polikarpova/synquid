@@ -5,8 +5,8 @@ This branch is the implementatin of **Lifty** (Liquid Information Flow TYpes), a
 The major changes relative to Synquid as follows:
 
 - The [PolicyChecker](src/Synquid/PolicyChecker.hs) module implements the fault localization and repair logic.
-- The Lifty standard library is in two lifty source files: [Prelude](test/taggedio/Prelude.sq) and [Tagged](test/security/taggedio/Tagged.sq) (the latter is where the TIO monad is defined).
-- Lifty benchmarks and case studies as [here](test/taggedio).
+- The Lifty standard library is in two lifty source files: [Prelude](test/Prelude.sq) and [Tagged](test/Tagged.sq) (the latter is where the TIO monad is defined).
+- Lifty benchmarks and case studies as [here](test).
 
 There are other minor changes throughout the code, such as support for maps in the refinement logic.
 
