@@ -20,7 +20,6 @@ module Synquid.TypeConstraintSolver (
   setUnknownRecheck,
   solveTypeConstraints,
   simplifyAllConstraints,
-  getViolatingLabels,
   solveAllCandidates,
   matchConsType,
   hasPotentialScrutinees,
@@ -136,41 +135,6 @@ solveTypeConstraints = do
 
   hornClauses .= []
   consistencyChecks .= []
-
-{- Repair-specific interface -}
-
-getViolatingLabels :: MonadHorn s => TCSolver s (Set Id)
-getViolatingLabels = do
-  scs <- use simpleConstraints
-  writeLog 2 (text "Simple Constraints" $+$ (vsep $ map pretty scs))
-
-  processAllPredicates
-  processAllConstraints
-  generateAllHornClauses
-
-  clauses <- use hornClauses
-  -- TODO: this should probably be moved to Horn solver
-  let (nontermClauses, termClauses) = partition isNonTerminal clauses
-  qmap <- use qualifierMap
-  cands <- use candidates
-  env <- use initEnv
-
-  writeLog 2 (vsep [
-    nest 2 $ text "Terminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) termClauses),
-    nest 2 $ text "Nonterminal Horn clauses" $+$ vsep (map (\(fml, l) -> text l <> text ":" <+> pretty fml) nontermClauses),
-    nest 2 $ text "QMap" $+$ pretty qmap])
-
-  newCand <- head <$> (lift . lift . lift $ refineCandidates (map fst nontermClauses) qmap (instantiateConsAxioms env Nothing) cands)
-  candidates .= [newCand]
-  invalidTerminals <- filterM (isInvalid newCand (instantiateConsAxioms env Nothing)) termClauses
-  return $ Set.fromList $ map snd invalidTerminals
-  where
-    isNonTerminal (Binary Implies _ (Unknown _ _), _) = True
-    isNonTerminal _ = False
-
-    isInvalid cand extractAssumptions (fml,_) = do
-      cands' <- lift . lift . lift $ checkCandidates False [fml] extractAssumptions [cand]
-      return $ null cands'
 
 {- Implementation -}
 
