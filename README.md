@@ -21,6 +21,8 @@ Synquid is based on the combination of [bidirectional synthesis](http://dl.acm.o
 
 ## News ##
 
+*April 5, 2022*: A [docker](https://hub.docker.com/repository/docker/yinengy/synquid) for Synquid is avaiable now! Thanks to [yinergy](https://github.com/yinengy)!
+
 *June 18, 2016*: [Synquid mode](https://github.com/cpitclaudel/synquid-emacs) for Emacs is now available on MELPA! Thanks to [Clément Pit--Claudel](https://github.com/cpitclaudel)!
 
 *June 16, 2016*: The [Synquid paper](http://people.csail.mit.edu/polikarn/publications/pldi16.pdf) was presented at [PLDI'16](http://conf.researchr.org/home/pldi-2016) in Santa Barbara!
